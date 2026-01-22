@@ -1,0 +1,17 @@
+{
+  "description": "Document without status header and no acceptance criteria for AC-21 testing",
+  "document": {
+    "path": ".taskmaster/docs/simple-doc.txt",
+    "content": "# Simple Document\n\n## Overview\n\nThis is a simple document without acceptance criteria.\nIt might be a reference doc or early-stage planning.\n\n## Details\n\nSome technical details here.\n",
+    "has_status_header": false
+  },
+  "expected_behavior": {
+    "should_add_header": true,
+    "inferred_status": "draft",
+    "reason": "No acceptance criteria means document is assumed to be in draft state"
+  },
+  "expected_header_format": {
+    "template": "## Document Status\n\n**Current Status**: {status}\n**Last Updated**: {date}\n**Completion**: N/A\n",
+    "insertion_point": "after_h1_title"
+  }
+}

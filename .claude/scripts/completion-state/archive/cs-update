@@ -1,0 +1,201 @@
+#!/bin/bash
+# cs-update - Update feature/goal status, log progress, or add patterns
+# Usage: cs-update --feature F1.1 --status passed
+#        cs-update --goal G1 --status in_progress
+#        cs-update --epic E1 --status passed
+#        cs-update --log --action "Did X" --outcome success --learning "Learned Y"
+#        cs-update --pattern "Pattern description"
+#        cs-update --summary "One-line summary of completion promise"
+#        cs-update --iteration  (increment iteration count)
+
+set -e
+
+STATE_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/completion-state"
+STATE_FILE="$STATE_DIR/session-state.json"
+
+if [ ! -f "$STATE_FILE" ]; then
+    echo "Error: Session state not initialized. Run cs-init first."
+    exit 1
+fi
+
+MODE=""
+TARGET_ID=""
+STATUS=""
+ACTION=""
+OUTCOME=""
+LEARNING=""
+DETAILS=""
+PATTERN=""
+SUMMARY=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --feature)
+            MODE="feature"
+            TARGET_ID="$2"
+            shift 2
+            ;;
+        --goal)
+            MODE="goal"
+            TARGET_ID="$2"
+            shift 2
+            ;;
+        --epic)
+            MODE="epic"
+            TARGET_ID="$2"
+            shift 2
+            ;;
+        --status)
+            STATUS="$2"
+            shift 2
+            ;;
+        --log)
+            MODE="log"
+            shift
+            ;;
+        --action)
+            ACTION="$2"
+            shift 2
+            ;;
+        --outcome)
+            OUTCOME="$2"
+            shift 2
+            ;;
+        --learning)
+            LEARNING="$2"
+            shift 2
+            ;;
+        --details)
+            DETAILS="$2"
+            shift 2
+            ;;
+        --pattern)
+            MODE="pattern"
+            PATTERN="$2"
+            shift 2
+            ;;
+        --summary)
+            MODE="summary"
+            SUMMARY="$2"
+            shift 2
+            ;;
+        --iteration)
+            MODE="iteration"
+            shift
+            ;;
+        --help)
+            echo "Usage:"
+            echo "  cs-update --feature F1.1 --status passed"
+            echo "  cs-update --goal G1 --status in_progress"
+            echo "  cs-update --epic E1 --status passed"
+            echo "  cs-update --log --action \"Did X\" --outcome success"
+            echo "  cs-update --pattern \"Pattern description\""
+            echo "  cs-update --summary \"Completion promise summary\""
+            echo "  cs-update --iteration"
+            echo ""
+            echo "Status values: pending, in_progress, passed, failed"
+            echo "Outcome values: success, partial, failed"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            exit 1
+            ;;
+    esac
+done
+
+case $MODE in
+    feature)
+        if [ -z "$TARGET_ID" ] || [ -z "$STATUS" ]; then
+            echo "Error: --feature requires ID and --status"
+            exit 1
+        fi
+        # Find and update feature across all epics
+        jq --arg id "$TARGET_ID" --arg status "$STATUS" \
+           '(.prd.epics[].features[] | select(.id == $id) | .status) = $status' \
+           "$STATE_FILE" > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
+        echo "Updated feature $TARGET_ID status to: $STATUS"
+        ;;
+
+    goal)
+        if [ -z "$TARGET_ID" ] || [ -z "$STATUS" ]; then
+            echo "Error: --goal requires ID and --status"
+            exit 1
+        fi
+        jq --arg id "$TARGET_ID" --arg status "$STATUS" \
+           '(.goals[] | select(.id == $id) | .status) = $status' \
+           "$STATE_FILE" > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
+        echo "Updated goal $TARGET_ID status to: $STATUS"
+        ;;
+
+    epic)
+        if [ -z "$TARGET_ID" ] || [ -z "$STATUS" ]; then
+            echo "Error: --epic requires ID and --status"
+            exit 1
+        fi
+        jq --arg id "$TARGET_ID" --arg status "$STATUS" \
+           '(.prd.epics[] | select(.id == $id) | .status) = $status' \
+           "$STATE_FILE" > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
+        echo "Updated epic $TARGET_ID status to: $STATUS"
+        ;;
+
+    log)
+        if [ -z "$ACTION" ]; then
+            echo "Error: --log requires --action"
+            exit 1
+        fi
+        TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        ITERATION=$(jq '.iteration' "$STATE_FILE")
+        LEARNINGS_JSON="[]"
+        if [ -n "$LEARNING" ]; then
+            LEARNINGS_JSON=$(echo "[]" | jq --arg l "$LEARNING" '. + [$l]')
+        fi
+        jq --arg action "$ACTION" \
+           --arg outcome "${OUTCOME:-success}" \
+           --arg details "$DETAILS" \
+           --argjson learnings "$LEARNINGS_JSON" \
+           --arg ts "$TIMESTAMP" \
+           --argjson iter "$ITERATION" \
+           '.progress_log += [{
+               "iteration": $iter,
+               "timestamp": $ts,
+               "action": $action,
+               "outcome": $outcome,
+               "details": $details,
+               "learnings": $learnings
+           }]' "$STATE_FILE" > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
+        echo "Logged: $ACTION ($OUTCOME)"
+        ;;
+
+    pattern)
+        if [ -z "$PATTERN" ]; then
+            echo "Error: --pattern requires a description"
+            exit 1
+        fi
+        jq --arg p "$PATTERN" '.codebase_patterns += [$p]' \
+           "$STATE_FILE" > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
+        echo "Added pattern: $PATTERN"
+        ;;
+
+    summary)
+        if [ -z "$SUMMARY" ]; then
+            echo "Error: --summary requires text"
+            exit 1
+        fi
+        jq --arg s "$SUMMARY" '.completion_promise.summary = $s' \
+           "$STATE_FILE" > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
+        echo "Updated completion promise summary: $SUMMARY"
+        ;;
+
+    iteration)
+        jq '.iteration += 1' "$STATE_FILE" > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
+        NEW_ITER=$(jq '.iteration' "$STATE_FILE")
+        echo "Incremented iteration to: $NEW_ITER"
+        ;;
+
+    *)
+        echo "Error: Must specify what to update"
+        echo "Run cs-update --help for usage."
+        exit 1
+        ;;
+esac

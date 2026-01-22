@@ -1,0 +1,12 @@
+{
+  "session_id": "test-session-010",
+  "transcript_path": "/Users/test/.claude/projects/-Users-test-project/session.jsonl",
+  "cwd": "/Users/test/project",
+  "permission_mode": "full",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "ls -la"
+  },
+  "tool_result": "total 48\ndrwxr-xr-x  12 test  staff   384 Dec 21 10:30 .\ndrwxr-xr-x   5 test  staff   160 Dec 20 09:15 ..\n-rw-r--r--   1 test  staff   256 Dec 21 10:30 .gitignore\ndrwxr-xr-x  10 test  staff   320 Dec 21 10:28 .git\n-rw-r--r--   1 test  staff  1024 Dec 21 10:25 README.md\n-rw-r--r--   1 test  staff   512 Dec 21 10:20 package.json"
+}

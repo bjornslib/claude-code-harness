@@ -1,0 +1,14 @@
+{
+  "description": "Ephemeral document in handoffs directory for exclusion testing (AC-15)",
+  "document": {
+    "path": "documentation/handoffs/handoff-session-2025-12-21.md",
+    "content": "# Session Handoff: 2025-12-21\n\n## Session Summary\n\n- Completed feature implementation\n- Started testing phase\n\n## Next Steps\n\n- [ ] Complete unit tests\n- [ ] Run integration tests\n\n## Files Modified\n\n- src/components/Feature.tsx\n- src/api/feature.ts\n",
+    "status_header": null
+  },
+  "expected_behavior": {
+    "should_be_excluded": true,
+    "reason": "handoffs/ directory is ephemeral and excluded from lifecycle management",
+    "should_move": false,
+    "should_update_status": false
+  }
+}

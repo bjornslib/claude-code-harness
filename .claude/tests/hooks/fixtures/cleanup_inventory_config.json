@@ -1,0 +1,51 @@
+{
+  "description": "Configuration for documentation inventory generation (AC-20)",
+  "inventory_scope": {
+    "description": "Directories to inventory for documentation audit",
+    "directories_to_scan": [
+      {
+        "path": "documentation/prds/",
+        "document_types": ["prd", "md"],
+        "recursive": true
+      },
+      {
+        "path": "documentation/solution_designs/",
+        "document_types": ["md"],
+        "recursive": true
+      },
+      {
+        "path": ".taskmaster/docs/",
+        "document_types": ["prd", "txt", "md"],
+        "recursive": true
+      }
+    ],
+    "claude_md_locations": [
+      "CLAUDE.md",
+      ".claude/CLAUDE.md",
+      "agencheck-support-agent/CLAUDE.md",
+      "agencheck-support-frontend/CLAUDE.md",
+      "agencheck-communication-agent/CLAUDE.md"
+    ]
+  },
+  "expected_inventory_format": {
+    "total_documents": 0,
+    "by_type": {
+      "prds": [],
+      "solution_designs": [],
+      "claude_md_files": []
+    },
+    "by_status": {
+      "with_status_header": [],
+      "without_status_header": [],
+      "unknown_status": []
+    },
+    "by_location": {}
+  },
+  "test_cases": {
+    "ac_20_inventory_generation": {
+      "scenario": "Codebase has documentation in 40+ directories",
+      "action": "Generate complete inventory of all PRDs, solution designs, and CLAUDE.md files",
+      "expected": "Inventory includes all documents with path, type, and status information"
+    }
+  }
+}

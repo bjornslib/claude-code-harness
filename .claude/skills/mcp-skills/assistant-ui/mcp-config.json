@@ -1,0 +1,9 @@
+{
+  "name": "assistant-ui",
+  "command": "npx",
+  "args": [
+    "-y",
+    "@assistant-ui/mcp-docs-server"
+  ],
+  "env": null
+}

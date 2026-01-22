@@ -1,0 +1,9 @@
+{
+  "name": "magicui",
+  "command": "npx",
+  "args": [
+    "-y",
+    "@magicuidesign/mcp@latest"
+  ],
+  "env": null
+}

@@ -1,0 +1,70 @@
+#!/bin/bash
+# mb-register - Register an orchestrator with the message bus
+# Usage: mb-register <instance-id> <tmux-session> <description> [--initiative=X] [--worktree=Y]
+#
+# Examples:
+#   mb-register orch-epic4 orch-epic4 "Epic 4 Orchestrator" --initiative=epic4
+#   mb-register system3 main "System 3 Meta-Orchestrator"
+
+set -e
+
+INSTANCE_ID="$1"
+TMUX_SESSION="$2"
+DESCRIPTION="$3"
+INITIATIVE=""
+WORKTREE=""
+
+# Validate required args
+if [ -z "$INSTANCE_ID" ] || [ -z "$TMUX_SESSION" ]; then
+    echo "Usage: mb-register <instance-id> <tmux-session> <description> [--initiative=X] [--worktree=Y]"
+    exit 1
+fi
+
+# Parse optional flags
+for arg in "$@"; do
+    case $arg in
+        --initiative=*)
+            INITIATIVE="${arg#*=}"
+            ;;
+        --worktree=*)
+            WORKTREE="${arg#*=}"
+            ;;
+    esac
+done
+
+# Default worktree to current directory
+[ -z "$WORKTREE" ] && WORKTREE="$(pwd)"
+
+DB_FILE="${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/message-bus/queue.db"
+
+# Ensure DB exists
+if [ ! -f "$DB_FILE" ]; then
+    echo "Error: Message bus not initialized. Run mb-init first."
+    exit 1
+fi
+
+# Escape description for SQL
+ESCAPED_DESC=$(echo "$DESCRIPTION" | sed "s/'/''/g")
+
+# Insert or update
+sqlite3 "$DB_FILE" "
+    INSERT INTO orchestrators (instance_id, tmux_session, description, initiative, worktree_path, status, last_heartbeat)
+    VALUES ('$INSTANCE_ID', '$TMUX_SESSION', '$ESCAPED_DESC', '$INITIATIVE', '$WORKTREE', 'active', CURRENT_TIMESTAMP)
+    ON CONFLICT(instance_id) DO UPDATE SET
+        tmux_session = '$TMUX_SESSION',
+        description = '$ESCAPED_DESC',
+        initiative = '$INITIATIVE',
+        worktree_path = '$WORKTREE',
+        status = 'active',
+        last_heartbeat = CURRENT_TIMESTAMP
+"
+
+# Log registration
+sqlite3 "$DB_FILE" "INSERT INTO message_log (event, instance_id, details)
+    VALUES ('registered', '$INSTANCE_ID', 'tmux=$TMUX_SESSION initiative=$INITIATIVE')"
+
+echo "Registered: $INSTANCE_ID"
+echo "  tmux: $TMUX_SESSION"
+echo "  desc: $DESCRIPTION"
+[ -n "$INITIATIVE" ] && echo "  initiative: $INITIATIVE"
+echo "  worktree: $WORKTREE"

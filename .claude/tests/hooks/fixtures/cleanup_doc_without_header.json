@@ -1,0 +1,17 @@
+{
+  "description": "Document without status header for AC-21 testing",
+  "document": {
+    "path": "documentation/solution_designs/old-feature.md",
+    "content": "# Old Feature Solution Design\n\n## Overview\n\nThis is an older solution design that was created before status headers were standardized.\n\n## Technical Approach\n\nThe implementation uses standard patterns.\n\n## Acceptance Criteria\n\n- [x] AC-1: First criterion implemented\n- [x] AC-2: Second criterion implemented\n- [ ] AC-3: Third criterion pending\n",
+    "has_status_header": false
+  },
+  "expected_behavior": {
+    "should_add_header": true,
+    "inferred_status": "draft",
+    "reason": "Document has unchecked criteria, so cannot be implemented"
+  },
+  "expected_header_format": {
+    "template": "## Document Status\n\n**Current Status**: {status}\n**Last Updated**: {date}\n**Completion**: {percentage}%\n",
+    "insertion_point": "after_h1_title"
+  }
+}

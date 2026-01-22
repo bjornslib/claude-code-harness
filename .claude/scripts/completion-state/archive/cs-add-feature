@@ -1,0 +1,86 @@
+#!/bin/bash
+# cs-add-feature - Add a feature to an epic
+# Usage: cs-add-feature --epic E1 --id F1.1 --title "Feature" --criteria "C1" --criteria "C2"
+
+set -e
+
+STATE_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/completion-state"
+STATE_FILE="$STATE_DIR/session-state.json"
+
+if [ ! -f "$STATE_FILE" ]; then
+    echo "Error: Session state not initialized. Run cs-init first."
+    exit 1
+fi
+
+EPIC_ID=""
+FEATURE_ID=""
+TITLE=""
+CRITERIA=()
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --epic)
+            EPIC_ID="$2"
+            shift 2
+            ;;
+        --id)
+            FEATURE_ID="$2"
+            shift 2
+            ;;
+        --title)
+            TITLE="$2"
+            shift 2
+            ;;
+        --criteria)
+            CRITERIA+=("$2")
+            shift 2
+            ;;
+        --help)
+            echo "Usage: cs-add-feature --epic E1 --id F1.1 --title \"Feature\" --criteria \"C1\""
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            exit 1
+            ;;
+    esac
+done
+
+if [ -z "$EPIC_ID" ] || [ -z "$FEATURE_ID" ] || [ -z "$TITLE" ]; then
+    echo "Error: --epic, --id, and --title are required"
+    exit 1
+fi
+
+# Check epic exists
+EPIC_EXISTS=$(jq --arg id "$EPIC_ID" '.prd.epics | map(select(.id == $id)) | length' "$STATE_FILE")
+if [ "$EPIC_EXISTS" -eq 0 ]; then
+    echo "Error: Epic $EPIC_ID not found"
+    exit 1
+fi
+
+# Build criteria array
+CRITERIA_JSON="[]"
+for c in "${CRITERIA[@]}"; do
+    CRITERIA_JSON=$(echo "$CRITERIA_JSON" | jq --arg c "$c" '. + [$c]')
+done
+
+# Add feature to epic
+jq --arg epic_id "$EPIC_ID" \
+   --arg id "$FEATURE_ID" \
+   --arg title "$TITLE" \
+   --argjson criteria "$CRITERIA_JSON" \
+   '(.prd.epics[] | select(.id == $epic_id) | .features) += [{
+       "id": $id,
+       "title": $title,
+       "acceptance_criteria": $criteria,
+       "status": "pending",
+       "verification": null
+   }]' "$STATE_FILE" > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
+
+echo "Added feature $FEATURE_ID to epic $EPIC_ID: $TITLE"
+if [ ${#CRITERIA[@]} -gt 0 ]; then
+    echo "Acceptance criteria:"
+    for c in "${CRITERIA[@]}"; do
+        echo "  - $c"
+    done
+fi

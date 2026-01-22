@@ -1,0 +1,65 @@
+#!/bin/bash
+# mb-init - Initialize the message bus database and directories
+# Usage: mb-init
+
+set -e
+
+MB_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/message-bus"
+DB_FILE="$MB_DIR/queue.db"
+SIGNAL_DIR="$MB_DIR/signals"
+
+mkdir -p "$MB_DIR" "$SIGNAL_DIR"
+
+# Create/update schema
+sqlite3 "$DB_FILE" << 'EOF'
+-- Messages table (the queue)
+CREATE TABLE IF NOT EXISTS messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    from_instance TEXT NOT NULL,
+    to_instance TEXT,              -- NULL = broadcast to all
+    message_type TEXT NOT NULL,    -- guidance, completion, broadcast, query, urgent
+    priority INTEGER DEFAULT 5,    -- 1=highest, 10=lowest
+    payload TEXT NOT NULL,         -- JSON payload
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    read_at TIMESTAMP,
+    ack_at TIMESTAMP,
+    expires_at TIMESTAMP           -- Optional TTL
+);
+
+-- Indexes for efficient querying
+CREATE INDEX IF NOT EXISTS idx_messages_unread
+    ON messages(to_instance, read_at) WHERE read_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_messages_priority
+    ON messages(priority, created_at) WHERE read_at IS NULL;
+
+-- Orchestrator registry
+CREATE TABLE IF NOT EXISTS orchestrators (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    instance_id TEXT UNIQUE NOT NULL,   -- e.g., "orch-epic4"
+    tmux_session TEXT NOT NULL,          -- tmux session name
+    description TEXT,                    -- Human-readable description
+    worktree_path TEXT,                  -- Path to worktree
+    initiative TEXT,                     -- Initiative/epic being worked on
+    status TEXT DEFAULT 'active',        -- active, idle, stopped
+    registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_heartbeat TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    metadata TEXT                        -- JSON for additional data
+);
+
+CREATE INDEX IF NOT EXISTS idx_orchestrators_status
+    ON orchestrators(status) WHERE status = 'active';
+
+-- Message log (audit trail)
+CREATE TABLE IF NOT EXISTS message_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    message_id INTEGER,
+    event TEXT,                          -- sent, received, read, ack, expired
+    instance_id TEXT,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    details TEXT
+);
+EOF
+
+echo "Message bus initialized at $MB_DIR"
+echo "Database: $DB_FILE"
+echo "Signals: $SIGNAL_DIR"

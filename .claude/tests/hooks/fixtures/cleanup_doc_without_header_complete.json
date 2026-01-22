@@ -1,0 +1,17 @@
+{
+  "description": "Document without status header but fully complete for AC-21 testing",
+  "document": {
+    "path": "documentation/solution_designs/legacy-complete-feature.md",
+    "content": "# Legacy Complete Feature Solution Design\n\n## Overview\n\nThis is a legacy solution design that was completed before status headers were standardized.\n\n## Technical Approach\n\nAll implementation has been done.\n\n## Acceptance Criteria\n\n- [x] AC-1: First criterion implemented\n- [x] AC-2: Second criterion implemented\n- [x] AC-3: Third criterion implemented\n",
+    "has_status_header": false
+  },
+  "expected_behavior": {
+    "should_add_header": true,
+    "inferred_status": "implemented",
+    "reason": "All acceptance criteria are checked (100% complete)"
+  },
+  "expected_header_format": {
+    "template": "## Document Status\n\n**Current Status**: {status}\n**Last Updated**: {date}\n**Completion**: {percentage}%\n",
+    "insertion_point": "after_h1_title"
+  }
+}

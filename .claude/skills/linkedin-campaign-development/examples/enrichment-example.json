@@ -1,0 +1,72 @@
+{
+  "lead": {
+    "firstName": "Greg",
+    "lastName": "Barclay",
+    "company": "Slater and Gordon Lawyers",
+    "title": "Transformation Director",
+    "linkedInUrl": "https://linkedin.com/in/gregbarclay"
+  },
+  "enrichment": {
+    "individualProfile": {
+      "summary": "10 professional certifications in Agile, Project Management, and Change Management. Stanford Graduate School of Business education (2016-2018). Lean Six Sigma Green Belt certified since 2010.",
+      "identitySignals": [
+        {
+          "type": "credentials",
+          "detail": "10 transformation certifications including Stanford Innovation",
+          "source": "LinkedIn certifications section",
+          "quality": "high"
+        },
+        {
+          "type": "reputation",
+          "detail": "Recommended as 'change management and program management expert'",
+          "source": "LinkedIn recommendations",
+          "quality": "high"
+        }
+      ],
+      "selfDescription": "Not available in About section",
+      "recommendations": [
+        "Strong change management expertise",
+        "Program management leadership"
+      ]
+    },
+    "recentActivity": {
+      "lastActive": "Within 30 days",
+      "posts": [],
+      "jobChanges": "Slater and Gordon underwent CEO transition (Dina Tutungi appointed March 2024)",
+      "hiringActivity": "None observed"
+    },
+    "companyContext": {
+      "size": "1000+ employees",
+      "industry": "Legal Services",
+      "recentNews": "CEO transition March 2024, ongoing transformation initiatives",
+      "challenges": [
+        "Organizational change management",
+        "Legal workflow efficiency",
+        "Digital transformation in traditional industry"
+      ]
+    },
+    "aiOpportunities": [
+      {
+        "opportunity": "Predict case complexity from intake for routing",
+        "rationale": "Aligns with transformation role and legal workflow optimization",
+        "roleAlignment": "Transformation Director - appropriate for strategic ops"
+      },
+      {
+        "opportunity": "Analyze transformation readiness across departments",
+        "rationale": "Directly relevant to their certification expertise",
+        "roleAlignment": "Direct fit for transformation leadership"
+      },
+      {
+        "opportunity": "Surface patterns in legal workflow bottlenecks",
+        "rationale": "Connects Lean Six Sigma background to legal ops",
+        "roleAlignment": "Appropriate for process improvement leader"
+      }
+    ]
+  },
+  "selectedApproach": {
+    "identitySignal": "10 transformation certifications including Stanford Innovation",
+    "identityType": "credentials",
+    "aiOpportunity": "Predict case complexity from intake for routing",
+    "rationale": "Leading with professional development identity shows deep profile reading. Stanford credential adds prestige. AI opportunity connects to legal workflow during organizational change period."
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "scenario": "new_branch_first_push",
+  "description": "First push on a new branch in existing repository",
+  "branch": "feature/new-feature",
+  "branch_is_new": true,
+  "last_push_commit": null,
+  "current_head": "feat789",
+  "expected_commits": ["feat123", "feat456", "feat789"],
+  "total_commits_in_repo": 50,
+  "reflog_output": "feat789 HEAD@{0}: commit: feature complete\nfeat456 HEAD@{1}: commit: add tests\nfeat123 HEAD@{2}: checkout: moving from main to feature/new-feature",
+  "detection_method": "fallback_10",
+  "notes": "New branch has no push history, uses fallback"
+}

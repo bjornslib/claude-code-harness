@@ -1,0 +1,11 @@
+{
+  "scenario": "few_commits",
+  "description": "New repo with fewer than 10 commits total",
+  "last_push_commit": null,
+  "current_head": "commit05",
+  "expected_commits": ["commit01", "commit02", "commit03", "commit04", "commit05"],
+  "total_commits_in_repo": 5,
+  "reflog_output": "commit05 HEAD@{0}: commit: fifth\ncommit04 HEAD@{1}: commit: fourth\ncommit03 HEAD@{2}: commit: third\ncommit02 HEAD@{3}: commit: second\ncommit01 HEAD@{4}: commit (initial): first",
+  "detection_method": "fallback_all",
+  "notes": "Fewer than 10 commits, returns all commits"
+}

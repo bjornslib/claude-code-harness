@@ -1,0 +1,74 @@
+{
+  "description": "Sample documentation inventory result for AC-20 testing",
+  "inventory": {
+    "generated_at": "2025-12-21T14:30:00Z",
+    "total_documents": 15,
+    "by_type": {
+      "prds": [
+        {
+          "path": "documentation/prds/feature-a-prd.md",
+          "has_status_header": true,
+          "status": "approved"
+        },
+        {
+          "path": ".taskmaster/docs/post-push-code-review-hook-prd.md",
+          "has_status_header": true,
+          "status": "in-progress"
+        }
+      ],
+      "solution_designs": [
+        {
+          "path": "documentation/solution_designs/feature-x.md",
+          "has_status_header": true,
+          "status": "implemented"
+        },
+        {
+          "path": "documentation/solution_designs/feature-y.md",
+          "has_status_header": false,
+          "status": "unknown"
+        },
+        {
+          "path": "documentation/solution_designs/implemented/old-feature.md",
+          "has_status_header": false,
+          "status": "unknown"
+        }
+      ],
+      "claude_md_files": [
+        {
+          "path": "CLAUDE.md",
+          "type": "project_root"
+        },
+        {
+          "path": ".claude/CLAUDE.md",
+          "type": "claude_config"
+        },
+        {
+          "path": "agencheck-support-agent/CLAUDE.md",
+          "type": "service_specific"
+        }
+      ]
+    },
+    "by_status": {
+      "with_status_header": 5,
+      "without_status_header": 7,
+      "unknown_status": 3
+    },
+    "summary": {
+      "documents_needing_headers": 7,
+      "implemented_without_proper_status": 1,
+      "total_prds": 6,
+      "total_solution_designs": 5,
+      "total_claude_md": 4
+    }
+  },
+  "expected_report_format": {
+    "sections": [
+      "Summary Statistics",
+      "Documents by Type",
+      "Documents by Status",
+      "Documents Needing Headers",
+      "Implemented Documents Validation",
+      "Recommended Actions"
+    ]
+  }
+}

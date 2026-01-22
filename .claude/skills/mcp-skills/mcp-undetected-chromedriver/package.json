@@ -1,0 +1,8 @@
+{
+  "name": "skill-mcp-undetected-chromedriver",
+  "version": "1.0.0",
+  "description": "Claude Skill wrapper for mcp-undetected-chromedriver MCP server",
+  "scripts": {
+    "setup": "pip install mcp"
+  }
+}

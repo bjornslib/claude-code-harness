@@ -1,0 +1,503 @@
+---
+name: system3-orchestrator
+description: This skill should be used when spawning orchestrators, launching new initiatives, starting parallel work, creating orchestrators in worktrees, or managing System 3 orchestration. Provides complete preflight checklists and spawn workflows for nested orchestrator management with Hindsight wisdom injection.
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Task, SlashCommand
+version: 3.2.0
+---
+
+# System 3 Orchestrator Skill
+
+Spawn orchestrator Claude Code sessions in isolated worktrees. Named after Russian nesting dolls: System 3 contains orchestrators, which contain workers.
+
+```
+System 3 (Uber-Orchestrator)
+    ├── Orchestrator A (worktree: trees/auth)
+    ├── Orchestrator B (worktree: trees/dashboard)
+    └── Orchestrator C (worktree: trees/api-v2)
+```
+
+---
+
+## 🚨 WHEN YOU MUST USE THIS SKILL
+
+**Invoke this skill for ANY implementation work. No exceptions.**
+
+### Triggers That REQUIRE This Skill
+
+| User Request | Action |
+|--------------|--------|
+| "Fix the bug in..." | → Invoke this skill, spawn orchestrator |
+| "Add a feature to..." | → Invoke this skill, spawn orchestrator |
+| "Refactor the..." | → Invoke this skill, spawn orchestrator |
+| "Update the code to..." | → Invoke this skill, spawn orchestrator |
+| "Fix deprecation warnings" | → Invoke this skill, spawn orchestrator |
+| "Implement..." | → Invoke this skill, spawn orchestrator |
+| ANY task requiring Edit/Write | → Invoke this skill, spawn orchestrator |
+
+### The Test
+
+**Ask yourself: "Will this result in code being edited or written?"**
+
+- **YES** → You MUST invoke this skill and spawn an orchestrator
+- **NO** → You may proceed directly (research, planning, memory operations)
+
+### Common Rationalizations to REJECT
+
+| Rationalization | Why It's Wrong |
+|-----------------|----------------|
+| "It's just a small fix" | Size is irrelevant - pattern matters |
+| "It's straightforward" | Complexity is irrelevant - pattern matters |
+| "Only 2-3 files" | File count is irrelevant - pattern matters |
+| "I'll delegate to backend-solutions-engineer" | WRONG - delegate to ORCHESTRATOR who delegates |
+| "Let me research first" | Research is fine, but the moment you'd Edit/Write → orchestrator |
+
+### What System 3 Does vs What Orchestrators Do
+
+| System 3 (You) | Orchestrators |
+|----------------|---------------|
+| Spawn orchestrators | Spawn workers |
+| Monitor progress | Coordinate implementation |
+| Inject wisdom | Execute Edit/Write |
+| Guide strategy | Run tests |
+| Validate outcomes | Handle beads |
+
+---
+
+## PREFLIGHT CHECKLIST (Do This First)
+
+Before spawning ANY orchestrator, complete this checklist:
+
+### [ ] 1. Extract Goals from PRD
+
+```python
+# Read the PRD
+prd_content = Read(f".taskmaster/docs/{initiative}-prd.md")
+
+# Retain goals to Hindsight
+mcp__hindsight__retain(
+    content=f"""
+    ## Active Initiative: {initiative}
+    ### Goals: [extract from PRD]
+    ### Acceptance Criteria: [extract from PRD]
+    ### Scope Boundaries: [IN/OUT from PRD]
+    """,
+    context="system3-prd-tracking"
+)
+```
+
+**Detailed workflow**: See [references/prd-extraction.md](references/prd-extraction.md)
+
+### [ ] 2. Initialize Completion Promise
+
+**Note**: `CLAUDE_SESSION_ID` is auto-set by `ccsystem3`. No manual initialization needed.
+
+```bash
+# Create promise from PRD or goal (session ID already set!)
+cs-promise --create "Complete [initiative] with [acceptance criteria]"
+
+# Start the promise
+cs-promise --start <promise-id>
+```
+
+**For tmux-spawned orchestrators**: You must set `CLAUDE_SESSION_ID` manually before launching (see spawn sequence below).
+
+**Detailed workflow**: See [references/completion-promise.md](references/completion-promise.md)
+
+### [ ] 3. Gather Wisdom from Hindsight
+
+```python
+# Meta-orchestration patterns (private bank)
+meta_patterns = mcp__hindsight__reflect(
+    f"What orchestration patterns apply to {initiative}?",
+    budget="mid",
+    bank_id="system3-orchestrator"
+)
+
+# Domain-specific patterns (shared bank)
+domain_patterns = mcp__hindsight__reflect(
+    f"What development patterns apply to {domain}?",
+    budget="mid",
+    bank_id="claude-code-agencheck"
+)
+```
+
+### [ ] 4. Check Business Outcome Linkage
+
+```bash
+# What Business Epic does this serve?
+bd list --tag=bo --status=open
+
+# What Key Results will this advance?
+bd show <bo-id>
+```
+
+**Detailed workflow**: See [references/okr-tracking.md](references/okr-tracking.md)
+
+### [ ] 5. Define Validation Expectations
+
+Determine which validation levels apply:
+- [ ] Unit tests required?
+- [ ] API tests required?
+- [ ] E2E browser tests required?
+
+**Detailed workflow**: See [references/validation-workflow.md](references/validation-workflow.md)
+
+---
+
+## SPAWN WORKFLOW
+
+### Option A: Use Spawn Script (Recommended)
+
+```bash
+# 1. Create worktree (if needed)
+/create_worktree [initiative-name]
+
+# 2. Create wisdom injection file
+cat > /tmp/wisdom-${INITIATIVE}.md << 'EOF'
+[Include FIRST ACTIONS template + gathered wisdom]
+EOF
+
+# 3. Launch
+./scripts/spawn-orchestrator.sh [initiative-name] /tmp/wisdom-${INITIATIVE}.md
+```
+
+The script automatically:
+- Creates `.claude` and `.beads` symlinks
+- Sets `CLAUDE_SESSION_DIR` and `CLAUDE_SESSION_ID`
+- Launches Claude Code with proper tmux patterns
+- Updates orchestrator registry
+
+### Option B: Manual tmux Commands
+
+```bash
+# 1. Symlink shared resources
+ln -s $(pwd)/.claude trees/[name]/agencheck/.claude
+ln -s $(dirname $(pwd))/.beads trees/[name]/.beads
+
+# 2. Create tmux session
+tmux new-session -d -s "orch-[name]"
+
+# 3. Navigate to worktree
+tmux send-keys -t "orch-[name]" "cd trees/[name]/agencheck"
+tmux send-keys -t "orch-[name]" Enter
+
+# 4. CRITICAL: Set env vars BEFORE launching Claude
+tmux send-keys -t "orch-[name]" "export CLAUDE_SESSION_DIR=[initiative]-$(date +%Y%m%d)"
+tmux send-keys -t "orch-[name]" Enter
+tmux send-keys -t "orch-[name]" "export CLAUDE_SESSION_ID=orch-[name]"
+tmux send-keys -t "orch-[name]" Enter
+
+# 5. Launch Claude Code with ccorch (Enter MUST be separate!)
+tmux send-keys -t "orch-[name]" "ccorch"
+tmux send-keys -t "orch-[name]" Enter
+
+# 6. Wait for initialization
+sleep 5
+
+# 7. Send initialization prompt
+tmux send-keys -t "orch-[name]" "$(cat /tmp/wisdom-${INITIATIVE}.md)"
+tmux send-keys -t "orch-[name]" Enter
+```
+
+**tmux command reference**: See [references/tmux-commands.md](references/tmux-commands.md)
+
+---
+
+## INITIALIZATION TEMPLATE
+
+Include this in your wisdom injection file:
+
+```markdown
+You are an orchestrator for initiative: [INITIATIVE_NAME]
+
+## FIRST ACTIONS (Do Not Skip)
+
+### 1. Invoke Skill (MANDATORY)
+Before ANYTHING else: `Skill("orchestrator-multiagent")`
+
+### 2. Register with Message Bus
+```bash
+.claude/scripts/message-bus/mb-register \
+    "${CLAUDE_SESSION_ID}" \
+    "orch-[name]" \
+    "[description]" \
+    --initiative="[name]"
+```
+
+### 3. Spawn Background Monitor
+```python
+Task(
+    subagent_type="general-purpose",
+    model="haiku",
+    run_in_background=True,
+    description="Message queue monitor",
+    prompt="[Monitor template from message-bus skill]"
+)
+```
+
+### 4. Check for Messages
+```bash
+.claude/scripts/message-bus/mb-recv --peek
+```
+
+## System 3 Wisdom Injection
+[Include patterns from Hindsight here]
+
+## Your Mission
+[Initiative description and goals]
+
+## Acceptance Criteria
+[From PRD or completion promise]
+
+## Validation Requirements
+[Which of 3 levels: Unit, API, E2E]
+
+## Starting Point
+1. Follow PREFLIGHT checklist from orchestrator-multiagent skill
+2. Use `bd ready` to find first task
+3. Report progress to `.claude/progress/orch-[name]-log.md`
+4. Send completion messages to System 3 via `mb-send`
+```
+
+---
+
+## MONITORING CHECKLIST
+
+**🚨 CRITICAL**: Always monitor orchestrators using background Haiku agents. Never block the main thread waiting for orchestrator status.
+
+### Mandatory Background Monitoring Pattern
+
+Spawn a Haiku 4.5 background agent to monitor. It reports back ONLY when intervention is needed:
+
+```python
+Task(
+    subagent_type="general-purpose",
+    model="haiku",  # Uses Haiku 4.5 - fast and cheap
+    run_in_background=True,  # MANDATORY - never monitor in main thread
+    description=f"Monitor orch-{name}",
+    prompt=f"""
+Monitor tmux session 'orch-{name}' and report back ONLY if:
+1. Orchestrator is BLOCKED and needs intervention
+2. Orchestrator has COMPLETED all work
+3. There is an ERROR requiring attention
+
+Check command:
+```bash
+tmux capture-pane -t orch-{name} -p | tail -50
+```
+
+If orchestrator is actively working (not blocked): Confirm running, do NOT report full output.
+If session doesn't exist: Report that.
+
+Be concise - only return actionable information.
+"""
+)
+```
+
+**Why background agents?** System 3 can continue other work while orchestrators run. Only interrupt when intervention is actually needed.
+
+### Quick Manual Status Check (for debugging)
+
+```bash
+# List all orchestrator sessions
+tmux list-sessions | grep "^orch-"
+
+# View recent output (manual check only)
+tmux capture-pane -t "orch-[name]" -p | tail -20
+```
+
+### Intervention via Message Bus
+
+```bash
+# Send guidance (preferred)
+.claude/scripts/message-bus/mb-send "orch-[name]" guidance '{
+    "subject": "Priority Change",
+    "body": "Focus on API endpoints first"
+}'
+
+# Urgent message
+.claude/scripts/message-bus/mb-send "orch-[name]" urgent '{
+    "subject": "Stop Work",
+    "body": "Regression detected"
+}' --urgent
+
+# Broadcast to all
+.claude/scripts/message-bus/mb-send --broadcast announcement '{
+    "subject": "Policy Update",
+    "body": "All commits require passing tests"
+}'
+```
+
+### Direct tmux Intervention (Fallback)
+
+```bash
+# Inject message
+tmux send-keys -t "orch-[name]" "[guidance]"
+tmux send-keys -t "orch-[name]" Enter
+
+# Interrupt and rescue
+tmux send-keys -t "orch-[name]" C-c
+tmux send-keys -t "orch-[name]" "[rescue instructions]"
+tmux send-keys -t "orch-[name]" Enter
+```
+
+---
+
+## POST-COMPLETION CHECKLIST
+
+When an orchestrator completes:
+
+### [ ] 1. Collect Outcomes
+
+```python
+progress_log = Read(f"trees/{initiative}/.claude/progress/orch-{initiative}-log.md")
+```
+
+### [ ] 2. Apply Process Supervision
+
+```python
+validation = mcp__hindsight__reflect(
+    f"""
+    PROCESS SUPERVISION: Validate orchestrator reasoning
+
+    INITIATIVE: {initiative}
+    REASONING PATH: {progress_log}
+
+    VERDICT: VALID or INVALID
+    CONFIDENCE: 0.0 to 1.0
+    """,
+    budget="high",
+    bank_id="system3-orchestrator"
+)
+```
+
+### [ ] 3. Store Learnings
+
+```python
+# Valid pattern
+mcp__hindsight__retain(
+    content=f"Validated pattern: {pattern_summary}",
+    context="system3-patterns",
+    bank_id="system3-orchestrator"
+)
+
+# Or anti-pattern
+mcp__hindsight__retain(
+    content=f"Anti-pattern: {failure_description}",
+    context="system3-anti-patterns",
+    bank_id="system3-orchestrator"
+)
+```
+
+### [ ] 4. Check Key Results
+
+```python
+# Did this advance any Key Results?
+for kr in get_key_results_for(business_epic):
+    if can_verify_now(kr):
+        Task(subagent_type="validation-agent",
+             prompt=f"--mode=business --task_id={kr.id}")
+```
+
+### [ ] 5. Merge Work
+
+```bash
+cd trees/[name]/agencheck
+git push -u origin [branch-name]
+gh pr create --title "[initiative] Implementation" --body "..."
+```
+
+### [ ] 6. Cleanup
+
+```bash
+# Update registry (automatic if using terminate script)
+./scripts/terminate-orchestrator.sh [initiative-name]
+
+# Or remove worktree
+/remove_worktree [initiative-name]
+```
+
+**Detailed workflow**: See [references/post-orchestration.md](references/post-orchestration.md)
+
+---
+
+## PARALLEL ORCHESTRATORS
+
+### Coordination Rules
+
+1. **No Overlapping Files** - Clear file ownership per orchestrator
+2. **Independent Epics** - No dependent tasks across orchestrators
+3. **Shared Knowledge** - All learnings go to central Hindsight bank
+4. **Regular Sync** - Check for conflicts before merging
+
+### Registry
+
+Maintain active orchestrators in `.claude/state/active-orchestrators.json`:
+
+```json
+{
+  "orchestrators": [{
+    "name": "orch-auth",
+    "initiative": "auth",
+    "worktree": "trees/auth/agencheck",
+    "status": "active",
+    "started_at": "2025-12-29T10:00:00Z"
+  }]
+}
+```
+
+---
+
+## QUICK REFERENCE
+
+### Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `./scripts/spawn-orchestrator.sh` | Spawn new orchestrator |
+| `./scripts/status-orchestrators.sh` | Check all status |
+| `./scripts/terminate-orchestrator.sh` | Graceful termination |
+| `./scripts/inject-guidance.sh` | Send message |
+
+### Commands
+
+| Action | Command |
+|--------|---------|
+| List orchestrators | `tmux list-sessions \| grep orch-` |
+| Attach to session | `tmux attach -t orch-[name]` |
+| View output | `tmux capture-pane -t orch-[name] -p` |
+| Create worktree | `/create_worktree [name]` |
+| Remove worktree | `/remove_worktree [name]` |
+
+### Reference Files
+
+| File | Content |
+|------|---------|
+| [completion-promise.md](references/completion-promise.md) | Session state tracking, cs-* scripts |
+| [prd-extraction.md](references/prd-extraction.md) | Goal extraction workflow |
+| [validation-workflow.md](references/validation-workflow.md) | 3-level validation, validation-agent |
+| [okr-tracking.md](references/okr-tracking.md) | Business Epic / Key Result tracking |
+| [spawn-workflow.md](references/spawn-workflow.md) | Complete spawn process |
+| [tmux-commands.md](references/tmux-commands.md) | tmux command reference |
+| [post-orchestration.md](references/post-orchestration.md) | Post-completion workflow |
+| [troubleshooting.md](references/troubleshooting.md) | Common issues and solutions |
+
+---
+
+**Version**: 3.1.0
+**Dependencies**: worktree-manager-skill, orchestrator-multiagent, tmux, Hindsight MCP
+**Theory**: Sophia (arXiv:2512.18202), Hindsight (arXiv:2512.12818)
+
+**v3.1.0 Changes**:
+- **BREAKING**: Use `ccorch` instead of `launchcc` for spawning orchestrators
+- Monitoring must use background Haiku 4.5 agents (never main thread)
+- Enhanced monitoring pattern with specific reporting criteria
+- Added explicit "Why background agents?" explanation
+
+**v3.0.0 Changes**:
+- Restructured as preflight checklist format
+- Added 4 new reference files: completion-promise.md, prd-extraction.md, validation-workflow.md, okr-tracking.md
+- Updated spawn-orchestrator.sh with CLAUDE_SESSION_DIR and CLAUDE_SESSION_ID
+- Added validation expectations to preflight
+- Added OKR linkage check to preflight
+- Enhanced initialization template with message bus integration

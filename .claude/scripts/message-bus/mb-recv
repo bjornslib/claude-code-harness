@@ -1,0 +1,101 @@
+#!/bin/bash
+# mb-recv - Receive messages from the queue
+# Usage: mb-recv [--peek] [--json] [--instance=ID]
+#
+# Options:
+#   --peek      Don't mark messages as read
+#   --json      Output in JSON format
+#   --instance  Override instance ID (default: $CLAUDE_SESSION_ID or "default")
+
+set -e
+
+INSTANCE_ID="${CLAUDE_SESSION_ID:-default}"
+DB_FILE="${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/message-bus/queue.db"
+SIGNAL_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/message-bus/signals"
+PEEK=false
+JSON=false
+
+# Parse arguments
+for arg in "$@"; do
+    case $arg in
+        --peek)
+            PEEK=true
+            ;;
+        --json)
+            JSON=true
+            ;;
+        --instance=*)
+            INSTANCE_ID="${arg#*=}"
+            ;;
+    esac
+done
+
+# Ensure DB exists
+if [ ! -f "$DB_FILE" ]; then
+    echo "Error: Message bus not initialized. Run mb-init first."
+    exit 1
+fi
+
+# Fetch messages (targeted + broadcast)
+if [ "$JSON" = true ]; then
+    MESSAGES=$(sqlite3 -json "$DB_FILE" "
+        SELECT id, from_instance, message_type, priority, payload, created_at
+        FROM messages
+        WHERE (to_instance = '$INSTANCE_ID' OR to_instance IS NULL)
+          AND read_at IS NULL
+        ORDER BY priority ASC, created_at ASC
+    " 2>/dev/null || echo "[]")
+
+    if [ "$MESSAGES" = "[]" ]; then
+        echo "[]"
+        exit 0
+    fi
+
+    echo "$MESSAGES"
+else
+    MESSAGES=$(sqlite3 "$DB_FILE" "
+        SELECT id, from_instance, message_type, payload
+        FROM messages
+        WHERE (to_instance = '$INSTANCE_ID' OR to_instance IS NULL)
+          AND read_at IS NULL
+        ORDER BY priority ASC, created_at ASC
+    " 2>/dev/null || echo "")
+
+    if [ -z "$MESSAGES" ]; then
+        echo "No pending messages for $INSTANCE_ID"
+        exit 0
+    fi
+
+    echo "=== Messages for $INSTANCE_ID ==="
+    echo ""
+    echo "$MESSAGES" | while IFS='|' read -r id from_inst msg_type payload; do
+        echo "[$id] From: $from_inst | Type: $msg_type"
+        echo "Payload: $payload"
+        echo "---"
+    done
+fi
+
+# Mark as read (unless peek)
+if [ "$PEEK" = false ]; then
+    MSG_IDS=$(sqlite3 "$DB_FILE" "
+        SELECT id FROM messages
+        WHERE (to_instance = '$INSTANCE_ID' OR to_instance IS NULL)
+          AND read_at IS NULL
+    " 2>/dev/null | tr '\n' ',' | sed 's/,$//')
+
+    if [ -n "$MSG_IDS" ]; then
+        sqlite3 "$DB_FILE" "
+            UPDATE messages SET read_at = CURRENT_TIMESTAMP
+            WHERE id IN ($MSG_IDS)
+        "
+
+        # Log reads
+        for id in $(echo "$MSG_IDS" | tr ',' ' '); do
+            sqlite3 "$DB_FILE" "INSERT INTO message_log (message_id, event, instance_id)
+                VALUES ($id, 'read', '$INSTANCE_ID')"
+        done
+    fi
+
+    # Clear signal files
+    rm -f "$SIGNAL_DIR/${INSTANCE_ID}.signal" "$SIGNAL_DIR/${INSTANCE_ID}.msg" 2>/dev/null || true
+fi

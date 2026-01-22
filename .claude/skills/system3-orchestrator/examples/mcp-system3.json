@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "hindsight-system3": {
+      "url": "http://localhost:8888/mcp/claude-code-system3/mcp",
+      "description": "Private bank for System 3 meta-orchestration wisdom"
+    },
+    "hindsight-shared": {
+      "url": "http://localhost:8888/mcp/claude-code-agencheck/mcp",
+      "description": "Shared bank for project knowledge (all sessions)"
+    }
+  }
+}

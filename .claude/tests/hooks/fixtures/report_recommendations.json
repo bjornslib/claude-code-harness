@@ -1,0 +1,60 @@
+{
+  "description": "Report with actionable recommendations section (AC-17 Recommendations section)",
+  "scenario": "report_with_recommendations",
+  "push_context": {
+    "branch": "develop",
+    "remote": "origin/develop",
+    "commits_start": "rec0001",
+    "commits_end": "rec0099",
+    "commit_count": 6,
+    "timestamp": "2025-12-21T09:00:00Z"
+  },
+  "skill_results": {
+    "security": {
+      "status": "warnings",
+      "issues_count": 1,
+      "findings": [
+        {"severity": "moderate", "type": "dependency", "package": "axios@0.21.1", "recommendation": "Upgrade to axios@1.6.0"}
+      ]
+    },
+    "code_quality": {
+      "status": "warnings",
+      "issues_count": 3,
+      "findings": [
+        {"severity": "warning", "type": "complexity", "file": "src/service.ts", "recommendation": "Extract helper functions"},
+        {"severity": "warning", "type": "type_safety", "file": "src/api.ts", "recommendation": "Add explicit type annotations"},
+        {"severity": "info", "type": "style", "file": "src/utils.ts", "recommendation": "Consider using optional chaining"}
+      ]
+    },
+    "documentation": {
+      "status": "warnings",
+      "issues_count": 1,
+      "updates": []
+    }
+  },
+  "expected_recommendations": [
+    {
+      "priority": 1,
+      "category": "security",
+      "action": "Run npm audit fix or manually update axios to version 1.6.0"
+    },
+    {
+      "priority": 2,
+      "category": "code_quality",
+      "action": "Refactor src/service.ts to reduce cyclomatic complexity"
+    },
+    {
+      "priority": 3,
+      "category": "code_quality",
+      "action": "Add type annotations to src/api.ts functions"
+    }
+  ],
+  "expected_report": {
+    "recommendations_section": {
+      "has_content": true,
+      "is_actionable": true,
+      "ordered_by_priority": true,
+      "minimum_recommendations": 1
+    }
+  }
+}

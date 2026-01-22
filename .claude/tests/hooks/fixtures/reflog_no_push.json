@@ -1,0 +1,11 @@
+{
+  "scenario": "no_push_history",
+  "description": "First push ever - no push in reflog history",
+  "last_push_commit": null,
+  "current_head": "abc1234",
+  "expected_commits": ["commit01", "commit02", "commit03", "commit04", "commit05", "commit06", "commit07", "commit08", "commit09", "commit10"],
+  "total_commits_in_repo": 15,
+  "reflog_output": "abc1234 HEAD@{0}: commit: feat: add new feature\ndef5678 HEAD@{1}: commit: fix: resolve bug\n333ccc HEAD@{2}: commit: initial commit\n444ddd HEAD@{3}: commit (initial): Initial commit",
+  "detection_method": "fallback_10",
+  "notes": "No push history in reflog, uses fallback to last 10 commits"
+}

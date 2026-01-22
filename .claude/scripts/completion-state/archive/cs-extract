@@ -1,0 +1,150 @@
+#!/bin/bash
+# cs-extract - Extract goals from prompt or PRD and add to session state
+# Usage: cs-extract --prompt "User prompt..."
+#        cs-extract --prd "path/to/prd.md"
+#        cs-extract --goal "Goal description" --criteria "Criterion 1" --criteria "Criterion 2"
+
+set -e
+
+STATE_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/completion-state"
+STATE_FILE="$STATE_DIR/session-state.json"
+
+# Check state exists
+if [ ! -f "$STATE_FILE" ]; then
+    echo "Error: Session state not initialized. Run cs-init first."
+    exit 1
+fi
+
+MODE=""
+PROMPT=""
+PRD_PATH=""
+GOAL_DESC=""
+CRITERIA=()
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --prompt)
+            MODE="prompt"
+            PROMPT="$2"
+            shift 2
+            ;;
+        --prd)
+            MODE="prd"
+            PRD_PATH="$2"
+            shift 2
+            ;;
+        --goal)
+            MODE="manual"
+            GOAL_DESC="$2"
+            shift 2
+            ;;
+        --criteria)
+            CRITERIA+=("$2")
+            shift 2
+            ;;
+        --help)
+            echo "Usage: cs-extract --prompt \"User prompt...\""
+            echo "       cs-extract --prd \"path/to/prd.md\""
+            echo "       cs-extract --goal \"Goal\" --criteria \"C1\" --criteria \"C2\""
+            echo ""
+            echo "Extract goals from user prompt or PRD and add to session state."
+            echo ""
+            echo "Options:"
+            echo "  --prompt TEXT    Extract goals from user's raw prompt"
+            echo "  --prd PATH       Extract epics/features from PRD file"
+            echo "  --goal TEXT      Manually add a goal"
+            echo "  --criteria TEXT  Acceptance criterion (use multiple times)"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            exit 1
+            ;;
+    esac
+done
+
+case $MODE in
+    prompt)
+        # Store raw prompt and mark for extraction
+        ESCAPED_PROMPT=$(echo "$PROMPT" | jq -Rs .)
+        EXTRACTED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+        # Update completion_promise
+        jq --argjson prompt "$ESCAPED_PROMPT" \
+           --arg extracted "$EXTRACTED_AT" \
+           '.completion_promise.raw_prompt = $prompt |
+            .completion_promise.extracted_at = $extracted' \
+           "$STATE_FILE" > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
+
+        echo "Stored raw prompt in completion promise."
+        echo ""
+        echo "IMPORTANT: You must now extract goals from this prompt."
+        echo "Use: cs-extract --goal \"Goal description\" --criteria \"Criterion\""
+        echo ""
+        echo "Or use Claude to analyze and extract goals, then call cs-extract for each."
+        ;;
+
+    prd)
+        if [ ! -f "$PRD_PATH" ]; then
+            echo "Error: PRD file not found: $PRD_PATH"
+            exit 1
+        fi
+
+        # Store PRD source
+        jq --arg path "$PRD_PATH" '.prd.source = $path' \
+           "$STATE_FILE" > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
+
+        echo "Linked PRD: $PRD_PATH"
+        echo ""
+        echo "IMPORTANT: You must now extract epics/features from this PRD."
+        echo "Use cs-add-epic and cs-add-feature to populate the structure."
+        echo ""
+        echo "Example:"
+        echo "  cs-add-epic --id E1 --title \"Epic title\""
+        echo "  cs-add-feature --epic E1 --id F1.1 --title \"Feature\" --criteria \"Criterion\""
+        ;;
+
+    manual)
+        if [ -z "$GOAL_DESC" ]; then
+            echo "Error: --goal requires a description"
+            exit 1
+        fi
+
+        # Generate goal ID
+        GOAL_COUNT=$(jq '.goals | length' "$STATE_FILE")
+        GOAL_ID="G$((GOAL_COUNT + 1))"
+
+        # Build criteria array
+        CRITERIA_JSON="[]"
+        for c in "${CRITERIA[@]}"; do
+            CRITERIA_JSON=$(echo "$CRITERIA_JSON" | jq --arg c "$c" '. + [$c]')
+        done
+
+        # Add goal
+        jq --arg id "$GOAL_ID" \
+           --arg desc "$GOAL_DESC" \
+           --argjson criteria "$CRITERIA_JSON" \
+           '.goals += [{
+               "id": $id,
+               "description": $desc,
+               "acceptance_criteria": $criteria,
+               "status": "pending",
+               "verification": null
+           }]' "$STATE_FILE" > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
+
+        echo "Added goal $GOAL_ID: $GOAL_DESC"
+        if [ ${#CRITERIA[@]} -gt 0 ]; then
+            echo "Acceptance criteria:"
+            for c in "${CRITERIA[@]}"; do
+                echo "  - $c"
+            done
+        fi
+        ;;
+
+    *)
+        echo "Error: Must specify --prompt, --prd, or --goal"
+        echo "Run cs-extract --help for usage."
+        exit 1
+        ;;
+esac

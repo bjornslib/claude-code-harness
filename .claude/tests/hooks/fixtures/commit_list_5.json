@@ -1,0 +1,15 @@
+{
+  "description": "List of only 5 commits - fewer than the 10 commit fallback limit",
+  "scenario": "AC-5: New repository with fewer than 10 commits",
+  "commit_list": [
+    {"hash": "aaa1111", "message": "Initial commit", "timestamp": "2025-12-21T09:00:00Z"},
+    {"hash": "bbb2222", "message": "feat: add basic structure", "timestamp": "2025-12-21T09:15:00Z"},
+    {"hash": "ccc3333", "message": "docs: add README", "timestamp": "2025-12-21T09:30:00Z"},
+    {"hash": "ddd4444", "message": "feat: add main feature", "timestamp": "2025-12-21T09:45:00Z"},
+    {"hash": "eee5555", "message": "fix: initial bug fix", "timestamp": "2025-12-21T10:00:00Z"}
+  ],
+  "git_command": "git rev-list --reverse HEAD~10..HEAD",
+  "expected_behavior": "When fewer than 10 commits exist, review ALL available commits",
+  "expected_count": 5,
+  "notes": "HEAD~10 will fail gracefully when fewer than 10 commits exist, defaulting to reviewing all commits"
+}

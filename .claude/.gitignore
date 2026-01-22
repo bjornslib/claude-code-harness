@@ -1,0 +1,5 @@
+# Ignore generated Codex review reports (prevent stale report issues)
+reports/post-push/codex-review-*.md
+
+# Keep the directory structure and other files
+!reports/post-push/.gitkeep

@@ -1,0 +1,24 @@
+{
+  "scenario": "multiple_branches",
+  "description": "Repository with push history across multiple branches",
+  "current_branch": "feature/auth",
+  "last_push_commit": "333ccc",
+  "current_head": "abc1234",
+  "expected_commits": ["abc1234"],
+  "total_commits_in_repo": 50,
+  "branches": [
+    {
+      "branch": "main",
+      "last_push_commit": "111aaa",
+      "expected_commits": ["222bbb"]
+    },
+    {
+      "branch": "feature/auth",
+      "last_push_commit": "333ccc",
+      "expected_commits": ["abc1234"]
+    }
+  ],
+  "reflog_output": "abc1234 HEAD@{0}: commit: feat: add auth middleware\ndef5678 HEAD@{1}: checkout: moving from main to feature/auth\n111aaa HEAD@{2}: push origin main\n222bbb HEAD@{3}: commit: docs: update main readme\n333ccc HEAD@{4}: push origin feature/auth\n444ddd HEAD@{5}: commit: feat: initial auth setup",
+  "detection_method": "reflog",
+  "notes": "Each branch has independent push tracking"
+}

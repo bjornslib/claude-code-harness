@@ -1,0 +1,12 @@
+{
+  "scenario": "reflog_expired",
+  "description": "Reflog entries have expired (garbage collected)",
+  "last_push_commit": null,
+  "current_head": "head999",
+  "expected_commits": ["commit01", "commit02", "commit03", "commit04", "commit05", "commit06", "commit07", "commit08", "commit09", "commit10"],
+  "total_commits_in_repo": 100,
+  "reflog_expired": true,
+  "reflog_output": "head999 HEAD@{0}: commit: recent\n",
+  "detection_method": "fallback_10",
+  "notes": "Old reflog entries were garbage collected, push history lost"
+}

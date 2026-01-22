@@ -1,0 +1,12 @@
+{
+  "session_id": "test-session-002",
+  "transcript_path": "/Users/test/.claude/projects/-Users-test-project/session.jsonl",
+  "cwd": "/Users/test/project",
+  "permission_mode": "full",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git push -u origin feature/new-auth"
+  },
+  "tool_result": "Enumerating objects: 15, done.\nCounting objects: 100% (15/15), done.\nDelta compression using up to 10 threads\nCompressing objects: 100% (10/10), done.\nWriting objects: 100% (12/12), 4.52 KiB | 4.52 MiB/s, done.\nTotal 12 (delta 5), reused 0 (delta 0), pack-reused 0\nremote: Resolving deltas: 100% (5/5), completed with 3 local objects.\nremote: \nremote: Create a pull request for 'feature/new-auth' on GitHub by visiting:\nremote:      https://github.com/user/repo/pull/new/feature/new-auth\nremote: \nTo github.com:user/repo.git\n * [new branch]      feature/new-auth -> feature/new-auth\nbranch 'feature/new-auth' set up to track 'origin/feature/new-auth'."
+}

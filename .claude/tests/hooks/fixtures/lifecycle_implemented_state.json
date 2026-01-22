@@ -1,0 +1,20 @@
+{
+  "description": "Document in implemented state for lifecycle detection testing",
+  "document": {
+    "path": "documentation/solution_designs/implemented/feature-w.md",
+    "content": "# Feature W Solution Design\n\n## Document Status\n\n**Current Status**: implemented\n**Last Updated**: 2025-12-21\n**Completion**: 100%\n\n## Overview\n\nThis solution design has been fully implemented.\n\n## Acceptance Criteria\n\n- [x] AC-1: First acceptance criterion (done)\n- [x] AC-2: Second acceptance criterion (done)\n- [x] AC-3: Third acceptance criterion (done)\n",
+    "status_header": {
+      "current_status": "implemented",
+      "last_updated": "2025-12-21",
+      "completion": "100%"
+    }
+  },
+  "expected_detection": {
+    "state": "implemented",
+    "completion_percentage": 100,
+    "total_criteria": 3,
+    "checked_criteria": 3,
+    "expected_directory": "documentation/solution_designs/implemented/",
+    "should_move": false
+  }
+}

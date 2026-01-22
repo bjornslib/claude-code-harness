@@ -1,0 +1,12 @@
+{
+  "session_id": "test-session-020",
+  "transcript_path": "/Users/test/.claude/projects/-Users-test-project/session.jsonl",
+  "cwd": "/Users/test/project",
+  "permission_mode": "full",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git push origin main"
+  },
+  "tool_result": "Everything up-to-date"
+}

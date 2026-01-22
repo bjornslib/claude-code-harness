@@ -1,0 +1,18 @@
+{
+  "description": "Document in implemented folder WITHOUT status header for AC-22 validation",
+  "document": {
+    "path": "documentation/solution_designs/implemented/legacy-no-header.md",
+    "content": "# Legacy No Header Feature\n\n## Overview\n\nThis document is in the implemented folder but lacks a status header.\nIt was created before headers were standardized.\n\n## Acceptance Criteria\n\n- [x] AC-1: Feature implemented\n- [x] AC-2: Tests added\n- [x] AC-3: Documentation complete\n",
+    "location": "documentation/solution_designs/implemented/",
+    "has_status_header": false
+  },
+  "expected_validation": {
+    "is_valid": false,
+    "status_matches_location": false,
+    "issues": [
+      "Missing status header",
+      "Document in implemented/ but lacks 'implemented' status declaration"
+    ],
+    "recommended_action": "Add status header with Current Status: implemented"
+  }
+}

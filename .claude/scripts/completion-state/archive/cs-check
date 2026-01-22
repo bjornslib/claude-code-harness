@@ -1,0 +1,133 @@
+#!/bin/bash
+# cs-check - Evaluate if session can end (for stop hook)
+# Usage: cs-check [--verbose]
+#
+# Exit codes:
+#   0 - All criteria met, session can end
+#   1 - Error reading state
+#   2 - Criteria not met, session should continue (outputs reason)
+
+set -e
+
+STATE_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/completion-state"
+STATE_FILE="$STATE_DIR/session-state.json"
+VERBOSE=false
+
+for arg in "$@"; do
+    case $arg in
+        --verbose|-v)
+            VERBOSE=true
+            ;;
+        --help)
+            echo "Usage: cs-check [--verbose]"
+            echo ""
+            echo "Evaluate if session completion criteria are met."
+            echo ""
+            echo "Exit codes:"
+            echo "  0 - All criteria met, session can end"
+            echo "  1 - Error reading state"
+            echo "  2 - Criteria not met, session should continue"
+            exit 0
+            ;;
+    esac
+done
+
+# Check state exists
+if [ ! -f "$STATE_FILE" ]; then
+    echo "No completion state found. Allowing exit."
+    exit 0  # No state = no constraints
+fi
+
+# Check iteration limit
+ITERATION=$(jq '.iteration' "$STATE_FILE")
+MAX_ITER=$(jq '.max_iterations' "$STATE_FILE")
+
+if [ "$ITERATION" -ge "$MAX_ITER" ]; then
+    echo "Max iterations ($MAX_ITER) reached. Allowing exit."
+    exit 0
+fi
+
+# Count goals
+TOTAL_GOALS=$(jq '.goals | length' "$STATE_FILE")
+PASSED_GOALS=$(jq '[.goals[] | select(.status == "passed")] | length' "$STATE_FILE")
+FAILED_GOALS=$(jq '[.goals[] | select(.status == "failed")] | length' "$STATE_FILE")
+
+# Count features
+TOTAL_FEATURES=$(jq '[.prd.epics[].features[]] | length' "$STATE_FILE")
+PASSED_FEATURES=$(jq '[.prd.epics[].features[] | select(.status == "passed")] | length' "$STATE_FILE")
+FAILED_FEATURES=$(jq '[.prd.epics[].features[] | select(.status == "failed")] | length' "$STATE_FILE")
+
+# No goals = no constraints (but warn)
+if [ "$TOTAL_GOALS" -eq 0 ] && [ "$TOTAL_FEATURES" -eq 0 ]; then
+    if [ "$VERBOSE" = true ]; then
+        echo "Warning: No goals or features defined. Allowing exit."
+    fi
+    exit 0
+fi
+
+# Check for failures (allow exit if explicitly failed, user may have acknowledged)
+# But still report them
+if [ "$FAILED_GOALS" -gt 0 ] || [ "$FAILED_FEATURES" -gt 0 ]; then
+    if [ "$VERBOSE" = true ]; then
+        echo "Note: $FAILED_GOALS goal(s) and $FAILED_FEATURES feature(s) marked as failed."
+    fi
+fi
+
+# Calculate remaining
+REMAINING_GOALS=$((TOTAL_GOALS - PASSED_GOALS - FAILED_GOALS))
+REMAINING_FEATURES=$((TOTAL_FEATURES - PASSED_FEATURES - FAILED_FEATURES))
+
+# All done?
+if [ "$REMAINING_GOALS" -eq 0 ] && [ "$REMAINING_FEATURES" -eq 0 ]; then
+    if [ "$VERBOSE" = true ]; then
+        echo "All goals and features complete."
+    fi
+    exit 0
+fi
+
+# Not complete - build reason
+echo "COMPLETION CRITERIA NOT MET"
+echo ""
+echo "Session: $(jq -r '.session_id' "$STATE_FILE") (iteration $ITERATION/$MAX_ITER)"
+echo "Promise: $(jq -r '.completion_promise.summary // "Not set"' "$STATE_FILE")"
+echo ""
+
+if [ "$REMAINING_GOALS" -gt 0 ]; then
+    echo "INCOMPLETE GOALS ($REMAINING_GOALS remaining):"
+    jq -r '.goals[] | select(.status != "passed" and .status != "failed") |
+        "  [\(.status)] \(.id): \(.description)"' "$STATE_FILE"
+    echo ""
+fi
+
+if [ "$REMAINING_FEATURES" -gt 0 ]; then
+    echo "INCOMPLETE FEATURES ($REMAINING_FEATURES remaining):"
+    jq -r '.prd.epics[].features[] | select(.status != "passed" and .status != "failed") |
+        "  [\(.status)] \(.id): \(.title)"' "$STATE_FILE"
+    echo ""
+fi
+
+# Suggest next action
+echo "NEXT ACTION:"
+NEXT_GOAL=$(jq -r '.goals[] | select(.status == "in_progress") | .id' "$STATE_FILE" | head -1)
+NEXT_FEATURE=$(jq -r '.prd.epics[].features[] | select(.status == "in_progress") | .id' "$STATE_FILE" | head -1)
+
+if [ -n "$NEXT_GOAL" ]; then
+    echo "  Continue working on goal $NEXT_GOAL"
+elif [ -n "$NEXT_FEATURE" ]; then
+    echo "  Continue working on feature $NEXT_FEATURE"
+else
+    FIRST_PENDING=$(jq -r '.goals[] | select(.status == "pending") | .id' "$STATE_FILE" | head -1)
+    if [ -n "$FIRST_PENDING" ]; then
+        echo "  Start goal $FIRST_PENDING"
+    else
+        FIRST_FEATURE=$(jq -r '.prd.epics[].features[] | select(.status == "pending") | .id' "$STATE_FILE" | head -1)
+        if [ -n "$FIRST_FEATURE" ]; then
+            echo "  Start feature $FIRST_FEATURE"
+        else
+            echo "  Review and complete remaining items"
+        fi
+    fi
+fi
+
+# Exit with code 2 to block stop
+exit 2

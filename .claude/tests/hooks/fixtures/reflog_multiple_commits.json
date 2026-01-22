@@ -1,0 +1,10 @@
+{
+  "scenario": "multiple_commits",
+  "description": "Push with multiple commits since last push",
+  "last_push_commit": "abc1234",
+  "current_head": "def9012",
+  "expected_commits": ["bcd5678", "cde7890", "def9012"],
+  "total_commits_in_repo": 30,
+  "reflog_output": "def9012 HEAD@{0}: commit: third commit\ncde7890 HEAD@{1}: commit: second commit\nbcd5678 HEAD@{2}: commit: first commit\nabc1234 HEAD@{3}: push origin main",
+  "detection_method": "reflog"
+}

@@ -1,0 +1,31 @@
+{
+  "scenario": "post_push_triggers_skill_chain",
+  "description": "Successful git push triggers the codebase-quality skill chain",
+  "hook_event": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": "git push origin main",
+  "tool_result": "To github.com:user/repo.git\n   abc1234..def5678  main -> main",
+  "expected_trigger": true,
+  "expected_skill_invocation": "codebase-quality:full-audit",
+  "expected_sequence": [
+    {
+      "order": 1,
+      "skill": "codebase-quality:security",
+      "reason": "Security must run first to prevent obscured vulnerabilities"
+    },
+    {
+      "order": 2,
+      "skill": "codebase-quality:code-quality",
+      "reason": "Code quality runs after security passes"
+    },
+    {
+      "order": 3,
+      "skill": "codebase-quality:documentation",
+      "reason": "Documentation runs last to reflect finalized code"
+    }
+  ],
+  "commit_range": {
+    "detection_method": "reflog",
+    "commits": ["abc1234", "bcd2345", "cde3456", "def5678"]
+  }
+}

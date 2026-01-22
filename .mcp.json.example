@@ -1,0 +1,85 @@
+{
+  "mcpServers": {
+    "sequential-thinking": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ]
+    },
+    "task-master-ai": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "--package=task-master-ai",
+        "task-master-ai"
+      ],
+      "env": {
+        "ANTHROPIC_API_KEY": "your-anthropic-api-key-here",
+        "MODEL": "claude-opus-4-5-20251101",
+        "PERPLEXITY_MODEL": "sonar-pro",
+        "PERPLEXITY_API_KEY": "your-perplexity-api-key-here"
+      }
+    },
+    "context7": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp@latest"
+      ]
+    },
+    "perplexity-ask": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "server-perplexity-ask"
+      ],
+      "env": {
+        "PERPLEXITY_API_KEY": "your-perplexity-api-key-here"
+      }
+    },
+    "brave-search": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-brave-search"
+      ],
+      "env": {
+        "BRAVE_API_KEY": "your-brave-api-key-here"
+      }
+    },
+    "serena": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/oraios/serena",
+        "serena-mcp-server",
+        "--context",
+        "ide-assistant"
+      ],
+      "env": {}
+    },
+    "hindsight": {
+      "type": "http",
+      "url": "http://localhost:8888/mcp/your-session-name/mcp"
+    },
+    "beads_dev:beads": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/path/to/beads_fork/integrations/beads-mcp",
+        "run",
+        "beads-mcp"
+      ],
+      "env": {
+        "BEADS_WORKING_DIR": ".."
+      }
+    }
+  }
+}

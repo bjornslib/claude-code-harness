@@ -1,0 +1,12 @@
+{
+  "session_id": "test-session-001",
+  "transcript_path": "/Users/test/.claude/projects/-Users-test-project/session.jsonl",
+  "cwd": "/Users/test/project",
+  "permission_mode": "full",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git push origin main"
+  },
+  "tool_result": "Enumerating objects: 5, done.\nCounting objects: 100% (5/5), done.\nDelta compression using up to 10 threads\nCompressing objects: 100% (3/3), done.\nWriting objects: 100% (3/3), 1.24 KiB | 1.24 MiB/s, done.\nTotal 3 (delta 2), reused 0 (delta 0), pack-reused 0\nremote: Resolving deltas: 100% (2/2), completed with 2 local objects.\nTo github.com:user/repo.git\n   abc1234..def5678  main -> main"
+}

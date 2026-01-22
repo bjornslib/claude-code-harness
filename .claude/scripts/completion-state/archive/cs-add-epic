@@ -1,0 +1,61 @@
+#!/bin/bash
+# cs-add-epic - Add an epic to the PRD tracking
+# Usage: cs-add-epic --id E1 --title "Epic title"
+
+set -e
+
+STATE_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/completion-state"
+STATE_FILE="$STATE_DIR/session-state.json"
+
+if [ ! -f "$STATE_FILE" ]; then
+    echo "Error: Session state not initialized. Run cs-init first."
+    exit 1
+fi
+
+EPIC_ID=""
+TITLE=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --id)
+            EPIC_ID="$2"
+            shift 2
+            ;;
+        --title)
+            TITLE="$2"
+            shift 2
+            ;;
+        --help)
+            echo "Usage: cs-add-epic --id E1 --title \"Epic title\""
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            exit 1
+            ;;
+    esac
+done
+
+if [ -z "$EPIC_ID" ] || [ -z "$TITLE" ]; then
+    echo "Error: Both --id and --title are required"
+    exit 1
+fi
+
+# Check if epic already exists
+EXISTS=$(jq --arg id "$EPIC_ID" '.prd.epics | map(select(.id == $id)) | length' "$STATE_FILE")
+if [ "$EXISTS" -gt 0 ]; then
+    echo "Error: Epic $EPIC_ID already exists"
+    exit 1
+fi
+
+# Add epic
+jq --arg id "$EPIC_ID" \
+   --arg title "$TITLE" \
+   '.prd.epics += [{
+       "id": $id,
+       "title": $title,
+       "status": "pending",
+       "features": []
+   }]' "$STATE_FILE" > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
+
+echo "Added epic $EPIC_ID: $TITLE"

@@ -1,0 +1,9 @@
+{
+  "name": "logfire",
+  "command": "uvx",
+  "args": [
+    "logfire-mcp",
+    "--read-token=pylf_v1_eu_Tf00t4fP5FRv71BrVG1ytMj6xTJYXqW50YL0pxQdzfzq"
+  ],
+  "env": null
+}

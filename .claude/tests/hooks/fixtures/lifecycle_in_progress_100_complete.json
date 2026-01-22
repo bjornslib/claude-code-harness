@@ -1,0 +1,22 @@
+{
+  "description": "Document in-progress with 100% completion for implemented transition (AC-12)",
+  "document": {
+    "path": "documentation/solution_designs/in-progress/feature-complete.md",
+    "content": "# Feature Complete Solution Design\n\n## Document Status\n\n**Current Status**: in-progress\n**Last Updated**: 2025-12-21\n**Completion**: 100%\n\n## Overview\n\nThis solution design should transition to implemented when 100% of ACs are checked.\n\n## Acceptance Criteria\n\n- [x] AC-1: Implement the core functionality\n- [x] AC-2: Add error handling\n- [x] AC-3: Write unit tests\n- [x] AC-4: Write integration tests\n- [x] AC-5: Document the feature\n",
+    "status_header": {
+      "current_status": "in-progress",
+      "last_updated": "2025-12-21",
+      "completion": "100%"
+    }
+  },
+  "expected_transition": {
+    "from_status": "in-progress",
+    "to_status": "implemented",
+    "from_directory": "documentation/solution_designs/in-progress/",
+    "to_directory": "documentation/solution_designs/implemented/",
+    "reason": "All acceptance criteria checked (100% completion)",
+    "completion_percentage": 100,
+    "total_criteria": 5,
+    "checked_criteria": 5
+  }
+}

@@ -1,0 +1,31 @@
+[
+  {
+    "profileUrl": "https://www.linkedin.com/in/john-smith-marketing",
+    "firstName": "John",
+    "lastName": "Smith",
+    "occupation": "Senior Marketing Manager",
+    "personalisedMessage": "Hi John, I noticed your recent posts on AI implementation in marketing - your insights align perfectly with what we're building."
+  },
+  {
+    "email": "sarah.johnson@techcorp.com",
+    "firstName": "Sarah",
+    "lastName": "Johnson",
+    "occupation": "Chief Product Officer",
+    "personalisedMessage": "Sarah, your CPO playbook articles have been incredibly valuable. I think there's a strategic opportunity for our platforms to collaborate."
+  },
+  {
+    "profileUrl": "https://www.linkedin.com/in/michael-chen-1a7614206",
+    "email": "michael@innovationlabs.io",
+    "firstName": "Michael",
+    "lastName": "Chen",
+    "occupation": "VP of Operations",
+    "phone": "+1-415-555-0123",
+    "personalisedMessage": "Michael, I saw your recent expansion into Asia-Pacific. Our platform helps companies like yours scale operations efficiently."
+  },
+  {
+    "email": "emma.wilson@acme.com",
+    "firstName": "Emma",
+    "lastName": "Wilson",
+    "personalisedMessage": "Emma, based on your LinkedIn activity, it looks like you're building something interesting in the AI space. Would love to connect."
+  }
+]
