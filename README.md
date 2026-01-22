@@ -2,6 +2,12 @@
 
 A centralized, reusable configuration framework for multi-agent AI orchestration with Claude Code. Maintain one harness, use it across all your projects via symlinks.
 
+**📖 Quick Navigation**:
+- 🚀 **New here?** Start with the [Quick Start](#-quick-start) section below
+- 📘 **Setting up?** See [SETUP_GUIDE.md](./SETUP_GUIDE.md) for step-by-step instructions
+- 🏗️ **Understanding the system?** Check [ARCHITECTURE.md](./ARCHITECTURE.md) for visual diagrams
+- ⚙️ **Technical details?** Read [CLAUDE.md](./CLAUDE.md) for complete reference
+
 ## 🎯 Concept
 
 Instead of duplicating `.claude/` configuration in every project, maintain it once in this repository and symlink it into your project directories. This gives you:
@@ -31,7 +37,10 @@ Workers (Implementation)
 - **MCP Integration**: 9+ MCP servers with progressive disclosure wrappers
 - **Task Master**: PRD → Task decomposition and tracking
 
-See [CLAUDE.md](./CLAUDE.md) for complete architecture documentation.
+**📖 Documentation**:
+- [ARCHITECTURE.md](./ARCHITECTURE.md) - Visual diagrams and system flows
+- [CLAUDE.md](./CLAUDE.md) - Complete technical reference
+- [SETUP_GUIDE.md](./SETUP_GUIDE.md) - Quick setup and troubleshooting
 
 ## 🚀 Quick Start
 
@@ -310,7 +319,14 @@ pytest .claude/hooks/unified_stop_gate/tests/
 
 ## 📚 Documentation
 
-- [CLAUDE.md](./CLAUDE.md) - Complete architecture and configuration reference
+### Main Documentation
+
+- **[SETUP_GUIDE.md](./SETUP_GUIDE.md)** - Quick setup reference and troubleshooting
+- **[ARCHITECTURE.md](./ARCHITECTURE.md)** - Visual diagrams showing symlink concept, agent hierarchy, and system flows
+- **[CLAUDE.md](./CLAUDE.md)** - Complete technical architecture and configuration reference
+
+### Additional References
+
 - [.claude/TM_COMMANDS_GUIDE.md](./.claude/TM_COMMANDS_GUIDE.md) - Task Master slash commands
 - [.claude/documentation/MESSAGE_BUS_ARCHITECTURE.md](./.claude/documentation/MESSAGE_BUS_ARCHITECTURE.md) - Inter-instance messaging
 - [.claude/documentation/ADR-001-output-style-reliability.md](./.claude/documentation/ADR-001-output-style-reliability.md) - Output styles vs skills
@@ -337,49 +353,21 @@ git push origin feature/new-skill
 
 ## 🐛 Troubleshooting
 
-### Symlink not working
+For detailed troubleshooting, see [SETUP_GUIDE.md](./SETUP_GUIDE.md#troubleshooting).
+
+**Quick fixes**:
 
 ```bash
-# Check if symlink exists
-ls -la .claude
+# Symlink not working
+rm .claude && ln -s ~/claude-harness/.claude .claude
 
-# Should show:
-# .claude -> /path/to/claude-harness/.claude
-
-# If broken, recreate:
-rm .claude
-ln -s ~/claude-harness/.claude .claude
-```
-
-### Hooks not firing
-
-```bash
-# Verify settings.json is accessible
-cat .claude/settings.json
-
-# Check CLAUDE_PROJECT_DIR is set
-echo $CLAUDE_PROJECT_DIR
-
-# Hooks use absolute paths - ensure they resolve correctly
-```
-
-### Message bus not working
-
-```bash
-# Initialize message bus
-.claude/scripts/message-bus/mb-init
-
-# Check status
-.claude/scripts/message-bus/mb-status
-```
-
-### Permission denied on scripts
-
-```bash
-# Make scripts executable
+# Scripts not executable
 chmod +x ~/claude-harness/.claude/scripts/**/*
-chmod +x ~/claude-harness/.claude/hooks/**/*.sh
-chmod +x ~/claude-harness/.claude/hooks/**/*.py
+chmod +x ~/claude-harness/.claude/hooks/**/*
+
+# Message bus issues
+.claude/scripts/message-bus/mb-init
+.claude/scripts/message-bus/mb-status
 ```
 
 ## 📄 License
