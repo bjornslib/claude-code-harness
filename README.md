@@ -35,7 +35,33 @@ See [CLAUDE.md](./CLAUDE.md) for complete architecture documentation.
 
 ## 🚀 Quick Start
 
-### Option 1: Automated Setup (Recommended)
+### Step 1: Clone and Configure
+
+1. **Clone this repository** (one-time setup):
+   ```bash
+   git clone https://github.com/bjornslib/claude-code-harness.git ~/claude-harness
+   cd ~/claude-harness
+   ```
+
+2. **Configure MCP servers with your API keys**:
+   ```bash
+   cp .mcp.json.example .mcp.json
+   # Edit .mcp.json with your API keys:
+   # - ANTHROPIC_API_KEY
+   # - PERPLEXITY_API_KEY
+   # - BRAVE_API_KEY
+   # - GITHUB_PERSONAL_ACCESS_TOKEN (in .claude/skills/mcp-skills/github/mcp-config.json)
+   ```
+
+   **Required API keys**:
+   - **Anthropic API**: For Task Master and agent operations - [Get API key](https://console.anthropic.com/settings/keys)
+   - **Perplexity API**: For research and web queries - [Get API key](https://www.perplexity.ai/settings/api)
+   - **Brave Search API**: For web search capabilities - [Get API key](https://brave.com/search/api/)
+   - **GitHub Token**: For GitHub MCP skill (optional) - [Create token](https://github.com/settings/tokens)
+
+### Step 2: Link into Your Project
+
+#### Option A: Automated Setup (Recommended)
 
 From your project directory:
 
@@ -46,7 +72,7 @@ claude
 Then use the slash command:
 
 ```
-/setup-harness /path/to/claude-harness-setup
+/setup-harness ~/claude-harness
 ```
 
 The command will:
@@ -55,27 +81,28 @@ The command will:
 3. Optionally symlink `.mcp.json` (if you want shared MCP servers)
 4. Verify the setup
 
-### Option 2: Manual Setup
+#### Option B: Manual Setup
 
-1. **Clone this repository** (one-time setup):
-   ```bash
-   git clone https://github.com/yourusername/claude-code-harness.git ~/claude-harness
-   ```
-
-2. **Symlink into your project**:
+1. **Symlink into your project**:
    ```bash
    cd /path/to/your/project
    ln -s ~/claude-harness/.claude .claude
    ```
 
-3. **Optional: Symlink MCP configuration**:
+2. **Choose MCP configuration approach**:
+
+   **Option 1: Symlink** (share MCP servers across all projects):
    ```bash
    ln -s ~/claude-harness/.mcp.json .mcp.json
    ```
 
-   ⚠️ **Note**: Only symlink `.mcp.json` if you want to share MCP server configurations. If your project needs custom MCP servers, copy instead of symlink.
+   **Option 2: Copy** (customize per project):
+   ```bash
+   cp ~/claude-harness/.mcp.json .mcp.json
+   # Then customize for this project
+   ```
 
-4. **Verify setup**:
+3. **Verify setup**:
    ```bash
    ls -la .claude  # Should show symlink arrow
    claude          # Launch Claude Code
@@ -234,16 +261,22 @@ npm install -g task-master-ai
 
 ### API Keys
 
-The `.mcp.json` in this repository contains API keys for:
-- Anthropic API
-- Perplexity API
-- Brave Search API
+This repository provides `.mcp.json.example` as a template. You must create your own `.mcp.json` with your API keys:
 
-**For production use**:
-- Copy (don't symlink) `.mcp.json`
-- Replace with your own API keys
-- Add `.mcp.json` to your project's `.gitignore`
-- Never commit API keys to version control
+**Setup**:
+1. Copy the example: `cp .mcp.json.example .mcp.json`
+2. Add your API keys for:
+   - Anthropic API (required for Task Master)
+   - Perplexity API (required for research)
+   - Brave Search API (required for web search)
+   - GitHub Token (optional, for GitHub skill)
+3. Never commit `.mcp.json` to version control (already in `.gitignore`)
+
+**Security best practices**:
+- Keep API keys in `.mcp.json` which is gitignored
+- Use environment variables for CI/CD
+- Rotate keys regularly
+- Use project-specific keys when possible
 
 ### Symlink Compatibility
 
