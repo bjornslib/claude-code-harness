@@ -36,23 +36,75 @@ User: Link .claude from /Users/theb/Documents/Windsurf/claude-harness-setup
 
 ## Implementation
 
-### Step 1: Gather Information
+### Step 1: Select Target Directory
+
+**Use AskUserQuestion** to ask where they want to set up the harness:
+
+```
+Question: "Where do you want to set up the Claude Code harness?"
+Header: "Target Dir"
+Options:
+1. "Current directory" - Set up harness in the current working directory
+2. "Parent directory" - Set up harness in the parent of the current directory
+3. "Specify custom path" - Provide a custom directory path
+
+multiSelect: false
+```
+
+After receiving the answer:
+- If "Current directory": Use `pwd` as target
+- If "Parent directory": Use `$(dirname $(pwd))` as target
+- If "Specify custom path": Ask for the path with a follow-up question
+
+**Verify target directory**:
+```bash
+# Check if target directory exists
+if [ ! -d "$TARGET_DIR" ]; then
+    echo "Error: Target directory $TARGET_DIR does not exist"
+    echo "Create it first with: mkdir -p $TARGET_DIR"
+    exit 1
+fi
+
+# Check if target is writable
+if [ ! -w "$TARGET_DIR" ]; then
+    echo "Error: No write permission for $TARGET_DIR"
+    exit 1
+fi
+
+# Change to target directory
+cd "$TARGET_DIR"
+```
+
+### Step 2: Gather Additional Information
 
 Ask the user for:
 1. **Harness path**: Where is the claude-code-harness repository?
 2. **MCP symlink**: Do they want to symlink `.mcp.json` or keep it separate?
 
-**Example questions**:
+**Use AskUserQuestion for harness path**:
 ```
-What is the path to your claude-code-harness repository?
-(e.g., ~/claude-harness or /path/to/claude-harness-setup)
+Question: "Where is your claude-code-harness repository?"
+Header: "Harness Path"
+Options:
+1. "~/claude-harness-setup" - Default location
+2. "/Users/theb/Documents/Windsurf/claude-harness-setup" - Current harness location
+3. "Specify custom path" - Provide a different path
 
-Do you want to symlink .mcp.json as well?
-- Yes: Share MCP server configurations across projects
-- No: Keep project-specific MCP servers (recommended if you need custom API keys)
+multiSelect: false
 ```
 
-### Step 2: Verify Harness Path
+**Use AskUserQuestion for MCP symlink**:
+```
+Question: "Do you want to symlink .mcp.json as well?"
+Header: "MCP Config"
+Options:
+1. "No (Recommended)" - Keep project-specific MCP servers and API keys
+2. "Yes" - Share MCP configurations across all projects
+
+multiSelect: false
+```
+
+### Step 3: Verify Harness Path
 
 ```bash
 # Check if harness directory exists
@@ -69,7 +121,7 @@ if [ ! -f "$HARNESS_PATH/.claude/CLAUDE.md" ] || \
 fi
 ```
 
-### Step 3: Check Current Project State
+### Step 4: Check Current Project State
 
 ```bash
 # Check if .claude already exists
@@ -87,7 +139,7 @@ if [ -e ".claude" ]; then
 fi
 ```
 
-### Step 4: Create Symlinks
+### Step 5: Create Symlinks
 
 ```bash
 # Get absolute path to harness
@@ -112,7 +164,7 @@ if [ "$SYMLINK_MCP" = "yes" ]; then
 fi
 ```
 
-### Step 5: Verify Setup
+### Step 6: Verify Setup
 
 ```bash
 # Check if symlinks are valid
@@ -138,22 +190,113 @@ else
 fi
 ```
 
-### Step 6: Provide Next Steps
+### Step 7: Setup Shell Functions
+
+**Use AskUserQuestion to ask about shell configuration**:
+```
+Question: "Do you want to add the Claude Code launch functions to your shell?"
+Header: "Shell Setup"
+Options:
+1. "Yes, add to ~/.zshrc (Recommended)" - Add ccsystem3, ccorch, launchcc functions
+2. "No, I'll configure manually" - Skip shell setup
+
+multiSelect: false
+```
+
+If user selects "Yes", add these functions to `~/.zshrc`:
+
+```bash
+# Check if functions already exist
+if grep -q "function ccsystem3" ~/.zshrc 2>/dev/null; then
+    echo "⚠ Shell functions already exist in ~/.zshrc"
+    echo "  Skipping to avoid duplicates"
+else
+    cat >> ~/.zshrc << 'SHELL_FUNCTIONS'
+
+# Claude Code Harness - Launch Functions
+# Added by setup-harness skill
+
+# Helper: Derive project bank name from current directory
+function _derive_project_bank {
+    basename "$(pwd)" | tr '[:upper:]' '[:lower:]' | sed 's/_/-/g' | sed 's/ /-/g'
+}
+
+# Launch Claude Code with full permissions (for workers in tmux)
+function launchcc {
+    claude --chrome --dangerously-skip-permissions "$@"
+}
+
+# Launch as Orchestrator (Level 2)
+function ccorch {
+    export CLAUDE_SESSION_ID="$(date -u +%Y%m%dT%H%M%SZ)-$(openssl rand -hex 4)"
+    export CLAUDE_PROJECT_BANK="$(_derive_project_bank)"
+    export CLAUDE_OUTPUT_STYLE=orchestrator
+    export CLAUDE_ENFORCE_BO=false
+    export CLAUDE_MAX_ITERATIONS=5
+
+    echo "🆔 Session ID: $CLAUDE_SESSION_ID"
+    echo "🧠 Project Bank: $CLAUDE_PROJECT_BANK"
+    claude --chrome --dangerously-skip-permissions "$@"
+}
+
+# Launch as System 3 Meta-Orchestrator (Level 1)
+function ccsystem3 {
+    export CLAUDE_SESSION_ID="$(date -u +%Y%m%dT%H%M%SZ)-$(openssl rand -hex 4)"
+    export CLAUDE_PROJECT_BANK="$(_derive_project_bank)"
+    export CLAUDE_ENFORCE_PROMISE=true
+    export CLAUDE_ENFORCE_BO=true
+    export CLAUDE_OUTPUT_STYLE=system3
+    export CLAUDE_MAX_ITERATIONS=25
+
+    echo "🆔 Session ID: $CLAUDE_SESSION_ID"
+    echo "🧠 Project Bank: $CLAUDE_PROJECT_BANK"
+    claude --chrome --dangerously-skip-permissions "$@"
+}
+SHELL_FUNCTIONS
+
+    echo "✓ Added shell functions to ~/.zshrc"
+    echo "  Run 'source ~/.zshrc' to activate"
+fi
+```
+
+**Environment Variables Set by Launch Functions:**
+
+| Variable | Purpose | Set By |
+|----------|---------|--------|
+| `CLAUDE_SESSION_ID` | Unique session identifier for completion tracking | All functions |
+| `CLAUDE_PROJECT_BANK` | Hindsight memory bank (derived from directory name) | ccorch, ccsystem3 |
+| `CLAUDE_OUTPUT_STYLE` | Output style to load (orchestrator/system3) | ccorch, ccsystem3 |
+| `CLAUDE_ENFORCE_BO` | Enforce business outcome validation | ccsystem3 only |
+| `CLAUDE_ENFORCE_PROMISE` | Enforce completion promise tracking | ccsystem3 only |
+| `CLAUDE_MAX_ITERATIONS` | Max agentic turns before pause | All functions |
+
+### Step 8: Provide Next Steps
 
 ```
 ✓ Harness setup complete!
 
-Next steps:
-1. Launch Claude Code: claude
-2. Verify configuration: cat .claude/CLAUDE.md
-3. Start working:
-   - System 3: ccsystem3
-   - Orchestrator: launchorchestrator [epic-name]
-   - Worker: launchcc (in tmux session)
-
 Configuration:
   .claude -> $HARNESS_ABS/.claude
   [.mcp.json -> $HARNESS_ABS/.mcp.json] (if symlinked)
+  [Shell functions added to ~/.zshrc] (if selected)
+
+Next steps:
+1. Reload shell: source ~/.zshrc
+2. Launch Claude Code:
+   - System 3 (strategic): ccsystem3
+   - Orchestrator (feature): ccorch
+   - Worker (implementation): launchcc
+3. Verify configuration: cat .claude/CLAUDE.md
+
+Launch Commands:
+  ccsystem3    - Meta-orchestrator with completion promises
+  ccorch       - Feature orchestrator with worker delegation
+  launchcc     - Worker in tmux session
+
+Environment (auto-set by launch commands):
+  CLAUDE_SESSION_ID    - Unique per session
+  CLAUDE_PROJECT_BANK  - Derived from directory name (e.g., "my-project")
+  CLAUDE_OUTPUT_STYLE  - system3 or orchestrator
 
 To update the harness:
   cd $HARNESS_ABS && git pull
@@ -205,4 +348,46 @@ Before creating symlinks:
 ## Example Interaction
 
 ```
-User: Setup the harness from ~/claude-harness
+User: Setup the harness
+Assistant: I'll help you set up the Claude Code harness.
+
+Where do you want to set up the harness?
+1. Current directory (/Users/theb/Documents/Windsurf/my-project)
+2. Parent directory (/Users/theb/Documents/Windsurf)
+3. Specify custom path
+
+User: Current directory
+
+Assistant: [Verifies target directory exists and is writable]
+✓ Target directory is valid
+
+Where is your claude-code-harness repository?
+1. ~/claude-harness-setup
+2. /Users/theb/Documents/Windsurf/claude-harness-setup
+3. Specify custom path
+
+User: Option 2
+
+Assistant: [Checks ~/claude-harness/.claude exists]
+✓ Found valid harness at /Users/theb/Documents/Windsurf/claude-harness-setup
+
+Do you want to symlink .mcp.json as well?
+1. No (Recommended) - Keep project-specific MCP servers and API keys
+2. Yes - Share MCP configurations across all projects
+
+User: No, keep it separate
+
+Assistant: [Creates symlinks]
+✓ Created .claude symlink
+  .claude -> /Users/theb/Documents/Windsurf/claude-harness-setup/.claude
+
+✓ Harness setup complete\!
+
+Next steps:
+1. Launch Claude Code: claude
+2. Verify configuration: cat .claude/CLAUDE.md
+3. Start working:
+   - System 3: ccsystem3
+   - Orchestrator: launchorchestrator [epic-name]
+   - Worker: launchcc (in tmux session)
+```

@@ -970,11 +970,21 @@ When completing a task or epic:
 }'
 ```
 
-### Session End: Unregister
+### Session End: Cleanup & Unregister
 
-Before session ends:
+Before session ends, perform MANDATORY cleanup:
 
 ```bash
+# 1. Kill ALL worker tmux sessions spawned during this initiative
+for session in $(tmux list-sessions 2>/dev/null | grep "worker-" | awk -F: '{print $1}'); do
+    tmux kill-session -t "$session" 2>/dev/null && echo "Cleaned up: $session"
+done
+
+# 2. Verify cleanup
+remaining=$(tmux list-sessions 2>/dev/null | grep -c "worker-" || echo "0")
+echo "Remaining worker sessions: $remaining"
+
+# 3. Unregister from message bus
 .claude/scripts/message-bus/mb-unregister "${CLAUDE_SESSION_ID}"
 ```
 
@@ -988,6 +998,7 @@ Add to your session start/end routines:
 
 **Session End:**
 - [ ] Send completion report to System 3 (`mb-send`)
+- [ ] 🚨 **Kill all worker tmux sessions** (MANDATORY - prevents session buildup)
 - [ ] Unregister from message bus (`mb-unregister`)
 
 ### Message Types You May Receive

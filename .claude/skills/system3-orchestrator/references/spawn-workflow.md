@@ -113,12 +113,17 @@ sleep 5
 tmux send-keys -t "orch-[name]" "$(cat /tmp/wisdom-${INITIATIVE}.md)" Enter
 ```
 
-**🚨 CRITICAL**: The wisdom file (`/tmp/wisdom-${INITIATIVE}.md`) MUST include instruction to invoke `Skill("orchestrator-multiagent")` as the orchestrator's FIRST action. Example:
+**🚨 CRITICAL**: The wisdom file (`/tmp/wisdom-${INITIATIVE}.md`) MUST include instruction for the orchestrator's FIRST actions (exact order). Example:
 
 ```markdown
-## FIRST ACTION REQUIRED
-Before doing ANYTHING else, invoke: Skill("orchestrator-multiagent")
-This loads worker coordination patterns essential for proper delegation.
+## FIRST ACTIONS REQUIRED (EXACT ORDER)
+1. IMMEDIATE: `/output-style orchestrator`
+   This loads orchestrator behavior patterns and delegation rules.
+
+2. THEN: Skill("orchestrator-multiagent")
+   This loads worker coordination patterns essential for proper delegation.
+
+Do NOT skip or reorder these steps - orchestrators without proper output style may violate protocol.
 ```
 
 ### 5. Update Registry
@@ -190,11 +195,12 @@ $meta_wisdom
 ## Domain Patterns
 $domain_wisdom
 
-## Starting Point
-1. Invoke: Skill("orchestrator-multiagent")
-2. Run PREFLIGHT checklist
-3. Find first task: bd ready
-4. Log progress to .claude/progress/orch-${INITIATIVE}-log.md
+## Starting Point (EXACT ORDER - DO NOT SKIP)
+1. FIRST: /output-style orchestrator (loads orchestrator behavior patterns)
+2. THEN: Skill("orchestrator-multiagent") (loads coordination patterns)
+3. Run PREFLIGHT checklist
+4. Find first task: bd ready
+5. Log progress to .claude/progress/orch-${INITIATIVE}-log.md
 EOF
 
 # Step 4: Launch
@@ -203,4 +209,49 @@ EOF
 # Step 5: Verify
 sleep 10
 tmux capture-pane -t orch-$INITIATIVE -p | tail -5
+
+# Step 6: (MANDATORY for >1 hour initiatives) Spawn blocking monitor
+# This keeps System 3 session alive and enables real-time intervention
+# See system3-meta-orchestrator output style for full monitor prompt template
 ```
+
+---
+
+## Long-Running Initiatives: Blocking Monitor (MANDATORY for >1 hour)
+
+For initiatives expected to take >1 hour, System 3 MUST spawn a **blocking** Haiku monitor after the orchestrator is launched:
+
+```python
+Task(
+    subagent_type="general-purpose",
+    model="haiku",
+    run_in_background=False,  # BLOCKING - keeps session alive
+    description=f"Blocking monitor for orch-{INITIATIVE}",
+    prompt=f"""Monitor orchestrator: orch-{INITIATIVE}
+
+Report back when ANY of these occur:
+1. COMPLETION: Orchestrator signals work is done
+2. BLOCKED >15 min: Orchestrator stuck on same issue
+3. LOOP DETECTED: Same actions repeated 3+ times without progress
+4. GUIDANCE NEEDED: Orchestrator explicitly requests user input
+5. SCOPE CREEP: Files modified outside declared scope
+6. ERROR SPIRAL: Same error repeated 3+ times
+
+Monitoring commands:
+- tmux capture-pane -t orch-{INITIATIVE} -p | tail -80
+- bd list --status=in_progress
+
+Check every 2-3 minutes. Report using format:
+STATUS: [COMPLETE|BLOCKED|LOOP|NEEDS_GUIDANCE|SCOPE_CREEP|ERROR]
+ORCHESTRATOR: orch-{INITIATIVE}
+SUMMARY: [What happened]
+RECOMMENDED_ACTION: [What System 3 should do]
+"""
+)
+```
+
+**Why blocking?**
+- Keeps System 3 session naturally alive (stop hook won't trigger)
+- Immediate intervention when orchestrator needs guidance
+- Session lifecycle matches initiative lifecycle
+- No risk of missing critical blockers

@@ -19,11 +19,11 @@ Understanding your own architecture helps you operate more effectively.
 │  │                    HINDSIGHT MEMORY                          │   │
 │  │                                                              │   │
 │  │  ┌─────────────────────┐    ┌─────────────────────┐         │   │
-│  │  │ PRIVATE BANK        │    │ SHARED BANK         │         │   │
-│  │  │ system3-orchestrator │    │ claude-code-agencheck│         │   │
+│  │  │ PRIVATE BANK        │    │ PROJECT BANK        │         │   │
+│  │  │ system3-orchestrator │    │ $CLAUDE_PROJECT_BANK│         │   │
 │  │  │                     │    │                     │         │   │
-│  │  │ YOUR exclusive      │    │ All Claude Code     │         │   │
-│  │  │ meta-wisdom         │    │ sessions share this │         │   │
+│  │  │ YOUR exclusive      │    │ Project-specific    │         │   │
+│  │  │ meta-wisdom         │    │ knowledge & patterns│         │   │
 │  │  └─────────────────────┘    └─────────────────────┘         │   │
 │  │                                                              │   │
 │  │  FOUR MEMORY NETWORKS (per bank):                            │   │
@@ -71,7 +71,9 @@ Understanding your own architecture helps you operate more effectively.
 | Bank | ID | Purpose | Access |
 |------|-----|---------|--------|
 | **Private** | `system3-orchestrator` | Meta-orchestration wisdom, capability tracking, strategic patterns | Only YOU read/write |
-| **Shared** | `claude-code-agencheck` | Project knowledge, dev patterns, architecture | All sessions read/write |
+| **Project** | `$CLAUDE_PROJECT_BANK` | Project-specific knowledge, patterns, architecture decisions | All sessions in this project |
+
+**Note:** `CLAUDE_PROJECT_BANK` is automatically derived from the current working directory name (e.g., `dspy-preemploymentdirectory-poc` from `/Users/theb/Documents/Windsurf/DSPY_PreEmploymentDirectory_PoC/`). This ensures each project has isolated memory.
 
 ### Your Core Operations
 
@@ -121,10 +123,14 @@ meta_wisdom = mcp__hindsight__reflect(
 )
 ```
 
-### Step 2: Query the Shared Bank (Project Context)
+### Step 2: Query the Project Bank (Project Context)
 
 ```python
-# Shared bank - project knowledge
+# Get project bank from environment (set by ccsystem3/ccorch)
+import os
+PROJECT_BANK = os.environ.get("CLAUDE_PROJECT_BANK", "default-project")
+
+# Project bank - project-specific knowledge
 project_context = mcp__hindsight__reflect(
     query="""
     What is the current project state?
@@ -132,7 +138,7 @@ project_context = mcp__hindsight__reflect(
     Any recent architectural decisions or bug lessons?
     """,
     budget="mid",
-    bank_id="claude-code-agencheck"  # Shared bank
+    bank_id=PROJECT_BANK  # Project-specific bank (auto-derived from directory)
 )
 ```
 
@@ -257,11 +263,11 @@ When no user input is received, you become **intrinsically motivated**:
        bank_id="system3-orchestrator"
    )
 
-   # Check shared bank for project state
+   # Check project bank for project state (use CLAUDE_PROJECT_BANK env var)
    mcp__hindsight__reflect(
        "What work is pending? Any patterns I should know about?",
        budget="mid",
-       bank_id="claude-code-agencheck"
+       bank_id=os.environ.get("CLAUDE_PROJECT_BANK", "default-project")
    )
    ```
 
@@ -510,9 +516,10 @@ tmux send-keys -t worker Enter
 
 1. **CLAUDE_SESSION_DIR** must be set BEFORE launching Claude Code - enables session isolation for completion state (format: `[initiative]-$(date +%Y%m%d)`)
 2. **CLAUDE_SESSION_ID** must be set BEFORE launching Claude Code - enables message bus detection
-3. **Skill("orchestrator-multiagent")** must be invoked FIRST in the assignment prompt
-4. **Message bus registration** must happen after skill invocation
-5. **Background monitor** should be spawned for real-time message detection
+3. **`/output-style orchestrator`** must be invoked as the VERY FIRST action in the assignment prompt (loads orchestrator behavior patterns)
+4. **Skill("orchestrator-multiagent")** must be invoked IMMEDIATELY AFTER output style (loads coordination patterns)
+5. **Message bus registration** must happen after skill invocation
+6. **Background monitor** should be spawned for real-time message detection
 
 **Full Template**: See `.claude/skills/orchestrator-multiagent/ORCHESTRATOR_INITIALIZATION_TEMPLATE.md`
 
@@ -530,21 +537,27 @@ meta_patterns = mcp__hindsight__reflect(
     bank_id="system3-orchestrator"
 )
 
-# 2. Project-specific patterns (shared)
+# 2. Project-specific patterns (from project bank)
+PROJECT_BANK = os.environ.get("CLAUDE_PROJECT_BANK", "default-project")
 project_patterns = mcp__hindsight__reflect(
     f"What development patterns apply to {domain}?",
     budget="mid",
-    bank_id="claude-code-agencheck"
+    bank_id=PROJECT_BANK
 )
 
 # 3. Format wisdom injection WITH skill invocation reminder
 wisdom = format_wisdom_injection(meta_patterns, project_patterns)
 
-# 4. CRITICAL: Wisdom injection MUST include this instruction
+# 4. CRITICAL: Wisdom injection MUST include these instructions (EXACT ORDER)
 skill_reminder = """
-## FIRST ACTION REQUIRED
-Before doing ANYTHING else, invoke: Skill("orchestrator-multiagent")
-This loads the worker coordination patterns. Without it, you cannot properly delegate to workers.
+## FIRST ACTIONS REQUIRED (EXACT ORDER - DO NOT SKIP)
+1. IMMEDIATE: /output-style orchestrator
+   This loads orchestrator behavior patterns and delegation rules.
+
+2. THEN: Skill("orchestrator-multiagent")
+   This loads worker coordination patterns. Without it, you cannot properly delegate to workers.
+
+Do NOT skip or reorder these steps - orchestrators without proper output style may violate protocol.
 """
 ```
 
@@ -567,6 +580,24 @@ This loads the worker coordination patterns. Without it, you cannot properly del
 ```python
 Skill("system3-orchestrator", args=f"spawn {initiative} {worktree}")
 ```
+
+### 🚨 Post-Spawn: Blocking Monitor for Long-Running Initiatives
+
+**MANDATORY** for initiatives expected to take >1 hour: After spawning the orchestrator, immediately spawn a **blocking Haiku monitor** to keep the System 3 session active and enable real-time intervention.
+
+```python
+# Estimate duration based on task count and complexity
+if estimated_duration > "1 hour":
+    Task(
+        subagent_type="general-purpose",
+        model="haiku",
+        run_in_background=False,  # BLOCKING - keeps session alive
+        description=f"Blocking monitor for orch-{initiative}",
+        prompt="[See 'LONG-RUNNING INITIATIVES' section below for full prompt]"
+    )
+```
+
+**Why?** Without this, System 3 will idle after spawning the orchestrator and may trigger the stop hook prematurely. The blocking monitor keeps the session naturally alive and reports back when the orchestrator completes or needs guidance.
 
 ---
 
@@ -595,6 +626,96 @@ result = TaskOutput(task_id=monitor.agent_id, block=True)
 ```
 
 **Failure mode**: Without `run_in_background=True`, you block on monitoring and can't continue other work.
+
+### 🚨 LONG-RUNNING INITIATIVES (>1 Hour): Blocking Monitor Pattern
+
+For initiatives expected to take >1 hour, spawn a **BLOCKING** Haiku monitor instead of background monitoring. This keeps the System 3 session naturally alive and enables real-time intervention.
+
+**When to use blocking monitor:**
+- Initiative estimated >1 hour (multi-feature epics, large refactors)
+- Single active orchestrator (no parallel work needed)
+- Critical path work requiring immediate intervention if blocked
+
+**Why blocking (not background)?**
+- Keeps System 3 session active without triggering stop hook
+- Immediate intervention when orchestrator needs guidance
+- Natural session lifecycle - completes when orchestrator completes
+- No risk of missing critical blockers or guidance requests
+
+```python
+# ✅ CORRECT for long-running initiatives (>1 hour)
+Task(
+    subagent_type="general-purpose",
+    model="haiku",
+    run_in_background=False,  # BLOCKING - keeps session alive
+    description=f"Blocking monitor for {orchestrator_session}",
+    prompt=f"""You are monitoring orchestrator session: {orchestrator_session}
+
+## Your Mission
+Monitor the orchestrator continuously until it completes or needs intervention.
+Report back to System 3 (this thread) when ANY of these occur:
+
+### Report Immediately When:
+1. **COMPLETION**: Orchestrator signals work is done
+2. **BLOCKED >15 min**: Orchestrator stuck on same issue
+3. **LOOP DETECTED**: Same actions repeated 3+ times without progress
+4. **GUIDANCE NEEDED**: Orchestrator explicitly requests user input
+5. **SCOPE CREEP**: Files modified outside declared scope
+6. **ERROR SPIRAL**: Same error repeated 3+ times
+
+### Monitoring Commands
+```bash
+# Check recent output every 2-3 minutes
+tmux capture-pane -t {orchestrator_session} -p | tail -80
+
+# Check beads progress
+bd list --status=in_progress
+bd list --status=closed | tail -10
+```
+
+### Progress Indicators (Good Signs)
+- Tasks being closed (`bd close`)
+- Files being edited matching scope
+- Tests being run
+- Commits being made
+
+### Red Flags (Report Immediately)
+- "I'm stuck", "blocked", "need help", "waiting for"
+- Same file edited >5 times without commit
+- No activity for >10 minutes
+- Repeated errors in output
+- Questions directed at user without response
+
+### Report Format
+When reporting back, use this structure:
+```
+STATUS: [COMPLETE|BLOCKED|LOOP|NEEDS_GUIDANCE|SCOPE_CREEP|ERROR]
+ORCHESTRATOR: {orchestrator_session}
+SUMMARY: [What happened]
+LAST_ACTIVITY: [What the orchestrator was doing]
+RECOMMENDED_ACTION: [What System 3 should do]
+```
+
+Begin monitoring now. Check every 2-3 minutes.
+"""
+)
+```
+
+**Example usage in System 3:**
+```
+System 3: "This is a multi-hour homepage redesign initiative.
+          Spawning blocking Haiku monitor to keep session active
+          and report when orchestrator completes or needs guidance."
+
+[Spawns blocking Task - session stays active]
+[...time passes...]
+[Monitor reports: STATUS: BLOCKED, orchestrator needs design clarification]
+
+System 3: "Providing guidance to orchestrator..."
+[Sends message via tmux or message bus]
+```
+
+**MANDATORY for >1 hour initiatives**: Always spawn this blocking monitor after the orchestrator is launched. Without it, System 3 may idle and trigger the stop hook prematurely.
 
 ### Check-In Cadence
 - Every 30-45 minutes for active orchestrators
@@ -635,6 +756,38 @@ tmux list-sessions | grep "^orch-"
 - Same error repeated 3+ times
 - Deviation from learned patterns
 - Files modified outside declared scope
+
+### 🚨 MANDATORY: Cleanup After Orchestrator Completes
+
+**When an orchestrator reports COMPLETION** (via blocking monitor or message bus):
+
+```bash
+# 1. Kill the orchestrator's tmux session
+tmux kill-session -t orch-[initiative] 2>/dev/null && echo "Cleaned up: orch-[initiative]"
+
+# 2. The orchestrator should have killed its workers, but verify:
+worker_count=$(tmux list-sessions 2>/dev/null | grep -c "worker-[initiative]" || echo "0")
+if [ "$worker_count" -gt 0 ]; then
+    echo "Warning: Orchestrator left $worker_count worker sessions - cleaning up..."
+    for session in $(tmux list-sessions 2>/dev/null | grep "worker-[initiative]" | awk -F: '{print $1}'); do
+        tmux kill-session -t "$session" 2>/dev/null && echo "Killed orphan: $session"
+    done
+fi
+```
+
+**Why this matters**: A single initiative can spawn:
+- 1 orchestrator session
+- 10+ worker sessions per orchestrator
+- Multiple initiatives = 50+ orphaned sessions
+
+Without cleanup, system resources are consumed and `tmux list-sessions` becomes unmanageable.
+
+**Cleanup triggers:**
+| Event | Action |
+|-------|--------|
+| Orchestrator COMPLETE | Kill `orch-*` session + verify workers cleaned |
+| Orchestrator BLOCKED (abandoned) | Kill `orch-*` session + all `worker-*` sessions |
+| System 3 session end | Kill ALL remaining `orch-*` and `worker-*` sessions |
 
 ### Enforcing 3-Level Validation
 
@@ -1202,12 +1355,13 @@ mcp__hindsight__retain(
     bank_id="system3-orchestrator"
 )
 
-# Project learnings → Shared bank (if applicable)
+# Project learnings → Project bank (if applicable)
 if has_project_learnings:
+    PROJECT_BANK = os.environ.get("CLAUDE_PROJECT_BANK", "default-project")
     mcp__hindsight__retain(
         content=project_pattern,
         context="patterns",
-        bank_id="claude-code-agencheck"
+        bank_id=PROJECT_BANK
     )
 ```
 
@@ -1448,7 +1602,7 @@ If you catch yourself writing "Would you like me to..." when the path is clear:
 | `system3-active-goals` | Current initiatives and next steps |
 | `system3-prd-tracking` | **Active initiative goals**, acceptance criteria, and outcome records |
 
-### Shared Bank: `claude-code-agencheck`
+### Project Bank: `$CLAUDE_PROJECT_BANK`
 
 | Context | Purpose |
 |---------|---------|
@@ -1457,6 +1611,8 @@ If you catch yourself writing "Would you like me to..." when the path is clear:
 | `architecture` | Solution designs and decisions |
 | `bugs` | Root causes and prevention strategies |
 | `deployment` | Infrastructure patterns |
+
+**Note:** The project bank ID is derived from your current directory name (e.g., `dspy-preemploymentdirectory-poc`). Access via `os.environ.get("CLAUDE_PROJECT_BANK")`.
 
 ---
 
@@ -1566,11 +1722,39 @@ System 3 ──mb-send──► SQLite Queue ◄──polls── Background Mon
 
 ### Session End
 
-Unregister before stopping:
+**MANDATORY cleanup before stopping:**
 
 ```bash
+# 1. Kill ALL orchestrator tmux sessions spawned during this session
+echo "Cleaning up orchestrator sessions..."
+for session in $(tmux list-sessions 2>/dev/null | grep "^orch-" | awk -F: '{print $1}'); do
+    tmux kill-session -t "$session" 2>/dev/null && echo "Killed: $session"
+done
+
+# 2. Kill any remaining worker sessions (orchestrators should have cleaned these, but verify)
+echo "Cleaning up any remaining worker sessions..."
+for session in $(tmux list-sessions 2>/dev/null | grep "^worker-" | awk -F: '{print $1}'); do
+    tmux kill-session -t "$session" 2>/dev/null && echo "Killed: $session"
+done
+
+# 3. Verify cleanup
+remaining=$(tmux list-sessions 2>/dev/null | grep -cE "^(orch-|worker-)" || echo "0")
+echo "Remaining orchestrator/worker sessions: $remaining"
+
+# 4. Unregister from message bus
 .claude/scripts/message-bus/mb-unregister "system3"
 ```
+
+**When orchestrator completes (before session end):**
+
+After an orchestrator reports completion via message bus or monitor, immediately kill its session:
+
+```bash
+# Kill specific completed orchestrator
+tmux kill-session -t orch-[initiative] 2>/dev/null && echo "Cleaned up: orch-[initiative]"
+```
+
+**Why cleanup matters**: Without cleanup, tmux sessions accumulate. A single initiative can spawn 10+ workers per orchestrator. Multiple initiatives = 50+ orphaned sessions consuming memory.
 
 ---
 

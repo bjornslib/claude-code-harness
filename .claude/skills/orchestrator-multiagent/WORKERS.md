@@ -17,6 +17,28 @@ Patterns for delegating implementation to tmux workers.
 
 ---
 
+## 🚨 3-Tier Hierarchy (CRITICAL)
+
+Understanding the hierarchy prevents delegation violations:
+
+| Tier | Role | Spawns | Implements |
+|------|------|--------|------------|
+| **TIER 1: System 3** | Meta-orchestrator | Orchestrators via tmux | ❌ Never |
+| **TIER 2: Orchestrator** | Coordinator | Workers via tmux + Haiku monitors | ❌ Never |
+| **TIER 3: Worker** | Implementer | ❌ Does NOT spawn sub-workers | ✅ Directly |
+
+**The Key Insight**: Workers are the END of the chain. They implement directly using Edit/Write tools. Workers do NOT spawn their own sub-workers or sub-agents for implementation.
+
+```
+System 3 ──tmux──► Orchestrator ──tmux──► Worker ──Edit/Write──► Code
+                                              │
+                                              └──► (Task for validation ONLY, not implementation)
+```
+
+**Common Violation**: Workers spawning sub-agents for every coding step. This creates a 4-tier system and confuses responsibility. Workers ARE specialists - they implement directly.
+
+---
+
 ## Core Principle
 
 **Orchestrator = Coordinator. Worker = Implementer.**
@@ -187,19 +209,19 @@ mcp__serena__switch_modes(["editing", "interactive"])
 **Dependencies Verified**: [List parent beads that are closed]
 
 **Your Role**:
-- You are TIER 2 in the 3-tier hierarchy
-- Complete this ONE SMALL TASK
-- Spawn Haiku sub-agents for atomic operations (code OR test, never both)
+- You are TIER 2 in the 3-tier hierarchy (Worker)
+- Complete this ONE SMALL TASK - implement it DIRECTLY yourself
+- Do NOT spawn sub-agents for implementation - you ARE the implementer
 - ONLY modify files in scope list
 - Use superpowers:test-driven-development
 - Use superpowers:verification-before-completion before claiming done
 
-**Sub-Agent Pattern**:
-For each implementation step, spawn a Haiku sub-agent:
-Task(subagent_type="general-purpose", model="haiku", prompt="
-[Single atomic task - either code OR test, never both]
-Modify ONLY: [specific file]
-")
+**Implementation Approach**:
+- Write the code yourself using Edit/Write tools
+- Write the tests yourself using Edit/Write tools
+- You are a specialist agent (frontend-dev-expert, backend-solutions-engineer, etc.)
+- Sub-agents are ONLY for validation checks AFTER implementation, not during
+- If you need research help, use Task(model="haiku") for quick lookups only
 
 **When Done**:
 1. Run all validation steps from above
@@ -225,8 +247,8 @@ Before launching worker, verify assignment includes:
 - [ ] Explicit scope (file paths)
 - [ ] Validation type specified
 - [ ] Dependencies verified as passing
-- [ ] Role explanation (TIER 2)
-- [ ] Sub-agent pattern instructions
+- [ ] Role explanation (TIER 2 = direct implementer)
+- [ ] Implementation approach (worker implements directly, not via sub-agents)
 - [ ] Completion criteria
 - [ ] Critical constraints listed
 
@@ -547,19 +569,49 @@ cat /tmp/worker-F001-output.txt
 # Extract: What was implemented, tests run, validation performed, warnings
 ```
 
-### Cleanup After Worker Completes
+### 🚨 MANDATORY: Cleanup After Worker Completes
+
+**CRITICAL**: Always kill worker tmux sessions after they complete. Failure to do so results in session buildup that consumes system resources.
 
 ```bash
-# Kill worker session
+# 1. Kill the specific worker session
 tmux kill-session -t worker-F001
 
-# Verify session terminated
+# 2. Verify session terminated
 tmux list-sessions | grep worker-F001
 # Should return nothing
 
-# Clean up temp files
-rm /tmp/worker-F001-prompt.txt
-rm /tmp/worker-F001-output.txt
+# 3. Clean up temp files
+rm -f /tmp/worker-F001-*.txt
+```
+
+**Batch cleanup for multiple completed workers:**
+
+```bash
+# List all worker sessions
+tmux list-sessions 2>/dev/null | grep "^worker-" | awk -F: '{print $1}'
+
+# Kill all worker sessions matching a pattern (e.g., completed initiative)
+for session in $(tmux list-sessions 2>/dev/null | grep "worker-dspy-" | awk -F: '{print $1}'); do
+    tmux kill-session -t "$session" 2>/dev/null && echo "Killed: $session"
+done
+
+# Verify cleanup - should show only active workers
+tmux list-sessions 2>/dev/null | grep worker- | wc -l
+```
+
+**When to cleanup:**
+- ✅ After worker reports COMPLETE
+- ✅ After worker reports BLOCKED (and you've captured output)
+- ✅ Before starting a new initiative (clean slate)
+- ✅ At session end (cleanup all your workers)
+
+**Include in orchestrator's Session End protocol:**
+```bash
+# Kill all worker sessions for this initiative
+for session in $(tmux list-sessions 2>/dev/null | grep "worker-" | awk -F: '{print $1}'); do
+    tmux kill-session -t "$session" 2>/dev/null && echo "Cleaned up: $session"
+done
 ```
 
 ---

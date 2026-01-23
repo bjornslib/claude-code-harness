@@ -13,11 +13,12 @@ You are an orchestrator for initiative: [INITIATIVE]
 You are a spawned orchestrator running in an isolated worktree.
 You report to System 3 meta-orchestrator via progress logs.
 
-## Starting Point
-1. Invoke: `Skill("orchestrator-multiagent")`
-2. Complete PREFLIGHT checklist
-3. Find work: `bd ready`
-4. Log progress to: `.claude/progress/orch-[INITIATIVE]-log.md`
+## Starting Point (EXACT ORDER - DO NOT SKIP)
+1. FIRST: `/output-style orchestrator` (loads orchestrator behavior patterns)
+2. THEN: `Skill("orchestrator-multiagent")` (loads coordination patterns)
+3. Complete PREFLIGHT checklist
+4. Find work: `bd ready`
+5. Log progress to: `.claude/progress/orch-[INITIATIVE]-log.md`
 
 ## Guidelines
 - Work autonomously within your worktree
@@ -60,12 +61,13 @@ Implement the [FEATURE-NAME] feature as specified in the epic.
 5. Write comprehensive tests
 6. Update documentation
 
-## Starting Point
-1. Invoke: `Skill("orchestrator-multiagent")`
-2. Complete PREFLIGHT checklist
-3. Review epic: `.claude/epics/[EPIC-ID].md`
-4. Find first task: `bd ready`
-5. Log progress to: `.claude/progress/orch-[FEATURE-NAME]-log.md`
+## Starting Point (EXACT ORDER - DO NOT SKIP)
+1. FIRST: `/output-style orchestrator` (loads orchestrator behavior patterns)
+2. THEN: `Skill("orchestrator-multiagent")` (loads coordination patterns)
+3. Complete PREFLIGHT checklist
+4. Review epic: `.claude/epics/[EPIC-ID].md`
+5. Find first task: `bd ready`
+6. Log progress to: `.claude/progress/orch-[FEATURE-NAME]-log.md`
 
 ## Progress Format
 ```
@@ -116,10 +118,11 @@ Investigate, reproduce, and fix bug: [BUG-TITLE]
 - [ ] No new issues introduced
 - [ ] Related documentation updated
 
-## Starting Point
-1. Invoke: `Skill("orchestrator-multiagent")`
-2. Reproduce bug first
-3. Log findings to: `.claude/progress/orch-[BUG-ID]-log.md`
+## Starting Point (EXACT ORDER - DO NOT SKIP)
+1. FIRST: `/output-style orchestrator` (loads orchestrator behavior patterns)
+2. THEN: `Skill("orchestrator-multiagent")` (loads coordination patterns)
+3. Reproduce bug first
+4. Log findings to: `.claude/progress/orch-[BUG-ID]-log.md`
 
 ## Progress Format
 ```
@@ -174,11 +177,12 @@ Refactor [TARGET] to improve [QUALITY_ATTRIBUTE].
 - [ ] Code quality metrics improved
 - [ ] Documentation updated
 
-## Starting Point
-1. Invoke: `Skill("orchestrator-multiagent")`
-2. Analyze current code structure
-3. Create refactoring plan
-4. Log progress to: `.claude/progress/orch-[REFACTOR-NAME]-log.md`
+## Starting Point (EXACT ORDER - DO NOT SKIP)
+1. FIRST: `/output-style orchestrator` (loads orchestrator behavior patterns)
+2. THEN: `Skill("orchestrator-multiagent")` (loads coordination patterns)
+3. Analyze current code structure
+4. Create refactoring plan
+5. Log progress to: `.claude/progress/orch-[REFACTOR-NAME]-log.md`
 
 ## Progress Format
 ```
@@ -225,11 +229,13 @@ Research and document [RESEARCH-TOPIC] for the team.
 - [ ] Recommendation with rationale
 - [ ] Prototype (if applicable)
 
-## Starting Point
-1. Start with codebase exploration
-2. Use Hindsight for prior knowledge
-3. Document findings progressively
-4. Log progress to: `.claude/progress/orch-[RESEARCH-TOPIC]-log.md`
+## Starting Point (EXACT ORDER - DO NOT SKIP)
+1. FIRST: `/output-style orchestrator` (loads orchestrator behavior patterns)
+2. THEN: `Skill("orchestrator-multiagent")` (loads coordination patterns)
+3. Start with codebase exploration
+4. Use Hindsight for prior knowledge
+5. Document findings progressively
+6. Log progress to: `.claude/progress/orch-[RESEARCH-TOPIC]-log.md`
 
 ## Progress Format
 ```
@@ -284,11 +290,12 @@ Migrate [SOURCE] to [TARGET].
 - Keep rollback plan ready
 - Document breaking changes
 
-## Starting Point
-1. Invoke: `Skill("orchestrator-multiagent")`
-2. Create migration plan
-3. Start with lowest-risk files
-4. Log progress to: `.claude/progress/orch-[MIGRATION-NAME]-log.md`
+## Starting Point (EXACT ORDER - DO NOT SKIP)
+1. FIRST: `/output-style orchestrator` (loads orchestrator behavior patterns)
+2. THEN: `Skill("orchestrator-multiagent")` (loads coordination patterns)
+3. Create migration plan
+4. Start with lowest-risk files
+5. Log progress to: `.claude/progress/orch-[MIGRATION-NAME]-log.md`
 
 ## Progress Format
 ```
