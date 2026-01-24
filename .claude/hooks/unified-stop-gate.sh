@@ -41,6 +41,14 @@ sys.path.insert(0, str(hooks_dir.parent))
 from unified_stop_gate.checkers import SessionInfo, CompletionPromiseChecker, OrchestratorGuidanceChecker
 from unified_stop_gate.config import EnvironmentConfig, PathResolver, CheckResult
 
+# Import goal validator for task-based completion checking
+try:
+    from decision_guidance.goal_validator import GoalValidator
+    from decision_guidance.state_manager import ErrorTracker
+    GOAL_VALIDATOR_AVAILABLE = True
+except ImportError:
+    GOAL_VALIDATOR_AVAILABLE = False
+
 
 def get_beads_ready_work():
     """Run bd ready to find unblocked P0-P2 work."""
@@ -204,6 +212,52 @@ def main():
                 }
                 print(json.dumps(output, indent=2))
                 return
+
+        # Check goal/task completion against System3 instructions
+        if GOAL_VALIDATOR_AVAILABLE:
+            goal_validator = GoalValidator()
+
+            # Get error count from error tracker
+            try:
+                error_tracker = ErrorTracker()
+                error_count = len(error_tracker.get_recent_errors())
+            except Exception:
+                error_count = 0
+
+            validation_result = goal_validator.validate(
+                error_count=error_count,
+                stop_attempt=True
+            )
+
+            # Block if tasks incomplete and not on track
+            if not validation_result.should_stop and validation_result.completion_pct < 100:
+                guidance_message = goal_validator.format_for_guidance(validation_result)
+
+                # Check bypass attempts (similar to momentum check)
+                goal_bypass_marker = Path(f"/tmp/claude-goal-validation-{session_id}")
+                goal_attempts = 0
+                if goal_bypass_marker.exists():
+                    import time
+                    if time.time() - goal_bypass_marker.stat().st_mtime < 300:
+                        try:
+                            goal_attempts = int(goal_bypass_marker.read_text().strip())
+                        except (ValueError, OSError):
+                            goal_attempts = 1
+
+                if goal_attempts >= 2:
+                    # Allow bypass after 2 attempts
+                    pass
+                else:
+                    # Block and suggest continuing
+                    goal_bypass_marker.write_text(str(goal_attempts + 1))
+                    bypass_hint = f"\n\n*Attempt {goal_attempts + 1}/2. Stop {2 - goal_attempts} more time(s) to bypass.*"
+
+                    output = {
+                        "decision": "block",
+                        "reason": f"## 📋 Task Completion Check\n\n{guidance_message}{bypass_hint}"
+                    }
+                    print(json.dumps(output, indent=2))
+                    return
 
         # Promises passed - check for momentum block
         ready_work = get_beads_ready_work()
