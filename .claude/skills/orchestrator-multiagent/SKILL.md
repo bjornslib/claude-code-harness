@@ -202,7 +202,7 @@ The preflight includes:
 | Scenario | Signs | Workflow |
 |----------|-------|----------|
 | **Ideation** | No tasks exist, new initiative | Phase 0: Ideation (brainstorming + research) |
-| **Planning** | Ideation done, no Beads tasks | Phase 1: Planning (uber-epic + task decomposition) |
+| **Planning** | Ideation done, no Beads tasks | Phase 1: Planning (uber-epic + task decomposition + acceptance test generation) |
 | **Execution** | Tasks exist, all open | Phase 2: Execution (incremental implementation) |
 | **Continuation** | Some tasks closed, some open | Phase 2: Execution (continue from where left off) |
 | **Validation** | All impl done, AT pending | Phase 3: Validation (AT epic closure) |
@@ -355,14 +355,65 @@ node agencheck/.claude/skills/orchestrator-multiagent/scripts/sync-taskmaster-to
     --tasks-path=agencheck/.taskmaster/tasks/tasks.json
 # This also closes Task Master tasks 171-210 (status=done)
 
-# 6. Review hierarchy (filter by uber-epic)
+# 6. Generate acceptance tests from PRD (IMMEDIATELY after sync)
+cd /Users/theb/Documents/Windsurf/zenagent/agencheck
+Skill("acceptance-test-writer", args="--prd=PRD-AUTH-001 --source=.taskmaster/docs/prd.md")
+# This generates:
+# acceptance-tests/PRD-AUTH-001/
+# ├── manifest.yaml          # PRD metadata + feature list
+# ├── AC-user-login.yaml     # Acceptance criteria
+# ├── AC-invalid-credentials.yaml
+# └── ...
+
+# 7. Commit acceptance tests
+git add acceptance-tests/ && git commit -m "test(PRD-AUTH-001): add acceptance test suite"
+
+# 8. Review hierarchy (filter by uber-epic)
 bd list --parent=agencheck-001   # See only tasks under this initiative
 bd ready --parent=agencheck-001  # Ready tasks for this initiative only
 
-# 7. Commit and document (completes Phase 1)
+# 9. Commit planning artifacts (completes Phase 1)
 git add .beads/ && git commit -m "plan: initialize [initiative] hierarchy"
 # Write progress summary to .claude/progress/
 ```
+
+### Acceptance Test Generation (Phase 1 Part 2)
+
+**Prerequisites**:
+- ✅ Beads hierarchy synced (from sync step above)
+- ✅ PRD document exists at `.taskmaster/docs/`
+
+**Workflow**:
+
+```bash
+# 6. Generate acceptance tests from PRD (IMMEDIATELY after sync)
+Skill("acceptance-test-writer", args="--prd=PRD-AUTH-001 --source=.taskmaster/docs/prd.md")
+
+# This generates:
+# acceptance-tests/PRD-AUTH-001/
+# ├── manifest.yaml          # PRD metadata + feature list
+# ├── AC-user-login.yaml     # Acceptance criteria
+# ├── AC-invalid-credentials.yaml
+# └── ...
+
+# 7. Commit acceptance tests
+git add acceptance-tests/ && git commit -m "test(PRD-AUTH-001): add acceptance test suite"
+```
+
+**Why This Timing**:
+- Tests generated from fresh PRD → accurate representation
+- Tests committed BEFORE Phase 2 → workers can reference them
+- Enables early detection of ambiguous acceptance criteria
+- Phase 3 validation has tests ready to execute
+
+**Important**:
+- acceptance-test-writer is a **Skill** (invoked explicitly)
+- Tests are **NOT executed** in Phase 1 (only generated)
+- Tests become part of **version control**
+- Workers reference tests during Phase 2
+- validation-agent executes tests during Phase 3 closure
+
+---
 
 **Manual Planning** (Hotfixes only - already have clear scope):
 ```bash

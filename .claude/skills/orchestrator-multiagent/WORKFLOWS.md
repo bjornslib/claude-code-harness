@@ -5,6 +5,7 @@ Execution workflows for multi-feature development.
 ## Table of Contents
 - [4-Phase Pattern](#4-phase-pattern)
 - [Autonomous Mode Protocol](#autonomous-mode-protocol)
+- [Acceptance Test Generation (After PRD Parse)](#acceptance-test-generation-after-prd-parse)
 - [Feature Decomposition (MAKER)](#feature-decomposition-maker)
 - [Progress Tracking](#progress-tracking)
 - [Session Handoffs](#session-handoffs)
@@ -110,6 +111,7 @@ LOOP:
   1. PRE-FLIGHT CHECK
      - If not done this session: Run full PREFLIGHT.md checklist
      - If already done: Quick service health check only
+     - If new PRD: Generate acceptance tests (see Acceptance Test Generation)
 
   2. SELECT NEXT TASK
      bd ready → Pick highest priority unblocked task
@@ -201,6 +203,54 @@ Use Markdown-based test specifications:
 4. **Orchestrator Review** → Sense-check results, re-execute if anomalies
 
 **Pass Criteria**: UI renders correctly, workflows complete, no JS console errors, 100% pass rate.
+
+---
+
+## Acceptance Test Generation (After PRD Parse)
+
+**When**: Immediately after Task Master parse-prd and beads sync completes
+
+**Purpose**: Generate executable test scripts from PRD before implementation begins
+
+**Workflow**:
+
+1. **Generate tests from PRD**:
+   ```python
+   # Orchestrator invokes skill (NOT worker, NOT validation-agent)
+   Skill("acceptance-test-writer", args="--prd=PRD-XXX --source=.taskmaster/docs/prd.md")
+   ```
+
+2. **Review generated tests**:
+   - Check `acceptance-tests/PRD-XXX/manifest.yaml` for completeness
+   - Review each `AC-*.yaml` file for clarity
+   - Adjust selectors/assertions if needed
+
+3. **Commit tests**:
+   ```bash
+   git add acceptance-tests/ && git commit -m "test(PRD-XXX): add acceptance test suite"
+   ```
+
+**Output Directory**:
+```
+acceptance-tests/PRD-XXX/
+├── manifest.yaml           # PRD metadata + feature list
+├── AC-user-login.yaml     # Browser acceptance test
+├── AC-api-auth.yaml       # API acceptance test
+└── AC-session-timeout.yaml # Hybrid test
+```
+
+**Key Rules**:
+- Generate tests in Phase 1 (Planning), NOT Phase 2 (Execution)
+- Orchestrator generates tests, NOT workers
+- validation-agent executes tests in Phase 3 (NOT orchestrator)
+- Tests are committed to git with the beads hierarchy
+
+**Integration with Validation Gate**:
+```
+Phase 1: PRD → acceptance-test-writer → acceptance-tests/PRD-XXX/
+Phase 2: Workers implement (reference tests for guidance)
+Phase 3: validation-agent --mode=e2e --prd=PRD-XXX → runs tests → closes tasks
+```
 
 ---
 

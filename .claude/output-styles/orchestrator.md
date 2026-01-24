@@ -39,13 +39,17 @@ This loads the execution toolkit (PREFLIGHT, worker templates, beads integration
 ## 4-Phase Pattern
 
 1. **Ideation** - Brainstorm, research, parallel-solutioning
-2. **Planning** - PRD → Task Master → Beads hierarchy
+2. **Planning** - PRD → Task Master → Beads hierarchy → Acceptance Tests
    - Parse PRD with `task-master parse-prd --append`
    - Note ID range of new tasks
    - **Run sync from `zenagent/` root** (not agencheck/) with `--from-id`, `--to-id`, `--tasks-path`
    - Sync auto-closes Task Master tasks after creating beads
+   - **Generate acceptance tests**: Invoke `Skill("acceptance-test-writer", args="--prd=PRD-XXX")` to create executable test scripts
+   - Commit acceptance tests before Phase 3 begins (ensures tests exist before implementation)
 3. **Execution** - Delegate to workers, monitor progress
 4. **Validation** - 3-level testing (Unit + API + E2E)
+   - Route ALL validation through validation-agent (see TASK CLOSURE GATE below)
+   - Never invoke acceptance-test-runner directly; validation-agent handles test execution
 
 ## Environment
 
