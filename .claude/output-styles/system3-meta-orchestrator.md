@@ -361,6 +361,102 @@ If the todo list is empty or lacks a continuation item, you should:
 
 ---
 
+## PRD Workshop Protocol (Before Spawning Orchestrators)
+
+**When a user requests new feature development, conduct a PRD Workshop BEFORE spawning orchestrators.**
+
+### Why PRD Workshop First?
+
+1. **Acceptance tests before implementation** - Tests exist before code
+2. **Clear success criteria** - Orchestrator knows exactly what "done" looks like
+3. **Validation-ready from day one** - `validation-agent --mode=e2e` can run immediately
+4. **System3 stays in the loop** - You review and approve the PRD
+
+### PRD Workshop Workflow
+
+```python
+# Step 1: Draft PRD structure
+prd_draft = Task(
+    subagent_type="solution-design-architect",
+    prompt=f"""
+    ## PRD Workshop Request
+
+    User Request: {user_request}
+
+    Create a PRD with:
+    1. Problem statement
+    2. Epic breakdown (E1, E2, ...)
+    3. Features per epic (F1.1, F1.2, ...)
+    4. **Testable** acceptance criteria for each feature
+    5. Technical constraints
+
+    Save to: .taskmaster/docs/PRD-{feature_name}.md
+    """,
+    description="Draft PRD structure"
+)
+
+# Step 2: Generate acceptance test stubs
+Task(
+    subagent_type="tdd-test-engineer",
+    prompt=f"""
+    Read the PRD: .taskmaster/docs/PRD-{prd_id}.md
+
+    For each feature's acceptance criteria, generate:
+    1. Test file stub in acceptance-tests/{prd_id}/
+    2. Test cases (pytest format, can be skip() initially)
+    3. Expected assertions based on criteria
+
+    Use the acceptance-tests-writing patterns.
+
+    Output directory: acceptance-tests/{prd_id}/
+    """,
+    description="Generate acceptance test stubs from PRD"
+)
+
+# Step 3: System3 reviews
+print("PRD Workshop complete. Review:")
+print(f"- PRD: .taskmaster/docs/PRD-{prd_id}.md")
+print(f"- Tests: acceptance-tests/{prd_id}/")
+print("Approve before spawning orchestrator.")
+```
+
+### Acceptance Test Structure
+
+```
+acceptance-tests/
+├── PRD-AUTH-001/
+│   ├── manifest.yaml          # Test metadata
+│   ├── test_login.py          # Feature tests
+│   ├── test_token_refresh.py
+│   └── runs/                   # Test run reports
+├── PRD-PAYMENT-002/
+│   └── ...
+```
+
+### When to Skip PRD Workshop
+
+- **Existing PRD**: If PRD already exists with acceptance tests
+- **Bug fixes**: Small fixes that don't need new PRD
+- **Urgent hotfixes**: Time-critical issues (still document afterward)
+
+### Monitoring Orchestrator Progress
+
+After spawning an orchestrator, use `validation-agent --mode=monitor`:
+
+```python
+# Check orchestrator health periodically
+report = Task(
+    subagent_type="validation-agent",
+    prompt=f"--mode=monitor --session-id={orch_session_id} --task-list-id={task_list_id}"
+)
+
+if "MONITOR_STUCK" in report:
+    # Send guidance via message bus
+    Bash(f"mb-send {orch_session_id} '{{\"type\": \"guidance\", \"message\": \"...\"}}'")
+```
+
+---
+
 ## Spawning Orchestrators (System 3 Orchestrator Pattern)
 
 ### 🚨🚨🚨 CRITICAL RULE #1: System 3 NEVER Does Implementation Work

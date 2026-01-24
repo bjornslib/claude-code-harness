@@ -7,7 +7,7 @@ color: green
 
 ## Operating Modes
 
-This agent supports two primary operating modes controlled by the --mode parameter:
+This agent supports three operating modes controlled by the --mode parameter:
 
 ### Unit Mode (--mode=unit)
 - **Purpose**: Fast technical validation during development
@@ -23,17 +23,109 @@ This agent supports two primary operating modes controlled by the --mode paramet
 - **Data**: Real data ONLY - no mocks
 - **Output**: `E2E_PASS` | `E2E_FAIL` with evidence-based report
 
+### Monitor Mode (--mode=monitor) [NEW]
+- **Purpose**: Continuous progress monitoring for orchestrator sessions
+- **Trigger**: `validation-agent --mode=monitor --session-id=<orch-id> --task-list-id=<list-id>`
+- **Validation Focus**: Task completion against System3 instructions
+- **Output**: JSON progress report with health indicators
+- **Use Case**: System3 uses this to monitor orchestrator health
+
 ### Parameters
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `--mode` | Yes | `unit` or `e2e` |
-| `--task_id` | Yes | Beads task ID being validated |
+| `--mode` | Yes | `unit`, `e2e`, or `monitor` |
+| `--task_id` | For unit/e2e | Beads task ID being validated |
 | `--prd` | For e2e | PRD identifier (e.g., `PRD-AUTH-001`) |
 | `--criterion` | No | Specific acceptance criterion to test |
+| `--session-id` | For monitor | Orchestrator session ID (e.g., `orch-auth-123`) |
+| `--task-list-id` | For monitor | Task list ID from `.claude/tasks/` |
 
 ### Default Behavior
 If no --mode specified, assume `--mode=unit`.
+
+---
+
+### Monitor Mode Workflow (NEW)
+
+When invoked with `--mode=monitor --session-id=<orch-id> --task-list-id=<list-id>`:
+
+**Purpose**: Provide System3 with real-time progress visibility into orchestrator sessions.
+
+1. **Load Task State**:
+   ```python
+   # Use GoalValidator from decision_guidance
+   from decision_guidance import GoalValidator, ErrorTracker
+
+   validator = GoalValidator()
+   tasks = validator.load_tasks()  # From .claude/tasks/{task-list-id}
+   task_pct, incomplete = validator.get_task_completion_pct()
+   ```
+
+2. **Check Error Patterns**:
+   ```python
+   error_tracker = ErrorTracker()
+   recent_errors = error_tracker.get_recent_errors()
+   is_stuck = len(recent_errors) >= 4 and task_pct < 50
+   ```
+
+3. **Load Completion State** (if available):
+   ```python
+   state = validator.load_completion_state()
+   if state:
+       goals_complete = all(g.is_complete for g in state.goals)
+       original_prompt = state.raw_prompt
+   ```
+
+4. **Generate Monitor Report**:
+   ```json
+   {
+       "session_id": "orch-auth-123",
+       "timestamp": "2026-01-24T12:00:00Z",
+       "completion_pct": 45.0,
+       "tasks": {
+           "total": 8,
+           "completed": 3,
+           "in_progress": 2,
+           "pending": 3,
+           "incomplete_list": ["Task 4: Implement login", "Task 5: Add validation"]
+       },
+       "health": {
+           "is_stuck": false,
+           "recent_errors": 2,
+           "doom_loop_detected": false
+       },
+       "original_goal": "Implement authentication feature",
+       "should_intervene": false,
+       "recommendations": ["On track. 5 tasks remaining."]
+   }
+   ```
+
+5. **Output Decision**:
+   - `MONITOR_HEALTHY`: Orchestrator is making progress
+   - `MONITOR_STUCK`: Multiple errors, low progress (System3 should intervene)
+   - `MONITOR_COMPLETE`: All tasks done (validation can proceed)
+
+**Use from System3**:
+```python
+# System3 monitors orchestrator
+report = Task(
+    subagent_type="validation-agent",
+    prompt="--mode=monitor --session-id=orch-auth-123 --task-list-id=session-xyz"
+)
+
+if "MONITOR_STUCK" in report:
+    # Send guidance to orchestrator
+    Bash(f"mb-send orch-auth-123 '{json.dumps(guidance)}'")
+elif "MONITOR_COMPLETE" in report:
+    # Trigger final validation
+    Task(
+        subagent_type="validation-agent",
+        prompt="--mode=e2e --task_id=... --prd=..."
+    )
+```
+
+---
 
 ### Unit Mode Workflow
 
