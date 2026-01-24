@@ -14,6 +14,7 @@ class EnvironmentConfig:
     Attributes:
         project_dir: The Claude project directory (CLAUDE_PROJECT_DIR)
         session_dir: Optional session-specific directory for isolation (CLAUDE_SESSION_DIR)
+        session_id: The Claude session ID (CLAUDE_SESSION_ID)
         max_iterations: Maximum allowed iterations before requiring justification (CLAUDE_MAX_ITERATIONS)
         enforce_promise: Whether to enforce completion promise checking (CLAUDE_ENFORCE_PROMISE)
         enforce_bo: Whether to enforce business objectives checking (CLAUDE_ENFORCE_BO)
@@ -21,9 +22,15 @@ class EnvironmentConfig:
 
     project_dir: str
     session_dir: Optional[str]
+    session_id: Optional[str]
     max_iterations: int
     enforce_promise: bool
     enforce_bo: bool
+
+    @property
+    def is_orchestrator(self) -> bool:
+        """Check if this is an orchestrator session (session ID starts with 'orch-')."""
+        return bool(self.session_id and self.session_id.startswith("orch-"))
 
     @classmethod
     def from_env(cls) -> 'EnvironmentConfig':
@@ -32,6 +39,7 @@ class EnvironmentConfig:
         Environment Variables:
             CLAUDE_PROJECT_DIR: Project directory path (default: '.')
             CLAUDE_SESSION_DIR: Session directory for isolation (default: None)
+            CLAUDE_SESSION_ID: Session identifier, 'orch-*' prefix indicates orchestrator
             CLAUDE_MAX_ITERATIONS: Max iterations before justification (default: 25)
             CLAUDE_ENFORCE_PROMISE: Enforce completion promises (default: false)
             CLAUDE_ENFORCE_BO: Enforce business objectives (default: false)
@@ -42,6 +50,7 @@ class EnvironmentConfig:
         return cls(
             project_dir=os.environ.get('CLAUDE_PROJECT_DIR', '.'),
             session_dir=os.environ.get('CLAUDE_SESSION_DIR'),
+            session_id=os.environ.get('CLAUDE_SESSION_ID'),
             max_iterations=int(os.environ.get('CLAUDE_MAX_ITERATIONS', '25')),
             enforce_promise=os.environ.get('CLAUDE_ENFORCE_PROMISE', '').lower() in ('true', '1', 'yes'),
             enforce_bo=os.environ.get('CLAUDE_ENFORCE_BO', '').lower() in ('true', '1', 'yes'),
@@ -70,6 +79,7 @@ class Priority(IntEnum):
     P0_CIRCUIT_BREAKER = 0      # max_iterations - force ALLOW
     P1_COMPLETION_PROMISE = 1   # user goals - BLOCK if unmet
     P2_BEADS_SYNC = 2           # data integrity - BLOCK if dirty
+    P2_5_ORCHESTRATOR_GUIDANCE = 25  # orchestrator blocker escalation - BLOCK
     P3_TODO_CONTINUATION = 3    # momentum - BLOCK if missing
     P4_GIT_STATUS = 4           # advisory - WARN only
     P5_BUSINESS_OUTCOMES = 5    # focused mode - BLOCK if enforced
