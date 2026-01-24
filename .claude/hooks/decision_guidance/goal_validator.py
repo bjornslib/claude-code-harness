@@ -138,16 +138,22 @@ class ValidationResult:
 
 @dataclass
 class TaskMasterTask:
-    """A task from Task Master."""
+    """A task from Task Master or TodoWrite.
+
+    Handles both formats:
+    - Task Master: status = "pending", "in-progress", "done", "blocked"
+    - TodoWrite: status = "pending", "in_progress", "completed"
+    """
     id: str
     title: str
-    status: str  # pending, in-progress, done, blocked
+    status: str  # pending, in-progress/in_progress, done/completed, blocked
     priority: str  # P0, P1, P2, P3
     subtasks: list[dict] = field(default_factory=list)
 
     @property
     def is_complete(self) -> bool:
-        return self.status == "done"
+        """Check if task is complete (handles both TM and TodoWrite status values)."""
+        return self.status in ("done", "completed")
 
 
 class GoalValidator:
@@ -182,6 +188,37 @@ class GoalValidator:
         """Get path to .claude/tasks directory (TodoWrite storage)."""
         return self.project_dir / ".claude" / "tasks"
 
+    def _get_task_list_id(self) -> Optional[str]:
+        """Get the task list ID from environment."""
+        return os.environ.get("CLAUDE_CODE_TASK_LIST_ID")
+
+    def _get_task_list_path(self) -> Optional[Path]:
+        """Get path to the specific task list file.
+
+        Uses CLAUDE_CODE_TASK_LIST_ID to find the task list:
+        - .claude/tasks/{TASK_LIST_ID}
+        - .claude/tasks/{TASK_LIST_ID}.json
+
+        Returns None if no task list ID is set.
+        """
+        task_list_id = self._get_task_list_id()
+        if not task_list_id:
+            return None
+
+        tasks_dir = self._get_tasks_dir()
+
+        # Try exact path first
+        exact_path = tasks_dir / task_list_id
+        if exact_path.exists():
+            return exact_path
+
+        # Try with .json extension
+        json_path = tasks_dir / f"{task_list_id}.json"
+        if json_path.exists():
+            return json_path
+
+        return None
+
     def _get_taskmaster_path(self) -> Path:
         """Get path to Task Master tasks.json."""
         return self.project_dir / ".taskmaster" / "tasks" / "tasks.json"
@@ -189,44 +226,78 @@ class GoalValidator:
     def load_tasks(self) -> list[TaskMasterTask]:
         """Load tasks from .claude/tasks/ or .taskmaster/tasks/tasks.json.
 
-        Checks multiple sources:
-        1. .claude/tasks/*.json (TodoWrite storage)
-        2. .taskmaster/tasks/tasks.json (Task Master)
+        Priority order:
+        1. .claude/tasks/{CLAUDE_CODE_TASK_LIST_ID} (if env var set)
+        2. .claude/tasks/*.json (all JSON files)
+        3. .taskmaster/tasks/tasks.json (Task Master)
 
         Returns list of tasks found.
         """
         tasks = []
 
-        # Source 1: .claude/tasks/ directory
+        # Priority 1: Specific task list from CLAUDE_CODE_TASK_LIST_ID
+        task_list_path = self._get_task_list_path()
+        if task_list_path:
+            try:
+                with open(task_list_path, "r") as fp:
+                    data = json.load(fp)
+                    tasks.extend(self._parse_task_data(data))
+                    # If we found a specific task list, return it
+                    if tasks:
+                        return tasks
+            except (json.JSONDecodeError, IOError):
+                pass
+
+        # Source 2: .claude/tasks/ directory (all JSON files)
         tasks_dir = self._get_tasks_dir()
         if tasks_dir.exists():
             for f in tasks_dir.glob("*.json"):
                 try:
                     with open(f, "r") as fp:
                         data = json.load(fp)
-                        # Handle both single task and array formats
-                        if isinstance(data, list):
-                            for t in data:
-                                tasks.append(self._parse_task(t))
-                        elif isinstance(data, dict):
-                            if "tasks" in data:
-                                for t in data["tasks"]:
-                                    tasks.append(self._parse_task(t))
-                            else:
-                                tasks.append(self._parse_task(data))
+                        tasks.extend(self._parse_task_data(data))
                 except (json.JSONDecodeError, IOError, KeyError):
                     continue
 
-        # Source 2: .taskmaster/tasks/tasks.json
+        # Source 3: .taskmaster/tasks/tasks.json
         tm_path = self._get_taskmaster_path()
         if tm_path.exists():
             try:
                 with open(tm_path, "r") as f:
                     data = json.load(f)
-                    for t in data.get("tasks", []):
-                        tasks.append(self._parse_task(t))
+                    tasks.extend(self._parse_task_data(data))
             except (json.JSONDecodeError, IOError, KeyError):
                 pass
+
+        return tasks
+
+    def _parse_task_data(self, data) -> list[TaskMasterTask]:
+        """Parse task data from various formats.
+
+        Handles:
+        - Array of tasks: [{"id": 1, ...}, {"id": 2, ...}]
+        - Object with tasks key: {"tasks": [...]}
+        - Single task object: {"id": 1, ...}
+        - TodoWrite format: {"todos": [{"content": "...", "status": "..."}]}
+        """
+        tasks = []
+
+        if isinstance(data, list):
+            for t in data:
+                if isinstance(t, dict):
+                    tasks.append(self._parse_task(t))
+        elif isinstance(data, dict):
+            # Check for various container keys
+            if "tasks" in data:
+                for t in data["tasks"]:
+                    tasks.append(self._parse_task(t))
+            elif "todos" in data:
+                # TodoWrite format
+                for t in data["todos"]:
+                    tasks.append(self._parse_task(t))
+            elif "id" in data or "content" in data or "title" in data:
+                # Single task
+                tasks.append(self._parse_task(data))
 
         return tasks
 
