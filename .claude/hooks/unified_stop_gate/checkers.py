@@ -4,6 +4,8 @@ from dataclasses import dataclass
 import json
 import os
 import subprocess
+import time
+from pathlib import Path
 from typing import Optional
 
 from .config import CheckResult, EnvironmentConfig, PathResolver, Priority
@@ -481,5 +483,190 @@ class BusinessOutcomeChecker:
             priority=Priority.P5_BUSINESS_OUTCOMES,
             passed=True,
             message="Business outcomes check: placeholder (always pass when enforced)",
+            blocking=True,
+        )
+
+
+class OrchestratorGuidanceChecker:
+    """P2.5: Check if orchestrator has unescalated blockers.
+
+    Only active for orchestrator sessions (session ID starts with 'orch-').
+    Encourages orchestrators to consult System3 before stopping when blocked.
+
+    This implements decision-time guidance for orchestrators:
+    - Detects unescalated blockers from error patterns or worker failures
+    - Suggests consulting System3 for guidance
+    - Can be bypassed after 2 blocked attempts (like momentum check)
+    """
+
+    def __init__(self, config: EnvironmentConfig, paths: PathResolver):
+        """Initialize the checker.
+
+        Args:
+            config: Environment configuration.
+            paths: Path resolver for state files.
+        """
+        self.config = config
+        self.paths = paths
+
+    def _get_guidance_state_file(self) -> Path:
+        """Get path to orchestrator guidance state file."""
+        project_dir = Path(self.config.project_dir)
+        state_dir = project_dir / ".claude" / "state" / "decision-guidance"
+        return state_dir / "orchestrator-guidance-state.json"
+
+    def _load_guidance_state(self) -> dict:
+        """Load orchestrator guidance state."""
+        state_file = self._get_guidance_state_file()
+        if state_file.exists():
+            try:
+                with open(state_file, "r") as f:
+                    return json.load(f)
+            except (json.JSONDecodeError, IOError):
+                pass
+        return {"stop_attempts": 0, "last_attempt": 0, "escalated": False}
+
+    def _save_guidance_state(self, state: dict) -> None:
+        """Save orchestrator guidance state."""
+        state_file = self._get_guidance_state_file()
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(state_file, "w") as f:
+            json.dump(state, f, indent=2)
+
+    def _detect_unescalated_blockers(self) -> list[dict]:
+        """Detect blockers that should be escalated to System3.
+
+        Checks:
+        1. Recent error patterns from decision-guidance state
+        2. Worker failure records
+        3. Todo items marked as blocked
+        """
+        blockers = []
+        project_dir = Path(self.config.project_dir)
+        state_dir = project_dir / ".claude" / "state" / "decision-guidance"
+
+        # Check for recent error patterns
+        error_file = state_dir / "error-tracker.json"
+        if error_file.exists():
+            try:
+                with open(error_file, "r") as f:
+                    error_data = json.load(f)
+                    errors = error_data.get("errors", [])
+                    # Count errors in last 10 minutes
+                    cutoff = time.time() - 600
+                    recent_errors = [e for e in errors if e.get("timestamp", 0) > cutoff]
+                    if len(recent_errors) >= 3:
+                        blockers.append({
+                            "type": "error_pattern",
+                            "count": len(recent_errors),
+                            "description": f"{len(recent_errors)} errors in last 10 minutes",
+                        })
+            except (json.JSONDecodeError, IOError):
+                pass
+
+        # Check for worker failures
+        worker_file = state_dir / "worker-status.json"
+        if worker_file.exists():
+            try:
+                with open(worker_file, "r") as f:
+                    worker_data = json.load(f)
+                    failures = worker_data.get("failures", [])
+                    # Recent failures (last 30 minutes)
+                    cutoff = time.time() - 1800
+                    recent_failures = [f for f in failures if f.get("timestamp", 0) > cutoff]
+                    if recent_failures:
+                        blockers.append({
+                            "type": "worker_failure",
+                            "count": len(recent_failures),
+                            "description": f"{len(recent_failures)} worker failure(s)",
+                        })
+            except (json.JSONDecodeError, IOError):
+                pass
+
+        return blockers
+
+    def _format_blocker_list(self, blockers: list[dict]) -> str:
+        """Format blockers for display."""
+        lines = []
+        for b in blockers:
+            lines.append(f"- **{b['type']}**: {b['description']}")
+        return "\n".join(lines)
+
+    def check(self) -> CheckResult:
+        """Check if orchestrator should escalate blockers before stopping.
+
+        Returns:
+            CheckResult with:
+            - passed=True if not orchestrator, no blockers, or already escalated
+            - passed=False if unescalated blockers exist (BLOCK with guidance)
+        """
+        # Only applies to orchestrator sessions
+        if not self.config.is_orchestrator:
+            return CheckResult(
+                priority=Priority.P2_5_ORCHESTRATOR_GUIDANCE,
+                passed=True,
+                message="Not an orchestrator session - guidance check skipped",
+                blocking=False,
+            )
+
+        # Load state
+        state = self._load_guidance_state()
+
+        # Check if within cooldown window (bypass after 2 attempts in 5 minutes)
+        now = time.time()
+        if state["last_attempt"] > 0 and (now - state["last_attempt"]) < 300:
+            if state["stop_attempts"] >= 2:
+                # Allow through after 2 blocked attempts
+                return CheckResult(
+                    priority=Priority.P2_5_ORCHESTRATOR_GUIDANCE,
+                    passed=True,
+                    message="Guidance check bypassed (2 blocked attempts in 5 minutes)",
+                    blocking=True,
+                )
+        else:
+            # Reset counter if outside window
+            state["stop_attempts"] = 0
+
+        # Detect unescalated blockers
+        blockers = self._detect_unescalated_blockers()
+
+        if not blockers:
+            return CheckResult(
+                priority=Priority.P2_5_ORCHESTRATOR_GUIDANCE,
+                passed=True,
+                message="No unescalated blockers detected",
+                blocking=True,
+            )
+
+        # Blockers found - increment counter and block
+        state["stop_attempts"] += 1
+        state["last_attempt"] = now
+        self._save_guidance_state(state)
+
+        remaining = 2 - state["stop_attempts"] + 1
+        bypass_hint = f"\n\n*Attempt {state['stop_attempts']}/2. Stop {remaining} more time(s) to bypass.*" if remaining > 0 else ""
+
+        session_id = self.config.session_id or "unknown"
+
+        return CheckResult(
+            priority=Priority.P2_5_ORCHESTRATOR_GUIDANCE,
+            passed=False,
+            message=f"""## Orchestrator Guidance: Unescalated Blockers
+
+You have {len(blockers)} blocker(s) that should be escalated to System3:
+
+{self._format_blocker_list(blockers)}
+
+**Recommended Action - Send guidance request to System3:**
+```bash
+mb-send system3 '{{"type": "guidance_request", "blockers": {json.dumps([b["description"] for b in blockers])}, "session_id": "{session_id}"}}'
+```
+
+**Why escalate?**
+- A fresh perspective often recognizes solutions the stuck agent cannot
+- System3 can provide strategic guidance without failed attempts polluting context
+
+**Alternative**: If blockers are external dependencies, document them and proceed.
+{bypass_hint}""",
             blocking=True,
         )
