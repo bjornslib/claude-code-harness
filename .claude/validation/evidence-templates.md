@@ -62,7 +62,7 @@ Steps Verified:
 2. [step description]
 ```
 
-## Business Validation (--mode=business)
+## E2E Validation (--mode=e2e --prd=PRD-XXX)
 
 **Required Evidence**:
 - [ ] Key Result status (verified/not verified)

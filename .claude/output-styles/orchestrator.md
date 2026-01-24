@@ -56,22 +56,34 @@ This loads the execution toolkit (PREFLIGHT, worker templates, beads integration
 
 **Orchestrators NEVER close tasks directly with `bd close`.**
 
-All task closures MUST go through validation-agent with `--mode=implementation`:
+All task closures MUST go through validation-agent as the single entry point:
 
 ```python
-# CORRECT: Delegate to validation-agent
+# Stage 1: Fast unit check (runs first)
 Task(
     subagent_type="validation-agent",
-    prompt="""--mode=implementation --task_id=<task-id>
-    Run 3-level validation:
-    - Level 1: Unit Tests (pytest/Jest)
-    - Level 2: API Tests (curl endpoints)
-    - Level 3: E2E Browser Tests (chrome-devtools)
-    If ALL pass: Close with evidence. If ANY fail: Report, do NOT close."""
+    prompt="--mode=unit --task_id=agencheck-042"
 )
+# Quick validation with mocks, catches obvious breakage
 
-# WRONG: Direct closure
+# Stage 2: Full E2E with PRD acceptance tests (if unit passes)
+Task(
+    subagent_type="validation-agent",
+    prompt="--mode=e2e --task_id=agencheck-042 --prd=PRD-AUTH-001"
+)
+# validation-agent invokes acceptance-test-runner internally
+# Runs PRD-defined acceptance criteria with real data
+# Closes task with evidence if all criteria pass
+
+# WRONG: Direct closure or direct skill invocation
 bd close <task-id>  # BLOCKED - validation-agent MUST be used
+Skill("acceptance-test-runner", ...)  # BLOCKED - must route through validation-agent
 ```
+
+**Key Rules:**
+- NEVER use `bd close` directly
+- NEVER call acceptance-test-runner or acceptance-test-writer skills directly
+- ALWAYS route through validation-agent with `--prd=PRD-XXX` for e2e mode
+- Two-stage validation: unit (fast) then e2e (thorough)
 
 **Why**: Task closure requires verified evidence (test results, API responses, browser screenshots). Direct `bd close` bypasses this and allows hollow completions.

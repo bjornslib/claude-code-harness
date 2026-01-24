@@ -1,0 +1,85 @@
+# Example API-type acceptance test
+
+id: AC-api-authentication
+feature: F1
+title: "API returns 401 for invalid authentication token"
+description: |
+  Protected API endpoints must reject requests with invalid,
+  expired, or missing authentication tokens with a 401 status
+  code and appropriate error message.
+
+prd_reference: "PRD-AUTH-001, Section 4.2, Requirement R5"
+
+validation_type: api
+priority: critical
+
+preconditions:
+  - description: "API server is running"
+    details: "Base URL: http://localhost:8000"
+  - description: "Protected endpoint exists"
+    details: "GET /api/user/profile requires authentication"
+
+steps:
+  - id: step-1
+    action: api_request
+    method: GET
+    url: "/api/user/profile"
+    headers:
+      Authorization: "Bearer invalid-token-12345"
+      Content-Type: "application/json"
+    description: "Request protected endpoint with invalid token"
+
+  - id: step-2
+    action: assert_status
+    expected: 401
+    description: "Should return 401 Unauthorized"
+
+  - id: step-3
+    action: assert_json
+    path: "$.error"
+    expected: "Unauthorized"
+    description: "Error field indicates unauthorized"
+
+  - id: step-4
+    action: assert_header
+    header: "WWW-Authenticate"
+    expected: "Bearer"
+    description: "Response includes WWW-Authenticate header"
+
+  # Test with missing token
+  - id: step-5
+    action: api_request
+    method: GET
+    url: "/api/user/profile"
+    headers:
+      Content-Type: "application/json"
+    description: "Request without Authorization header"
+
+  - id: step-6
+    action: assert_status
+    expected: 401
+    description: "Missing token also returns 401"
+
+expected_outcome: |
+  API returns HTTP 401 with JSON body containing error message.
+  WWW-Authenticate header indicates Bearer authentication required.
+  Both invalid tokens and missing tokens receive 401.
+
+failure_indicators:
+  - "Returns 200 with data (authentication bypassed)"
+  - "Returns 500 (server error instead of auth error)"
+  - "Returns 403 (wrong error code)"
+  - "No error message in response body"
+
+evidence:
+  - type: api_response
+    when: always
+    filename: "api-invalid-token-response.json"
+    description: "Full response for invalid token request"
+    capture: full
+
+  - type: api_response
+    when: always
+    filename: "api-missing-token-response.json"
+    description: "Full response for missing token request"
+    capture: full

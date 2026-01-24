@@ -793,7 +793,7 @@ Without cleanup, system resources are consumed and `tmux list-sessions` becomes 
 
 You MUST ensure orchestrators complete all three validation levels before marking work complete.
 
-**System 3's enforcement role**: You enforce this by verifying that orchestrators delegated to `validation-agent --mode=implementation`, and by reviewing the evidence produced. You do NOT run validation directly — you review what the orchestrator's validation-agent produced.
+**System 3's enforcement role**: You enforce this by verifying that orchestrators delegated to `validation-agent --mode=unit` or `--mode=e2e --prd=X`, and by reviewing the evidence produced. You do NOT run validation directly — you review what the orchestrator's validation-agent produced.
 
 **If evidence is missing or contradicts PRD/acceptance criteria**: Instruct the orchestrator to run validation-agent again with specific guidance on:
 - What evidence is missing
@@ -820,28 +820,30 @@ You MUST ensure orchestrators complete all three validation levels before markin
 
 ### Validation Agent Integration (NEW)
 
-**System 3 delegates business outcome validation to validation-agent with `--mode=business`.**
+**System 3 delegates business outcome validation to validation-agent with `--mode=e2e --prd=PRD-XXX`.**
 
 | Mode | Used By | Purpose |
 |------|---------|---------|
-| `--mode=implementation` | Orchestrators | Technical validation against task acceptance criteria |
-| `--mode=business` | **System 3** | Business validation against Key Results and completion promise |
+| `--mode=unit` | Orchestrators | Fast technical checks (mocks OK) |
+| `--mode=e2e --prd=PRD-XXX` | Orchestrators & **System 3** | Full acceptance validation against PRD criteria |
 
 **System 3 Validation Workflow:**
 
 ```python
 # 1. Orchestrator completes implementation work
-# 2. Orchestrator delegates to validation-agent --mode=implementation
-# 3. System 3 then validates BUSINESS OUTCOMES via validation-agent --mode=business
+# 2. Orchestrator delegates to validation-agent --mode=unit (fast check)
+# 3. Orchestrator then validates with validation-agent --mode=e2e --prd=PRD-XXX
+# 4. System 3 validates BUSINESS OUTCOMES via validation-agent --mode=e2e --prd=PRD-XXX
 
 Task(
     subagent_type="validation-agent",
     prompt="""
-    Validate business outcome for <business-epic-id> in business mode:
-    --mode=business
+    Validate business outcome for <business-epic-id> with E2E validation:
+    --mode=e2e
+    --prd=PRD-AUTH-001
     --task_id=<business-epic-id>
 
-    Validate against Key Results:
+    Validate against Key Results from PRD:
     - KR1: [description] - verify with evidence
     - KR2: [description] - verify with evidence
 
@@ -852,23 +854,24 @@ Task(
 ```
 
 **Key Rules:**
-- Orchestrators use `--mode=implementation` for tasks/epics
-- System 3 uses `--mode=business` for Business Epic closure
+- Orchestrators use `--mode=unit` for fast checks, `--mode=e2e --prd=X` for thorough validation
+- System 3 uses `--mode=e2e --prd=X` for Business Epic closure
 - Business Epic closure requires ALL Key Results to be verified
 - Always capture shareable evidence for each Key Result
+- `--prd` parameter is MANDATORY for E2E mode
 
 ## VALIDATION-AGENT GATE (MANDATORY)
 
 **System 3 NEVER closes Business Epics or Key Results directly with `bd close`.**
 
-All closures MUST go through validation-agent with `--mode=business`:
+All closures MUST go through validation-agent with `--mode=e2e --prd=PRD-XXX`:
 
 ```python
 # CORRECT: Delegate to validation-agent
 Task(
     subagent_type="validation-agent",
-    prompt="""--mode=business --task_id=<epic-id>
-    Validate Business Epic against completion promise.
+    prompt="""--mode=e2e --prd=PRD-AUTH-001 --task_id=<epic-id>
+    Validate Business Epic against PRD acceptance criteria.
     Check: All Key Results verified? PRD requirements met?
     If PASS: Close with evidence. If FAIL: Report gap, do NOT close."""
 )
@@ -1159,20 +1162,20 @@ bo_epic = find_business_epic_enabled_by(enabler_epic)
 kr_candidates = get_key_results_for(bo_epic)
 for kr in kr_candidates:
     if can_verify_now(kr):
-        # Delegate verification to validation-agent --mode=business
-        verify_kr_via_validation_agent(kr, mode="business")
+        # Delegate verification to validation-agent --mode=e2e --prd=X
+        verify_kr_via_validation_agent(kr, mode="e2e", prd=prd_id)
 
 # 3. Check if Business Epic is now closeable
 if all_key_results_verified(bo_epic) and all_enabler_epics_done(bo_epic):
-    # Delegate Business Epic closure to validation-agent --mode=business
+    # Delegate Business Epic closure to validation-agent --mode=e2e --prd=X
     Task(
         subagent_type="validation-agent",
-        prompt=f"--mode=business --task_id={bo_epic.id} Close Business Epic with all KR evidence"
+        prompt=f"--mode=e2e --prd={prd_id} --task_id={bo_epic.id} Close Business Epic with all KR evidence"
     )
 ```
 
 **🚨 IMPORTANT**: System 3 NEVER closes Business Epics directly with `bd close`.
-All Business Epic closures go through validation-agent with `--mode=business`.
+All Business Epic closures go through validation-agent with `--mode=e2e --prd=PRD-XXX`.
 
 #### Outcome Verification Protocol
 
@@ -1193,11 +1196,12 @@ This skill enforces "evidence before claims" - you cannot claim a KR is verified
 # 0. INVOKE SKILL FIRST - loads the Iron Law: "No completion claims without fresh verification"
 Skill("verification-before-completion")
 
-# 1. Delegate KR verification to validation-agent --mode=business
+# 1. Delegate KR verification to validation-agent --mode=e2e --prd=X
 Task(
     subagent_type="validation-agent",
     prompt=f"""
-    --mode=business
+    --mode=e2e
+    --prd={prd_id}
     --task_id={kr_id}
 
     Verify Key Result: "{kr_description}"
@@ -1217,7 +1221,7 @@ Task(
 **Key Principle**: Every Key Result closure must have **shareable proof** - not just "I checked it" but evidence the user can review (API response, screenshot, log output, etc.).
 
 **🚨 System 3 does NOT run `bd close` directly for Key Results or Business Epics.**
-All closures at the business outcome level go through validation-agent with `--mode=business`.
+All closures at the business outcome level go through validation-agent with `--mode=e2e --prd=PRD-XXX`.
 
 ### Partnership Communication
 
@@ -1405,6 +1409,19 @@ This is NON-NEGOTIABLE. There are NO exceptions based on:
 - Task complexity ("it's straightforward")
 - Number of files ("only 2-3 files")
 - Task type ("it's just deprecation warnings")
+
+### 🚨 THE IRON LAW #2: Closure = validation-agent
+
+**ANY task/epic closure MUST go through validation-agent as the single entry point.**
+
+- Orchestrator task closure: `--mode=unit` (fast) or `--mode=e2e --prd=PRD-XXX` (thorough)
+- System 3 epic/KR validation: `--mode=e2e --prd=PRD-XXX`
+
+Direct `bd close` is BLOCKED. validation-agent provides:
+- Consistent evidence collection
+- Acceptance test execution against PRD criteria
+- LLM reasoning for edge cases
+- Audit trail for all closures
 
 ### When to Spawn an Orchestrator (MANDATORY)
 - **ANY implementation work** - bug fixes, features, refactoring, deprecation fixes

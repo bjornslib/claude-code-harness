@@ -64,13 +64,38 @@ tmux send-keys -t worker-F001 Enter
 |---------|-------------|-------------|
 | `bd close <id>` | Bypasses validation evidence | `Task(subagent_type="validation-agent", ...)` |
 | `bd close <id> --reason "..."` | Same - reason doesn't replace evidence | validation-agent collects actual evidence |
+| `Skill("acceptance-test-runner")` | Bypasses validation-agent routing | Use validation-agent --mode=e2e |
+| `Skill("acceptance-test-writer")` | Bypasses validation-agent routing | Use validation-agent --mode=e2e |
 
 **If you attempt `bd close`**: STOP. Ask yourself:
-1. Did I run validation-agent --mode=implementation?
+1. Did I run validation-agent --mode=unit or --mode=e2e?
 2. Did validation-agent produce passing evidence?
 3. Did validation-agent close the task for me?
 
 If NO to any: You're violating the validation gate. Delegate to validation-agent first.
+
+**Correct vs Incorrect Patterns:**
+
+```python
+# ❌ WRONG: Direct bd close
+bd close agencheck-042 --reason "Tests passing"
+
+# ❌ WRONG: Direct skill invocation
+Skill("acceptance-test-runner", args="--prd=PRD-001")
+
+# ✅ CORRECT: Fast unit check
+Task(
+    subagent_type="validation-agent",
+    prompt="--mode=unit --task_id=agencheck-042"
+)
+
+# ✅ CORRECT: Full E2E with PRD acceptance tests
+Task(
+    subagent_type="validation-agent",
+    prompt="--mode=e2e --task_id=agencheck-042 --prd=PRD-AUTH-001"
+)
+# validation-agent invokes acceptance-test-runner internally and closes with evidence
+```
 
 **Exception**: Only validation-agent is authorized to run `bd close` after verification passes.
 
@@ -461,18 +486,18 @@ The autonomous mode protocol provides:
 1. Verify ALL tasks in functional epic are closed
    └─ `bd list` - check status
    ↓
-2. Execute AT epic tasks via validation-agent (--mode=implementation)
-   └─ Validation-agent runs 3-level validation for each task
+2. Execute AT epic tasks via validation-agent (--mode=unit first, then --mode=e2e)
+   └─ Validation-agent runs fast unit checks, then PRD-based acceptance tests
    └─ Validation-agent closes tasks that pass
    ↓
 3. Close AT epic via validation-agent
-   └─ Delegate: validation-agent --mode=implementation --task_id=<at-epic-id>
+   └─ Delegate: validation-agent --mode=e2e --task_id=<at-epic-id> --prd=PRD-XXX
    ↓
 4. Close functional epic via validation-agent (now unblocked)
-   └─ Delegate: validation-agent --mode=implementation --task_id=<epic-id>
+   └─ Delegate: validation-agent --mode=e2e --task_id=<epic-id> --prd=PRD-XXX
    ↓
 5. When all epics closed → System 3 closes uber-epic
-   └─ System 3 uses validation-agent --mode=business for uber-epic
+   └─ System 3 uses validation-agent --mode=e2e --prd=PRD-XXX for uber-epic
    ↓
 6. Final commit and summary
    └─ `git add . && git commit -m "feat: complete [initiative]"`
@@ -756,37 +781,35 @@ The validation-agent operates in two modes:
 
 | Mode | Flag | Used By | Purpose |
 |------|------|---------|---------|
-| **Implementation** | `--mode=implementation` | Orchestrators | Technical validation against task acceptance criteria |
-| **Business** | `--mode=business` | System 3 | Business validation against completion promise |
+| **Unit** | `--mode=unit` | Orchestrators | Fast technical checks (mocks OK) |
+| **E2E** | `--mode=e2e --prd=PRD-XXX` | Orchestrators & System 3 | Full acceptance validation (real data, PRD criteria) |
 
-**Orchestrator Workflow (Implementation Mode):**
+**Two-Stage Validation Workflow:**
 
-```bash
-# 1. Worker completes implementation
-# 2. Orchestrator spawns validation-agent in implementation mode
+```python
+# Stage 1: Fast unit check (runs first)
 Task(
     subagent_type="validation-agent",
-    prompt="""
-    Validate task <bd-id> in implementation mode:
-    --mode=implementation
-    --task_id=<bd-id>
-
-    Run 3-level validation:
-    - Level 1: Unit Tests
-    - Level 2: API Tests
-    - Level 3: E2E Browser Tests
-
-    If ALL pass: Close task with evidence
-    If ANY fail: Report failure, do NOT close
-    """
+    prompt="--mode=unit --task_id=agencheck-042"
 )
+# Quick validation with mocks, catches obvious breakage
+
+# Stage 2: Full E2E with PRD acceptance tests (if unit passes)
+Task(
+    subagent_type="validation-agent",
+    prompt="--mode=e2e --task_id=agencheck-042 --prd=PRD-AUTH-001"
+)
+# validation-agent invokes acceptance-test-runner internally
+# Runs PRD-defined acceptance criteria with real data
+# Closes task with evidence if all criteria pass
 ```
 
 **Key Rules:**
 - Orchestrators NEVER run `bd close` directly
 - Validation-agent handles closure AFTER validation passes
-- Use `--mode=implementation` for technical validation
-- System 3 uses `--mode=business` for business outcome validation
+- NEVER invoke acceptance-test-runner or acceptance-test-writer directly
+- Always include `--prd=PRD-XXX` for e2e mode
+- System 3 uses `--mode=e2e --prd=X` for business outcome validation
 
 ### Validation Types
 
@@ -884,7 +907,7 @@ Task(subagent_type="Explore", prompt="Validate <bd-id> works as designed:
 - ✅ Ran regression check first?
 - ✅ Worker stayed within scope?
 - ✅ Validated feature works (not just tests pass)?
-- ✅ **Delegated closure to validation-agent (--mode=implementation)?**
+- ✅ **Delegated closure to validation-agent (--mode=unit or --mode=e2e --prd=X)?**
 - ✅ Committed with message?
 - ✅ Git status clean?
 

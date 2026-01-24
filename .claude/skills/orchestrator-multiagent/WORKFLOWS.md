@@ -85,7 +85,7 @@ Enable independent monitoring and completion of multiple features without user i
 **Continue to next feature automatically when ALL conditions met:**
 
 1. Current feature validation PASSED (all three levels)
-2. `bd close <id>` completed with evidence in reason
+2. validation-agent closed task with evidence
 3. Git commit successful with `feat(<id>)` message
 4. `bd ready` returns next available task
 5. No regressions detected in spot checks
@@ -129,7 +129,12 @@ LOOP:
 
   6. CLOSE OR REMEDIATE
      IF all validation passed:
-       bd close <id> --reason "PASS: Unit ✓ API ✓ E2E ✓ [evidence]"
+       # Delegate closure to validation-agent
+       Task(
+         subagent_type="validation-agent",
+         prompt="--mode=e2e --task_id=<id> --prd=PRD-XXX"
+       )
+       # validation-agent closes with evidence if all criteria pass
        git add . && git commit -m "feat(<id>): [description]"
        → CONTINUE LOOP
 

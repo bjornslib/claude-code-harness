@@ -27,6 +27,20 @@ Testing infrastructure and troubleshooting for orchestrator sessions.
 
 **Every feature must pass all three levels before closure.**
 
+**🚨 CRITICAL: validation-agent as Single Entry Point**
+
+All validation and task closure MUST go through validation-agent:
+
+```python
+# Fast unit check
+Task(subagent_type="validation-agent", prompt="--mode=unit --task_id=X")
+
+# Full E2E with PRD acceptance tests
+Task(subagent_type="validation-agent", prompt="--mode=e2e --task_id=X --prd=PRD-XXX")
+```
+
+The validation-agent orchestrates the three levels below and closes tasks with evidence. Orchestrators NEVER run these validations directly or invoke acceptance-test-runner/writer skills.
+
 ### Level 1: Unit Tests
 
 ```bash

@@ -396,7 +396,7 @@ mcp__hindsight__retain(
 for kr in get_key_results_for(business_epic):
     if can_verify_now(kr):
         Task(subagent_type="validation-agent",
-             prompt=f"--mode=business --task_id={kr.id}")
+             prompt=f"--mode=e2e --prd={prd_id} --task_id={kr.id}")
 ```
 
 ### [ ] 5. Merge Work

@@ -142,45 +142,63 @@ def test_create_user():
 
 | Mode | Flag | Used By | Purpose |
 |------|------|---------|---------|
-| **Implementation** | `--mode=implementation` | Orchestrators | Technical validation against task criteria |
-| **Business** | `--mode=business` | System 3 | Business validation against Key Results |
+| **Unit** | `--mode=unit` | Orchestrators | Fast technical checks (mocks OK) |
+| **E2E** | `--mode=e2e --prd=PRD-XXX` | Orchestrators & System 3 | Full acceptance validation against PRD criteria |
 
-### Orchestrator Usage (Implementation Mode)
+**CRITICAL**: `--prd` parameter is MANDATORY for E2E mode. The validation-agent will invoke `acceptance-test-runner` internally.
+
+### Orchestrator Usage (Unit/E2E Mode)
 
 **Orchestrators delegate ALL task closure to validation-agent.**
 
 ```python
+# Fast unit check
 Task(
     subagent_type="validation-agent",
     prompt="""
-    Validate task <bd-id> in implementation mode:
-    --mode=implementation
-    --task_id=<bd-id>
+    Validate task <task-id> with unit tests:
+    --mode=unit
+    --task_id=<task-id>
 
-    Run 3-level validation:
-    - Level 1: Unit Tests
-    - Level 2: API Tests
-    - Level 3: E2E Browser Tests
+    Run fast technical checks (mocks OK).
 
-    If ALL pass: Close task with evidence
+    If pass: Close task with evidence
+    If fail: Report failure, do NOT close
+    """
+)
+
+# Full E2E validation with PRD acceptance tests
+Task(
+    subagent_type="validation-agent",
+    prompt="""
+    Validate task <task-id> with E2E validation:
+    --mode=e2e
+    --prd=PRD-AUTH-001
+    --task_id=<task-id>
+
+    validation-agent will invoke acceptance-test-runner internally.
+    Validation against PRD acceptance criteria.
+
+    If ALL criteria pass: Close task with evidence
     If ANY fail: Report failure, do NOT close
     """
 )
 ```
 
-### System 3 Usage (Business Mode)
+### System 3 Usage (E2E Mode)
 
-**System 3 validates Business Epics and Key Results.**
+**System 3 validates Business Epics and Key Results via E2E mode.**
 
 ```python
 Task(
     subagent_type="validation-agent",
     prompt="""
-    Validate business outcome for <bo-id> in business mode:
-    --mode=business
+    Validate business outcome for <bo-id> with E2E validation:
+    --mode=e2e
+    --prd=PRD-WORK-HISTORY-001
     --task_id=<bo-id>
 
-    Validate against Key Results:
+    Validate against Key Results from PRD:
     - KR1: [description] - verify with evidence
     - KR2: [description] - verify with evidence
 
@@ -270,11 +288,14 @@ curl -s localhost:8000/health | jq .
 ### Validation Agent
 
 ```python
-# For tasks (orchestrator)
-Task(subagent_type="validation-agent", prompt="--mode=implementation --task_id=<id>")
+# For tasks - fast unit check (orchestrator)
+Task(subagent_type="validation-agent", prompt="--mode=unit --task_id=<id>")
+
+# For tasks - full E2E validation (orchestrator)
+Task(subagent_type="validation-agent", prompt="--mode=e2e --prd=PRD-XXX --task_id=<id>")
 
 # For business outcomes (System 3)
-Task(subagent_type="validation-agent", prompt="--mode=business --task_id=<id>")
+Task(subagent_type="validation-agent", prompt="--mode=e2e --prd=PRD-XXX --task_id=<id>")
 ```
 
 ---
