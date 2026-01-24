@@ -213,7 +213,7 @@ else:
 #   filename: "login-success.png"
 
 mcp__chrome-devtools__screenshot(
-    path=f"validation-reports/{prd_id}/evidence/{filename}"
+    path=f"acceptance-tests/{prd_id}/runs/evidence/{filename}"
 )
 ```
 

@@ -48,9 +48,14 @@ Skill("acceptance-test-runner", args="--prd=PRD-AUTH-001 --task_id=TASK-123")
 
 ## Output Structure
 
+Reports are stored within the same `acceptance-tests/` directory as the test definitions:
+
 ```
-validation-reports/
-└── PRD-XXX/
+acceptance-tests/PRD-XXX/
+├── manifest.yaml                  # Test suite metadata
+├── AC-user-login.yaml            # Test definitions
+├── AC-password-reset.yaml
+└── runs/                          # Execution results
     ├── 2026-01-24T10-30-00Z.md    # Timestamped report
     └── evidence/
         ├── AC-user-login-success.png
@@ -82,7 +87,7 @@ Action: Run acceptance-test-writer to generate tests first
 ```bash
 # Create timestamped evidence directory
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H-%M-%SZ")
-mkdir -p validation-reports/${PRD_ID}/evidence
+mkdir -p acceptance-tests/${PRD_ID}/runs/evidence
 ```
 
 ### Step 3: Execute Each Criterion
@@ -117,7 +122,7 @@ Task(
   - jq for JSON parsing
 
 ## Evidence Capture
-Save all evidence to: validation-reports/{prd_id}/evidence/
+Save all evidence to: acceptance-tests/{prd_id}/runs/evidence/
 - Screenshots: {criterion_id}-{{description}}.png
 - API responses: {criterion_id}-{{description}}.json
 
@@ -150,7 +155,7 @@ Collect results from all sub-agents:
 
 ### Step 5: Generate Report
 
-Create comprehensive markdown report at `validation-reports/{PRD_ID}/{TIMESTAMP}.md`.
+Create comprehensive markdown report at `acceptance-tests/{PRD_ID}/runs/{TIMESTAMP}.md`.
 
 Report structure:
 1. **Header**: PRD info, timestamp, environment
@@ -177,7 +182,7 @@ criteria_results:
   skipped: 0
 blocking_failures:
   - AC-password-reset-complete
-report_path: validation-reports/PRD-AUTH-001/2026-01-24T10-30-00Z.md
+report_path: acceptance-tests/PRD-AUTH-001/runs/2026-01-24T10-30-00Z.md
 ```
 
 ## Browser Test Execution
@@ -216,7 +221,7 @@ result = mcp__chrome-devtools__evaluate(
 assert "Welcome" in result
 
 # Step: capture screenshot
-mcp__chrome-devtools__screenshot(path="validation-reports/PRD-AUTH-001/evidence/AC-user-login-success.png")
+mcp__chrome-devtools__screenshot(path="acceptance-tests/PRD-AUTH-001/runs/evidence/AC-user-login-success.png")
 ```
 
 ## API Test Execution
@@ -246,7 +251,7 @@ BODY=$(sed '$d' /tmp/response.txt)
 echo "$BODY" | jq -e '.error == "Unauthorized"' && echo "PASS: Error field correct"
 
 # Save evidence
-echo "$BODY" | jq . > validation-reports/PRD-AUTH-001/evidence/AC-api-auth-response.json
+echo "$BODY" | jq . > acceptance-tests/PRD-AUTH-001/runs/evidence/AC-api-auth-response.json
 ```
 
 ## Failure Analysis
@@ -323,6 +328,6 @@ Action: Check if application is running and responsive
 
 - [ ] All criteria executed (or marked as SKIP with reason)
 - [ ] Evidence captured for each criterion
-- [ ] Report generated at `validation-reports/{PRD_ID}/{TIMESTAMP}.md`
+- [ ] Report generated at `acceptance-tests/{PRD_ID}/runs/{TIMESTAMP}.md`
 - [ ] Summary returned to caller with overall status
 - [ ] Blocking failures clearly identified

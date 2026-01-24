@@ -86,7 +86,7 @@ When invoked with `--mode=e2e --task_id=<beads-id> --prd=<PRD-ID>`:
    - Load acceptance criteria from `acceptance-tests/{PRD_ID}/`
    - Execute each criterion with real data
    - Capture evidence (screenshots, API responses)
-   - Generate report at `validation-reports/{PRD_ID}/{timestamp}.md`
+   - Generate report at `acceptance-tests/{PRD_ID}/runs/{timestamp}.md`
    - Return structured PASS/FAIL with evidence
 
    **If NO acceptance tests exist** → Generate them first:
@@ -109,7 +109,7 @@ When invoked with `--mode=e2e --task_id=<beads-id> --prd=<PRD-ID>`:
 3. **Record Evidence**:
    ```bash
    cs-verify --feature <task_id> --type e2e \
-       --proof "See: validation-reports/{PRD_ID}/{timestamp}.md" \
+       --proof "See: acceptance-tests/{PRD_ID}/runs/{timestamp}.md" \
        --task_id <task_id>
    ```
 
@@ -117,7 +117,7 @@ When invoked with `--mode=e2e --task_id=<beads-id> --prd=<PRD-ID>`:
    ```python
    mcp__plugin_beads_beads__comment_add(
        issue_id=task_id,
-       text="✅ E2E VALIDATION: {pass_count}/{total_count} criteria passed. Report: validation-reports/{PRD_ID}/{timestamp}.md",
+       text="✅ E2E VALIDATION: {pass_count}/{total_count} criteria passed. Report: acceptance-tests/{PRD_ID}/runs/{timestamp}.md",
        author="validation-agent"
    )
    ```

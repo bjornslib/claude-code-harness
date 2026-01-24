@@ -142,7 +142,7 @@ When a test fails, include:
 ## Evidence Linking
 
 Evidence files should be:
-- Stored in `validation-reports/{PRD_ID}/evidence/`
+- Stored in `acceptance-tests/{PRD_ID}/runs/evidence/`
 - Named as `{criterion_id}-{description}.{ext}`
 - Linked in report using relative paths: `[filename](./evidence/filename)`
 

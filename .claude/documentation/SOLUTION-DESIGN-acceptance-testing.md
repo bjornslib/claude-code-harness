@@ -64,7 +64,7 @@ Worker implements feature → Validation-agent runs tests → "TECHNICAL_PASS"
 │                                                             ▼               │
 │  ┌──────────────────────────────────────────────────────────────────────┐  │
 │  │                      VALIDATION REPORT                               │  │
-│  │  validation-reports/PRD-XXX/<timestamp>.md                           │  │
+│  │  acceptance-tests/PRD-XXX/runs/<timestamp>.md                           │  │
 │  │  - Per-criterion PASS/FAIL                                           │  │
 │  │  - Evidence (screenshots, API responses)                             │  │
 │  │  - Gap analysis for failures                                         │  │
@@ -110,19 +110,21 @@ acceptance-tests/
 │   ├── AC-overage-detection.yaml
 │   └── AC-invoice-generation.yaml
 │
-└── PRD-DASHBOARD-003/
-    └── ...
-
-validation-reports/
-├── PRD-AUTH-001/
-│   ├── 2026-01-24T10-30-00Z.md        # Timestamped report
-│   └── evidence/
-│       ├── AC-user-login-success.png
-│       └── AC-user-login-step2.png
+├── PRD-DASHBOARD-003/
+│   └── ...
 │
-└── PRD-BILLING-002/
-    └── ...
+└── PRD-AUTH-001/                      # Example with run results
+    ├── manifest.yaml
+    ├── AC-user-login.yaml
+    ├── AC-password-reset.yaml
+    └── runs/                           # Test execution results
+        ├── 2026-01-24T10-30-00Z.md    # Timestamped report
+        └── evidence/
+            ├── AC-user-login-success.png
+            └── AC-user-login-step2.png
 ```
+
+> **Note**: Validation reports are stored in `runs/` within each PRD's acceptance-tests directory, keeping all PRD-related artifacts together.
 
 ---
 
@@ -460,8 +462,8 @@ The password reset completion endpoint was not implemented. The reset email send
 - `--task_id=TASK-123` (optional, for traceability)
 
 **Output**:
-- `validation-reports/PRD-XXX/<timestamp>.md`
-- `validation-reports/PRD-XXX/evidence/*.png|.json`
+- `acceptance-tests/PRD-XXX/runs/<timestamp>.md`
+- `acceptance-tests/PRD-XXX/runs/evidence/*.png|.json`
 
 **Process**:
 1. Load manifest from `acceptance-tests/PRD-XXX/`
@@ -562,7 +564,7 @@ When acceptance tests fail:
 2. Orchestrator creates follow-up task:
 
    bd create --title="Fix: AC-password-reset-complete failing" \
-             --description="Reset endpoint returns 404. See validation-reports/PRD-AUTH-001/..." \
+             --description="Reset endpoint returns 404. See acceptance-tests/PRD-AUTH-001/runs/..." \
              --deps=TASK-123
 
 3. Worker receives specific, actionable feedback
