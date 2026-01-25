@@ -108,6 +108,10 @@ EOF
 # OR manual tmux commands
 tmux new-session -d -s "orch-[name]"
 tmux send-keys -t "orch-[name]" "cd trees/[name]/agencheck" Enter
+
+# 4b. Set task list ID (enables shared task tracking)
+tmux send-keys -t "orch-[name]" "export CLAUDE_CODE_TASK_LIST_ID=PRD-[prd-name]" Enter
+
 tmux send-keys -t "orch-[name]" "launchcc" Enter
 sleep 5
 tmux send-keys -t "orch-[name]" "$(cat /tmp/wisdom-${INITIATIVE}.md)" Enter
@@ -140,6 +144,25 @@ jq --arg name "orch-$INITIATIVE" \
    '.orchestrators += [{name: $name, initiative: $init, worktree: $wt, status: "active", started_at: $ts}]' \
    "$REGISTRY" > "${REGISTRY}.tmp" && mv "${REGISTRY}.tmp" "$REGISTRY"
 ```
+
+### 6. Launch Validation Monitor
+
+After orchestrator is running, System3 launches a validation monitor:
+
+```python
+Task(
+    subagent_type="validation-agent",
+    model="sonnet",  # ⚠️ MUST be Sonnet - Haiku lacks exit discipline
+    run_in_background=True,
+    description=f"Validation monitor for orch-{INITIATIVE}",
+    prompt=f"--mode=monitor --session-id=orch-{INITIATIVE} --task-list-id=PRD-{PRD_NAME} --max-iterations=30"
+)
+```
+
+**⚠️ Model Selection**: Use **Sonnet 4.5**, not Haiku. Testing showed Haiku gets distracted after validation and fails to return promptly. Sonnet has the discipline to detect → validate → RETURN.
+
+The monitor will COMPLETE after validation (or ~5 minutes max) and wake System3 with status.
+System3 must re-launch the monitor to continue watching.
 
 ---
 
@@ -210,7 +233,7 @@ EOF
 sleep 10
 tmux capture-pane -t orch-$INITIATIVE -p | tail -5
 
-# Step 6: (MANDATORY for >1 hour initiatives) Spawn blocking monitor
+# Step 6: (OPTIONAL for >1 hour initiatives) Spawn blocking monitor
 # This keeps System 3 session alive and enables real-time intervention
 # See system3-meta-orchestrator output style for full monitor prompt template
 ```

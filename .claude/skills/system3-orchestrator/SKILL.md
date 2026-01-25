@@ -261,6 +261,64 @@ Task(
 
 ---
 
+## VALIDATION MONITOR INTEGRATION (NEW)
+
+When spawning an orchestrator, launch a validation-agent monitor to enable wake-up notifications.
+
+### Set Task List ID in Spawn Sequence
+
+Add to tmux spawn commands (BEFORE launching Claude Code):
+
+```bash
+tmux send-keys -t "orch-[name]" "export CLAUDE_CODE_TASK_LIST_ID=PRD-[prd-name]"
+tmux send-keys -t "orch-[name]" Enter
+```
+
+### Launch Monitor (Cyclic Pattern)
+
+After orchestrator is running, launch a validation monitor:
+
+```python
+def launch_monitor(name, prd_name):
+    """Launch validation monitor - must be re-called after each wake-up."""
+    return Task(
+        subagent_type="validation-agent",
+        model="haiku",
+        run_in_background=True,
+        description=f"Monitor orch-{name}",
+        prompt=f"--mode=monitor --session-id=orch-{name} --task-list-id=PRD-{prd_name} --max-iterations=30"
+    )
+
+# Initial launch after spawning orchestrator
+launch_monitor(name, prd_name)
+```
+
+### Handle Wake-Up Notifications
+
+When monitor COMPLETES, System3 receives `<task-notification>`:
+
+```python
+if "MONITOR_STUCK" in result:
+    # Send guidance to orchestrator
+    Bash(f"mb-send orch-{name} guidance '...'")
+    # RE-LAUNCH monitor to continue watching
+    launch_monitor(name, prd_name)
+
+elif "MONITOR_COMPLETE" in result:
+    # All tasks done - trigger final validation
+    Task(subagent_type="validation-agent",
+         prompt=f"--mode=e2e --prd=PRD-{prd_name} ...")
+
+elif "MONITOR_HEALTHY" in result:
+    # Heartbeat - orchestrator working fine
+    # RE-LAUNCH monitor to continue cycle
+    launch_monitor(name, prd_name)
+```
+
+**Key Insight**: Monitors COMPLETE to wake System3. The cyclic pattern (launch → check → complete → re-launch) provides continuous monitoring.
+
+---
+
 ## MONITORING CHECKLIST
 
 **🚨 CRITICAL**: Always monitor orchestrators using background Haiku agents. Never block the main thread waiting for orchestrator status.

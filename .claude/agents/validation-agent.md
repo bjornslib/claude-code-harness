@@ -29,6 +29,7 @@ This agent supports three operating modes controlled by the --mode parameter:
 - **Validation Focus**: Task completion against System3 instructions
 - **Output**: JSON progress report with health indicators
 - **Use Case**: System3 uses this to monitor orchestrator health
+- **Model**: ⚠️ **MUST use Sonnet 4.5** (Haiku lacks discipline to exit promptly)
 
 ### Parameters
 
@@ -39,10 +40,27 @@ This agent supports three operating modes controlled by the --mode parameter:
 | `--prd` | For e2e | PRD identifier (e.g., `PRD-AUTH-001`) |
 | `--criterion` | No | Specific acceptance criterion to test |
 | `--session-id` | For monitor | Orchestrator session ID (e.g., `orch-auth-123`) |
-| `--task-list-id` | For monitor | Task list ID from `.claude/tasks/` |
+| `--task-list-id` | For monitor | Task list ID from `~/.claude/tasks/` |
+| `--max-iterations` | For monitor | Max poll iterations before heartbeat (default: 30) |
 
 ### Default Behavior
 If no --mode specified, assume `--mode=unit`.
+
+### Monitor Mode Dependencies
+
+The monitor mode requires the `task-list-monitor.py` script for efficient change detection:
+
+```
+~/.claude/scripts/task-list-monitor.py   # Core monitoring script
+~/.claude/tasks/{task-list-id}/          # Task JSON files
+/tmp/.task-monitor-{task-list-id}.json   # Checksum state (for change detection)
+```
+
+**Why use task-list-monitor.py?**
+- Uses MD5 checksum to detect changes in O(1) instead of reading all files
+- Tracks which specific tasks changed and how
+- Provides `--ready-for-validation` filter for newly completed tasks
+- Maintains state between polls for efficient delta detection
 
 ---
 
@@ -50,79 +68,224 @@ If no --mode specified, assume `--mode=unit`.
 
 When invoked with `--mode=monitor --session-id=<orch-id> --task-list-id=<list-id>`:
 
-**Purpose**: Provide System3 with real-time progress visibility into orchestrator sessions.
+**Purpose**: Provide System3 with real-time progress visibility into orchestrator sessions AND validate work as tasks complete.
 
-1. **Load Task State**:
-   ```python
-   # Use GoalValidator from decision_guidance
-   from decision_guidance import GoalValidator, ErrorTracker
+**Key Principle**: The monitor is not just a status reporter—it validates actual work when tasks are marked completed.
 
-   validator = GoalValidator()
-   tasks = validator.load_tasks()  # From .claude/tasks/{task-list-id}
-   task_pct, incomplete = validator.get_task_completion_pct()
-   ```
+#### Cyclic Wake-Up Pattern
 
-2. **Check Error Patterns**:
-   ```python
-   error_tracker = ErrorTracker()
-   recent_errors = error_tracker.get_recent_errors()
-   is_stuck = len(recent_errors) >= 4 and task_pct < 50
-   ```
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  MONITOR LIFECYCLE                                                   │
+│                                                                      │
+│  Launch → Poll → Check for changes → Validate completed work →      │
+│           ↑                         │                                │
+│           │                         ▼                                │
+│           │           ┌─────────────────────────────┐               │
+│           │           │  Issues found?              │               │
+│           │           │  OR max iterations?         │               │
+│           │           └──────────┬──────────────────┘               │
+│           │                      │                                   │
+│           │              YES ────┼───► COMPLETE (wakes System3)     │
+│           │                      │                                   │
+│           └──────── NO ──────────┘                                   │
+│                                                                      │
+│  After wake-up, System3 must RE-LAUNCH monitor to continue.         │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
-3. **Load Completion State** (if available):
-   ```python
-   state = validator.load_completion_state()
-   if state:
-       goals_complete = all(g.is_complete for g in state.goals)
-       original_prompt = state.raw_prompt
-   ```
+#### Step 1: Detect Changes Using task-list-monitor.py
 
-4. **Generate Monitor Report**:
-   ```json
-   {
-       "session_id": "orch-auth-123",
-       "timestamp": "2026-01-24T12:00:00Z",
-       "completion_pct": 45.0,
-       "tasks": {
-           "total": 8,
-           "completed": 3,
-           "in_progress": 2,
-           "pending": 3,
-           "incomplete_list": ["Task 4: Implement login", "Task 5: Add validation"]
-       },
-       "health": {
-           "is_stuck": false,
-           "recent_errors": 2,
-           "doom_loop_detected": false
-       },
-       "original_goal": "Implement authentication feature",
-       "should_intervene": false,
-       "recommendations": ["On track. 5 tasks remaining."]
-   }
-   ```
+**CRITICAL**: Use the efficient change detection script, NOT direct file reads.
 
-5. **Output Decision**:
-   - `MONITOR_HEALTHY`: Orchestrator is making progress
-   - `MONITOR_STUCK`: Multiple errors, low progress (System3 should intervene)
-   - `MONITOR_COMPLETE`: All tasks done (validation can proceed)
+```bash
+# Get changes since last poll (uses MD5 checksum for efficiency)
+python .claude/scripts/task-list-monitor.py \
+    --list-id ${task_list_id} \
+    --changes \
+    --json
+```
 
-**Use from System3**:
+Output:
+```json
+{
+    "has_changes": true,
+    "changes": [
+        {"task_id": "7", "old_status": "in_progress", "new_status": "completed"},
+        {"task_id": "8", "old_status": "pending", "new_status": "in_progress"}
+    ],
+    "checksum": "abc123...",
+    "timestamp": "2026-01-25T11:30:00Z"
+}
+```
+
+#### Step 2: Validate Newly Completed Tasks
+
+**MANDATORY**: When a task transitions to "completed", validate the actual work:
+
 ```python
-# System3 monitors orchestrator
-report = Task(
-    subagent_type="validation-agent",
-    prompt="--mode=monitor --session-id=orch-auth-123 --task-list-id=session-xyz"
-)
+for change in changes:
+    if change["new_status"] == "completed":
+        # Read task details to understand what was implemented
+        task = load_task(change["task_id"])
 
-if "MONITOR_STUCK" in report:
-    # Send guidance to orchestrator
-    Bash(f"mb-send orch-auth-123 '{json.dumps(guidance)}'")
-elif "MONITOR_COMPLETE" in report:
-    # Trigger final validation
-    Task(
+        # Run quick validation based on task type
+        if task.involves_file_changes:
+            # Verify files were actually modified
+            verify_files_changed(task.expected_files)
+
+        if task.involves_tests:
+            # Run the tests
+            run_tests(task.test_files)
+
+        if task.acceptance_criteria:
+            # Check acceptance criteria are met
+            validate_criteria(task.acceptance_criteria)
+
+        # Record validation result
+        validation_results.append({
+            "task_id": change["task_id"],
+            "validated": True/False,
+            "issues": [...] if failed else []
+        })
+```
+
+#### Step 3: Check Health Indicators
+
+```python
+# Use GoalValidator for overall health
+from decision_guidance import GoalValidator, ErrorTracker
+
+validator = GoalValidator()
+task_pct, incomplete = validator.get_task_completion_pct()
+
+error_tracker = ErrorTracker()
+recent_errors = error_tracker.get_recent_errors()
+is_stuck = len(recent_errors) >= 4 and task_pct < 50
+```
+
+#### Step 4: Generate Monitor Report
+
+```json
+{
+    "session_id": "orch-auth-123",
+    "timestamp": "2026-01-24T12:00:00Z",
+    "completion_pct": 45.0,
+    "tasks": {
+        "total": 8,
+        "completed": 3,
+        "in_progress": 2,
+        "pending": 3,
+        "incomplete_list": ["Task 4: Implement login", "Task 5: Add validation"]
+    },
+    "changes_detected": {
+        "newly_completed": ["7"],
+        "status_changes": 2
+    },
+    "validation_results": [
+        {
+            "task_id": "7",
+            "validated": true,
+            "evidence": "Files modified: spawn-workflow.md. Tests passing."
+        }
+    ],
+    "health": {
+        "is_stuck": false,
+        "recent_errors": 2,
+        "doom_loop_detected": false
+    },
+    "original_goal": "Implement authentication feature",
+    "should_intervene": false,
+    "recommendations": ["On track. 5 tasks remaining."]
+}
+```
+
+#### Step 5: Output Decision
+
+Based on findings, COMPLETE with one of these statuses:
+
+| Status | When | System3 Action |
+|--------|------|----------------|
+| `MONITOR_HEALTHY` | No issues, progress made | Re-launch monitor |
+| `MONITOR_STUCK` | Multiple errors, validation failures | Send guidance, re-launch |
+| `MONITOR_COMPLETE` | All tasks done AND validated | Trigger final e2e validation |
+| `MONITOR_VALIDATION_FAILED` | Completed task failed validation | Alert orchestrator |
+
+#### Step 6: Iteration Control (STRICT EXIT DISCIPLINE)
+
+**🚨 CRITICAL: RETURN IMMEDIATELY after validation. Do NOT add extra work.**
+
+Monitor runs in a loop with controlled iterations:
+
+```python
+MAX_ITERATIONS = 30  # ~5 minutes at 10s intervals
+POLL_INTERVAL = 10   # seconds
+
+for iteration in range(MAX_ITERATIONS):
+    changes = detect_changes()  # Uses task-list-monitor.py
+
+    if changes.has_newly_completed:
+        results = validate_completed_tasks(changes.newly_completed)
+
+        # 🚨 RETURN IMMEDIATELY - Do NOT write docs, scripts, or anything else
+        if any(r.failed for r in results):
+            return f"MONITOR_VALIDATION_FAILED: {json.dumps(results)}"
+        else:
+            return f"MONITOR_COMPLETE: Task validated. Evidence: {results}"
+
+    if is_stuck():
+        return f"MONITOR_STUCK: {stuck_reason}"
+
+    if all_tasks_complete():
+        return f"MONITOR_COMPLETE: All {count} tasks validated"
+
+    sleep(POLL_INTERVAL)
+
+# Max iterations reached - heartbeat
+return f"MONITOR_HEALTHY: {completion_pct}% complete, will continue"
+```
+
+**EXIT DISCIPLINE RULES:**
+1. ✅ Detect change → Validate → RETURN result immediately
+2. ❌ Do NOT write documentation
+3. ❌ Do NOT create additional scripts
+4. ❌ Do NOT "improve" things while monitoring
+5. ❌ Do NOT continue after validation completes
+
+The monitor's ONLY job is: **Detect → Validate → Report → EXIT**
+
+**Use from System3** (Cyclic Pattern):
+```python
+def launch_monitor(session_id, task_list_id):
+    """Launch monitor - must be re-called after each wake-up."""
+    # ⚠️ MUST use Sonnet - Haiku lacks exit discipline and gets distracted
+    return Task(
         subagent_type="validation-agent",
-        prompt="--mode=e2e --task_id=... --prd=..."
+        model="sonnet",  # NOT haiku - Haiku doesn't know when to stop
+        run_in_background=True,
+        prompt=f"--mode=monitor --session-id={session_id} --task-list-id={task_list_id}"
     )
+
+# Initial launch
+launch_monitor("orch-auth-123", "PRD-AUTH-001")
+
+# When monitor COMPLETES (wakes System3):
+if "MONITOR_STUCK" in result:
+    send_guidance_to_orchestrator()
+    launch_monitor(session_id, task_list_id)  # RE-LAUNCH
+
+elif "MONITOR_VALIDATION_FAILED" in result:
+    alert_orchestrator_of_failure()
+    launch_monitor(session_id, task_list_id)  # RE-LAUNCH
+
+elif "MONITOR_COMPLETE" in result:
+    # Trigger final validation - no re-launch needed
+    Task(subagent_type="validation-agent",
+         prompt="--mode=e2e --task_id=... --prd=...")
+
+elif "MONITOR_HEALTHY" in result:
+    # Heartbeat - orchestrator still working
+    launch_monitor(session_id, task_list_id)  # RE-LAUNCH
 ```
 
 ---
