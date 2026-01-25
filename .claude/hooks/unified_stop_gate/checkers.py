@@ -250,12 +250,89 @@ class CompletionPromiseChecker:
         if orphaned_in_progress:
             warning = f" [WARNING: {len(orphaned_in_progress)} orphaned in_progress promise(s)]"
 
+        # Detect orchestrator work and provide monitoring guidance
+        orchestrator_guidance = self._build_orchestrator_guidance(in_progress)
+
         return CheckResult(
             priority=Priority.P1_COMPLETION_PROMISE,
             passed=False,
-            message=f"Incomplete promises: {', '.join(msg_parts)}{warning}",
+            message=f"Incomplete promises: {', '.join(msg_parts)}{warning}{orchestrator_guidance}",
             blocking=True,
         )
+
+    def _build_orchestrator_guidance(self, in_progress: list[dict]) -> str:
+        """Build guidance for monitoring orchestrators.
+
+        Detects promises owned by orchestrators (session ID starts with 'orch-')
+        and provides guidance on how to monitor them using validation-agent.
+
+        Args:
+            in_progress: List of in_progress promise dicts
+
+        Returns:
+            Formatted guidance string, or empty string if no orchestrators detected
+        """
+        # Get full promise data to access ownership
+        promises_dir = self.paths.promises_dir
+        if not promises_dir.exists():
+            return ""
+
+        # Re-scan to get full ownership info for in_progress promises
+        orch_promises = []
+        try:
+            for promise_file in promises_dir.glob('*.json'):
+                with open(promise_file, 'r') as f:
+                    promise = json.load(f)
+
+                if promise.get('status') != 'in_progress':
+                    continue
+
+                owner = promise.get('ownership', {}).get('owned_by', '')
+                if owner and owner.startswith('orch-'):
+                    orch_promises.append({
+                        'id': promise.get('id', 'unknown'),
+                        'owner': owner,
+                        'summary': promise.get('summary', '')[:60],
+                    })
+        except (json.JSONDecodeError, OSError):
+            return ""
+
+        if not orch_promises:
+            return ""
+
+        # Build orchestrator list
+        orch_list = "\n".join([
+            f"- `{p['owner']}`: \"{p['summary']}...\""
+            for p in orch_promises[:5]
+        ])
+
+        # Extract likely task list ID from first orchestrator session
+        first_orch = orch_promises[0]['owner']
+        # orch-live-form-ui -> PRD-LIVE-FORM-UI
+        prd_name = first_orch.replace('orch-', 'PRD-').upper().replace('-', '-')
+
+        return f"""
+
+## Orchestrator Work in Progress
+
+The following orchestrators are actively working:
+{orch_list}
+
+**To monitor progress**, launch a blocking validation-agent:
+
+```python
+Task(
+    subagent_type="validation-agent",
+    model="sonnet",
+    run_in_background=False,  # BLOCKING - wakes you when orchestrator completes
+    description="Monitor orchestrator {first_orch}",
+    prompt="--mode=monitor --session-id={first_orch} --task-list-id={prd_name}"
+)
+```
+
+**Manual options**:
+1. Check progress: `cs-promise --mine`
+2. Adopt/cancel: `cs-promise --adopt/--cancel <id>`"""
 
 
 class BeadsSyncChecker:

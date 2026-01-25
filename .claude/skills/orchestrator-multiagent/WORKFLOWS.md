@@ -25,14 +25,13 @@ The orchestrator follows a complete cycle for each feature:
 2. ASSIGNMENT
    ├── Determine worker type
    ├── Prepare worker context
-   ├── Launch worker (tmux session)
-   └── Set expectations
+   ├── Launch worker (Task subagent)
+   └── Set expectations via prompt
 
-3. MONITORING
-   ├── Check-ins (every 30-45 min)
-   ├── Watch for red flags
-   ├── Provide guidance if needed
-   └── Detect completion signals
+3. COMPLETION
+   ├── Await Task result
+   ├── Check for red flags in result
+   └── Detect completion signals (COMPLETE/BLOCKED)
 
 4. VALIDATION
    ├── Run feature validation command
@@ -57,12 +56,12 @@ The orchestrator follows a complete cycle for each feature:
 **Assignment**: Delegate feature to appropriate worker with complete context.
 - Match feature to specialist (frontend/backend/general)
 - Provide context package with acceptance criteria, files, validation command
-- Launch tmux session with clear expectations
+- Launch Task subagent with clear expectations via prompt
 
-**Monitoring**: Track progress, detect problems early.
-- Periodic check-ins every 30-45 minutes
-- Use Haiku sub-agent with `run_in_background=True` for context-efficient monitoring
-- Watch for scope creep, TODO/FIXME, time exceeded
+**Completion**: Await worker result.
+- Task subagent completes and returns result directly
+- Check result for COMPLETE/BLOCKED signals
+- No monitoring needed - orchestrator blocks until worker completes (or use `run_in_background=True` for parallel workers)
 
 **Validation**: Verify feature works as designed, not just that tests pass.
 - Pre-validation: git clean, scope compliance, no incomplete markers
@@ -73,7 +72,7 @@ The orchestrator follows a complete cycle for each feature:
 - Update state file (only the `passes` field)
 - Commit with descriptive message
 - Update progress tracking, document learnings
-- Clean up worker session
+- (No cleanup needed - Task subagents clean up automatically)
 
 ---
 
@@ -117,14 +116,19 @@ LOOP:
      bd ready → Pick highest priority unblocked task
      bd update <id> --status in_progress
 
-  3. DELEGATE TO WORKER
-     - Create tmux session: worker-<id>
-     - Launch Claude Code interactively (no -p flag)
-     - Paste worker assignment template
-     - Launch Haiku monitor with run_in_background=True
+  3. DELEGATE TO WORKER VIA TASK SUBAGENT
+     ```python
+     result = Task(
+         subagent_type="[frontend-dev-expert|backend-solutions-engineer|etc]",
+         description="[Feature description]",
+         prompt="[Worker assignment template]"
+     )
+     ```
+     # Worker completes and returns result directly
 
-  4. AWAIT COMPLETION
-     TaskOutput(task_id=monitor_agent_id, block=True)
+  4. CHECK RESULT
+     - Parse result for COMPLETE/BLOCKED signals
+     - If BLOCKED: provide guidance and re-delegate
 
   5. VALIDATE (THREE LEVELS - ALL MANDATORY)
      See Validation Protocol below
@@ -453,7 +457,7 @@ If you observe these during Phase 2, the decomposition needs improvement:
 1. **Feature State Clean**
    - [ ] Current feature either complete OR cleanly stopped
    - [ ] No uncommitted code changes
-   - [ ] No active worker sessions
+   - [ ] No active background Task agents (check with TaskList)
 
 2. **Feature List Updated**
    - [ ] State file updated with latest passes status
@@ -479,20 +483,19 @@ If you observe these during Phase 2, the decomposition needs improvement:
 
 **Quick handoff command sequence:**
 ```bash
-# 1. Ensure workers terminated
-tmux list-sessions | grep worker && echo "Kill worker sessions first"
-
-# 2. Update state and commit
+# 1. Update state and commit
 git add .claude/state/
 git commit -m "feat(F00X): [description] - marked complete"
 
-# 3. Update progress files
+# 2. Update progress files
 git add .claude/progress/
 git commit -m "docs: update progress after F00X completion"
 
-# 4. Verify clean state
+# 3. Verify clean state
 git status
 ```
+
+**Note**: Task subagents clean up automatically - no manual session cleanup needed.
 
 ### Starting New Session
 
@@ -522,6 +525,8 @@ git status
 
 ---
 
-**Version**: 1.0
+**Version**: 2.0 (Task-Based Delegation)
 **Created**: 2026-01-07
+**Last Updated**: 2026-01-25
 **Consolidated from**: AUTONOMOUS_MODE.md, ORCHESTRATOR_PROCESS_FLOW.md, FEATURE_DECOMPOSITION.md, PROGRESS_TRACKING.md
+**Major Changes**: v2.0 - Updated to use Task subagents for worker delegation instead of tmux sessions.

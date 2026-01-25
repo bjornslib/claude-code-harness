@@ -108,8 +108,8 @@ curl -X POST http://localhost:8000/agencheck \
                                  │
                                  ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│ 2. WORKER EXECUTION (via tmux)                                      │
-│    - Orchestrator launches Worker in tmux session                  │
+│ 2. WORKER EXECUTION (via Task subagent)                             │
+│    - Orchestrator delegates to Worker via Task(subagent_type=...)  │
 │    - Worker reads the test spec Markdown file                      │
 │    - Worker executes tests using chrome-devtools MCP tools         │
 │    - Worker captures screenshots as evidence                       │
@@ -455,17 +455,16 @@ Instead, reject and retry fresh:
 
 **Recovery:**
 ```bash
-# 1. Kill worker
-tmux kill-session -t worker-F00X
-
-# 2. Revert changes
+# 1. Revert changes
 git reset --hard HEAD
 
-# 3. Refine scope (make more restrictive)
+# 2. Refine scope (make more restrictive)
 
-# 4. Launch fresh worker with explicit scope constraint:
-# "CRITICAL: ONLY modify these files: [list]. If you need to modify others, report BLOCKED."
+# 3. Launch fresh worker with explicit scope constraint:
+# Task(subagent_type="...", prompt="CRITICAL: ONLY modify these files: [list]. If you need to modify others, report BLOCKED.")
 ```
+
+**Note:** Task subagents clean up automatically - no manual session killing needed.
 
 ### Pattern 2: Feature Too Complex
 
@@ -473,16 +472,15 @@ git reset --hard HEAD
 
 **Recovery:**
 ```bash
-# 1. Kill worker
-tmux kill-session -t worker-F00X
-
-# 2. Return to decomposition
+# 1. Return to decomposition
 # Use MAKER checklist in WORKFLOWS.md
 
-# 3. Split F00X into F00X-part1, F00X-part2, F00X-part3
+# 2. Split F00X into F00X-part1, F00X-part2, F00X-part3
 
-# 4. Proceed with F00X-part1 (should complete in <1 hour now)
+# 3. Proceed with F00X-part1 (should complete in <1 hour now)
 ```
+
+**Note:** Task subagents clean up automatically when they complete or fail.
 
 ### Pattern 3: Flaky Tests
 

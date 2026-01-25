@@ -1,6 +1,6 @@
 # Worker Delegation
 
-Patterns for delegating implementation to tmux workers.
+Patterns for delegating implementation to Task subagents.
 
 **Part of**: [Multi-Agent Orchestrator Skill](SKILL.md)
 
@@ -9,11 +9,10 @@ Patterns for delegating implementation to tmux workers.
 ## Table of Contents
 - [Core Principle](#core-principle)
 - [Worker Types](#worker-types)
-- [tmux Delegation Pattern](#tmux-delegation-pattern)
+- [Task Delegation Pattern](#task-delegation-pattern)
 - [Worker Assignment Template](#worker-assignment-template)
-- [Monitoring with Haiku](#monitoring-with-haiku)
+- [Parallel Worker Pattern](#parallel-worker-pattern)
 - [Browser Testing Workers](#browser-testing-workers)
-- [Worker Feedback](#worker-feedback)
 
 ---
 
@@ -24,18 +23,20 @@ Understanding the hierarchy prevents delegation violations:
 | Tier | Role | Spawns | Implements |
 |------|------|--------|------------|
 | **TIER 1: System 3** | Meta-orchestrator | Orchestrators via tmux | ❌ Never |
-| **TIER 2: Orchestrator** | Coordinator | Workers via tmux + Haiku monitors | ❌ Never |
+| **TIER 2: Orchestrator** | Coordinator | Workers via Task subagents | ❌ Never |
 | **TIER 3: Worker** | Implementer | ❌ Does NOT spawn sub-workers | ✅ Directly |
 
 **The Key Insight**: Workers are the END of the chain. They implement directly using Edit/Write tools. Workers do NOT spawn their own sub-workers or sub-agents for implementation.
 
 ```
-System 3 ──tmux──► Orchestrator ──tmux──► Worker ──Edit/Write──► Code
+System 3 ──tmux──► Orchestrator ──Task()──► Worker ──Edit/Write──► Code
                                               │
                                               └──► (Task for validation ONLY, not implementation)
 ```
 
-**Common Violation**: Workers spawning sub-agents for every coding step. This creates a 4-tier system and confuses responsibility. Workers ARE specialists - they implement directly.
+**Important Distinction**:
+- **System 3 → Orchestrator**: Uses tmux for session isolation (orchestrators need persistent isolated environments in worktrees)
+- **Orchestrator → Worker**: Uses Task subagents (workers complete tasks and return results directly)
 
 ---
 
@@ -43,31 +44,42 @@ System 3 ──tmux──► Orchestrator ──tmux──► Worker ──Edit/
 
 **Orchestrator = Coordinator. Worker = Implementer.**
 
-Never use `Task(subagent_type=specialist)` directly - always delegate via tmux.
+Use `Task(subagent_type=specialist)` for all worker delegation.
 
-```bash
-# WRONG - Direct sub-agent usage
-Task(subagent_type="frontend-dev-expert", prompt="Implement...")
+```python
+# ✅ CORRECT - Worker via Task subagent
+result = Task(
+    subagent_type="frontend-dev-expert",
+    description="Implement feature F001",
+    prompt="""
+    ## Task: [Task title from Beads]
 
-# RIGHT - Worker via tmux
-tmux new-session -d -s worker-F001
-tmux send-keys -t worker-F001 "launchcc"
-tmux send-keys -t worker-F001 Enter
+    **Context**: [investigation summary]
+    **Requirements**: [list requirements]
+    **Acceptance Criteria**: [list criteria]
+    **Scope** (ONLY these files): [file list]
+
+    **Report back with**: Files modified, tests written/passed, any blockers
+    """
+)
+# Result returned directly - no monitoring needed
 ```
 
-**Why `launchcc`?** The alias includes `--dangerously-skip-permissions` so workers edit files autonomously.
-
-**Allowed exceptions**: `Task(subagent_type="Explore")` for investigation, `Task(model="haiku")` for monitoring.
+**Why Task subagents?**
+- Workers receive assignments and return results directly
+- No session management or monitoring loops
+- No cleanup required (automatic)
+- Orchestrator blocks until worker completes (or use `run_in_background=True` for parallel)
 
 ---
 
 ## Worker Types
 
-| Type | Via tmux | Use For |
-|------|----------|---------|
+| Type | subagent_type | Use For |
+|------|---------------|---------|
 | Frontend | `frontend-dev-expert` | React, Next.js, UI, TypeScript |
 | Backend | `backend-solutions-engineer` | Python, FastAPI, PydanticAI, MCP |
-| Browser Testing | `haiku` + chrome-devtools | E2E validation, browser automation |
+| Browser Testing | `tdd-test-engineer` | E2E validation, browser automation |
 | General | `general-purpose` | Scripts, docs, everything else |
 
 ### Quick Decision Rule
@@ -84,87 +96,50 @@ bd show <bd-id>  # View metadata including worker_type
 
 ---
 
-## tmux Delegation Pattern
+## Task Delegation Pattern
 
-### Critical: tmux Enter Pattern
+### Standard Blocking Pattern
 
-**Enter MUST be a separate `send-keys` command!**
+Use for single worker delegation where you need the result immediately:
 
-```bash
-# WRONG - Enter gets silently ignored (no error, just doesn't work)
-tmux send-keys -t worker "command" Enter
+```python
+result = Task(
+    subagent_type="backend-solutions-engineer",
+    description="Implement [feature]",
+    prompt="""
+    ## Task: Create API endpoint for user authentication
 
-# CORRECT - Enter as separate command
-tmux send-keys -t worker "command"
-tmux send-keys -t worker Enter
+    **Context**: We're building a FastAPI backend with JWT auth
+    **Requirements**:
+    - POST /api/auth/login endpoint
+    - Accept email and password
+    - Return JWT token on success
+
+    **Acceptance Criteria**:
+    - [ ] Endpoint returns 200 with valid credentials
+    - [ ] Endpoint returns 401 with invalid credentials
+    - [ ] Token expires in 24 hours
+
+    **Scope**: ONLY these files:
+    - agencheck-support-agent/app/routes/auth.py
+    - agencheck-support-agent/app/schemas/auth.py
+
+    **Report back with**: Files modified, tests written, any blockers
+    """
+)
+# Orchestrator waits here until worker completes
+print(f"Worker result: {result}")
 ```
 
-This affects 100% of worker delegation workflows.
+### Key Parameters
 
-### Step-by-Step Launch Procedure
-
-#### Step 1: Create tmux Session
-
-```bash
-# Create detached tmux session for worker
-tmux new-session -d -s worker-F001 -c /path/to/project
-
-# Verify session created
-tmux list-sessions | grep worker-F001
-```
-
-#### Step 2: Prepare Worker Prompt
-
-```bash
-# Write assignment to temporary file
-cat > /tmp/worker-F001-prompt.txt << 'EOF'
-You are a focused worker executing feature F001.
-
-[Paste full Worker Assignment Template here]
-EOF
-
-# Verify prompt file
-cat /tmp/worker-F001-prompt.txt
-```
-
-#### Step 3: Launch Claude Code Interactively
-
-```bash
-# Launch Claude Code in INTERACTIVE mode (no -p flag!)
-tmux send-keys -t worker-F001 "claude --dangerously-skip-permissions --model claude-opus-4-5-20251101"
-tmux send-keys -t worker-F001 Enter
-
-# Wait for Claude to start
-sleep 3
-
-# Paste the assignment prompt
-tmux send-keys -t worker-F001 "$(cat /tmp/worker-F001-prompt.txt)"
-tmux send-keys -t worker-F001 Enter
-```
-
-**Why `--dangerously-skip-permissions`**: Workers need to act autonomously. Orchestrator has already verified scope constraints.
-
-**Why NOT use `-p` flag**: Worker needs to be interactive for follow-up questions and feedback.
-
-#### Step 4: Verify Worker Started
-
-```bash
-# Check worker output after 10 seconds
-sleep 10
-tmux capture-pane -t worker-F001 -p | tail -30
-
-# Look for: "I'll help you implement...", "Let me start by...", Tool usage messages
-```
-
-### Launch Checklist
-
-- [ ] tmux session created with correct name
-- [ ] Worker assignment written to temp file
-- [ ] Claude Code launched in INTERACTIVE mode (no `-p`)
-- [ ] `--dangerously-skip-permissions` flag used
-- [ ] Opus 4.5 model specified
-- [ ] Assignment prompt pasted into session
-- [ ] Worker output shows it's processing
+| Parameter | Purpose | When to Use |
+|-----------|---------|-------------|
+| `subagent_type` | Worker specialist type | Always required |
+| `description` | Short task summary | Always (3-5 words) |
+| `prompt` | Full assignment | Always (use template below) |
+| `run_in_background` | Return immediately, collect later | Parallel workers |
+| `model` | Override model | Rarely needed |
 
 ---
 
@@ -209,7 +184,7 @@ mcp__serena__switch_modes(["editing", "interactive"])
 **Dependencies Verified**: [List parent beads that are closed]
 
 **Your Role**:
-- You are TIER 2 in the 3-tier hierarchy (Worker)
+- You are TIER 3 in the 3-tier hierarchy (Worker)
 - Complete this ONE SMALL TASK - implement it DIRECTLY yourself
 - Do NOT spawn sub-agents for implementation - you ARE the implementer
 - ONLY modify files in scope list
@@ -247,81 +222,75 @@ Before launching worker, verify assignment includes:
 - [ ] Explicit scope (file paths)
 - [ ] Validation type specified
 - [ ] Dependencies verified as passing
-- [ ] Role explanation (TIER 2 = direct implementer)
+- [ ] Role explanation (TIER 3 = direct implementer)
 - [ ] Implementation approach (worker implements directly, not via sub-agents)
 - [ ] Completion criteria
 - [ ] Critical constraints listed
 
 ---
 
-## Monitoring with Haiku
+## Parallel Worker Pattern
 
-### Haiku Monitor Sub-Agent (RECOMMENDED)
-
-**Use a Haiku sub-agent to monitor workers - saves orchestrator context!**
+When delegating multiple workers that can run concurrently:
 
 ```python
-# Background monitor with TaskOutput retrieval
-monitor_task = Task(
-    subagent_type="general-purpose",
-    model="haiku",
-    run_in_background=True,  # MANDATORY - without this, orchestrator blocks!
-    prompt="""
-Monitor the tmux worker session 'worker-F001' until completion or blockers.
+# Launch workers in parallel using run_in_background=True
+frontend_task = Task(
+    subagent_type="frontend-dev-expert",
+    run_in_background=True,  # Don't block
+    description="Frontend feature F001",
+    prompt="[Worker assignment...]"
+)
 
-Instructions:
-1. Check session every 30 seconds:
-   tmux capture-pane -t worker-F001 -p | tail -50
+backend_task = Task(
+    subagent_type="backend-solutions-engineer",
+    run_in_background=True,  # Don't block
+    description="Backend feature F002",
+    prompt="[Worker assignment...]"
+)
 
-2. Look for signals:
-   - 'COMPLETE' - Worker finished successfully
-   - 'BLOCKED' - Worker needs help
-   - 'PASS' / 'FAIL' - Test results
-   - 'Error' - Something went wrong
+# Both workers are now running in parallel
+# Collect results when needed
 
-3. Continue monitoring silently until you detect:
-   - COMPLETE signal -> Report: 'COMPLETE: [summary of what was done]'
-   - BLOCKED signal -> Report: 'BLOCKED: [reason and what help is needed]'
-   - No output for 5+ minutes -> Report: 'STALLED: Worker may be stuck'
+frontend_result = TaskOutput(task_id=frontend_task.agent_id, block=True)
+backend_result = TaskOutput(task_id=backend_task.agent_id, block=True)
 
-4. ONLY report back when one of these conditions is met
-5. Do NOT report intermediate progress - only final status
-""")
-
-# Capture agent_id for later retrieval
-agent_id = monitor_task.agent_id
-
-# Wait for monitor result (orchestrator waits efficiently via TaskOutput)
-result = TaskOutput(task_id=agent_id, block=True, timeout=600000)  # 10 min max
+# Process results
+if "COMPLETE" in frontend_result and "COMPLETE" in backend_result:
+    print("Both workers completed successfully")
 ```
 
-**Why Haiku Monitors**:
-- Orchestrator context is precious - don't waste it on polling
-- Haiku is cheap and fast for simple monitoring tasks
-- Monitor runs in background while orchestrator does other work
-- Only reports when action is needed
+### When to Use Parallel Workers
 
-### Monitor Checklist
+| Scenario | Pattern |
+|----------|---------|
+| Single feature | Blocking: `Task(...)` |
+| Frontend + Backend in parallel | Parallel: `run_in_background=True` + `TaskOutput()` |
+| Multiple independent features | Parallel: Launch all, collect all |
+| Voting consensus (multiple approaches) | Parallel: 3-5 workers, compare results |
 
-- [ ] One Haiku monitor per worker
-- [ ] Monitor checks every 30 seconds
-- [ ] Monitor looks for completion signals
-- [ ] Monitor reports only final status (not intermediate)
-- [ ] Monitor includes error details if BLOCKED
-- [ ] `run_in_background=True` is specified (MANDATORY)
-- [ ] `TaskOutput` is used to retrieve results
+### Voting Consensus Pattern
 
-### Monitoring Signals
+When you need multiple perspectives on a problem:
 
-| Signal in Output | Meaning | Action |
-|------------------|---------|--------|
-| "COMPLETE" | Worker finished successfully | Retrieve output, validate, close bead |
-| "BLOCKED" | Worker needs help | Read blocker reason, provide solution |
-| "FAIL" after test run | Tests failed | Review failure, provide fix or retry |
-| "PASS" after test run | Tests passed | Good sign, wait for validation |
-| No output for 5+ minutes | Worker stalled | Check if stuck, provide hint or restart |
-| "Error:" or "Exception:" | Runtime error | Review error, provide fix or retry |
-| Files outside scope | Scope violation | Reject immediately, fresh retry |
+```python
+# Launch multiple workers with different approaches
+workers = []
+for i, approach in enumerate(["approach_a", "approach_b", "approach_c"]):
+    worker = Task(
+        subagent_type="general-purpose",
+        run_in_background=True,
+        description=f"Solution {i+1}",
+        prompt=f"Solve using {approach}..."
+    )
+    workers.append(worker)
+
+# Collect all results
+results = [TaskOutput(task_id=w.agent_id, block=True) for w in workers]
+
+# Analyze consensus
+consensus = analyze_voting_results(results)
+```
 
 ---
 
@@ -329,9 +298,9 @@ result = TaskOutput(task_id=agent_id, block=True, timeout=600000)  # 10 min max
 
 ### Overview
 
-Browser testing workers enable actual E2E validation using chrome-devtools MCP tools for real browser automation, not just unit tests.
+Browser testing workers enable actual E2E validation using chrome-devtools MCP tools or Playwright for real browser automation.
 
-**Pattern**: Orchestrator -> Worker (via tmux) -> chrome-devtools MCP -> Execution Report -> Orchestrator Review
+**Pattern**: Orchestrator → Task(tdd-test-engineer) → Browser Testing → Results
 
 ### When to Use
 
@@ -347,285 +316,86 @@ Browser testing workers enable actual E2E validation using chrome-devtools MCP t
 - API endpoint testing (use curl/HTTP requests)
 - Backend validation (use pytest)
 
-### Markdown-Based Test Specification Workflow
+### Browser Testing Pattern
+
+```python
+# Direct browser testing via Task subagent
+result = Task(
+    subagent_type="tdd-test-engineer",
+    description="E2E browser testing for F084",
+    prompt="""
+    MISSION: Validate feature F084 via browser automation
+
+    TARGET: http://localhost:5001/[path]
+
+    TESTING CHECKLIST:
+    - [ ] Navigate to page (chrome-devtools: navigate)
+    - [ ] Verify UI renders correctly (read_page, screenshot)
+    - [ ] Test user interactions (click, form_input)
+    - [ ] Verify state changes (read_page after action)
+    - [ ] Capture screenshots as evidence
+
+    VALIDATION CRITERIA:
+    - Page loads without console errors
+    - All interactive elements are accessible
+    - User workflow completes successfully
+
+    REPORT FORMAT:
+    - Pass/Fail per item
+    - Screenshots of key states
+    - Console log analysis
+    - Overall assessment
+    """
+)
+```
+
+### Test Specification Workflow
 
 ```
 1. TEST SPECIFICATION (Markdown)
    Location: __tests__/e2e/specs/J{N}-{journey-name}.md
-   Template: __tests__/e2e/specs/TEMPLATE.md
-   Format: Given/When/Then with MCP chrome-devtools steps
+   Format: Given/When/Then with chrome-devtools steps
                                  |
                                  v
-2. WORKER EXECUTION (via tmux)
-   - Orchestrator launches Worker in tmux session
+2. WORKER EXECUTION (via Task)
    - Worker reads the test spec Markdown file
    - Worker executes tests using chrome-devtools MCP tools
    - Worker captures screenshots as evidence
                                  |
                                  v
-3. EXECUTION REPORT (Markdown)
+3. EXECUTION REPORT
    Location: __tests__/e2e/results/J{N}/J{N}_EXECUTION_REPORT.md
-   Contents: Pass/Fail per test, evidence manifest, issues found
+   Contents: Pass/Fail per test, evidence, issues found
                                  |
                                  v
 4. ORCHESTRATOR REVIEW
    - Reviews execution report for anomalies
    - Sense-checks results against expected behavior
-   - Re-executes any tests that seem incorrect
    - Approves or requests fixes
 ```
 
-### Key Files
-
-| File | Purpose |
-|------|---------|
-| `__tests__/e2e/specs/TEMPLATE.md` | Standard format for test specifications |
-| `__tests__/e2e/specs/J{N}-*.md` | Journey-specific test specs |
-| `__tests__/e2e/results/EXECUTION_REPORT_TEMPLATE.md` | Standard format for execution reports |
-| `__tests__/e2e/results/J{N}/J{N}_EXECUTION_REPORT.md` | Filled-out execution report |
-| `__tests__/e2e/results/J{N}/*.png` | Screenshot evidence |
-
-### Browser Testing Worker Launch Pattern
-
-```python
-Task({
-    subagent_type: "general-purpose",
-    model: "haiku",
-    description: "Launch browser-testing worker for F084",
-    prompt: """MISSION: Set up E2E testing worker with chrome-devtools
-
-FEATURE: F084 - [Feature description]
-
-PHASES:
-1. Setup: Create tmux session and launch Claude Code worker
-2. Assignment: Send testing checklist to worker
-3. Monitor: Track progress and report results
-
-EXECUTION:
-
-## Phase 1: Setup Worker Session
-
-SESSION="e2e-worker-f084"
-tmux new-session -d -s $SESSION
-tmux send-keys -t $SESSION "claude --model claude-haiku-4-5-20250514"
-tmux send-keys -t $SESSION Enter
-sleep 5
-
-## Phase 2: Send Testing Assignment
-
-[Include testing checklist with chrome-devtools commands]
-
-## Phase 3: Monitor Progress
-
-[Monitor loop checking for completion signals]
-
-SUCCESS CRITERIA:
-- chrome-devtools connected successfully
-- Worker received testing assignment
-- All test steps executed
-- Results reported with pass/fail status"""
-})
-```
-
-### Worker Testing Assignment Template
-
-```markdown
-FEATURE: [ID] - [Description]
-
-TARGET: http://localhost:[port]/[path]
-
-TESTING CHECKLIST:
-- [ ] [Action 1] ([chrome-devtools command])
-- [ ] [Action 2] ([chrome-devtools command])
-- [ ] [Action 3] ([chrome-devtools command])
-
-VALIDATION CRITERIA:
-- [Criterion 1]
-- [Criterion 2]
-- [Criterion 3]
-
-EXPECTED BEHAVIOR:
-- [Behavior 1]
-- [Behavior 2]
-
-REPORT FORMAT:
-- Pass/Fail per item
-- Screenshots of key states
-- Console log analysis
-- Overall assessment
-```
-
-### Connection Validation
-
-**Check tmux capture-pane for**:
-
-| Indicator | State | Action |
-|-----------|-------|--------|
-| "connected" in MCP status | Connected | Proceed |
-| "chrome-devtools" checkmark | Connected | Proceed |
-| "failed" or "error" | Failed | Check MCP config |
-| `Context left: X%` where X<15 | Low context | May need /clear |
-
-### Troubleshooting
-
-**chrome-devtools Won't Connect**:
-1. Check `.mcp.json` has chrome-devtools configured
-2. Verify Chrome DevTools MCP server is installed
-3. Check for port conflicts
-4. Try manual attach: `tmux attach-session -t session`
-
-**Worker Stuck in Loop**:
-1. Attach to session: `tmux attach-session -t session`
-2. Send C-c to interrupt
-3. Provide clarifying guidance
-4. If unrecoverable: `tmux kill-session -t session`
-
-**Tests Pass But Feature Broken** (Hollow Test Problem):
-- Worker may be testing mocked/stubbed behavior
-- DOM elements present but non-functional
-- Update assignment to use production endpoints
-- Add real data validation
-- Test actual user workflows
-
 ---
 
-## Worker Feedback
+## Worker Output Handling
 
-### When to Intervene
+### Interpreting Results
 
-| Trigger | Timing | Action |
-|---------|--------|--------|
-| Worker reports BLOCKED | Immediate | Read blocker, provide solution |
-| No output for 10+ minutes | After 10 min | Check status, provide hint |
-| Files outside scope modified | Immediate | Reject, provide correction |
-| Repeated errors on same step | After 2-3 attempts | Provide alternative or decompose |
-| Worker asks question | Immediate | Answer via send-keys |
+| Signal in Result | Meaning | Action |
+|------------------|---------|--------|
+| "COMPLETE" | Worker finished successfully | Validate, close bead |
+| "BLOCKED" | Worker needs help | Read blocker reason, provide guidance or re-delegate |
+| "FAIL" after test run | Tests failed | Review failure, fix or retry |
+| "PASS" after test run | Tests passed | Good - proceed to validation |
+| Files outside scope | Scope violation | Reject, fresh retry with clearer boundaries |
 
-### Providing Feedback via tmux
-
-```bash
-# Short message
-tmux send-keys -t worker-F001 "Your feedback here"
-tmux send-keys -t worker-F001 Enter
-
-# Multi-line message
-tmux send-keys -t worker-F001 "$(cat <<'EOF'
-Your feedback here.
-Can be multiple lines.
-EOF
-)"
-tmux send-keys -t worker-F001 Enter
-```
-
-### Example Interventions
-
-**Worker blocked on missing dependency**:
-```bash
-tmux send-keys -t worker-F001 "$(cat <<'EOF'
-The backend endpoint you need doesn't exist yet.
-For now, create a mock that returns sample data.
-We'll implement the real endpoint in the next feature.
-EOF
-)"
-tmux send-keys -t worker-F001 Enter
-```
-
-**Worker exceeded scope**:
-```bash
-tmux send-keys -t worker-F001 "$(cat <<'EOF'
-STOP - You modified files outside your scope.
-Your scope is ONLY:
-- agencheck-support-frontend/components/ChatInterface.tsx
-
-Please revert changes to other files and stay within scope.
-EOF
-)"
-tmux send-keys -t worker-F001 Enter
-```
-
-### Feedback Best Practices
-
-**DO**:
-- Be specific and actionable
-- Reference existing code patterns when possible
-- Provide examples or file paths
-- Acknowledge what worker got right
-
-**DON'T**:
-- Be vague ("just make it work")
-- Solve the whole problem (let worker figure it out)
-- Provide conflicting instructions
-- Ignore repeated blockers (decompose instead)
-
-### Retrieving Worker Output
-
-```bash
-# Capture full session output
-tmux capture-pane -t worker-F001 -p -S - > /tmp/worker-F001-output.txt
-
-# View output
-cat /tmp/worker-F001-output.txt
-
-# Extract: What was implemented, tests run, validation performed, warnings
-```
-
-### 🚨 MANDATORY: Cleanup After Worker Completes
-
-**CRITICAL**: Always kill worker tmux sessions after they complete. Failure to do so results in session buildup that consumes system resources.
-
-```bash
-# 1. Kill the specific worker session
-tmux kill-session -t worker-F001
-
-# 2. Verify session terminated
-tmux list-sessions | grep worker-F001
-# Should return nothing
-
-# 3. Clean up temp files
-rm -f /tmp/worker-F001-*.txt
-```
-
-**Batch cleanup for multiple completed workers:**
-
-```bash
-# List all worker sessions
-tmux list-sessions 2>/dev/null | grep "^worker-" | awk -F: '{print $1}'
-
-# Kill all worker sessions matching a pattern (e.g., completed initiative)
-for session in $(tmux list-sessions 2>/dev/null | grep "worker-dspy-" | awk -F: '{print $1}'); do
-    tmux kill-session -t "$session" 2>/dev/null && echo "Killed: $session"
-done
-
-# Verify cleanup - should show only active workers
-tmux list-sessions 2>/dev/null | grep worker- | wc -l
-```
-
-**When to cleanup:**
-- ✅ After worker reports COMPLETE
-- ✅ After worker reports BLOCKED (and you've captured output)
-- ✅ Before starting a new initiative (clean slate)
-- ✅ At session end (cleanup all your workers)
-
-**Include in orchestrator's Session End protocol:**
-```bash
-# Kill all worker sessions for this initiative
-for session in $(tmux list-sessions 2>/dev/null | grep "worker-" | awk -F: '{print $1}'); do
-    tmux kill-session -t "$session" 2>/dev/null && echo "Cleaned up: $session"
-done
-```
-
----
-
-## Red Flags
+### Red Flags
 
 | Signal | Action |
 |--------|--------|
-| Modified files outside scope | Reject - Fresh retry |
-| TODO/FIXME in output | Reject - Fresh retry |
+| Modified files outside scope | Reject - Fresh retry with clearer scope |
+| TODO/FIXME in output | Reject - Fresh retry (incomplete work) |
 | Validation fails | Reject - Fresh retry |
-| Exceeds 2 hours | Stop - Re-decompose |
-| "I think" or "probably" | Warn - Verify everything |
-| Didn't run validation steps | Reject - Must validate |
+| Worker reports unclear requirements | Re-decompose task with better spec |
 
 ---
 
@@ -633,11 +403,10 @@ done
 
 - **[SKILL.md](SKILL.md)** - Main orchestrator skill
 - **[WORKFLOWS.md](WORKFLOWS.md)** - Feature decomposition, autonomous mode
-- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Recovery patterns
-- **[BEADS_INTEGRATION.md](BEADS_INTEGRATION.md)** - Task state management
+- **[VALIDATION.md](VALIDATION.md)** - Service startup, testing infrastructure
 
 ---
 
-**Document Version**: 1.0
-**Last Updated**: 2026-01-07
-**Consolidated From**: WORKER_DELEGATION_GUIDE.md, BROWSER_TESTING_WORKERS.md
+**Document Version**: 2.0 (Task-Based Delegation)
+**Last Updated**: 2026-01-25
+**Major Changes**: Replaced tmux worker delegation with Task subagents. Workers now receive assignments via `Task(subagent_type="...")` and return results directly. System 3 → Orchestrator still uses tmux; Orchestrator → Worker now uses Task subagents.

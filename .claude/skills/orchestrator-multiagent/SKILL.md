@@ -1,28 +1,9 @@
 ---
 name: orchestrator-multiagent
-description: Multi-agent orchestration for building software incrementally. Use when coordinating workers via tmux sessions, managing task state with Beads, delegating features to specialized workers (NOT direct sub-agents), tracking progress across sessions, or implementing the four-phase pattern (ideation → planning → execution → validation). Triggers on orchestration, coordination, multi-agent, beads, worker delegation, session handoff, progress tracking.
+description: Multi-agent orchestration for building software incrementally. Use when coordinating workers via Task subagents, managing task state with Beads, delegating features to specialized workers (frontend-dev-expert, backend-solutions-engineer, etc.), tracking progress across sessions, or implementing the four-phase pattern (ideation → planning → execution → validation). Triggers on orchestration, coordination, multi-agent, beads, worker delegation, session handoff, progress tracking.
 ---
 
 # Multi-Agent Orchestrator Skill
-
-## 🚨 CRITICAL: tmux Enter Pattern (READ THIS FIRST)
-
-**EVERY orchestrator using tmux worker delegation MUST know this:**
-
-When sending commands via tmux, **Enter must be a separate `send-keys` command** or it will be **silently ignored** (no error, just doesn't work).
-
-```bash
-# ❌ WRONG - Enter gets silently ignored
-tmux send-keys -t worker "command" Enter
-
-# ✅ CORRECT - Enter as separate command
-tmux send-keys -t worker "command"
-tmux send-keys -t worker Enter
-```
-
-**This affects 100% of worker delegation workflows.** See [WORKERS.md](WORKERS.md#critical-tmux-enter-pattern) for detailed explanation.
-
----
 
 ## 🚀 SESSION START (Do This First)
 
@@ -40,19 +21,28 @@ tmux send-keys -t worker Enter
 
 **Orchestrator = Coordinator. Worker = Implementer.**
 
-```bash
-# ❌ WRONG - Direct sub-agent usage
-Task(subagent_type="frontend-dev-expert", prompt="Implement...")
+```python
+# ✅ CORRECT - Worker via Task subagent
+result = Task(
+    subagent_type="frontend-dev-expert",
+    description="Implement feature F001",
+    prompt="""
+    ## Task: [Task title from Beads]
 
-# ✅ RIGHT - Worker via tmux
-tmux new-session -d -s worker-F001
-tmux send-keys -t worker-F001 "launchcc"  # launchcc = claude --chrome --dangerously-skip-permissions
-tmux send-keys -t worker-F001 Enter
+    **Context**: [investigation summary]
+    **Requirements**: [list requirements]
+    **Acceptance Criteria**: [list criteria]
+    **Scope** (ONLY these files): [file list]
+
+    **Report back with**: Files modified, tests written/passed, any blockers
+    """
+)
+# Result returned directly - no monitoring, no cleanup needed
 ```
 
-**Why `launchcc` not `claude`?** The alias includes `--dangerously-skip-permissions` so workers can edit files autonomously without requiring manual approval for each change. Using plain `claude` means you'll have to approve every edit manually.
+**Why Task subagents?** Workers receive the assignment, execute it, and return results directly. No session management, no monitoring loops, no cleanup required. The orchestrator blocks until the worker completes.
 
-**Allowed exceptions**: `Task(subagent_type="Explore")` for investigation, `Task(model="haiku")` for monitoring.
+**Parallel workers**: Use `run_in_background=True` and collect with `TaskOutput(task_id=...)`.
 
 ---
 
@@ -118,17 +108,15 @@ bd dep list <bd-id>               # Show dependencies
 
 **Quick Reference**: [REFERENCE.md](REFERENCE.md#beads-commands)
 
-### Worker Types (via tmux ONLY)
-| Type | Worker Via tmux | Use For |
-|------|-----------------|---------|
-| Frontend | `frontend-dev-expert` in tmux | React, Next.js, UI |
-| Backend | `backend-solutions-engineer` in tmux | Python, FastAPI, PydanticAI |
-| **Browser Testing** | `haiku` in tmux with chrome-devtools | **E2E UI validation, automated browser testing** |
-| General | `general-purpose` in tmux | Everything else |
+### Worker Types (via Task Subagents)
+| Type | subagent_type | Use For |
+|------|---------------|---------|
+| Frontend | `frontend-dev-expert` | React, Next.js, UI, TypeScript |
+| Backend | `backend-solutions-engineer` | Python, FastAPI, PydanticAI, MCP |
+| **Browser Testing** | `tdd-test-engineer` | **E2E UI validation, automated browser testing** |
+| General | `general-purpose` | Scripts, docs, everything else |
 
-**CRITICAL:** Never use Task tool with these worker types. Always launch via tmux.
-
-**⚠️ IMPORTANT tmux Command Pattern**: See critical banner at top of this file for Enter pattern details.
+**Pattern**: Use `Task(subagent_type="...", prompt="...")` for all worker delegation. Workers complete and return results directly.
 
 ### Key Directories
 - `.beads/` - Task state (managed by `bd` commands)
@@ -422,7 +410,7 @@ bd create --title="[Hotfix Description]" --type=epic --priority=1
 # Skip Phase 0 only for emergency fixes with <3 file changes
 ```
 
-**⚠️ Ignore plan skill's "execute with superpowers:executing-plans"** - we use tmux workers.
+**⚠️ Ignore plan skill's "execute with superpowers:executing-plans"** - we use Task subagents.
 
 ---
 
@@ -505,10 +493,10 @@ The autonomous mode protocol provides:
    ↓
 3. `bd update <bd-id> --status in-progress`
    ↓
-4. 🚨 DELEGATE TO WORKER VIA TMUX (MANDATORY - INTERACTIVE MODE)
-   See WORKERS.md for template
+4. 🚨 DELEGATE TO WORKER VIA TASK SUBAGENT
+   Task(subagent_type="...", description="...", prompt="...")
    ↓
-5. Monitor via Haiku sub-agent
+5. Wait for Task to complete (result returned directly)
    ↓
 6. Validate completion (3 LEVELS - see WORKFLOWS.md)
    - Level 1: Unit Tests (pytest + Jest)
@@ -522,8 +510,7 @@ The autonomous mode protocol provides:
 
 **Critical Rules**:
 - One feature at a time. Leave clean state. Commit progress.
-- **NEVER use Task tool with implementation sub-agents - ALWAYS delegate via tmux**
-- **INTERACTIVE MODE IS MANDATORY** - Workers must be able to receive feedback
+- **Use Task(subagent_type="...") for all worker delegation** - Workers complete and return results
 - Orchestrator coordinates; Workers implement
 
 **Legacy feature_list.json**: See [LEGACY_FEATURE_LIST.md](archive/LEGACY_FEATURE_LIST.md) for legacy workflow.
@@ -647,7 +634,7 @@ USER FEEDBACK DETECTED
 **Example**: User keeps reminding to launch Haiku sub-agent for monitoring:
 - Retain: "User reminded me to launch Haiku sub-agent to monitor worker progress"
 - Reflect: "Why did I miss this? What's the pattern?"
-- Retain: "Lesson: Always launch Haiku sub-agent after delegating to tmux worker"
+- Retain: "Lesson: Always use run_in_background=True for parallel workers"
 
 ### Rejected 2 Times (Feature or Regression)
 
@@ -747,56 +734,62 @@ This creates a continuous improvement cycle where each task benefits from all pr
 
 ## Worker Delegation
 
-**🚨 CRITICAL REMINDER:** Orchestrators NEVER use Task tool with worker types directly.
+**Orchestrators use Task subagents for all worker delegation.**
 
-### Quick Worker Selection (Launch via tmux)
+### Quick Worker Selection
 
-| Feature Type | Worker (via tmux) |
-|--------------|-------------------|
-| React, UI | `frontend-dev-expert` in tmux |
-| API, Python | `backend-solutions-engineer` in tmux |
-| **E2E Browser Tests** | **`haiku` in tmux with chrome-devtools** |
-| Scripts, docs | `general-purpose` in tmux |
+| Feature Type | subagent_type |
+|--------------|---------------|
+| React, UI | `frontend-dev-expert` |
+| API, Python | `backend-solutions-engineer` |
+| **E2E Browser Tests** | **`tdd-test-engineer`** |
+| Scripts, docs | `general-purpose` |
 
-**Delegation Pattern (MANDATORY):**
-1. Create tmux session
-2. Launch Claude Code in session
-3. Provide worker assignment
-4. Monitor via Haiku sub-agent
+**Delegation Pattern:**
+```python
+result = Task(
+    subagent_type="frontend-dev-expert",
+    description="Implement [feature]",
+    prompt="[worker assignment from template]"
+)
+# Worker completes, result returned directly
+```
 
-**❌ ANTI-PATTERN:** Using `Task(subagent_type="frontend-dev-expert")` directly
+**For parallel workers**: Use `run_in_background=True` and collect with `TaskOutput(task_id=...)`
 
-### Browser Testing Worker Pattern (NEW)
+### Browser Testing Worker Pattern
 
 **When to use**: Features requiring actual browser automation (not just unit tests)
 
-**Pattern**: Orchestrator → Haiku Sub-Agent → Browser Testing Worker
+**Pattern**: Orchestrator → Task subagent with tdd-test-engineer or browser-mcp
 
-```typescript
-// Orchestrator delegates to Haiku for browser testing setup
-Task({
-    subagent_type: "general-purpose",
-    model: "haiku",
-    description: "Launch browser-testing worker for F084",
-    prompt: `MISSION: Set up E2E testing worker with chrome-devtools
+```python
+# Direct browser testing via Task subagent
+result = Task(
+    subagent_type="tdd-test-engineer",
+    description="E2E browser testing for F084",
+    prompt="""
+    MISSION: Validate feature F084 via browser automation
 
-STEPS:
-1. Create tmux session: e2e-worker-f084
-2. Launch Claude Code (Haiku model)
-3. Validate chrome-devtools connected
-4. Send testing assignment to worker
-5. Monitor progress and report results
+    TARGET: http://localhost:5001/[path]
 
-See: .claude/skills/orchestrator-multiagent/WORKERS.md#browser-testing-workers for details`
-})
+    TESTING CHECKLIST:
+    - [ ] Navigate to page
+    - [ ] Verify UI renders correctly
+    - [ ] Test user interactions
+    - [ ] Capture screenshots as evidence
+
+    Report: Pass/Fail per item, screenshots, overall assessment
+    """
+)
+```
 ```
 
 **Full Guide**: [WORKERS.md](WORKERS.md)
-- tmux Delegation Pattern (critical Enter pattern)
+- Task Delegation Pattern (blocking and parallel)
 - Worker Assignment Template
-- Monitoring with Haiku Sub-Agent
+- Parallel Worker Pattern
 - Browser Testing Workers (E2E validation)
-- Worker Feedback and Intervention
 
 ---
 
@@ -814,8 +807,7 @@ lsof -i :5001 -i :8000 -i :5184 -i :5185 | grep LISTEN
 ```
 
 **Full Guide**: [VALIDATION.md](VALIDATION.md#service-management)
-- Service Session Setup (tmux)
-- Health Checks
+- Service Setup and Health Checks
 - Starting from Clean State
 - Worker Dependency Verification
 - Troubleshooting Service Issues
@@ -954,7 +946,7 @@ Task(subagent_type="Explore", prompt="Validate <bd-id> works as designed:
 - ✅ Chose correct workflow (Task Master vs Manual)?
 
 **After each feature:**
-- ✅ **Used tmux worker (NOT Task tool with implementation sub-agents)?**
+- ✅ **Used Task(subagent_type="...") for worker delegation?**
 - ✅ Ran regression check first?
 - ✅ Worker stayed within scope?
 - ✅ Validated feature works (not just tests pass)?
@@ -962,7 +954,7 @@ Task(subagent_type="Explore", prompt="Validate <bd-id> works as designed:
 - ✅ Committed with message?
 - ✅ Git status clean?
 
-**CRITICAL:** If you used `Task(subagent_type="frontend-dev-expert"|"backend-solutions-engineer"|"general-purpose")` for implementation, you violated the orchestrator pattern. Next time, delegate via tmux.
+**Pattern**: All worker delegation uses `Task(subagent_type="...")`. Workers complete and return results directly.
 
 **Full Guide**: [VALIDATION.md](VALIDATION.md#troubleshooting)
 - Worker Red Flags & Recovery
@@ -991,17 +983,6 @@ At the START of every orchestrator session:
     "[Your initiative description]" \
     --initiative="[epic-name]" \
     --worktree="$(pwd)"
-```
-
-```python
-# 2. Spawn background monitor for real-time message detection
-Task(
-    subagent_type="general-purpose",
-    model="haiku",
-    run_in_background=True,
-    description="Message queue monitor",
-    prompt="""[Load from .claude/skills/message-bus/monitor-prompt-template.md]"""
-)
 ```
 
 ### Receiving Messages
@@ -1046,21 +1027,14 @@ When completing a task or epic:
 
 ### Session End: Cleanup & Unregister
 
-Before session ends, perform MANDATORY cleanup:
+Before session ends:
 
 ```bash
-# 1. Kill ALL worker tmux sessions spawned during this initiative
-for session in $(tmux list-sessions 2>/dev/null | grep "worker-" | awk -F: '{print $1}'); do
-    tmux kill-session -t "$session" 2>/dev/null && echo "Cleaned up: $session"
-done
-
-# 2. Verify cleanup
-remaining=$(tmux list-sessions 2>/dev/null | grep -c "worker-" || echo "0")
-echo "Remaining worker sessions: $remaining"
-
-# 3. Unregister from message bus
+# 1. Unregister from message bus
 .claude/scripts/message-bus/mb-unregister "${CLAUDE_SESSION_ID}"
 ```
+
+**Note**: Task subagents clean up automatically - no manual tmux cleanup needed.
 
 ### Updated Session Handoff Checklist
 
@@ -1068,11 +1042,9 @@ Add to your session start/end routines:
 
 **Session Start:**
 - [ ] Register with message bus (`mb-register`)
-- [ ] Spawn background monitor (Haiku, run_in_background)
 
 **Session End:**
 - [ ] Send completion report to System 3 (`mb-send`)
-- [ ] 🚨 **Kill all worker tmux sessions** (MANDATORY - prevents session buildup)
 - [ ] Unregister from message bus (`mb-unregister`)
 
 ### Message Types You May Receive
@@ -1125,10 +1097,11 @@ Add to your session start/end routines:
 
 ---
 
-**Skill Version**: 3.13 (Sync Script Finalization)
+**Skill Version**: 4.0 (Task-Based Worker Delegation)
 **Progressive Disclosure**: 5 reference files for detailed information
-**Last Updated**: 2026-01-07
+**Last Updated**: 2026-01-25
 **Latest Enhancements**:
+- v4.0: 🆕 **Task-Based Worker Delegation** - Replaced tmux worker delegation with Task subagents. Workers now receive assignments via `Task(subagent_type="...")` and return results directly. No session management, monitoring loops, or cleanup required. Parallel workers use `run_in_background=True` with `TaskOutput()` collection. System 3 → Orchestrator still uses tmux for session isolation; Orchestrator → Worker now uses Task subagents.
 - v3.13: 🆕 **Sync Script Finalization** - Sync script now auto-closes Task Master tasks after sync (status=done). Removed mapping file (redundant with beads hierarchy). **IMPORTANT**: Must run from `zenagent/` root to use correct `.beads` database. Updated all docs with correct paths and `--tasks-path` usage.
 - v3.12: **ID Range Filtering** - `--from-id=<id>` and `--to-id=<id>` to filter which Task Master tasks to sync. Essential for multi-PRD projects.
 - v3.11: **Enhanced Sync Script** - `--uber-epic=<id>` for parent-child linking. Auto-maps description, details→design, testStrategy→acceptance.

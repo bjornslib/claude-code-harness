@@ -217,24 +217,31 @@ Run this at the start of every orchestrator session:
 
 ---
 
-## Worker Types (via tmux ONLY)
+## Worker Types (via Task Subagents)
 
-| Type | Worker | Use For |
-|------|--------|---------|
+| Type | subagent_type | Use For |
+|------|---------------|---------|
 | Frontend | `frontend-dev-expert` | React, Next.js, UI |
 | Backend | `backend-solutions-engineer` | Python, FastAPI, APIs |
-| Browser Testing | `haiku` with chrome-devtools | E2E validation |
+| Browser Testing | `tdd-test-engineer` | E2E validation |
 | General | `general-purpose` | Everything else |
 
-### tmux Enter Pattern (CRITICAL)
+### Task Delegation Pattern
 
-```bash
-# WRONG - Enter gets silently ignored
-tmux send-keys -t worker "command" Enter
+```python
+# Standard blocking delegation
+result = Task(
+    subagent_type="frontend-dev-expert",
+    description="Implement feature",
+    prompt="[Worker assignment...]"
+)
+# Result returned directly - no monitoring needed
 
-# CORRECT - Enter as separate command
-tmux send-keys -t worker "command"
-tmux send-keys -t worker Enter
+# Parallel workers
+task1 = Task(subagent_type="...", run_in_background=True, ...)
+task2 = Task(subagent_type="...", run_in_background=True, ...)
+result1 = TaskOutput(task_id=task1.agent_id, block=True)
+result2 = TaskOutput(task_id=task2.agent_id, block=True)
 ```
 
 ---

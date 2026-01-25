@@ -512,14 +512,18 @@ System 3 → tdd-test-engineer / frontend-dev-expert / backend-solutions-enginee
 
 **Why?** Orchestrators provide:
 - Worktree isolation (prevents conflicts)
-- Worker coordination with voting/consensus
+- Worker coordination with Task subagents (blocking or parallel)
 - Beads tracking and progress monitoring
-- Proper tmux session management
+- Proper tmux session isolation (System 3 → Orchestrator only)
 - Wisdom injection from Hindsight banks
 
-**Implementation Guide**: For complete worker delegation patterns including tmux commands, monitoring, and feedback, see:
+**2-Level Delegation Architecture**:
+- **System 3 → Orchestrator**: Uses tmux for session isolation (orchestrators need persistent environments in worktrees)
+- **Orchestrator → Worker**: Uses Task subagents (workers complete and return results directly)
+
+**Implementation Guide**: For complete worker delegation patterns, see:
 - `Skill("orchestrator-multiagent")` → SKILL.md "Core Rule" and "Worker Delegation" sections
-- [WORKERS.md](.claude/skills/orchestrator-multiagent/WORKERS.md) → Detailed tmux patterns and monitoring
+- [WORKERS.md](.claude/skills/orchestrator-multiagent/WORKERS.md) → Task-based delegation patterns
 
 ---
 
@@ -553,7 +557,9 @@ ln -s $(pwd)/.claude ../[worktree-name]/.claude
 
 **Why symlink?** Git worktrees are isolated directories. Without symlinking `.claude/`, the spawned orchestrator won't have access to skills, output styles, or project-specific configurations. This is a MANDATORY step.
 
-### CRITICAL: tmux Spawning Patterns
+### CRITICAL: tmux Patterns for Spawning Orchestrators
+
+**Note**: These patterns apply to **System 3 → Orchestrator** spawning only. Orchestrators delegate to Workers using **Task subagents** (not tmux).
 
 These patterns were learned through painful experience. Violating them causes silent failures.
 
@@ -561,19 +567,19 @@ These patterns were learned through painful experience. Violating them causes si
 
 ```bash
 # ❌ WRONG - Enter gets silently ignored, command never executes
-tmux send-keys -t worker "command" Enter
+tmux send-keys -t orch-epic4 "command" Enter
 
 # ✅ CORRECT - Enter as separate command
-tmux send-keys -t worker "command"
-tmux send-keys -t worker Enter
+tmux send-keys -t orch-epic4 "command"
+tmux send-keys -t orch-epic4 Enter
 ```
 
-**Failure mode**: Worker command never executes, orchestrator thinks worker is working, session hangs indefinitely.
+**Failure mode**: Command never executes, System 3 thinks orchestrator is working, session hangs indefinitely.
 
 #### Pattern 2: Use `launchcc` (Not Plain `claude`)
 
 ```bash
-# ❌ WRONG - Workers block on approval dialogs invisibly
+# ❌ WRONG - Orchestrators block on approval dialogs invisibly
 tmux send-keys -t orch-epic4 "claude"
 tmux send-keys -t orch-epic4 Enter
 
@@ -582,20 +588,20 @@ tmux send-keys -t orch-epic4 "launchcc"
 tmux send-keys -t orch-epic4 Enter
 ```
 
-**Why**: Without `--dangerously-skip-permissions`, workers block on approval dialogs. The orchestrator has no way to detect this hang. Workers need autonomy to complete tasks without manual approval.
+**Why**: Without `--dangerously-skip-permissions`, orchestrators block on approval dialogs. System 3 has no way to detect this hang. Orchestrators need autonomy to delegate to workers without manual approval.
 
 #### Pattern 3: Interactive Mode is MANDATORY
 
 ```bash
-# ❌ WRONG - Headless workers can't spawn sub-agents or handle blockers
+# ❌ WRONG - Headless orchestrators can't spawn workers or handle blockers
 claude -p "Do the work"
 
-# ✅ CORRECT - Interactive mode allows sub-agent spawning
-tmux send-keys -t worker "launchcc"
-tmux send-keys -t worker Enter
+# ✅ CORRECT - Interactive mode allows orchestrator to spawn Task subagents
+tmux send-keys -t orch-epic4 "launchcc"
+tmux send-keys -t orch-epic4 Enter
 sleep 5  # Wait for initialization
-tmux send-keys -t worker "Your assignment..."
-tmux send-keys -t worker Enter
+tmux send-keys -t orch-epic4 "Your assignment..."
+tmux send-keys -t orch-epic4 Enter
 ```
 
 **Evidence**: Session F091 (headless) hung indefinitely. Session F092 (interactive) completed in 4 minutes.
@@ -873,32 +879,24 @@ tmux list-sessions | grep "^orch-"
 **When an orchestrator reports COMPLETION** (via blocking monitor or message bus):
 
 ```bash
-# 1. Kill the orchestrator's tmux session
+# Kill the orchestrator's tmux session
 tmux kill-session -t orch-[initiative] 2>/dev/null && echo "Cleaned up: orch-[initiative]"
 
-# 2. The orchestrator should have killed its workers, but verify:
-worker_count=$(tmux list-sessions 2>/dev/null | grep -c "worker-[initiative]" || echo "0")
-if [ "$worker_count" -gt 0 ]; then
-    echo "Warning: Orchestrator left $worker_count worker sessions - cleaning up..."
-    for session in $(tmux list-sessions 2>/dev/null | grep "worker-[initiative]" | awk -F: '{print $1}'); do
-        tmux kill-session -t "$session" 2>/dev/null && echo "Killed orphan: $session"
-    done
-fi
+# Verify cleanup
+remaining=$(tmux list-sessions 2>/dev/null | grep -c "^orch-" || echo "0")
+echo "Remaining orchestrator sessions: $remaining"
 ```
 
-**Why this matters**: A single initiative can spawn:
-- 1 orchestrator session
-- 10+ worker sessions per orchestrator
-- Multiple initiatives = 50+ orphaned sessions
+**Note**: Workers are now Task subagents that clean up automatically when they complete. No worker tmux session cleanup is needed.
 
-Without cleanup, system resources are consumed and `tmux list-sessions` becomes unmanageable.
+**Why this matters**: Without cleanup, orchestrator tmux sessions accumulate, consuming system resources and making `tmux list-sessions` unmanageable.
 
 **Cleanup triggers:**
 | Event | Action |
 |-------|--------|
-| Orchestrator COMPLETE | Kill `orch-*` session + verify workers cleaned |
-| Orchestrator BLOCKED (abandoned) | Kill `orch-*` session + all `worker-*` sessions |
-| System 3 session end | Kill ALL remaining `orch-*` and `worker-*` sessions |
+| Orchestrator COMPLETE | Kill `orch-*` tmux session |
+| Orchestrator BLOCKED (abandoned) | Kill `orch-*` tmux session |
+| System 3 session end | Kill ALL remaining `orch-*` sessions |
 
 ### Enforcing 3-Level Validation
 
@@ -1859,19 +1857,15 @@ for session in $(tmux list-sessions 2>/dev/null | grep "^orch-" | awk -F: '{prin
     tmux kill-session -t "$session" 2>/dev/null && echo "Killed: $session"
 done
 
-# 2. Kill any remaining worker sessions (orchestrators should have cleaned these, but verify)
-echo "Cleaning up any remaining worker sessions..."
-for session in $(tmux list-sessions 2>/dev/null | grep "^worker-" | awk -F: '{print $1}'); do
-    tmux kill-session -t "$session" 2>/dev/null && echo "Killed: $session"
-done
+# 2. Verify cleanup
+remaining=$(tmux list-sessions 2>/dev/null | grep -c "^orch-" || echo "0")
+echo "Remaining orchestrator sessions: $remaining"
 
-# 3. Verify cleanup
-remaining=$(tmux list-sessions 2>/dev/null | grep -cE "^(orch-|worker-)" || echo "0")
-echo "Remaining orchestrator/worker sessions: $remaining"
-
-# 4. Unregister from message bus
+# 3. Unregister from message bus
 .claude/scripts/message-bus/mb-unregister "system3"
 ```
+
+**Note**: Workers are now Task subagents that clean up automatically. No worker tmux session cleanup is needed.
 
 **When orchestrator completes (before session end):**
 
@@ -1882,7 +1876,7 @@ After an orchestrator reports completion via message bus or monitor, immediately
 tmux kill-session -t orch-[initiative] 2>/dev/null && echo "Cleaned up: orch-[initiative]"
 ```
 
-**Why cleanup matters**: Without cleanup, tmux sessions accumulate. A single initiative can spawn 10+ workers per orchestrator. Multiple initiatives = 50+ orphaned sessions consuming memory.
+**Why cleanup matters**: Without cleanup, orchestrator tmux sessions accumulate consuming system resources.
 
 ---
 
