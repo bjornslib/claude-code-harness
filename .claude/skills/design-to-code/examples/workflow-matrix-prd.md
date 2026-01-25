@@ -1,9 +1,21 @@
-# Product Requirements Document: Workflow Matrix
+```yaml
+# PRD FRONTMATTER (REQUIRED)
+# The prd_id is the canonical identifier used throughout the system
+prd_id: PRD-WORKFLOW-MATRIX
+title: "Workflow Matrix"
+product: "AgenCheck"
+version: "0.1"
+status: draft
+created: "2026-01-15"
+author: "FAIE Labs"
+```
 
-**Product:** AgenCheck Workflow Matrix  
-**Version:** 0.1 (Initial Draft)  
-**Date:** 15 January 2026  
-**Author:** FAIE Labs  
+# PRD-WORKFLOW-MATRIX: Workflow Matrix
+
+**Product:** AgenCheck Workflow Matrix
+**Version:** 0.1 (Initial Draft)
+**Date:** 15 January 2026
+**Author:** FAIE Labs
 **Status:** Draft for Extension
 
 ---

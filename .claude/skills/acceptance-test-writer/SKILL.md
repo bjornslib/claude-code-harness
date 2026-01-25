@@ -31,13 +31,48 @@ Invoke this skill:
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `--prd` | Yes | PRD identifier (e.g., `PRD-AUTH-001`) |
+| `--prd` | **Auto-detected** | PRD identifier - extracted from YAML frontmatter if present |
 | `--source` | Yes | Path to PRD markdown file |
 
-Example invocation:
-```
+**PRD ID Detection Priority:**
+1. **YAML frontmatter** (preferred) - Look for `prd_id:` in the source document
+2. **`--prd` argument** - Explicit override if frontmatter missing
+3. **Error** - If neither is found, fail with clear message
+
+Example invocations:
+```bash
+# Auto-detect from frontmatter (PREFERRED)
+Skill("acceptance-test-writer", args="--source=docs/prds/auth-system.md")
+
+# Explicit override (when frontmatter missing or for legacy PRDs)
 Skill("acceptance-test-writer", args="--prd=PRD-AUTH-001 --source=docs/prds/auth-system.md")
 ```
+
+### PRD Frontmatter Format
+
+The PRD source document should have YAML frontmatter with `prd_id`:
+
+```yaml
+prd_id: PRD-AUTH-001
+title: "User Authentication System"
+product: "AgenCheck"
+version: "1.0"
+status: active
+created: "2026-01-15"
+author: "Product Team"
+```
+
+**Parsing Logic:**
+1. Read source file
+2. Look for YAML block (between triple backticks with `yaml` or fenced with `---`)
+3. Extract `prd_id` field
+4. If `--prd` argument provided, use it as override
+5. If no `prd_id` found and no `--prd` argument, fail with:
+   ```
+   ERROR: No PRD ID found. Either:
+   - Add prd_id to document frontmatter, or
+   - Provide --prd=PRD-XXX argument
+   ```
 
 ## Output Structure
 
@@ -52,10 +87,38 @@ acceptance-tests/
 
 ## Workflow
 
+### Step 0: Extract PRD ID (MANDATORY)
+
+**Before anything else, determine the canonical PRD ID.**
+
+```python
+# Pseudocode for PRD ID extraction
+def extract_prd_id(source_path, prd_override=None):
+    content = read_file(source_path)
+
+    # Look for YAML frontmatter (```yaml ... ``` or --- ... ---)
+    yaml_match = regex_search(r'```yaml\n(.*?)\n```', content, DOTALL)
+    if not yaml_match:
+        yaml_match = regex_search(r'^---\n(.*?)\n---', content, DOTALL)
+
+    if yaml_match:
+        frontmatter = parse_yaml(yaml_match.group(1))
+        prd_id = frontmatter.get('prd_id')
+        if prd_id:
+            return prd_override or prd_id  # Override wins if provided
+
+    if prd_override:
+        return prd_override
+
+    raise Error("No PRD ID found. Add prd_id to frontmatter or provide --prd argument")
+```
+
+**Output**: Canonical `prd_id` string (e.g., `PRD-AUTH-001`)
+
 ### Step 1: Read and Parse PRD
 
 Read the source PRD document. Extract:
-- PRD title and identifier
+- PRD title and identifier (use `prd_id` from Step 0)
 - Features/epics with descriptions
 - Acceptance criteria (look for sections titled "Acceptance Criteria", "Definition of Done", "Success Criteria", or numbered requirements)
 - User flows and scenarios

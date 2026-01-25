@@ -4,12 +4,38 @@ Use this template to generate a PRD from a design image. This document is struct
 
 ---
 
-# Product Requirements Document: {Feature Name}
+```yaml
+# ============================================================
+# PRD FRONTMATTER (REQUIRED)
+# ============================================================
+# This YAML block MUST be the first content after the title.
+# The prd_id is the canonical identifier used throughout the system:
+#   - CLAUDE_CODE_TASK_LIST_ID environment variable
+#   - acceptance-tests/PRD-XXX/ directory
+#   - Task Master task grouping
+#   - Hindsight memory context
+#
+# Format: PRD-{CATEGORY}-{DESCRIPTOR}
+# Examples:
+#   - PRD-AUTH-001        (numbered series)
+#   - PRD-LIVE-FORM-UI    (descriptive)
+#   - PRD-VOICE-AGENT-MVP (major feature)
+# ============================================================
+prd_id: PRD-{CATEGORY}-{DESCRIPTOR}
+title: "{Feature Name}"
+product: "{Product Name}"
+version: "0.1"
+status: draft
+created: "{YYYY-MM-DD}"
+author: "{Author/Team}"
+```
 
-**Product:** {Product Name}  
-**Version:** 0.1 (Initial Draft)  
-**Date:** {Current Date}  
-**Author:** {Author/Team}  
+# PRD-{CATEGORY}-{DESCRIPTOR}: {Feature Name}
+
+**Product:** {Product Name}
+**Version:** 0.1 (Initial Draft)
+**Date:** {Current Date}
+**Author:** {Author/Team}
 **Status:** Draft for Extension
 
 ---
