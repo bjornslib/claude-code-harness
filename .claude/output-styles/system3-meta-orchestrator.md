@@ -698,146 +698,157 @@ This loads the worker coordination patterns. Without it, you cannot properly del
 Skill("system3-orchestrator", args=f"spawn {initiative} {worktree}")
 ```
 
-### 🚨 Post-Spawn: Blocking Monitor for Long-Running Initiatives
+### 🚨 Post-Spawn: Multi-Orchestrator Monitoring (MANDATORY)
 
-**MANDATORY** for initiatives expected to take >1 hour: After spawning the orchestrator, immediately spawn a **blocking Haiku monitor** to keep the System 3 session active and enable real-time intervention.
+After spawning orchestrators, IMMEDIATELY set up the **dual-layer monitoring pattern**:
 
-```python
-# Estimate duration based on task count and complexity
-if estimated_duration > "1 hour":
-    Task(
-        subagent_type="general-purpose",
-        model="haiku",
-        run_in_background=False,  # BLOCKING - keeps session alive
-        description=f"Blocking monitor for orch-{initiative}",
-        prompt="[See 'LONG-RUNNING INITIATIVES' section below for full prompt]"
-    )
-```
+1. **Background monitors**: One Sonnet validation-agent per orchestrator (deep validation)
+2. **Blocking watcher**: One Haiku agent watching ALL orchestrators (session keep-alive + first-to-report)
 
-**Why?** Without this, System 3 will idle after spawning the orchestrator and may trigger the stop hook prematurely. The blocking monitor keeps the session naturally alive and reports back when the orchestrator completes or needs guidance.
+See "Multi-Orchestrator Monitoring Pattern" section below for complete code.
+
+**Why both layers?**
+- Background Sonnet monitors handle deep validation work with proper exit discipline
+- Blocking Haiku watcher keeps System 3 session alive and reports immediately when ANY orchestrator needs attention
+- This is the "First-to-Finish" pattern that enables efficient multi-orchestrator oversight
 
 ---
 
 ## Monitoring Spawned Orchestrators
 
-### CRITICAL: Non-Blocking Monitoring Pattern
+### 🚨 Multi-Orchestrator Monitoring Pattern (MANDATORY)
 
-```python
-# ❌ WRONG - Orchestrator blocks waiting for monitor result
-monitor = Task(
-    subagent_type="general-purpose",
-    model="haiku",
-    prompt="Check orchestrator progress..."
-)  # This blocks!
+When spawning 1+ orchestrators, use this **dual-layer monitoring** approach:
 
-# ✅ CORRECT - Non-blocking with run_in_background
-monitor = Task(
-    subagent_type="general-purpose",
-    model="haiku",
-    run_in_background=True,  # CRITICAL - allows parallel work
-    prompt="Quick check on orchestrator: Read git diff, check scope, report status"
-)
-
-# Wait only when you need the result
-result = TaskOutput(task_id=monitor.agent_id, block=True)
+```
+System 3 (Opus)
+    │
+    ├── Background Task: validation-agent --mode=monitor (Sonnet) → orch-epic-A
+    ├── Background Task: validation-agent --mode=monitor (Sonnet) → orch-epic-B
+    │
+    └── BLOCKING Task: Haiku watcher ─────────────────────────────────────────────┐
+                                                                                   │
+        Polls ALL orchestrators periodically via tmux capture-pane                │
+        Reports back when ANY orchestrator:                                       │
+          • Completes work                                                        │
+          • Gets stuck/blocked                                                    │
+          • Needs user input (System 3 = user for orchestrators)                  │
+          • Runs off course                                                       │
+        ──────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Failure mode**: Without `run_in_background=True`, you block on monitoring and can't continue other work.
-
-### 🚨 LONG-RUNNING INITIATIVES (>1 Hour): Blocking Monitor Pattern
-
-For initiatives expected to take >1 hour, spawn a **BLOCKING** Haiku monitor instead of background monitoring. This keeps the System 3 session naturally alive and enables real-time intervention.
-
-**When to use blocking monitor:**
-- Initiative estimated >1 hour (multi-feature epics, large refactors)
-- Single active orchestrator (no parallel work needed)
-- Critical path work requiring immediate intervention if blocked
-
-**Why blocking (not background)?**
-- Keeps System 3 session active without triggering stop hook
-- Immediate intervention when orchestrator needs guidance
-- Natural session lifecycle - completes when orchestrator completes
-- No risk of missing critical blockers or guidance requests
+#### Step 1: Launch Background Validation-Agents (one per orchestrator)
 
 ```python
-# ✅ CORRECT for long-running initiatives (>1 hour)
+# For each orchestrator, spawn a background Sonnet monitor for deep validation
+orchestrator_sessions = ["orch-live-form-ui", "orch-employer-data-model"]
+
+for orch_session in orchestrator_sessions:
+    Task(
+        subagent_type="validation-agent",
+        model="sonnet",  # Sonnet has exit discipline; Haiku doesn't
+        run_in_background=True,  # Non-blocking
+        description=f"Background monitor: {orch_session}",
+        prompt=f"--mode=monitor --session-id={orch_session} --task-list-id=PRD-XXX"
+    )
+```
+
+#### Step 2: Launch ONE Blocking Haiku Watcher (monitors ALL orchestrators)
+
+```python
+# This keeps System 3 alive and reports when ANY orchestrator needs attention
+orchestrator_sessions = ["orch-live-form-ui", "orch-employer-data-model"]
+session_list = ", ".join(orchestrator_sessions)
+
 Task(
     subagent_type="general-purpose",
     model="haiku",
-    run_in_background=False,  # BLOCKING - keeps session alive
-    description=f"Blocking monitor for {orchestrator_session}",
-    prompt=f"""You are monitoring orchestrator session: {orchestrator_session}
+    run_in_background=False,  # BLOCKING - keeps System 3 alive
+    description="Blocking watcher for all orchestrators",
+    prompt=f'''You are monitoring these orchestrators: {session_list}
 
 ## Your Mission
-Monitor the orchestrator continuously until it completes or needs intervention.
-Report back to System 3 (this thread) when ANY of these occur:
+Poll all orchestrators periodically. Report back to System 3 IMMEDIATELY when ANY orchestrator:
+1. **COMPLETE**: Signals work is done
+2. **BLOCKED**: Stuck on same issue for >10 minutes
+3. **NEEDS_INPUT**: Waiting for user/System3 guidance
+4. **OFF_COURSE**: Modifying files outside scope or repeating actions
+5. **ERROR**: Same error repeated 3+ times
 
-### Report Immediately When:
-1. **COMPLETION**: Orchestrator signals work is done
-2. **BLOCKED >15 min**: Orchestrator stuck on same issue
-3. **LOOP DETECTED**: Same actions repeated 3+ times without progress
-4. **GUIDANCE NEEDED**: Orchestrator explicitly requests user input
-5. **SCOPE CREEP**: Files modified outside declared scope
-6. **ERROR SPIRAL**: Same error repeated 3+ times
+## Monitoring Commands
+Check each orchestrator every 2-3 minutes:
 
-### Monitoring Commands
 ```bash
-# Check recent output every 2-3 minutes
-tmux capture-pane -t {orchestrator_session} -p | tail -80
+# Check orch-live-form-ui
+echo "=== LIVE FORM UI ===" && tmux capture-pane -t "orch-live-form-ui" -p | tail -45
 
-# Check beads progress
-bd list --status=in_progress
-bd list --status=closed | tail -10
+# Check orch-employer-data-model
+echo "=== EMPLOYER DATA MODEL ===" && tmux capture-pane -t "orch-employer-data-model" -p | tail -45
 ```
 
-### Progress Indicators (Good Signs)
+Also check beads progress:
+```bash
+bd list --status=in_progress
+bd list --status=closed | tail -5
+```
+
+## Progress Indicators (Good Signs)
 - Tasks being closed (`bd close`)
 - Files being edited matching scope
 - Tests being run
 - Commits being made
 
-### Red Flags (Report Immediately)
+## Red Flags (Report Immediately)
 - "I'm stuck", "blocked", "need help", "waiting for"
 - Same file edited >5 times without commit
 - No activity for >10 minutes
 - Repeated errors in output
 - Questions directed at user without response
 
-### Report Format
-When reporting back, use this structure:
+## Report Format
+When ANY orchestrator needs attention:
 ```
-STATUS: [COMPLETE|BLOCKED|LOOP|NEEDS_GUIDANCE|SCOPE_CREEP|ERROR]
-ORCHESTRATOR: {orchestrator_session}
+STATUS: [COMPLETE|BLOCKED|NEEDS_INPUT|OFF_COURSE|ERROR]
+ORCHESTRATOR: [which one]
 SUMMARY: [What happened]
-LAST_ACTIVITY: [What the orchestrator was doing]
+LAST_ACTIVITY: [What it was doing]
 RECOMMENDED_ACTION: [What System 3 should do]
 ```
 
+## Important
+- Report as soon as ONE orchestrator needs attention (don't wait for all)
+- Include which specific orchestrator needs help
+- System 3 will send guidance and may relaunch you to continue watching
+
 Begin monitoring now. Check every 2-3 minutes.
-"""
+'''
 )
 ```
 
-**Example usage in System 3:**
-```
-System 3: "This is a multi-hour homepage redesign initiative.
-          Spawning blocking Haiku monitor to keep session active
-          and report when orchestrator completes or needs guidance."
+#### Why This Pattern Works
 
-[Spawns blocking Task - session stays active]
-[...time passes...]
-[Monitor reports: STATUS: BLOCKED, orchestrator needs design clarification]
+| Component | Role | Model | Blocking? |
+|-----------|------|-------|-----------|
+| validation-agent monitors | Deep validation, complex checks, exit discipline | Sonnet | No (background) |
+| Haiku watcher | Fast polling, session keep-alive, first-to-report | Haiku | Yes (blocking) |
 
-System 3: "Providing guidance to orchestrator..."
-[Sends message via tmux or message bus]
-```
+**Benefits:**
+- System 3 stays alive (blocking Haiku watcher)
+- Scalable to N orchestrators (one watcher monitors all)
+- Immediate intervention when any orchestrator needs help
+- Deep validation runs in parallel (Sonnet monitors with proper exit discipline)
 
-**MANDATORY for >1 hour initiatives**: Always spawn this blocking monitor after the orchestrator is launched. Without it, System 3 may idle and trigger the stop hook prematurely.
+### Model Selection for Monitors
 
-### Check-In Cadence
-- Every 30-45 minutes for active orchestrators
-- Use Haiku sub-agent with `run_in_background=True`
-- Check tmux pane output for progress indicators
+| Monitor Type | Model | Reason |
+|--------------|-------|--------|
+| validation-agent --mode=monitor | **Sonnet** | Exit discipline required - Haiku keeps working instead of returning |
+| Blocking watcher | **Haiku** | Simple polling task, fast and cheap, exit discipline not critical |
+
+**Why not Haiku for validation-agent?** Testing (2026-01-25) showed:
+- ✅ Haiku validated correctly (5 tests passed)
+- ❌ Haiku failed to EXIT - kept writing documentation
+- ✅ Sonnet returned promptly: "MONITOR_COMPLETE: Task #15 validated"
 
 ### tmux Monitoring Techniques
 

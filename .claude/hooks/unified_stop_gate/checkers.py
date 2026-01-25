@@ -311,6 +311,10 @@ class CompletionPromiseChecker:
         # orch-live-form-ui -> PRD-LIVE-FORM-UI
         prd_name = first_orch.replace('orch-', 'PRD-').upper().replace('-', '-')
 
+        # Build orchestrator session list for code examples
+        orch_sessions = [p['owner'] for p in orch_promises[:5]]
+        orch_sessions_str = str(orch_sessions)
+
         return f"""
 
 ## Orchestrator Work in Progress
@@ -318,15 +322,27 @@ class CompletionPromiseChecker:
 The following orchestrators are actively working:
 {orch_list}
 
-**To monitor progress**, launch a blocking validation-agent:
+**Recommended: Dual-Layer Monitoring Pattern**
 
+1. **Background validation-agents** (one per orchestrator, Sonnet for exit discipline):
+```python
+for orch in {orch_sessions_str}:
+    Task(
+        subagent_type="validation-agent",
+        model="sonnet",
+        run_in_background=True,
+        prompt=f"--mode=monitor --session-id={{orch}} --task-list-id={prd_name}"
+    )
+```
+
+2. **ONE blocking Haiku watcher** for ALL orchestrators (keeps session alive):
 ```python
 Task(
-    subagent_type="validation-agent",
-    model="sonnet",
-    run_in_background=False,  # BLOCKING - wakes you when orchestrator completes
-    description="Monitor orchestrator {first_orch}",
-    prompt="--mode=monitor --session-id={first_orch} --task-list-id={prd_name}"
+    subagent_type="general-purpose",
+    model="haiku",
+    run_in_background=False,  # BLOCKING - keeps session alive
+    description="Blocking watcher for all orchestrators",
+    prompt="Monitor {orch_sessions_str}, report when any needs attention"
 )
 ```
 
