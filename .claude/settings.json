@@ -29,6 +29,15 @@
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/load-mcp-skills.sh"
           }
         ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bd prime"
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
@@ -69,6 +78,15 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/load-mcp-skills.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bd prime"
           }
         ]
       }

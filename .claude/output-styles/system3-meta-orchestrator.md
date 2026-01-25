@@ -604,18 +604,33 @@ tmux send-keys -t worker Enter
 
 **Canonical Location**: See `Skill("system3-orchestrator")` for the complete spawn workflow including:
 - tmux session creation with worktree directory
-- CLAUDE_SESSION_DIR and CLAUDE_SESSION_ID setup
+- Environment variables (CLAUDE_SESSION_DIR, CLAUDE_SESSION_ID, CLAUDE_CODE_TASK_LIST_ID)
 - launchcc with proper Enter pattern
 - Assignment prompt injection
 
 **🚨 CRITICAL Requirements for Orchestrator Initialization**:
 
-1. **CLAUDE_SESSION_DIR** must be set BEFORE launching Claude Code - enables session isolation for completion state (format: `[initiative]-$(date +%Y%m%d)`)
-2. **CLAUDE_SESSION_ID** must be set BEFORE launching Claude Code - enables message bus detection
-3. **`/output-style orchestrator`** must be invoked as the VERY FIRST action in the assignment prompt (loads orchestrator behavior patterns)
-4. **Skill("orchestrator-multiagent")** must be invoked IMMEDIATELY AFTER output style (loads coordination patterns)
-5. **Message bus registration** must happen after skill invocation
-6. **Background monitor** should be spawned for real-time message detection
+**Environment Variables (ALL THREE REQUIRED - set BEFORE launching Claude Code):**
+```bash
+# 1. Session isolation for completion state
+tmux send-keys -t "orch-[name]" "export CLAUDE_SESSION_DIR=[initiative]-$(date +%Y%m%d)"
+tmux send-keys -t "orch-[name]" Enter
+
+# 2. Message bus detection
+tmux send-keys -t "orch-[name]" "export CLAUDE_SESSION_ID=orch-[name]"
+tmux send-keys -t "orch-[name]" Enter
+
+# 3. 🚨 TASK LIST ID - enables shared task tracking with validation monitors
+tmux send-keys -t "orch-[name]" "export CLAUDE_CODE_TASK_LIST_ID=PRD-[prd-name]"
+tmux send-keys -t "orch-[name]" Enter
+```
+
+**After Environment Variables Are Set:**
+1. Launch Claude Code with `ccorch` (or `launchcc`)
+2. **`/output-style orchestrator`** must be invoked as the VERY FIRST action in the assignment prompt (loads orchestrator behavior patterns)
+3. **Skill("orchestrator-multiagent")** must be invoked IMMEDIATELY AFTER output style (loads coordination patterns)
+4. **Message bus registration** must happen after skill invocation
+5. **Background monitor** should be spawned for real-time message detection
 
 **Full Template**: See `.claude/skills/orchestrator-multiagent/ORCHESTRATOR_INITIALIZATION_TEMPLATE.md`
 

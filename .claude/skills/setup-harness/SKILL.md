@@ -152,14 +152,14 @@ fi
 # NOTE: validation/ IS copied (contains validation configs)
 # NOTE: scripts/completion-state/ and scripts/message-bus/ MUST be copied (CLI tools)
 # NOTE: Top-level message-bus/ and completion-state/ are RUNTIME dirs (excluded)
+# IMPORTANT: Use leading slash (/) to match ONLY top-level directories, not nested ones
 rsync -av --delete \
-    --include='scripts/***' \
-    --exclude='state/*' \
-    --exclude='completion-state/' \
-    --exclude='progress/*' \
-    --exclude='worker-assignments/*' \
-    --exclude='message-bus/' \
-    --exclude='logs/' \
+    --exclude='/state/*' \
+    --exclude='/completion-state/' \
+    --exclude='/progress/*' \
+    --exclude='/worker-assignments/*' \
+    --exclude='/message-bus/' \
+    --exclude='/logs/' \
     --exclude='*.log' \
     --exclude='.DS_Store' \
     --exclude='__pycache__/' \
@@ -338,7 +338,7 @@ To update harness later:
 - `skills/` - All skill definitions
 - `hooks/` - Lifecycle hooks
 - `output-styles/` - Agent behavior definitions
-- `scripts/` - CLI utilities
+- `scripts/` - CLI utilities (includes `scripts/completion-state/` and `scripts/message-bus/`)
 - `commands/` - Slash commands
 - `schemas/` - JSON schemas
 - `tests/` - Hook tests
@@ -348,6 +348,8 @@ To update harness later:
 - `validation/` - Validation agent configs
 - `learnings/` - Multi-agent coordination guides (coordination.md, decomposition.md, failures.md)
 - `TM_COMMANDS_GUIDE.md` - Task Master reference
+
+**Note**: `scripts/completion-state/` (cs-* CLI tools) and `scripts/message-bus/` (mb-* CLI tools) are COPIED because they are CLI utilities, not runtime data. The TOP-LEVEL `completion-state/` and `message-bus/` directories are excluded because those contain runtime state.
 
 ### Excluded (runtime, gitignored)
 - `state/*` - Runtime state files (directory kept with .gitkeep)
