@@ -163,7 +163,7 @@ EOF
 
 The script automatically:
 - Creates `.claude` and `.beads` symlinks
-- Sets `CLAUDE_SESSION_DIR` and `CLAUDE_SESSION_ID`
+- Sets `CLAUDE_SESSION_DIR`, `CLAUDE_SESSION_ID`, and `CLAUDE_CODE_TASK_LIST_ID`
 - Launches Claude Code with proper tmux patterns
 - Updates orchestrator registry
 
@@ -185,6 +185,8 @@ tmux send-keys -t "orch-[name]" Enter
 tmux send-keys -t "orch-[name]" "export CLAUDE_SESSION_DIR=[initiative]-$(date +%Y%m%d)"
 tmux send-keys -t "orch-[name]" Enter
 tmux send-keys -t "orch-[name]" "export CLAUDE_SESSION_ID=orch-[name]"
+tmux send-keys -t "orch-[name]" Enter
+tmux send-keys -t "orch-[name]" "export CLAUDE_CODE_TASK_LIST_ID=PRD-[prd-name]"
 tmux send-keys -t "orch-[name]" Enter
 
 # 5. Launch Claude Code with ccorch (Enter MUST be separate!)
@@ -399,6 +401,74 @@ tmux send-keys -t "orch-[name]" "[rescue instructions]"
 tmux send-keys -t "orch-[name]" Enter
 ```
 
+### First-to-Finish Blocking Monitor (Multi-Orchestrator)
+
+When running multiple orchestrators in parallel and you want to wait for ANY one to complete (not all), use a **blocking** subagent:
+
+```python
+Task(
+    subagent_type="general-purpose",
+    model="sonnet",  # Sonnet for exit discipline
+    run_in_background=False,  # BLOCKING - waits for completion
+    description="Wait for first orchestrator to complete",
+    prompt="""
+## Mission
+Poll multiple orchestrator tmux sessions. Return immediately when EITHER completes.
+
+## Orchestrators
+| Session | Epic | PRD |
+|---------|------|-----|
+| `orch-{name-1}` | {epic-id-1} | PRD-{prd-1} |
+| `orch-{name-2}` | {epic-id-2} | PRD-{prd-2} |
+
+## Polling Loop (every 60 seconds)
+
+### Step 1: Check if sessions still exist
+```bash
+tmux has-session -t "orch-{name-1}" 2>/dev/null && echo "{name-1}:running" || echo "{name-1}:ended"
+tmux has-session -t "orch-{name-2}" 2>/dev/null && echo "{name-2}:running" || echo "{name-2}:ended"
+```
+
+### Step 2: Check epic status
+```bash
+bd show {epic-id-1} --brief | grep status
+bd show {epic-id-2} --brief | grep status
+```
+
+### Step 3: If still running, sleep and repeat
+```bash
+sleep 60
+```
+
+## Completion Criteria (return when ANY is true)
+- tmux session ended
+- Epic status = "closed"
+- All child tasks of epic have status = "closed"
+
+## Return Format
+```
+FIRST_COMPLETE: {session-name}
+Epic: {epic-id}
+Other: {remaining-session} still running
+```
+
+## Timeout
+Max iterations: 120 (2 hours). On timeout:
+```
+MONITOR_TIMEOUT: Neither completed in 2 hours
+```
+"""
+)
+```
+
+**When to use blocking vs background:**
+| Scenario | Pattern |
+|----------|---------|
+| System 3 has other work to do | Background monitors |
+| System 3 should wait for results | Blocking first-to-finish |
+| Need to validate work incrementally | Background with cyclic re-launch |
+| Racing multiple approaches | Blocking first-to-finish |
+
 ---
 
 ## POST-COMPLETION CHECKLIST
@@ -542,9 +612,15 @@ Maintain active orchestrators in `.claude/state/active-orchestrators.json`:
 
 ---
 
-**Version**: 3.1.0
+**Version**: 3.2.0
 **Dependencies**: worktree-manager-skill, orchestrator-multiagent, tmux, Hindsight MCP
 **Theory**: Sophia (arXiv:2512.18202), Hindsight (arXiv:2512.12818)
+
+**v3.2.0 Changes**:
+- Added `CLAUDE_CODE_TASK_LIST_ID` inline in spawn sequence (step 4)
+- Added "First-to-Finish Blocking Monitor" pattern for multi-orchestrator scenarios
+- Polling-based monitor returns on ANY completion (not all)
+- Clear decision matrix: blocking vs background monitoring
 
 **v3.1.0 Changes**:
 - **BREAKING**: Use `ccorch` instead of `launchcc` for spawning orchestrators
