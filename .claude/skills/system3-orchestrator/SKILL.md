@@ -403,71 +403,104 @@ tmux send-keys -t "orch-[name]" Enter
 
 ### First-to-Finish Blocking Monitor (Multi-Orchestrator)
 
-When running multiple orchestrators in parallel and you want to wait for ANY one to complete (not all), use a **blocking** subagent:
+When running multiple orchestrators in parallel and you want to wait for ANY one to complete, use the **shared TaskList** for coordination.
+
+#### Step 1: Create Tracking Tasks (Before Spawning Monitors)
+
+```python
+# Create tracking tasks for each orchestrator
+TaskCreate(
+    subject="Monitor orch-live-form-ui",
+    description="Tracking task for validation-agent monitoring orch-live-form-ui",
+    activeForm="Monitoring orch-live-form-ui"
+)
+# Returns task ID, e.g., #16
+
+TaskCreate(
+    subject="Monitor orch-employer-data-model",
+    description="Tracking task for validation-agent monitoring orch-employer-data-model",
+    activeForm="Monitoring orch-employer-data-model"
+)
+# Returns task ID, e.g., #17
+```
+
+#### Step 2: Instruct Validation-Agents to Update Tasks
+
+Include in monitor prompt:
+
+```python
+Task(
+    subagent_type="validation-agent",
+    model="sonnet",
+    run_in_background=True,
+    description="Monitor orch-live-form-ui",
+    prompt=f"""
+    --mode=monitor --session-id=orch-live-form-ui --task-list-id=PRD-LIVE-FORM-UI
+
+    CRITICAL: When you complete (for ANY reason), update the tracking task:
+    TaskUpdate(taskId="{monitor_task_id}", status="completed")
+
+    This allows System 3 to detect your completion via TaskList.
+    """
+)
+```
+
+#### Step 3: Blocking Watcher Polls TaskList
 
 ```python
 Task(
     subagent_type="general-purpose",
-    model="sonnet",  # Sonnet for exit discipline
-    run_in_background=False,  # BLOCKING - waits for completion
-    description="Wait for first orchestrator to complete",
+    model="haiku",  # Haiku is fine for simple polling
+    run_in_background=False,  # BLOCKING - System 3 waits here
+    description="Wait for first monitor to complete",
     prompt="""
 ## Mission
-Poll multiple orchestrator tmux sessions. Return immediately when EITHER completes.
+Poll TaskList until ANY validation-agent monitor task completes.
 
-## Orchestrators
-| Session | Epic | PRD |
-|---------|------|-----|
-| `orch-{name-1}` | {epic-id-1} | PRD-{prd-1} |
-| `orch-{name-2}` | {epic-id-2} | PRD-{prd-2} |
+## Tracking Tasks
+| Task ID | Orchestrator |
+|---------|--------------|
+| #16 | orch-live-form-ui |
+| #17 | orch-employer-data-model |
 
-## Polling Loop (every 60 seconds)
+## Polling Loop (every 10 seconds)
 
-### Step 1: Check if sessions still exist
-```bash
-tmux has-session -t "orch-{name-1}" 2>/dev/null && echo "{name-1}:running" || echo "{name-1}:ended"
-tmux has-session -t "orch-{name-2}" 2>/dev/null && echo "{name-2}:running" || echo "{name-2}:ended"
-```
-
-### Step 2: Check epic status
-```bash
-bd show {epic-id-1} --brief | grep status
-bd show {epic-id-2} --brief | grep status
-```
-
-### Step 3: If still running, sleep and repeat
-```bash
-sleep 60
-```
-
-## Completion Criteria (return when ANY is true)
-- tmux session ended
-- Epic status = "closed"
-- All child tasks of epic have status = "closed"
+1. Call TaskList to get all tasks
+2. Check tasks #16 and #17 for status="completed"
+3. If ANY is completed → return immediately with details
+4. If none completed → sleep 10 seconds, repeat
 
 ## Return Format
 ```
-FIRST_COMPLETE: {session-name}
-Epic: {epic-id}
-Other: {remaining-session} still running
+FIRST_COMPLETE: #16
+Orchestrator: orch-live-form-ui
+Remaining: #17 (orch-employer-data-model) still in_progress
 ```
 
 ## Timeout
-Max iterations: 120 (2 hours). On timeout:
+Max iterations: 720 (2 hours at 10s intervals). On timeout:
 ```
-MONITOR_TIMEOUT: Neither completed in 2 hours
+MONITOR_TIMEOUT: No monitors completed in 2 hours
 ```
 """
 )
 ```
 
+#### Why This Pattern Works
+
+1. **Shared TaskList** - All subagents share `CLAUDE_CODE_TASK_LIST_ID`
+2. **Real-time updates** - TaskUpdate propagates immediately
+3. **Simple polling** - Haiku can do this (just TaskList + sleep)
+4. **No external dependencies** - No tmux/beads polling needed
+5. **Built-in coordination** - Uses Claude Code's native task system
+
 **When to use blocking vs background:**
 | Scenario | Pattern |
 |----------|---------|
-| System 3 has other work to do | Background monitors |
-| System 3 should wait for results | Blocking first-to-finish |
+| System 3 has other work to do | Background monitors only |
+| System 3 should wait for results | Blocking watcher + background monitors |
 | Need to validate work incrementally | Background with cyclic re-launch |
-| Racing multiple approaches | Blocking first-to-finish |
+| Racing multiple approaches | Blocking watcher + background monitors |
 
 ---
 
@@ -618,9 +651,10 @@ Maintain active orchestrators in `.claude/state/active-orchestrators.json`:
 
 **v3.2.0 Changes**:
 - Added `CLAUDE_CODE_TASK_LIST_ID` inline in spawn sequence (step 4)
-- Added "First-to-Finish Blocking Monitor" pattern for multi-orchestrator scenarios
-- Polling-based monitor returns on ANY completion (not all)
-- Clear decision matrix: blocking vs background monitoring
+- Added "First-to-Finish Blocking Monitor" pattern using shared TaskList
+- Validation-agents update tracking tasks on completion (TaskUpdate)
+- Blocking watcher polls TaskList (not tmux/beads) for simplicity
+- Uses Claude Code's native task system for cross-subagent coordination
 
 **v3.1.0 Changes**:
 - **BREAKING**: Use `ccorch` instead of `launchcc` for spawning orchestrators
