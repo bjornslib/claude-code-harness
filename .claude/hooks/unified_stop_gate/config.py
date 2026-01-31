@@ -32,6 +32,11 @@ class EnvironmentConfig:
         """Check if this is an orchestrator session (session ID starts with 'orch-')."""
         return bool(self.session_id and self.session_id.startswith("orch-"))
 
+    @property
+    def is_system3(self) -> bool:
+        """Check if this is a System 3 meta-orchestrator session (session ID starts with 'system3-')."""
+        return bool(self.session_id and self.session_id.startswith("system3-"))
+
     @classmethod
     def from_env(cls) -> 'EnvironmentConfig':
         """Create configuration from environment variables.
@@ -81,6 +86,7 @@ class Priority(IntEnum):
     P2_BEADS_SYNC = 2           # data integrity - BLOCK if dirty
     P2_5_ORCHESTRATOR_GUIDANCE = 25  # orchestrator blocker escalation - BLOCK
     P3_TODO_CONTINUATION = 3    # momentum - BLOCK if missing
+    P3_5_SYSTEM3_JUDGE = 35     # System 3 continuation evaluation - BLOCK if premature
     P4_GIT_STATUS = 4           # advisory - WARN only
     P5_BUSINESS_OUTCOMES = 5    # focused mode - BLOCK if enforced
 

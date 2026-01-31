@@ -6,7 +6,8 @@
 #   2. Orchestrator Guidance: BLOCKS orch-* sessions with unescalated blockers
 #   3. Beads Sync Check: BLOCKS if .beads/ has uncommitted changes
 #   4. Todo Continuation Check: BLOCKS if no continuation todo exists
-#   5. Work Available: INFORMS about priority-ordered work (NEVER blocks)
+#   5. System 3 Judge: BLOCKS system3-* sessions if Haiku judge says continue
+#   6. Work Available: INFORMS about priority-ordered work (NEVER blocks)
 #
 # Changes from v2:
 #   - Removed momentum check blocking (user intent: inform, don't block)
@@ -25,6 +26,9 @@ CS_VERIFY="$PROJECT_ROOT/.claude/scripts/completion-state/cs-verify"
 
 # Read JSON from stdin (Claude Code passes context)
 INPUT=$(cat)
+
+# Export for Python subprocesses (needed by SessionInfo.from_hook_input)
+export CLAUDE_HOOK_INPUT="$INPUT"
 
 SESSION_ID="${CLAUDE_SESSION_ID:-}"
 
@@ -156,22 +160,29 @@ To proceed:
 fi
 
 # --- Step 4: Todo Continuation Check ---
-# Ensure at least one continuation todo exists (Momentum Maintenance Protocol)
+# Ensure at least one pending/in_progress task exists (Momentum Maintenance Protocol)
+# Uses the Claude Code Task primitive: ~/.claude/tasks/{CLAUDE_CODE_TASK_LIST_ID}/*.json
 
 HAS_CONTINUATION=false
 
-if command -v jq &>/dev/null; then
-    # Check most recent todo file for continuation items
-    TODOS_DIR="$HOME/.claude/todos"
-    if [ -d "$TODOS_DIR" ]; then
-        LATEST_TODO=$(ls -t "$TODOS_DIR"/*.json 2>/dev/null | head -1)
-        if [ -n "$LATEST_TODO" ]; then
-            # Check for items containing continuation keywords
-            if jq -r '.items[].description' "$LATEST_TODO" 2>/dev/null | grep -qiE 'bd ready|check for|next task|continuation|follow.*up|ask.*user|present.*option|seek.*feedback'; then
-                HAS_CONTINUATION=true
-            fi
+TASK_LIST_ID="${CLAUDE_CODE_TASK_LIST_ID:-}"
+
+if [ -z "$TASK_LIST_ID" ]; then
+    # No task list configured - skip check
+    HAS_CONTINUATION=true
+elif [ -d "$HOME/.claude/tasks/$TASK_LIST_ID" ]; then
+    # Check for any pending or in_progress tasks
+    for task_file in "$HOME/.claude/tasks/$TASK_LIST_ID"/*.json; do
+        [ -f "$task_file" ] || continue
+        task_status=$(jq -r '.status // ""' "$task_file" 2>/dev/null)
+        if [ "$task_status" = "pending" ] || [ "$task_status" = "in_progress" ]; then
+            HAS_CONTINUATION=true
+            break
         fi
-    fi
+    done
+else
+    # Task list directory doesn't exist - skip check
+    HAS_CONTINUATION=true
 fi
 
 if [ "$HAS_CONTINUATION" = false ]; then
@@ -195,7 +206,57 @@ To proceed:
     exit 0
 fi
 
-# --- Step 5: Work Available (INFORMATIONAL ONLY - NEVER BLOCKS) ---
+# --- Step 5: System 3 Continuation Judge (system3-* sessions only) ---
+# Uses Haiku 4.5 API call to evaluate if session should continue
+
+S3_MSG=""
+
+if [[ "$SESSION_ID" == system3-* ]]; then
+    TIMEOUT_CMD="timeout"
+    if command -v gtimeout &> /dev/null; then
+        TIMEOUT_CMD="gtimeout"
+    fi
+
+    S3_RESULT=$($TIMEOUT_CMD 8s python3 << 'S3_CHECK'
+import json
+import sys
+import os
+
+sys.path.insert(0, os.path.join(os.environ.get('CLAUDE_PROJECT_DIR', os.getcwd()), '.claude', 'hooks'))
+
+try:
+    from unified_stop_gate.system3_continuation_judge import System3ContinuationJudgeChecker
+    from unified_stop_gate.config import EnvironmentConfig
+    from unified_stop_gate.checkers import SessionInfo
+
+    hook_input = json.loads(os.environ.get('CLAUDE_HOOK_INPUT', '{}'))
+    config = EnvironmentConfig.from_env()
+    session = SessionInfo.from_hook_input(hook_input)
+    checker = System3ContinuationJudgeChecker(config, session)
+    result = checker.check()
+
+    print(json.dumps({"passed": result.passed, "message": result.message}))
+except Exception as e:
+    print(json.dumps({"passed": True, "message": f"System 3 judge error: {e}"}))
+S3_CHECK
+)
+    TIMEOUT_EXIT=$?
+    if [ $TIMEOUT_EXIT -eq 124 ]; then
+        echo "⚠️  System 3 judge timed out (8s), allowing stop" >&2
+        S3_RESULT='{"passed": true, "message": "Judge timed out, allowing stop"}'
+    fi
+
+    S3_PASSED=$(echo "$S3_RESULT" | jq -r '.passed // true')
+    # ALWAYS extract message (not just on block)
+    S3_MSG=$(echo "$S3_RESULT" | jq -r '.message // ""')
+
+    if [ "$S3_PASSED" = "false" ]; then
+        output_json "block" "reason" "$S3_MSG"
+        exit 0
+    fi
+fi
+
+# --- Step 6: Work Available (INFORMATIONAL ONLY - NEVER BLOCKS) ---
 # Show priority-ordered work, but always approve
 
 READY_WORK=""
@@ -207,6 +268,12 @@ fi
 
 # Build final message
 MSG_PARTS="✅ ${PROMISE_MESSAGE}"
+
+# Add System 3 judge result if present
+if [ -n "$S3_MSG" ]; then
+    MSG_PARTS="${MSG_PARTS}
+🧠 ${S3_MSG}"
+fi
 
 # Only show work section if there's actual work (not just "No open issues")
 if [ -n "$READY_WORK" ] && ! echo "$READY_WORK" | grep -q "No open issues"; then
