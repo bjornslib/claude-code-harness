@@ -22,6 +22,53 @@ from .config import CheckResult, EnvironmentConfig, Priority
 from .checkers import SessionInfo
 
 
+def _extract_json_object(text: str) -> str:
+    """Extract the outermost JSON object from text that may contain extra content.
+
+    Handles cases where Haiku returns JSON followed by explanatory text:
+        {"should_continue": true, ...}
+
+        Note: The session has properly...
+
+    Returns just the JSON substring between the first '{' and its matching '}'.
+    Raises ValueError if no valid JSON object structure is found.
+    """
+    start = text.find('{')
+    if start == -1:
+        raise ValueError("No '{' found in response text")
+
+    depth = 0
+    in_string = False
+    escape_next = False
+
+    for i in range(start, len(text)):
+        char = text[i]
+
+        if escape_next:
+            escape_next = False
+            continue
+
+        if char == '\\' and in_string:
+            escape_next = True
+            continue
+
+        if char == '"' and not escape_next:
+            in_string = not in_string
+            continue
+
+        if in_string:
+            continue
+
+        if char == '{':
+            depth += 1
+        elif char == '}':
+            depth -= 1
+            if depth == 0:
+                return text[start:i + 1]
+
+    raise ValueError(f"Unbalanced braces in response (depth={depth} at end)")
+
+
 # System prompt for the Haiku judge
 SYSTEM3_JUDGE_SYSTEM_PROMPT = """You are a session completion evaluator for a System 3 meta-orchestrator.
 
@@ -446,8 +493,14 @@ class System3ContinuationJudgeChecker:
                 clean_text = clean_text[:-3]
             clean_text = clean_text.strip()
 
+            # Extract just the JSON object (handles trailing text from Haiku)
+            try:
+                json_str = _extract_json_object(clean_text)
+            except ValueError as e:
+                raise Exception(f"Could not extract JSON from Haiku response: {e}")
+
             # Parse JSON response
-            judgment = json.loads(clean_text)
+            judgment = json.loads(json_str)
 
             # Validate required fields
             if 'should_continue' not in judgment:
