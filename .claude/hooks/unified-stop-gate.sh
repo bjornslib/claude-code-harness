@@ -294,6 +294,12 @@ fi
 # Build final message
 MSG_PARTS="✅ ${PROMISE_MESSAGE}"
 
+# Add Step 4 work-state context if available (even when passing)
+if [ -n "$STEP4_MSG" ]; then
+    MSG_PARTS="${MSG_PARTS}
+📊 ${STEP4_MSG}"
+fi
+
 # Add System 3 judge result if present
 if [ -n "$S3_MSG" ]; then
     MSG_PARTS="${MSG_PARTS}
