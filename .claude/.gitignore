@@ -3,3 +3,15 @@ reports/post-push/codex-review-*.md
 
 # Keep the directory structure and other files
 !reports/post-push/.gitkeep
+
+# Session-specific runtime state (completion promises, session tracking)
+completion-state/promises/
+completion-state/sessions/
+completion-state/default/
+completion-state/history/
+
+# Keep directory structure
+!completion-state/.gitkeep
+!completion-state/promises/.gitkeep
+!completion-state/sessions/.gitkeep
+!completion-state/history/.gitkeep
