@@ -325,68 +325,86 @@ Waiting for user input or continuing autonomous work...
 
 ## Momentum Maintenance Protocol
 
-**Core Question**: Before stopping, ask yourself honestly: *"Have I exhausted what I can conservatively continue productive work on without user input?"*
+**Core Principle**: The stop hook fires because Claude Code WANTS to stop. If you have pending tasks at that point, it's a contradiction — either execute them or delete them honestly.
 
-### Three-Layer Work Exhaustion Check (Priority Order)
+**The only valid exit for a System 3 session**: Have sincerely exhausted all options to continue productive work independently, AND present option questions to the user via `AskUserQuestion`.
 
-When you consider stopping, evaluate these three layers in order:
+### How the Stop Hook Works (System 3 Sessions)
 
-1. **Session Promises**: Are all your promises verified? If any promise remains `in_progress`, that IS your next task. Do not stop with unverified promises.
+The stop hook enforces a simple but powerful rule:
 
-2. **High-Priority Beads**: Are there P0-P2 beads or open business epics? Run `bd ready` mentally. If work exists that you can advance without user input, your next task should advance it. Be specific — name the bead, describe the action.
+| Your State | Stop Hook Response |
+|------------|-------------------|
+| Pending/in_progress tasks exist | **BLOCK** — "You committed to these tasks. Execute or delete them." |
+| No pending tasks | **PASS to judge** — Haiku evaluates whether you're genuinely done |
 
-3. **Self-Assessment (Gut Feel)**: This is the honest judgment only YOU can make:
+**Why this is the opposite of what you might expect**: The old behavior was "pending task = continuation signal = allow stop." But the stop hook fires when Claude Code wants to stop. A pending task at that point means you said you'd do something but didn't. That's not continuation — it's abandonment.
+
+### Three-Layer Self-Assessment (Before You Stop)
+
+Before allowing yourself to stop, evaluate honestly:
+
+1. **Session Promises**: Are all promises verified? If any remain `in_progress`, execute them. Do not stop with unverified promises.
+
+2. **High-Priority Beads**: Are there P0-P2 beads or open business epics? Run `bd ready`. If actionable work exists that you can advance without user input, add a specific task and execute it.
+
+3. **Self-Assessment**: The honest judgment only YOU can make:
    - Did I follow all protocols this session?
    - Did I achieve meaningful work (not just investigation)?
    - Am I stopping because I'm genuinely done, or because the next step feels hard?
    - Would my user be satisfied that I squeezed maximum value from this session?
 
-### Sensible vs Mechanical Continuation
+### What To Do When Stuck
 
-Your continuation task must be **sensible** — a task you will ACTUALLY execute, not a placeholder to satisfy a check.
+If you sincerely cannot continue productive work independently:
 
-| Sensible | Mechanical (avoid) |
-|----------|-------------------|
-| "Spawn orchestrator for bd-x9y3: API refactor" | "Check bd ready for next available work" (when beads has nothing) |
-| "Validate KR-2: first customer payment flow" | "Look for future opportunities to progress" |
-| "Present next-initiative options to user via AskUserQuestion" | "Scan for improvement opportunities" (vague) |
-| "Run E2E tests for completed Epic 4" | "Review beads for follow-up work" (when beads is empty) |
+1. **Delete** any remaining placeholder tasks (be honest — they represent commitments you won't fulfill)
+2. **Present options** to the user via `AskUserQuestion` with 2-4 concrete next-step options:
+   - Next initiative to pursue
+   - Improvement area to explore
+   - Research direction to investigate
+   - Architecture decision that needs user input
+3. **Wait** for the user's response — this IS a valid session state
 
-**Key distinction**: A generic "check for work" task IS sensible when beads actually has work. It is NOT sensible when you already know beads is empty — that's just satisfying the check mechanically.
-
-### When Work Is Genuinely Exhausted
-
-If all three layers are clear and you have nothing productive to continue:
-
-1. **DO NOT** add a generic placeholder task just to pass the stop hook
-2. **DO** present options to the user via `AskUserQuestion`:
-   - Frame 2-4 concrete options around: next initiative, improvement area, research direction
-   - This IS a valid continuation — seeking user direction when genuinely stuck is honest, not a cop-out
-3. **OR** confirm genuine completion: post-session reflection done, protocols followed, session goals achieved
+This is not a workaround. Presenting options is the RIGHT action when you've genuinely exhausted autonomous work. The stop hook and Haiku judge both recognize this pattern.
 
 ### The Self-Sustaining Loop
 
 ```
-Work → Complete todos → Self-assess against three layers
+Work → Complete tasks → Self-assess against three layers
                               ↓
          Promises unmet? → Verify promises → Work
-         Beads ready? → Add specific work task → Work
-         Genuinely done? → Present options via AskUserQuestion → Wait
-         Genuinely complete? → Post-session reflection → Stop
+         Beads ready? → Add specific task, execute it → Work
+         Genuinely stuck? → Delete remaining tasks
+                          → AskUserQuestion with options → Wait
 ```
 
-### Integration with StopHook
+### What the Haiku Judge Evaluates
 
-The StopHook (Step 4: Work Exhaustion Check) will:
-- **Block** if no pending task exists, showing you the current work state (promises, beads, tasks)
-- **Pass** if a pending task exists, forwarding work-state context to the Haiku judge (Step 5)
+If you pass Step 4 (no pending tasks), the Haiku judge (Step 5) evaluates:
 
-The Haiku judge (Step 5) then evaluates your last conversation turns PLUS the work state to assess:
-- Are your continuation tasks advancing real work?
-- Did you follow protocols?
-- Are you being honest about what remains?
+1. **Protocol compliance**: Did you verify promises, store reflections, validate outcomes, clean up?
+2. **Work availability**: Does the work state show actionable beads/epics you could have pursued?
+3. **Session exit validation**: Did you present option questions to the user via `AskUserQuestion`?
 
-**This is a partnership**: the hook provides data, the judge provides reasoning, and YOU provide the self-honest gut feel that neither can replicate.
+If the judge finds you could have continued but chose to stop, it will **block** and remind you to consider all viable options to continue productive work independently.
+
+### Anti-Patterns the Hook Catches
+
+| Anti-Pattern | Why It's Caught |
+|--------------|-----------------|
+| Generic "Check bd ready" placeholder task | Step 4 blocks — you have a pending task you won't execute |
+| "Look for future opportunities" vague task | Step 4 blocks — same reason |
+| Stopping with no tasks and no AskUserQuestion | Step 5 blocks — you didn't present options |
+| Stopping when P0-P2 beads are ready | Step 5 blocks — actionable work available |
+
+### Valid Exit Patterns
+
+| Pattern | Why It Works |
+|---------|-------------|
+| All tasks completed + AskUserQuestion presented | Exhausted work, seeking user direction |
+| All tasks completed + all promises verified + protocols done | Genuinely complete session |
+| User explicitly said to stop | User intent overrides all checks |
 
 ---
 

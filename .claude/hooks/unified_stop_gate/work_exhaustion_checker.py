@@ -1,17 +1,20 @@
-"""Work Exhaustion Checker - Gathers work state and guides System 3 intelligently.
+"""Work Exhaustion Checker - Gathers work state and enforces task completion.
 
-This checker replaces the rigid "does any pending Task exist?" check with one
-that ALSO gathers context about available work (promises, beads) and includes
-that context in its guidance messages.
+For System 3 sessions (system3-*):
+  Pending/in_progress tasks BLOCK the session from stopping. The stop hook
+  fires because Claude Code WANTS to stop — a pending task at that point is
+  a contradiction. Either execute the task or delete it honestly.
 
-The checker does NOT attempt to judge whether tasks are "sensible" — that is
-the job of the LLM (either System 3 itself via its output style, or the Haiku
-judge in Step 5). This checker is purely mechanical: gather data, check for
-tasks, and provide rich context when blocking.
+  The only valid exit for System 3 is to have exhausted all productive work
+  and presented option questions to the user via AskUserQuestion.
+
+For non-System 3 sessions:
+  Pending tasks indicate continuation intent — session is ALLOWED to stop
+  (current behavior preserved).
 
 Architecture:
-- Step 4 (this checker): Mechanical data gathering + task existence check
-- Step 5 (Haiku judge): LLM-based judgment using transcript + work state
+- Step 4 (this checker): Mechanical data gathering + task enforcement
+- Step 5 (Haiku judge): LLM-based judgment using transcript + ALL task states
 - Output style: Behavioral guidance for System 3's self-assessment
 """
 
@@ -21,7 +24,7 @@ import os
 import re
 import subprocess
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Dict
 
 from .config import CheckResult, EnvironmentConfig, Priority
 
@@ -45,9 +48,13 @@ class WorkState:
     open_business_epic_count: int = 0
     beads_summary: str = ""
 
-    # Task primitives
+    # Task primitives — unfinished (pending + in_progress)
     pending_task_count: int = 0
     task_subjects: list = field(default_factory=list)
+
+    # Task primitives — completed (for judge context)
+    completed_task_count: int = 0
+    completed_task_subjects: list = field(default_factory=list)
 
     @property
     def has_available_work(self) -> bool:
@@ -86,29 +93,40 @@ class WorkState:
         else:
             lines.append("Beads: no ready work")
 
-        # Tasks
+        # Unfinished tasks
         if self.pending_task_count > 0:
             subjects = "; ".join(f'"{s}"' for s in self.task_subjects[:3])
-            lines.append(f"Tasks: {self.pending_task_count} pending ({subjects})")
+            lines.append(f"Tasks: {self.pending_task_count} pending/in-progress ({subjects})")
         else:
             lines.append("Tasks: none pending")
+
+        # Completed tasks
+        if self.completed_task_count > 0:
+            subjects = "; ".join(f'"{s}"' for s in self.completed_task_subjects[:3])
+            lines.append(f"Completed: {self.completed_task_count} tasks done ({subjects})")
 
         return lines
 
     def format_for_judge(self) -> str:
         """Structured summary for the System 3 Haiku Judge (Step 5).
 
-        Provides factual context — the judge makes the judgment call.
+        Includes ALL task states so the judge can evaluate session completeness.
         """
         lines = ["WORK STATE (from Step 4):"]
         lines.extend(f"  {line}" for line in self.format_summary_lines())
         lines.append(f"  Work available: {'YES' if self.has_available_work else 'NO'}")
-        lines.append(f"  Has pending tasks: {'YES' if self.pending_task_count > 0 else 'NO'}")
+        lines.append(f"  Unfinished tasks: {'YES' if self.pending_task_count > 0 else 'NO'}")
 
+        # Show ALL task details for the judge
         if self.pending_task_count > 0:
-            lines.append("  Pending task subjects:")
+            lines.append("  UNFINISHED task subjects:")
             for subject in self.task_subjects[:5]:
-                lines.append(f"    - \"{subject}\"")
+                lines.append(f"    - [pending] \"{subject}\"")
+
+        if self.completed_task_count > 0:
+            lines.append("  COMPLETED task subjects:")
+            for subject in self.completed_task_subjects[:5]:
+                lines.append(f"    - [done] \"{subject}\"")
 
         if self.beads_summary:
             lines.append(f"  Beads detail: {self.beads_summary[:300]}")
@@ -117,13 +135,13 @@ class WorkState:
 
 
 class WorkExhaustionChecker:
-    """P3: Work-state-aware task continuation checker.
+    """P3: Work-state-aware task enforcement checker.
 
     Mechanical responsibilities:
     1. Gather work state from three sources (promises, beads, task primitives)
-    2. Check whether any pending/in_progress Task primitive exists
-    3. When blocking, include the gathered work state as rich guidance
-    4. Produce a work_state_summary for Step 5 (Haiku judge) to reason over
+    2. For System 3 sessions: BLOCK if unfinished tasks exist (must execute or delete)
+    3. For non-System 3: PASS if unfinished tasks exist (continuation signal)
+    4. Produce a work_state_summary for Step 5 (Haiku judge) with ALL task states
 
     What this checker does NOT do:
     - Judge whether a task is "sensible" (that's the LLM's job)
@@ -136,12 +154,17 @@ class WorkExhaustionChecker:
         self._work_state: Optional[WorkState] = None
 
     def check(self) -> CheckResult:
-        """Check for pending tasks and gather work-state context.
+        """Check task state and gather work-state context.
+
+        For System 3 sessions (system3-*):
+            pending/in_progress tasks → BLOCK (the stop hook fires because
+            Claude Code wants to stop — pending tasks are a contradiction)
+
+        For non-System 3 sessions:
+            pending/in_progress tasks → PASS (continuation signal, current behavior)
 
         Returns:
-            CheckResult with:
-            - passed=True if a pending/in_progress task exists (continuation present)
-            - passed=False if no pending task (blocks with work-state-enriched guidance)
+            CheckResult with work-state-enriched messages in all cases.
         """
         task_list_id = os.environ.get("CLAUDE_CODE_TASK_LIST_ID", "")
 
@@ -154,7 +177,7 @@ class WorkExhaustionChecker:
                 blocking=True,
             )
 
-        # Gather work state from all sources (for context, not for blocking decisions)
+        # Gather work state from all sources
         try:
             work_state = self._gather_work_state(task_list_id)
             self._work_state = work_state
@@ -163,11 +186,28 @@ class WorkExhaustionChecker:
             self._work_state = WorkState()
             work_state = self._work_state
 
-        # Core check: does a pending/in_progress task exist?
-        has_continuation = work_state.pending_task_count > 0
+        has_unfinished_tasks = work_state.pending_task_count > 0
 
-        if has_continuation:
-            # Task exists — pass, but include work state context for Step 5
+        # System 3 sessions: pending tasks BLOCK (must execute or delete)
+        if self.config.is_system3:
+            if has_unfinished_tasks:
+                return CheckResult(
+                    priority=Priority.P3_TODO_CONTINUATION,
+                    passed=False,
+                    message=self._format_system3_unfinished_block(work_state),
+                    blocking=True,
+                )
+            else:
+                # No unfinished tasks — pass with context for Step 5 (judge)
+                return CheckResult(
+                    priority=Priority.P3_TODO_CONTINUATION,
+                    passed=True,
+                    message=self._format_pass_message(work_state),
+                    blocking=True,
+                )
+
+        # Non-System 3 sessions: original behavior
+        if has_unfinished_tasks:
             return CheckResult(
                 priority=Priority.P3_TODO_CONTINUATION,
                 passed=True,
@@ -175,11 +215,10 @@ class WorkExhaustionChecker:
                 blocking=True,
             )
         else:
-            # No task — block with rich guidance including work state
             return CheckResult(
                 priority=Priority.P3_TODO_CONTINUATION,
                 passed=False,
-                message=self._format_block_message(work_state),
+                message=self._format_non_system3_block(work_state),
                 blocking=True,
             )
 
@@ -187,6 +226,7 @@ class WorkExhaustionChecker:
     def work_state_summary(self) -> str:
         """Structured work-state summary for Step 5 (System 3 Judge).
 
+        Includes ALL task states (pending, completed) for judge evaluation.
         Returns empty string if check() hasn't been called yet.
         """
         if self._work_state is None:
@@ -280,7 +320,12 @@ class WorkExhaustionChecker:
             pass
 
     def _gather_task_state(self, state: WorkState, task_list_id: str) -> None:
-        """Read Task primitive JSON files for pending/in_progress tasks."""
+        """Read ALL Task primitive JSON files — both unfinished and completed.
+
+        Unfinished tasks (pending/in_progress) drive the blocking decision.
+        Completed tasks are included for the Haiku judge to evaluate session
+        completeness.
+        """
         tasks_dir = Path.home() / ".claude" / "tasks" / task_list_id
 
         if not tasks_dir.exists():
@@ -293,10 +338,15 @@ class WorkExhaustionChecker:
                         task = json.load(f)
 
                     task_status = task.get("status", "")
+                    subject = task.get("subject", task.get("title", "untitled"))
+
                     if task_status in ("pending", "in_progress"):
                         state.pending_task_count += 1
-                        subject = task.get("subject", task.get("title", "untitled"))
                         state.task_subjects.append(subject)
+                    elif task_status == "completed":
+                        state.completed_task_count += 1
+                        state.completed_task_subjects.append(subject)
+                    # deleted tasks are ignored entirely
                 except (json.JSONDecodeError, OSError):
                     continue
         except OSError:
@@ -308,13 +358,49 @@ class WorkExhaustionChecker:
         """Pass message with work-state context (for Step 5 and system message)."""
         lines = state.format_summary_lines()
         summary = "\n".join(f"  {line}" for line in lines)
-        return f"Work exhaustion check: continuation task exists\n{summary}"
+        return f"Work exhaustion check: all tasks completed or none pending\n{summary}"
 
-    def _format_block_message(self, state: WorkState) -> str:
-        """Block message with rich work-state guidance.
+    def _format_system3_unfinished_block(self, state: WorkState) -> str:
+        """Block message for System 3 sessions with unfinished tasks.
 
-        The intelligence here is in WHAT CONTEXT we provide, not in making
-        judgment calls. We show System 3 the full picture and let it decide.
+        The stop hook fires because Claude Code WANTS to stop. Pending tasks
+        at that point are a contradiction — either execute them or delete them.
+        """
+        task_list = "\n".join(f'  - "{s}"' for s in state.task_subjects[:5])
+        lines = state.format_summary_lines()
+        work_summary = "\n".join(f"  {line}" for line in lines)
+
+        return f"""UNFINISHED TASKS - SESSION CANNOT STOP
+
+You have {state.pending_task_count} pending/in-progress task(s):
+{task_list}
+
+The stop hook fires because you want to end the session. But you have
+unfinished tasks — work you committed to doing.
+
+Current work state:
+{work_summary}
+
+REQUIRED ACTIONS (choose one):
+
+1. EXECUTE your pending tasks — they represent work you committed to.
+   Consider all viable options to continue productive work independently.
+
+2. DELETE tasks that are no longer relevant:
+   TaskUpdate(taskId="<id>", status="deleted")
+
+3. If you genuinely have no more productive work to do:
+   - Delete your pending tasks
+   - Use AskUserQuestion to present 2-4 next-step options to the user
+   - The session can stop after the user responds or you await their input
+
+Do NOT create placeholder tasks to satisfy this check.
+Tasks represent real commitments — execute them or be honest about deleting them."""
+
+    def _format_non_system3_block(self, state: WorkState) -> str:
+        """Block message for non-System 3 sessions with no tasks.
+
+        Original behavior: no pending task means no continuation intent.
         """
         lines = state.format_summary_lines()
         work_summary = "\n".join(f"  {line}" for line in lines)
@@ -329,20 +415,6 @@ There is available work but no pending continuation task. Before stopping,
 ask yourself: "Have I exhausted what I can conservatively continue productive
 work on without user input?"
 
-Three-layer self-assessment (in priority order):
-1. SESSION PROMISES: Are all promises verified? If not, that is your next task.
-2. HIGH-PRIORITY BEADS: Are there P0-P2 beads or open business epics above?
-   If yes, your next task should advance one of them.
-3. SELF-ASSESSMENT: Did you follow protocols? Did you achieve session goals?
-   Are you being honest with yourself about what remains?
-
-If you CAN continue productively:
-  Add a specific continuation task that advances the available work.
-
-If you GENUINELY need user input to decide direction:
-  Use AskUserQuestion to present 2-4 concrete options to the user.
-  This is a valid and sensible action — not a cop-out.
-
 To proceed: Add a continuation task, then try stopping again."""
         else:
             return f"""NO CONTINUATION TASK - NO AVAILABLE WORK
@@ -350,21 +422,6 @@ To proceed: Add a continuation task, then try stopping again."""
 Current work state:
 {work_summary}
 
-No promises, no ready beads, no open business epics. Before stopping,
-ask yourself: "Have I genuinely completed my session goals and followed
-all protocols?"
+No promises, no ready beads, no open business epics.
 
-Before stopping, either:
-1. PRESENT OPTIONS to the user via AskUserQuestion:
-   - What should the next session focus on?
-   - Are there improvement areas to explore?
-   - Should we start a new initiative?
-   This counts as a valid continuation task.
-
-2. CONFIRM GENUINE COMPLETION by adding a brief completion task:
-   - Post-session reflection stored to Hindsight?
-   - All protocols followed?
-   - Session goals achieved?
-
-To proceed: Add a continuation task (even an AskUserQuestion-based one),
-then try stopping again."""
+To proceed: Add a continuation task or confirm completion, then try stopping again."""

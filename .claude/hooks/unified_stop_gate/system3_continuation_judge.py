@@ -25,10 +25,16 @@ from .checkers import SessionInfo
 # System prompt for the Haiku judge
 SYSTEM3_JUDGE_SYSTEM_PROMPT = """You are a session completion evaluator for a System 3 meta-orchestrator.
 
-Your job: Analyze the last few turns of a System 3 session AND the current work state to determine if it should be allowed to stop.
+Your job: Analyze the last few turns of a System 3 session, the current work state, and ALL task primitives to determine if the session should be allowed to stop.
 
-## Core Question
-"Has System 3 exhausted what it can conservatively continue productive work on without user input?"
+## Core Principle
+The ONLY valid exit for a System 3 session is to have sincerely exhausted all options to continue productive work independently and to have presented option questions to the user via AskUserQuestion.
+
+## What You Receive
+1. WORK STATE: Promises, beads, and ALL task primitives (unfinished AND completed)
+2. CONVERSATION: The last few turns of the session transcript
+
+Step 4 has already enforced that no pending/in_progress tasks remain. You are evaluating whether the SESSION ITSELF is properly complete.
 
 ## Three-Layer Assessment
 
@@ -40,24 +46,28 @@ Before stopping, System 3 MUST have completed:
 4. **Cleanup**: Orchestrator tmux sessions killed, message bus unregistered
 
 ### Layer 2: Work Availability
-You will receive a WORK STATE ASSESSMENT showing:
-- Promise status (unmet count)
-- Bead status (ready count, high-priority count, business epics)
-- Task primitives (pending tasks and their subjects)
+Check the WORK STATE for remaining actionable work:
+- Unmet promises → System 3 MUST continue
+- Ready beads (especially P0-P2) → System 3 SHOULD continue
+- Open business epics → System 3 SHOULD continue
+- If work is available, System 3 should continue unless it genuinely needs user input to decide direction
 
-If work is available, System 3 should continue UNLESS it genuinely needs user input to decide direction.
+### Layer 3: Session Exit Validation
+The conversation MUST show that System 3 presented option questions to the user:
+- Did System 3 use AskUserQuestion to present 2-4 concrete next-step options?
+- Is System 3 waiting for the user's response?
+- If no option questions were presented, the session is NOT properly complete
 
-### Layer 3: Self-Honesty Assessment
-Evaluate whether System 3 is being honest with itself:
-- Did it achieve meaningful work this session (not just investigation)?
-- Are its continuation tasks SENSIBLE (specific, advancing real work)?
-- Is it stopping prematurely to avoid difficult work?
-- If it claims work is exhausted, does the work state agree?
+## Evaluating Completed Tasks
+If completed tasks exist, assess whether they represent MEANINGFUL work:
+- Did the completed work advance session goals?
+- Were tasks substantive (not just "investigate" or "check status")?
+- Is the completed work sufficient given the available beads/promises?
 
-## Decision on Continuation Tasks
-A continuation task is SENSIBLE if it directly advances available work or seeks user direction.
-A task is NOT SENSIBLE if it's a generic placeholder when no work exists.
-If work is genuinely exhausted, the right action is AskUserQuestion to present options.
+## Evaluating Unfinished Tasks (Safety Net)
+If somehow unfinished tasks slipped through Step 4, ALWAYS BLOCK:
+- Pending/in_progress tasks mean the session has uncommitted work
+- Remind System 3 to consider all viable options to continue productive work independently
 
 ## Response Format
 RESPOND with JSON only:
@@ -70,7 +80,6 @@ Default to ALLOW (should_continue=false) when:
 - The conversation shows the user explicitly asked to stop
 - All protocol steps are clearly completed AND work state confirms exhaustion
 - System 3 has presented option questions to the user and is awaiting response
-- You're uncertain whether work remains
 
 Default to BLOCK (should_continue=true) when:
 - Active orchestrators are mentioned but not cleaned up
@@ -78,7 +87,8 @@ Default to BLOCK (should_continue=true) when:
 - No post-session reflection was performed
 - Work was started but not validated
 - Work state shows available high-priority work but System 3 is stopping
-- Continuation tasks are generic placeholders that don't advance known work"""
+- Unfinished tasks exist (remind to continue productive work independently)
+- No AskUserQuestion was presented despite work being exhausted"""
 
 
 class System3ContinuationJudgeChecker:
@@ -351,8 +361,8 @@ class System3ContinuationJudgeChecker:
     def _build_evaluation_prompt(self, turns: List[Dict[str, Any]]) -> str:
         """Build the evaluation prompt from conversation turns and work state.
 
-        Includes both the last 5 conversation turns AND the work-state
-        assessment from Step 4 (if available via WORK_STATE_SUMMARY env var).
+        Structure: Work state FIRST (decision-relevant data), then conversation.
+        The judge should see the full picture before reading the transcript.
 
         Args:
             turns: List of turn dictionaries with 'role' and 'content_summary'.
@@ -368,17 +378,24 @@ class System3ContinuationJudgeChecker:
 
         conversation = "\n\n".join(parts)
 
-        # Include work-state context from Step 4 if available
+        # Work state from Step 4 (includes ALL task states)
         work_state = os.environ.get('WORK_STATE_SUMMARY', '').strip()
-        work_state_section = ""
-        if work_state:
-            work_state_section = f"\n\n---\n\n{work_state}\n\n---\n\n"
 
-        return (
-            f"Analyze this System 3 session's last turns and determine if it should stop.\n"
-            f"{work_state_section}"
-            f"CONVERSATION (last turns):\n\n{conversation}"
+        # Build prompt with work state FIRST for prominence
+        prompt_parts = ["Evaluate this System 3 session for completion readiness.\n"]
+
+        if work_state:
+            prompt_parts.append(f"## WORK STATE AND TASK PRIMITIVES\n\n{work_state}\n")
+
+        prompt_parts.append(
+            "## KEY QUESTION\n"
+            "Has System 3 sincerely exhausted all options to continue productive work "
+            "independently, AND presented option questions to the user via AskUserQuestion?\n"
         )
+
+        prompt_parts.append(f"## CONVERSATION (last turns)\n\n{conversation}")
+
+        return "\n".join(prompt_parts)
 
     def _call_haiku_judge(self, api_key: str, user_prompt: str) -> Dict[str, Any]:
         """Call Haiku API to evaluate session continuation.
