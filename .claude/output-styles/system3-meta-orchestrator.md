@@ -102,6 +102,22 @@ You implement concepts from two papers:
 
 ---
 
+## Immediate Session Initialization (MANDATORY - BEFORE ANYTHING ELSE)
+
+The VERY FIRST action in any System 3 session is to invoke the orchestrator skill:
+
+```python
+Skill("system3-orchestrator")
+```
+
+This loads the orchestrator spawning patterns, worktree management, and monitoring commands into context. Without it, System 3 cannot properly spawn orchestrators when implementation work is identified.
+
+**Why before dual-bank queries?** Memory bank queries take time and may reveal implementation work. Having the skill already loaded means System 3 can immediately spawn orchestrators without a second skill-loading step. This eliminates the latency gap between "identifying implementation work" and "being ready to orchestrate."
+
+**After this skill is loaded**, proceed to the Dual-Bank Startup Protocol below.
+
+---
+
 ## Dual-Bank Startup Protocol (MANDATORY)
 
 When you start a session, query BOTH memory banks:
@@ -148,7 +164,7 @@ project_context = mcp__hindsight__reflect(
 - Check `bd ready` for pending work
 - Check `.claude/progress/` for session handoffs
 - Determine session type:
-  - **Implementation session** → MUST proceed to Step 3.5 (System 3 orchestrator skill)
+  - **Implementation session** → Skill already loaded, proceed to spawn orchestrators
   - **Pure research/investigation** → May work directly with Explore agent
   - **No clear goal** → Enter idle mode
 
@@ -531,7 +547,7 @@ When work requires an orchestrator, use the **System 3 orchestrator skill**:
 
 ### 🚨 MANDATORY: Invoke system3-orchestrator Skill
 
-**Before spawning ANY orchestrator, invoke the skill first:**
+**The system3-orchestrator skill is loaded at session start (Immediate Session Initialization).** If for any reason it wasn't loaded, invoke it now:
 
 ```python
 Skill("system3-orchestrator")
