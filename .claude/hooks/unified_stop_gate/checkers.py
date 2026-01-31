@@ -140,6 +140,7 @@ class CompletionPromiseChecker:
         my_promises = []
         orphaned_in_progress = []
         all_in_progress = []
+        orch_in_progress = []  # Track orchestrator promises for guidance
 
         try:
             for promise_file in promises_dir.glob('*.json'):
@@ -158,6 +159,14 @@ class CompletionPromiseChecker:
                         'owner': owner,
                         'summary': summary,
                     })
+
+                    # Track orchestrator promises for guidance (owner starts with 'orch-')
+                    if owner and owner.startswith('orch-'):
+                        orch_in_progress.append({
+                            'id': promise_id,
+                            'owner': owner,
+                            'summary': promise.get('summary', '')[:60],  # Full 60 chars for guidance
+                        })
 
                 # Track promises owned by this session (if session ID set)
                 if self.session_id and owner == self.session_id:
@@ -250,8 +259,8 @@ class CompletionPromiseChecker:
         if orphaned_in_progress:
             warning = f" [WARNING: {len(orphaned_in_progress)} orphaned in_progress promise(s)]"
 
-        # Detect orchestrator work and provide monitoring guidance
-        orchestrator_guidance = self._build_orchestrator_guidance(in_progress)
+        # Detect orchestrator work and provide monitoring guidance (using cached data)
+        orchestrator_guidance = self._build_orchestrator_guidance(orch_in_progress)
 
         return CheckResult(
             priority=Priority.P1_COMPLETION_PROMISE,
@@ -260,43 +269,18 @@ class CompletionPromiseChecker:
             blocking=True,
         )
 
-    def _build_orchestrator_guidance(self, in_progress: list[dict]) -> str:
+    def _build_orchestrator_guidance(self, orch_promises: list[dict]) -> str:
         """Build guidance for monitoring orchestrators.
 
-        Detects promises owned by orchestrators (session ID starts with 'orch-')
-        and provides guidance on how to monitor them using validation-agent.
+        Provides guidance on how to monitor orchestrators using validation-agent.
 
         Args:
-            in_progress: List of in_progress promise dicts
+            orch_promises: List of in_progress orchestrator promise dicts
+                          (pre-filtered to owner.startswith('orch-'))
 
         Returns:
             Formatted guidance string, or empty string if no orchestrators detected
         """
-        # Get full promise data to access ownership
-        promises_dir = self.paths.promises_dir
-        if not promises_dir.exists():
-            return ""
-
-        # Re-scan to get full ownership info for in_progress promises
-        orch_promises = []
-        try:
-            for promise_file in promises_dir.glob('*.json'):
-                with open(promise_file, 'r') as f:
-                    promise = json.load(f)
-
-                if promise.get('status') != 'in_progress':
-                    continue
-
-                owner = promise.get('ownership', {}).get('owned_by', '')
-                if owner and owner.startswith('orch-'):
-                    orch_promises.append({
-                        'id': promise.get('id', 'unknown'),
-                        'owner': owner,
-                        'summary': promise.get('summary', '')[:60],
-                    })
-        except (json.JSONDecodeError, OSError):
-            return ""
-
         if not orch_promises:
             return ""
 
