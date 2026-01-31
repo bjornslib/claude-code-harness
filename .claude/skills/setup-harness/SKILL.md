@@ -107,7 +107,7 @@ if [ -e "$TARGET_DIR/.claude" ]; then
         # User confirmation needed
     else
         echo "Found existing .claude directory"
-        echo "Will overwrite (preserving project CLAUDE.md if present)"
+        echo "Will overwrite (.claude/CLAUDE.md updated from harness)"
         # User confirmation needed
     fi
 fi
@@ -124,15 +124,19 @@ Options:
 multiSelect: false
 ```
 
-### Step 4: Backup Project CLAUDE.md (if exists)
+### Step 4: Handle .claude/CLAUDE.md
+
+The harness ships a `.claude/CLAUDE.md` that documents the agent hierarchy, monitoring architecture,
+and delegation patterns. This file is **part of the harness** and should be updated on each deploy.
+
+**Important distinction**:
+- `.claude/CLAUDE.md` — Harness documentation (ALWAYS updated from harness source)
+- `CLAUDE.md` (project root) — Project-specific instructions (NEVER touched by harness)
 
 ```bash
-PROJECT_CLAUDE_BACKUP=""
-if [ -f "$TARGET_DIR/.claude/CLAUDE.md" ]; then
-    PROJECT_CLAUDE_BACKUP=$(mktemp)
-    cp "$TARGET_DIR/.claude/CLAUDE.md" "$PROJECT_CLAUDE_BACKUP"
-    echo "✓ Backed up project CLAUDE.md"
-fi
+# No backup needed for .claude/CLAUDE.md — it's a harness file, always overwritten
+# The project's root CLAUDE.md is unaffected by rsync (different directory)
+echo "✓ .claude/CLAUDE.md will be updated from harness source"
 ```
 
 ### Step 5: Copy Harness with Exclusions
@@ -171,13 +175,14 @@ rsync -av --delete \
 echo "✓ Copied harness to $TARGET_DIR/.claude/"
 ```
 
-### Step 6: Restore Project CLAUDE.md (if backed up)
+### Step 6: Verify .claude/CLAUDE.md Updated
 
 ```bash
-if [ -n "$PROJECT_CLAUDE_BACKUP" ] && [ -f "$PROJECT_CLAUDE_BACKUP" ]; then
-    cp "$PROJECT_CLAUDE_BACKUP" "$TARGET_DIR/.claude/CLAUDE.md"
-    rm "$PROJECT_CLAUDE_BACKUP"
-    echo "✓ Restored project CLAUDE.md"
+# .claude/CLAUDE.md is now the harness version (updated by rsync in Step 5)
+if [ -f "$TARGET_DIR/.claude/CLAUDE.md" ]; then
+    echo "✓ .claude/CLAUDE.md updated from harness source"
+else
+    echo "⚠ .claude/CLAUDE.md missing after copy"
 fi
 ```
 
@@ -319,7 +324,7 @@ Runtime directories created (gitignored, with .gitkeep):
   - message-bus/ (with subdirs: signals/)
 
 Next steps:
-1. Customize .claude/CLAUDE.md for your project
+1. Review .claude/CLAUDE.md (harness docs — updated each deploy)
 2. Review .mcp.json API keys
 3. Commit the .claude/ directory to git
 4. Launch Claude Code:
@@ -328,7 +333,7 @@ Next steps:
    - Worker: launchcc
 
 To update harness later:
-  Run /setup-harness again (will preserve your CLAUDE.md)
+  Run /setup-harness again (.claude/CLAUDE.md updated from harness; root CLAUDE.md untouched)
 ```
 
 ## Files Copied vs Excluded
