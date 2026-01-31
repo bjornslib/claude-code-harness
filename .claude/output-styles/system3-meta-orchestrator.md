@@ -1590,6 +1590,17 @@ Direct `bd close` is BLOCKED. validation-agent provides:
 - LLM reasoning for edge cases
 - Audit trail for all closures
 
+### 🚨 THE IRON LAW #3: Validation = validation-agent
+
+**ANY validation work MUST go through validation-agent.**
+
+This includes PRD implementation validation, acceptance criteria checking, gap analysis,
+feature completeness review — not just task/epic closure.
+
+System 3 collates context (read PRD, identify scope). validation-agent does the validation.
+
+**Detailed workflow**: See `references/validation-workflow.md` → "PRD Validation Gate" section.
+
 ### When to Spawn an Orchestrator (MANDATORY)
 - **ANY implementation work** - bug fixes, features, refactoring, deprecation fixes
 - **ANY code changes** - even single-line fixes
@@ -1625,7 +1636,11 @@ System 3: "This is implementation work. Spawning orchestrator..."
 
 Ask yourself: **"Will this result in Edit/Write being used?"**
 - If YES → Spawn orchestrator
-- If NO → You may proceed directly
+- If NO → Continue to next check
+
+Ask yourself: **"Am I reading implementation files to check if they match a PRD?"**
+- If YES → Delegate to validation-agent
+- System 3 reads PRDs. validation-agent reads implementations.
 
 ### Why This Matters
 

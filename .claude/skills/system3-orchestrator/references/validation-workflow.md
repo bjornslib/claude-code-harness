@@ -210,6 +210,68 @@ Task(
 
 ---
 
+## PRD Validation Gate (MANDATORY)
+
+System 3 NEVER validates PRD implementations directly. Follow this context collation
+→ delegation pattern.
+
+### Step 1: Context Collation (System 3 does this)
+
+Gather information validation-agent needs:
+- Read the PRD to understand scope and acceptance criteria
+- Identify the worktree/branch where implementation lives
+- Note specific areas of concern or focus
+- Identify the PRD ID for the `--prd` parameter
+
+**BOUNDARY**: The moment the thought arises "let me read the implementation files
+to check if they match the PRD" — STOP. That is validation work.
+
+### Step 2: Delegation (one tool call)
+
+```python
+Task(
+    subagent_type="validation-agent",
+    prompt=f"""
+    --mode=e2e
+    --prd=PRD-{prd_id}
+
+    ## Validation Request
+    Validate PRD implementation completeness.
+
+    ## PRD Location
+    {prd_path}
+
+    ## Implementation Location
+    Worktree: {worktree_path}
+    Branch: {branch_name}
+
+    ## Acceptance Criteria to Validate
+    {extracted_criteria_from_prd}
+
+    ## Focus Areas (if any)
+    {specific_concerns}
+
+    ## Required Output
+    For each acceptance criterion:
+    1. PASS/FAIL with file-level evidence
+    2. If FAIL: specific gap description and remediation steps
+    3. Confidence level (high/medium/low)
+
+    Produce a structured gap analysis report.
+    """
+)
+```
+
+### Step 3: Review Report (System 3 reviews the REPORT, not the code)
+
+After validation-agent returns:
+1. Read the structured gap analysis report
+2. If all PASS → proceed to next phase (close epic, advance Key Result)
+3. If any FAIL → spawn orchestrator to fix gaps, then re-validate
+4. Store validation outcome to Hindsight for pattern tracking
+
+---
+
 ## The Gate Function
 
 **Every claim needs proof.** Follow this pattern:

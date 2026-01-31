@@ -43,6 +43,16 @@ This agent supports three operating modes controlled by the --mode parameter:
 | `--task-list-id` | For monitor | Task list ID from `~/.claude/tasks/` |
 | `--max-iterations` | For monitor | Max poll iterations before heartbeat (default: 30) |
 
+### Use Cases
+
+| Use Case | Mode | Triggered By | Context Provider Supplies |
+|----------|------|-------------|---------------------------|
+| Task closure | `--mode=unit` | Orchestrator | Task ID, expected behavior |
+| PRD acceptance | `--mode=e2e --prd=X` | System 3 / Orchestrator | PRD path, worktree, criteria |
+| PRD gap analysis | `--mode=e2e --prd=X` | System 3 "validate PRD" | PRD path, implementation location, focus areas |
+| KR verification | `--mode=e2e --prd=X` | System 3 checking Key Results | KR description, evidence requirements |
+| Orchestrator health | `--mode=monitor` | System 3 monitoring | Session ID, task list ID |
+
 ### Default Behavior
 If no --mode specified, assume `--mode=unit`.
 
