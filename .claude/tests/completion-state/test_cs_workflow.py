@@ -525,6 +525,7 @@ class TestCompletionPromiseChecker:
         config = EnvironmentConfig(
             project_dir=temp_project_dir,
             session_dir=None,
+            session_id=None,
             max_iterations=25,
             enforce_promise=True,
             enforce_bo=False,
@@ -546,6 +547,7 @@ class TestCompletionPromiseChecker:
         config = EnvironmentConfig(
             project_dir=temp_project_dir,
             session_dir=None,
+            session_id='test-checker-session',
             max_iterations=25,
             enforce_promise=True,
             enforce_bo=False,
@@ -586,6 +588,7 @@ class TestCompletionPromiseChecker:
         config = EnvironmentConfig(
             project_dir=temp_project_dir,
             session_dir=None,
+            session_id='my-session',
             max_iterations=25,
             enforce_promise=True,
             enforce_bo=False,
@@ -629,6 +632,7 @@ class TestCompletionPromiseChecker:
         config = EnvironmentConfig(
             project_dir=temp_project_dir,
             session_dir=None,
+            session_id='my-session',
             max_iterations=25,
             enforce_promise=True,
             enforce_bo=False,
@@ -683,6 +687,7 @@ class TestStopHookIntegration:
         config = EnvironmentConfig(
             project_dir=temp_project_dir,
             session_dir=None,
+            session_id='stop-hook-test-session',
             max_iterations=25,
             enforce_promise=True,
             enforce_bo=False,

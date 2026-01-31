@@ -325,55 +325,68 @@ Waiting for user input or continuing autonomous work...
 
 ## Momentum Maintenance Protocol
 
-**Core Rule**: ALWAYS maintain at least one continuation todo item.
+**Core Question**: Before stopping, ask yourself honestly: *"Have I exhausted what I can conservatively continue productive work on without user input?"*
 
-### The Anti-Pattern: Empty Todo List
+### Three-Layer Work Exhaustion Check (Priority Order)
 
-```
-[completed] Task A
-[completed] Task B
-(empty) ← Leads to passive waiting
-```
+When you consider stopping, evaluate these three layers in order:
 
-### The Pattern: Continuation Item
+1. **Session Promises**: Are all your promises verified? If any promise remains `in_progress`, that IS your next task. Do not stop with unverified promises.
 
-```
-[completed] Task A
-[completed] Task B
-[in_progress] Check bd ready for available work  ← Keeps momentum
-```
+2. **High-Priority Beads**: Are there P0-P2 beads or open business epics? Run `bd ready` mentally. If work exists that you can advance without user input, your next task should advance it. Be specific — name the bead, describe the action.
 
-### Context-Specific Continuation Items
+3. **Self-Assessment (Gut Feel)**: This is the honest judgment only YOU can make:
+   - Did I follow all protocols this session?
+   - Did I achieve meaningful work (not just investigation)?
+   - Am I stopping because I'm genuinely done, or because the next step feels hard?
+   - Would my user be satisfied that I squeezed maximum value from this session?
 
-| After completing... | Continuation item |
-|---------------------|-------------------|
-| Implementation | "Verify E2E and seek next task" |
-| Documentation | "Check bd ready for new work" |
-| Orchestrator work | "Monitor orchestrators or seek next initiative" |
-| Session close prep | "Scan for improvement opportunities" |
-| Generic | "Look for future opportunities to progress" |
+### Sensible vs Mechanical Continuation
+
+Your continuation task must be **sensible** — a task you will ACTUALLY execute, not a placeholder to satisfy a check.
+
+| Sensible | Mechanical (avoid) |
+|----------|-------------------|
+| "Spawn orchestrator for bd-x9y3: API refactor" | "Check bd ready for next available work" (when beads has nothing) |
+| "Validate KR-2: first customer payment flow" | "Look for future opportunities to progress" |
+| "Present next-initiative options to user via AskUserQuestion" | "Scan for improvement opportunities" (vague) |
+| "Run E2E tests for completed Epic 4" | "Review beads for follow-up work" (when beads is empty) |
+
+**Key distinction**: A generic "check for work" task IS sensible when beads actually has work. It is NOT sensible when you already know beads is empty — that's just satisfying the check mechanically.
+
+### When Work Is Genuinely Exhausted
+
+If all three layers are clear and you have nothing productive to continue:
+
+1. **DO NOT** add a generic placeholder task just to pass the stop hook
+2. **DO** present options to the user via `AskUserQuestion`:
+   - Frame 2-4 concrete options around: next initiative, improvement area, research direction
+   - This IS a valid continuation — seeking user direction when genuinely stuck is honest, not a cop-out
+3. **OR** confirm genuine completion: post-session reflection done, protocols followed, session goals achieved
 
 ### The Self-Sustaining Loop
 
 ```
-Work → Complete todos → Add continuation → Check for work
-                                               ↓
-                              Found work? → Add specific todos → Work
-                              No work? → Enter Idle Mode activities
+Work → Complete todos → Self-assess against three layers
+                              ↓
+         Promises unmet? → Verify promises → Work
+         Beads ready? → Add specific work task → Work
+         Genuinely done? → Present options via AskUserQuestion → Wait
+         Genuinely complete? → Post-session reflection → Stop
 ```
 
 ### Integration with StopHook
 
-A StopHook will remind you to verify this protocol before stopping.
-If the todo list is empty or lacks a continuation item, you should:
-1. Add an appropriate continuation item
-2. Execute it before declaring complete
+The StopHook (Step 4: Work Exhaustion Check) will:
+- **Block** if no pending task exists, showing you the current work state (promises, beads, tasks)
+- **Pass** if a pending task exists, forwarding work-state context to the Haiku judge (Step 5)
 
-**Why This Works**:
-- TodoWrite visibility in system messages acts as external scaffold
-- Prevents "done" state trap
-- Aligns with constrained intrinsic motivation research
-- Creates closed loop that sustains momentum
+The Haiku judge (Step 5) then evaluates your last conversation turns PLUS the work state to assess:
+- Are your continuation tasks advancing real work?
+- Did you follow protocols?
+- Are you being honest about what remains?
+
+**This is a partnership**: the hook provides data, the judge provides reasoning, and YOU provide the self-honest gut feel that neither can replicate.
 
 ---
 

@@ -5,7 +5,7 @@
 #   1. Completion Promise Check: BLOCKS if open promises owned by this session
 #   2. Orchestrator Guidance: BLOCKS orch-* sessions with unescalated blockers
 #   3. Beads Sync Check: BLOCKS if .beads/ has uncommitted changes
-#   4. Todo Continuation Check: BLOCKS if no continuation todo exists
+#   4. Work Exhaustion Check: BLOCKS if work available but no sensible continuation
 #   5. System 3 Judge: BLOCKS system3-* sessions if Haiku judge says continue
 #   6. Work Available: INFORMS about priority-ordered work (NEVER blocks)
 #
@@ -126,9 +126,11 @@ ORCH_CHECK
         ORCH_RESULT='{"passed": true, "message": "Check timed out, allowing stop"}'
     fi
 
-    ORCH_PASSED=$(echo "$ORCH_RESULT" | jq -r '.passed // true')
+    # NOTE: jq's // operator treats false same as null, so '.passed // true' ALWAYS returns true.
+    # Use explicit null check to preserve false values.
+    ORCH_PASSED=$(printf '%s\n' "$ORCH_RESULT" | jq -r 'if .passed == null then "true" else (.passed | tostring) end')
     if [ "$ORCH_PASSED" = "false" ]; then
-        ORCH_MSG=$(echo "$ORCH_RESULT" | jq -r '.message // ""')
+        ORCH_MSG=$(printf '%s\n' "$ORCH_RESULT" | jq -r '.message // ""')
         output_json "block" "reason" "$ORCH_MSG"
         exit 0
     fi
@@ -159,50 +161,71 @@ To proceed:
     exit 0
 fi
 
-# --- Step 4: Todo Continuation Check ---
-# Ensure at least one pending/in_progress task exists (Momentum Maintenance Protocol)
-# Uses the Claude Code Task primitive: ~/.claude/tasks/{CLAUDE_CODE_TASK_LIST_ID}/*.json
+# --- Step 4: Work Exhaustion Check (replaces simple Todo Continuation) ---
+# Three-layer evaluation: promises + beads + task sensibility
+# Produces WORK_STATE_SUMMARY for Step 5 (System 3 Judge)
 
-HAS_CONTINUATION=false
+WORK_EXHAUSTION_PASSED=true
+WORK_STATE_SUMMARY=""
 
 TASK_LIST_ID="${CLAUDE_CODE_TASK_LIST_ID:-}"
 
-if [ -z "$TASK_LIST_ID" ]; then
-    # No task list configured - skip check
-    HAS_CONTINUATION=true
-elif [ -d "$HOME/.claude/tasks/$TASK_LIST_ID" ]; then
-    # Check for any pending or in_progress tasks
-    for task_file in "$HOME/.claude/tasks/$TASK_LIST_ID"/*.json; do
-        [ -f "$task_file" ] || continue
-        task_status=$(jq -r '.status // ""' "$task_file" 2>/dev/null)
-        if [ "$task_status" = "pending" ] || [ "$task_status" = "in_progress" ]; then
-            HAS_CONTINUATION=true
-            break
-        fi
-    done
-else
-    # Task list directory doesn't exist - skip check
-    HAS_CONTINUATION=true
+if [ -n "$TASK_LIST_ID" ]; then
+    # Use gtimeout on macOS (GNU coreutils), fallback to timeout on Linux
+    TIMEOUT_CMD="timeout"
+    if command -v gtimeout &> /dev/null; then
+        TIMEOUT_CMD="gtimeout"
+    fi
+
+    STEP4_RESULT=$($TIMEOUT_CMD 8s python3 << 'WORK_CHECK'
+import json
+import sys
+import os
+
+sys.path.insert(0, os.path.join(os.environ.get('CLAUDE_PROJECT_DIR', os.getcwd()), '.claude', 'hooks'))
+
+try:
+    from unified_stop_gate.work_exhaustion_checker import WorkExhaustionChecker
+    from unified_stop_gate.config import EnvironmentConfig
+
+    config = EnvironmentConfig.from_env()
+    checker = WorkExhaustionChecker(config)
+    result = checker.check()
+    work_summary = checker.work_state_summary
+
+    print(json.dumps({
+        "passed": result.passed,
+        "message": result.message,
+        "work_state_summary": work_summary
+    }))
+except Exception as e:
+    print(json.dumps({
+        "passed": True,
+        "message": f"Work exhaustion check error (fail-open): {e}",
+        "work_state_summary": ""
+    }))
+WORK_CHECK
+)
+    TIMEOUT_EXIT=$?
+    if [ $TIMEOUT_EXIT -eq 124 ]; then
+        echo "⚠️  Work exhaustion check timed out (8s), allowing stop" >&2
+        STEP4_RESULT='{"passed": true, "message": "Work exhaustion check timed out, allowing stop", "work_state_summary": ""}'
+    fi
+
+    # Parse result (using explicit null check to preserve false values)
+    STEP4_PASSED=$(printf '%s\n' "$STEP4_RESULT" | jq -r 'if .passed == null then "true" else (.passed | tostring) end')
+    STEP4_MSG=$(printf '%s\n' "$STEP4_RESULT" | jq -r '.message // ""')
+
+    # Extract work state summary for Step 5
+    export WORK_STATE_SUMMARY=$(printf '%s\n' "$STEP4_RESULT" | jq -r '.work_state_summary // ""')
+
+    if [ "$STEP4_PASSED" = "false" ]; then
+        WORK_EXHAUSTION_PASSED=false
+    fi
 fi
 
-if [ "$HAS_CONTINUATION" = false ]; then
-    output_json "block" "reason" "🚫 NO CONTINUATION TODO
-
-To maintain momentum between sessions, add a continuation todo item before stopping.
-
-Examples:
-- \"Check bd ready for next available task\"
-- \"Review beads for follow-up work\"
-- \"Continue investigating X\"
-- \"Ask user for feedback on Y using AskUserQuestion\"
-- \"Present options to user for Z approach\"
-
-This ensures work isn't abandoned and next session knows where to start.
-Continuation items may include seeking user input/feedback via option questions.
-
-To proceed:
-1. Add a continuation todo using TodoWrite
-2. Try stopping again"
+if [ "$WORK_EXHAUSTION_PASSED" = false ]; then
+    output_json "block" "reason" "$STEP4_MSG"
     exit 0
 fi
 
@@ -246,9 +269,11 @@ S3_CHECK
         S3_RESULT='{"passed": true, "message": "Judge timed out, allowing stop"}'
     fi
 
-    S3_PASSED=$(echo "$S3_RESULT" | jq -r '.passed // true')
+    # NOTE: jq's // operator treats false same as null, so '.passed // true' ALWAYS returns true.
+    # Use explicit null check to preserve false values.
+    S3_PASSED=$(printf '%s\n' "$S3_RESULT" | jq -r 'if .passed == null then "true" else (.passed | tostring) end')
     # ALWAYS extract message (not just on block)
-    S3_MSG=$(echo "$S3_RESULT" | jq -r '.message // ""')
+    S3_MSG=$(printf '%s\n' "$S3_RESULT" | jq -r '.message // ""')
 
     if [ "$S3_PASSED" = "false" ]; then
         output_json "block" "reason" "$S3_MSG"

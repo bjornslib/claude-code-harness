@@ -25,17 +25,41 @@ from .checkers import SessionInfo
 # System prompt for the Haiku judge
 SYSTEM3_JUDGE_SYSTEM_PROMPT = """You are a session completion evaluator for a System 3 meta-orchestrator.
 
-Your job: Analyze the last few turns of a System 3 session and determine if it should be allowed to stop.
+Your job: Analyze the last few turns of a System 3 session AND the current work state to determine if it should be allowed to stop.
 
-A System 3 session manages orchestrators that build software. Before stopping, it MUST have:
+## Core Question
+"Has System 3 exhausted what it can conservatively continue productive work on without user input?"
 
+## Three-Layer Assessment
+
+### Layer 1: Protocol Compliance
+Before stopping, System 3 MUST have completed:
 1. **Completion Promises**: All session promises verified with proof (cs-verify), or no promises created
 2. **Post-Session Reflection**: Learnings stored to Hindsight (mcp__hindsight__retain)
 3. **Validation Evidence**: Business outcomes validated via validation-agent (not direct bd close)
 4. **Cleanup**: Orchestrator tmux sessions killed, message bus unregistered
-5. **Meaningful Work**: Session accomplished something (not stopping after just investigation)
-6. **Continuation Items**: Todo list has continuation items OR work is genuinely complete
 
+### Layer 2: Work Availability
+You will receive a WORK STATE ASSESSMENT showing:
+- Promise status (unmet count)
+- Bead status (ready count, high-priority count, business epics)
+- Task primitives (pending tasks and their subjects)
+
+If work is available, System 3 should continue UNLESS it genuinely needs user input to decide direction.
+
+### Layer 3: Self-Honesty Assessment
+Evaluate whether System 3 is being honest with itself:
+- Did it achieve meaningful work this session (not just investigation)?
+- Are its continuation tasks SENSIBLE (specific, advancing real work)?
+- Is it stopping prematurely to avoid difficult work?
+- If it claims work is exhausted, does the work state agree?
+
+## Decision on Continuation Tasks
+A continuation task is SENSIBLE if it directly advances available work or seeks user direction.
+A task is NOT SENSIBLE if it's a generic placeholder when no work exists.
+If work is genuinely exhausted, the right action is AskUserQuestion to present options.
+
+## Response Format
 RESPOND with JSON only:
 {"should_continue": boolean, "reason": "brief explanation", "suggestion": "what to do next if continuing"}
 
@@ -44,14 +68,17 @@ should_continue=false means ALLOW the stop (session properly completed)
 
 Default to ALLOW (should_continue=false) when:
 - The conversation shows the user explicitly asked to stop
-- All protocol steps are clearly completed
+- All protocol steps are clearly completed AND work state confirms exhaustion
+- System 3 has presented option questions to the user and is awaiting response
 - You're uncertain whether work remains
 
 Default to BLOCK (should_continue=true) when:
 - Active orchestrators are mentioned but not cleaned up
 - Completion promises exist but weren't verified
 - No post-session reflection was performed
-- Work was started but not validated"""
+- Work was started but not validated
+- Work state shows available high-priority work but System 3 is stopping
+- Continuation tasks are generic placeholders that don't advance known work"""
 
 
 class System3ContinuationJudgeChecker:
@@ -158,7 +185,7 @@ class System3ContinuationJudgeChecker:
             # Return result based on judgment
             if should_continue:
                 # BLOCK - session should continue
-                message = f"🧠 System 3 Judge: {reason}"
+                message = f"System 3 Judge: {reason}"
                 if suggestion:
                     message += f"\n\nSuggestion: {suggestion}"
                 return CheckResult(
@@ -322,7 +349,10 @@ class System3ContinuationJudgeChecker:
         return 'no params'
 
     def _build_evaluation_prompt(self, turns: List[Dict[str, Any]]) -> str:
-        """Build the evaluation prompt from the last 5 conversation turns.
+        """Build the evaluation prompt from conversation turns and work state.
+
+        Includes both the last 5 conversation turns AND the work-state
+        assessment from Step 4 (if available via WORK_STATE_SUMMARY env var).
 
         Args:
             turns: List of turn dictionaries with 'role' and 'content_summary'.
@@ -337,7 +367,18 @@ class System3ContinuationJudgeChecker:
             parts.append(f"[{role}]: {content}")
 
         conversation = "\n\n".join(parts)
-        return f"Analyze this System 3 session's last turns and determine if it should stop:\n\n{conversation}"
+
+        # Include work-state context from Step 4 if available
+        work_state = os.environ.get('WORK_STATE_SUMMARY', '').strip()
+        work_state_section = ""
+        if work_state:
+            work_state_section = f"\n\n---\n\n{work_state}\n\n---\n\n"
+
+        return (
+            f"Analyze this System 3 session's last turns and determine if it should stop.\n"
+            f"{work_state_section}"
+            f"CONVERSATION (last turns):\n\n{conversation}"
+        )
 
     def _call_haiku_judge(self, api_key: str, user_prompt: str) -> Dict[str, Any]:
         """Call Haiku API to evaluate session continuation.
