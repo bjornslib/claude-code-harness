@@ -114,6 +114,7 @@
     "code-review@claude-plugins-official": true,
     "double-shot-latte@superpowers-marketplace": true,
     "pyright-lsp@claude-plugins-official": false,
-    "typescript-lsp@claude-plugins-official": false
+    "typescript-lsp@claude-plugins-official": false,
+    "claude-orchestration-framework@claude-orchestration": false
   }
 }
