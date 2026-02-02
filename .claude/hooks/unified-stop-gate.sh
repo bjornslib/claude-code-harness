@@ -96,7 +96,8 @@ if [[ "$SESSION_ID" == orch-* ]]; then
         TIMEOUT_CMD="gtimeout"
     fi
 
-    ORCH_RESULT=$(cd "$PROJECT_ROOT" && $TIMEOUT_CMD 5s python3 << 'ORCH_CHECK'
+    ORCH_EXIT=0
+    ORCH_RESULT=$(cd "$PROJECT_ROOT" && $TIMEOUT_CMD 20s python3 << 'ORCH_CHECK'
 import json
 import sys
 import os
@@ -119,11 +120,13 @@ try:
 except Exception as e:
     print(json.dumps({"passed": True, "message": f"Orchestrator check error: {e}"}))
 ORCH_CHECK
-)
-    TIMEOUT_EXIT=$?
-    if [ $TIMEOUT_EXIT -eq 124 ]; then
-        echo "⚠️  Orchestrator check timed out (5s), allowing stop" >&2
+) || ORCH_EXIT=$?
+    if [ $ORCH_EXIT -eq 124 ]; then
+        echo "⚠️  Orchestrator check timed out (20s), allowing stop" >&2
         ORCH_RESULT='{"passed": true, "message": "Check timed out, allowing stop"}'
+    elif [ $ORCH_EXIT -ne 0 ] && [ -z "$ORCH_RESULT" ]; then
+        echo "⚠️  Orchestrator check failed (exit $ORCH_EXIT), allowing stop" >&2
+        ORCH_RESULT='{"passed": true, "message": "Check failed (fail-open), allowing stop"}'
     fi
 
     # NOTE: jq's // operator treats false same as null, so '.passed // true' ALWAYS returns true.
@@ -177,7 +180,8 @@ if [ -n "$TASK_LIST_ID" ]; then
         TIMEOUT_CMD="gtimeout"
     fi
 
-    STEP4_RESULT=$($TIMEOUT_CMD 8s python3 << 'WORK_CHECK'
+    STEP4_EXIT=0
+    STEP4_RESULT=$($TIMEOUT_CMD 20s python3 << 'WORK_CHECK'
 import json
 import sys
 import os
@@ -205,11 +209,13 @@ except Exception as e:
         "work_state_summary": ""
     }))
 WORK_CHECK
-)
-    TIMEOUT_EXIT=$?
-    if [ $TIMEOUT_EXIT -eq 124 ]; then
-        echo "⚠️  Work exhaustion check timed out (8s), allowing stop" >&2
+) || STEP4_EXIT=$?
+    if [ $STEP4_EXIT -eq 124 ]; then
+        echo "⚠️  Work exhaustion check timed out (20s), allowing stop" >&2
         STEP4_RESULT='{"passed": true, "message": "Work exhaustion check timed out, allowing stop", "work_state_summary": ""}'
+    elif [ $STEP4_EXIT -ne 0 ] && [ -z "$STEP4_RESULT" ]; then
+        echo "⚠️  Work exhaustion check failed (exit $STEP4_EXIT), allowing stop" >&2
+        STEP4_RESULT='{"passed": true, "message": "Work exhaustion check failed (fail-open), allowing stop", "work_state_summary": ""}'
     fi
 
     # Parse result (using explicit null check to preserve false values)
@@ -240,7 +246,8 @@ if [[ "$SESSION_ID" == system3-* ]]; then
         TIMEOUT_CMD="gtimeout"
     fi
 
-    S3_RESULT=$($TIMEOUT_CMD 8s python3 << 'S3_CHECK'
+    S3_EXIT=0
+    S3_RESULT=$($TIMEOUT_CMD 20s python3 << 'S3_CHECK'
 import json
 import sys
 import os
@@ -262,11 +269,13 @@ try:
 except Exception as e:
     print(json.dumps({"passed": True, "message": f"System 3 judge error: {e}"}))
 S3_CHECK
-)
-    TIMEOUT_EXIT=$?
-    if [ $TIMEOUT_EXIT -eq 124 ]; then
-        echo "⚠️  System 3 judge timed out (8s), allowing stop" >&2
+) || S3_EXIT=$?
+    if [ $S3_EXIT -eq 124 ]; then
+        echo "⚠️  System 3 judge timed out (20s), allowing stop" >&2
         S3_RESULT='{"passed": true, "message": "Judge timed out, allowing stop"}'
+    elif [ $S3_EXIT -ne 0 ] && [ -z "$S3_RESULT" ]; then
+        echo "⚠️  System 3 judge failed (exit $S3_EXIT), allowing stop" >&2
+        S3_RESULT='{"passed": true, "message": "Judge failed (fail-open), allowing stop"}'
     fi
 
     # NOTE: jq's // operator treats false same as null, so '.passed // true' ALWAYS returns true.
