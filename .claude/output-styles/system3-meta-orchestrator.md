@@ -559,18 +559,18 @@ System 3 → tdd-test-engineer / frontend-dev-expert / backend-solutions-enginee
 
 **Why?** Orchestrators provide:
 - Worktree isolation (prevents conflicts)
-- Worker coordination with Task subagents (blocking or parallel)
+- Worker coordination via native Agent Teams (teammates with peer messaging)
 - Beads tracking and progress monitoring
 - Proper tmux session isolation (System 3 → Orchestrator only)
 - Wisdom injection from Hindsight banks
 
 **2-Level Delegation Architecture**:
 - **System 3 → Orchestrator**: Uses tmux for session isolation (orchestrators need persistent environments in worktrees)
-- **Orchestrator → Worker**: Uses Task subagents (workers complete and return results directly)
+- **Orchestrator → Worker**: Uses native Agent Teams (orchestrator is team lead, workers are teammates with peer messaging)
 
 **Implementation Guide**: For complete worker delegation patterns, see:
 - `Skill("orchestrator-multiagent")` → SKILL.md "Core Rule" and "Worker Delegation" sections
-- [WORKERS.md](.claude/skills/orchestrator-multiagent/WORKERS.md) → Task-based delegation patterns
+- [WORKERS.md](.claude/skills/orchestrator-multiagent/WORKERS.md) → Native team delegation patterns
 
 ---
 
@@ -606,7 +606,7 @@ ln -s $(pwd)/.claude ../[worktree-name]/.claude
 
 ### CRITICAL: tmux Patterns for Spawning Orchestrators
 
-**Note**: These patterns apply to **System 3 → Orchestrator** spawning only. Orchestrators delegate to Workers using **Task subagents** (not tmux).
+**Note**: These patterns apply to **System 3 → Orchestrator** spawning only. Orchestrators delegate to Workers using **native Agent Teams** (teammates, not tmux).
 
 These patterns were learned through painful experience. Violating them causes silent failures.
 
@@ -643,7 +643,7 @@ tmux send-keys -t orch-epic4 Enter
 # ❌ WRONG - Headless orchestrators can't spawn workers or handle blockers
 claude -p "Do the work"
 
-# ✅ CORRECT - Interactive mode allows orchestrator to spawn Task subagents
+# ✅ CORRECT - Interactive mode allows orchestrator to create teams and spawn teammates
 tmux send-keys -t orch-epic4 "launchcc"
 tmux send-keys -t orch-epic4 Enter
 sleep 5  # Wait for initialization
@@ -663,7 +663,7 @@ tmux send-keys -t orch-epic4 Enter
 
 **🚨 CRITICAL Requirements for Orchestrator Initialization**:
 
-**Environment Variables (ALL THREE REQUIRED - set BEFORE launching Claude Code):**
+**Environment Variables (ALL FOUR REQUIRED - set BEFORE launching Claude Code):**
 ```bash
 # 1. Session isolation for completion state
 tmux send-keys -t "orch-[name]" "export CLAUDE_SESSION_DIR=[initiative]-$(date +%Y%m%d)"
@@ -676,14 +676,19 @@ tmux send-keys -t "orch-[name]" Enter
 # 3. 🚨 TASK LIST ID - enables shared task tracking with validation monitors
 tmux send-keys -t "orch-[name]" "export CLAUDE_CODE_TASK_LIST_ID=PRD-[prd-name]"
 tmux send-keys -t "orch-[name]" Enter
+
+# 4. 🚨 AGENT TEAMS - enables native team coordination (Teammate, SendMessage, shared TaskList)
+tmux send-keys -t "orch-[name]" "export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1"
+tmux send-keys -t "orch-[name]" Enter
 ```
 
 **After Environment Variables Are Set:**
 1. Launch Claude Code with `ccorch` (or `launchcc`)
 2. **`/output-style orchestrator`** must be invoked as the VERY FIRST action in the assignment prompt (loads orchestrator behavior patterns)
 3. **Skill("orchestrator-multiagent")** must be invoked IMMEDIATELY AFTER output style (loads coordination patterns)
-4. **Message bus registration** must happen after skill invocation
-5. **Background monitor** should be spawned for real-time message detection
+4. **Create worker team**: `Teammate(operation="spawnTeam", team_name="{initiative}-workers", description="Workers for {initiative}")` — establishes native team for worker coordination
+5. **Message bus registration** must happen after skill invocation
+6. **Background monitor** should be spawned for real-time message detection
 
 **Full Template**: See `.claude/skills/orchestrator-multiagent/ORCHESTRATOR_INITIALIZATION_TEMPLATE.md`
 
@@ -721,6 +726,9 @@ skill_reminder = """
 2. THEN: Skill("orchestrator-multiagent")
    This loads worker coordination patterns. Without it, you cannot properly delegate to workers.
 
+3. CREATE WORKER TEAM: Teammate(operation="spawnTeam", team_name="{initiative}-workers", description="Workers for {initiative}")
+   This creates the native team for worker coordination via TaskCreate + SendMessage.
+
 Do NOT skip or reorder these steps - orchestrators without proper output style may violate protocol.
 """
 ```
@@ -729,9 +737,9 @@ Do NOT skip or reorder these steps - orchestrators without proper output style m
 ```markdown
 You are an orchestrator for initiative: [NAME]
 
-## FIRST ACTION REQUIRED
-Before doing ANYTHING else, invoke: Skill("orchestrator-multiagent")
-This loads the worker coordination patterns. Without it, you cannot properly delegate to workers.
+## FIRST ACTIONS REQUIRED (EXACT ORDER)
+1. Skill("orchestrator-multiagent") — loads worker coordination patterns
+2. Teammate(operation="spawnTeam", team_name="[NAME]-workers", description="Workers for [NAME]") — creates native team
 
 ## Patterns from Hindsight
 [Include meta_patterns and project_patterns here]
@@ -945,7 +953,7 @@ remaining=$(tmux list-sessions 2>/dev/null | grep -c "^orch-" || echo "0")
 echo "Remaining orchestrator sessions: $remaining"
 ```
 
-**Note**: Workers are now Task subagents that clean up automatically when they complete. No worker tmux session cleanup is needed.
+**Note**: Workers are now native teammates managed by the team lead (orchestrator). Shut down workers via `SendMessage(type="shutdown_request")` and clean up teams via `Teammate(operation="cleanup")` before killing the orchestrator tmux session.
 
 **Why this matters**: Without cleanup, orchestrator tmux sessions accumulate, consuming system resources and making `tmux list-sessions` unmanageable.
 
@@ -1938,7 +1946,7 @@ echo "Remaining orchestrator sessions: $remaining"
 .claude/scripts/message-bus/mb-unregister "system3"
 ```
 
-**Note**: Workers are now Task subagents that clean up automatically. No worker tmux session cleanup is needed.
+**Note**: Workers are now native teammates managed by the team lead (orchestrator). Shut down workers via `SendMessage(type="shutdown_request")` and clean up teams via `Teammate(operation="cleanup")` before killing the orchestrator tmux session.
 
 **When orchestrator completes (before session end):**
 

@@ -59,9 +59,10 @@ This wisdom was gathered by System 3 meta-orchestrator from Hindsight memory ban
 ## Starting Point
 
 1. **Invoke skill**: `Skill("orchestrator-multiagent")`
-2. **Run PREFLIGHT checklist** from the skill
-3. **Find first task**: `bd ready`
-4. **Log progress** to: `.claude/progress/orch-[INITIATIVE_NAME]-log.md`
+2. **Create worker team**: `Teammate(operation="spawnTeam", team_name="{initiative}-workers", description="Workers for {initiative}")`
+3. **Run PREFLIGHT checklist** from the skill
+4. **Find first task**: `bd ready`
+5. **Log progress** to: `.claude/progress/orch-[INITIATIVE_NAME]-log.md`
 
 ## Progress Reporting
 
@@ -186,9 +187,10 @@ Integration tests use `vitest` with test database. Run with `npm run test:integr
 ## Starting Point
 
 1. **Invoke skill**: `Skill("orchestrator-multiagent")`
-2. **Run PREFLIGHT checklist** from the skill
-3. **Find first task**: `bd ready`
-4. **Log progress** to: `.claude/progress/orch-auth-epic-2-log.md`
+2. **Create worker team**: `Teammate(operation="spawnTeam", team_name="auth-epic-2-workers", description="Workers for auth-epic-2")`
+3. **Run PREFLIGHT checklist** from the skill
+4. **Find first task**: `bd ready`
+5. **Log progress** to: `.claude/progress/orch-auth-epic-2-log.md`
 
 ## Progress Reporting
 
@@ -285,9 +287,10 @@ You are an orchestrator for initiative: {initiative}
 
 ## Starting Point
 1. Invoke: Skill("orchestrator-multiagent")
-2. Run PREFLIGHT checklist
-3. Find first task: bd ready
-4. Log to: .claude/progress/orch-{initiative}-log.md
+2. Create worker team: Teammate(operation="spawnTeam", team_name="{initiative}-workers", description="Workers for {initiative}")
+3. Run PREFLIGHT checklist
+4. Find first task: bd ready
+5. Log to: .claude/progress/orch-{initiative}-log.md
 
 Begin work now.
 """

@@ -16,9 +16,9 @@ This project uses a 3-level agent hierarchy for complex multi-feature developmen
 │  LEVEL 2: ORCHESTRATOR                                              │
 │  Output Style: orchestrator.md                                      │
 │  Skills: orchestrator-multiagent/                                   │
-│  Role: Feature coordination, worker delegation via Task subagents   │
+│  Role: Feature coordination, worker delegation via native teams     │
 ├─────────────────────────────────────────────────────────────────────┤
-│  LEVEL 3: WORKERS (via Task subagents)                              │
+│  LEVEL 3: WORKERS (native teammates via Agent Teams)                │
 │  Specialists: frontend-dev-expert, backend-solutions-engineer,      │
 │               tdd-test-engineer, solution-architect                 │
 │  Role: Implementation, testing, focused execution                   │
@@ -31,7 +31,7 @@ This project uses a 3-level agent hierarchy for complex multi-feature developmen
 |-------|---------|---------|
 | System 3 | `ccsystem3` | Launch meta-orchestrator with completion promises |
 | Orchestrator | `launchorchestrator [epic-name]` | Launch in isolated worktree (via tmux) |
-| Worker | `Task(subagent_type="...")` | Spawned by orchestrator as Task subagent |
+| Worker | `Task(subagent_type="...", team_name="...", name="...")` | Spawned as native teammate by orchestrator (team lead) |
 
 ### Key Principle
 

@@ -188,6 +188,8 @@ tmux send-keys -t "orch-[name]" "export CLAUDE_SESSION_ID=orch-[name]"
 tmux send-keys -t "orch-[name]" Enter
 tmux send-keys -t "orch-[name]" "export CLAUDE_CODE_TASK_LIST_ID=PRD-[prd-name]"
 tmux send-keys -t "orch-[name]" Enter
+tmux send-keys -t "orch-[name]" "export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1"
+tmux send-keys -t "orch-[name]" Enter
 
 # 5. Launch Claude Code with ccorch (Enter MUST be separate!)
 tmux send-keys -t "orch-[name]" "ccorch"
@@ -237,7 +239,16 @@ Task(
 )
 ```
 
-### 4. Check for Messages
+### 4. Create Worker Team (NEW)
+```python
+Teammate(
+    operation="spawnTeam",
+    team_name="{initiative}-workers",
+    description="Workers for {initiative}"
+)
+```
+
+### 5. Check for Messages
 ```bash
 .claude/scripts/message-bus/mb-recv --peek
 ```
@@ -568,7 +579,18 @@ git push -u origin [branch-name]
 gh pr create --title "[initiative] Implementation" --body "..."
 ```
 
-### [ ] 6. Cleanup
+### [ ] 6. Cleanup Team
+
+```python
+# Shut down all workers
+SendMessage(type="broadcast", content="All tasks complete. Shutting down team.")
+# Then for each worker:
+SendMessage(type="shutdown_request", recipient="worker-name", content="Task complete")
+# Finally:
+Teammate(operation="cleanup")
+```
+
+### [ ] 7. Cleanup Worktree
 
 ```bash
 # Update registry (automatic if using terminate script)
