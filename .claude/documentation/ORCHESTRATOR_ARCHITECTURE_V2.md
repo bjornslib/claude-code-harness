@@ -5,7 +5,7 @@
 This document outlines architectural changes to improve orchestrator reliability through:
 1. **Task-based delegation** instead of tmux sessions
 2. **System3 involvement** in PRD writing with acceptance tests
-3. **Continuous validation monitoring** via validation-agent
+3. **Continuous validation monitoring** via validation-test-agent
 4. **Decision-time guidance integration** for stuck detection
 
 ## Current State (V1)
@@ -36,13 +36,13 @@ System3
     │       ├── Delegates to workers via Task(subagent_type="*-expert")
     │       │       └── Workers return structured results
     │       │
-    │       ├── Uses validation-agent --mode=monitor continuously
+    │       ├── Uses validation-test-agent --mode=monitor continuously
     │       │       └── Gets progress reports every N tool calls
     │       │
     │       └── Decision-time guidance detects stuck patterns
     │               └── Triggers System3 consultation when needed
     │
-    └── Monitors via validation-agent --mode=monitor
+    └── Monitors via validation-test-agent --mode=monitor
             └── Can intervene if orchestrator is stuck
 ```
 
@@ -192,7 +192,7 @@ acceptance-tests/
 ### New Mode: `--mode=monitor`
 ```bash
 # Continuous monitoring of orchestrator progress
-validation-agent --mode=monitor \
+validation-test-agent --mode=monitor \
     --session-id=orch-auth-123 \
     --interval=30 \
     --task-list-id=session-abc
@@ -268,10 +268,10 @@ class ValidationMonitor:
 ```
 
 ### Implementation Steps
-1. Add `--mode=monitor` to validation-agent
+1. Add `--mode=monitor` to validation-test-agent
 2. Create `MonitorReport` dataclass
 3. Add interval-based polling option
-4. Create System3 → validation-agent integration
+4. Create System3 → validation-test-agent integration
 
 ---
 
@@ -286,9 +286,9 @@ async def monitor_orchestrator(orch_session_id: str, task_list_id: str):
     """System3 monitors orchestrator progress actively."""
 
     while True:
-        # Check progress via validation-agent
+        # Check progress via validation-test-agent
         report = Task(
-            subagent_type="validation-agent",
+            subagent_type="validation-test-agent",
             prompt=f"--mode=monitor --session-id={orch_session_id} --task-list-id={task_list_id}",
             description="Check orchestrator progress"
         )
@@ -345,7 +345,7 @@ Send me a status update with: mb-send system3 '{"type": "status_update", ...}'
 ### Implementation Steps
 1. Add monitoring loop to System3 output-style
 2. Create intervention message templates
-3. Add `--background` option for validation-agent monitor mode
+3. Add `--background` option for validation-test-agent monitor mode
 4. Integrate with message bus for bidirectional communication
 
 ---
@@ -425,7 +425,7 @@ class TestUserLogin:
 ### Validation Agent E2E Mode Uses These Tests
 ```bash
 # When validating feature completion
-validation-agent --mode=e2e --prd=PRD-AUTH-001
+validation-test-agent --mode=e2e --prd=PRD-AUTH-001
 
 # Runs: pytest acceptance-tests/PRD-AUTH-001/ -v
 # Reports which acceptance criteria pass/fail
@@ -442,7 +442,7 @@ validation-agent --mode=e2e --prd=PRD-AUTH-001
 4. ⬜ Update orchestrator output-style for Task delegation
 
 ### Phase 2: Validation Monitoring
-5. ⬜ Add `--mode=monitor` to validation-agent
+5. ⬜ Add `--mode=monitor` to validation-test-agent
 6. ⬜ Create MonitorReport format
 7. ⬜ Add System3 monitoring loop
 

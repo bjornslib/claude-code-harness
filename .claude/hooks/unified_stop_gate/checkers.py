@@ -272,7 +272,7 @@ class CompletionPromiseChecker:
     def _build_orchestrator_guidance(self, orch_promises: list[dict]) -> str:
         """Build guidance for monitoring orchestrators.
 
-        Provides guidance on how to monitor orchestrators using validation-agent.
+        Provides guidance on how to monitor orchestrators using validation-test-agent.
 
         Args:
             orch_promises: List of in_progress orchestrator promise dicts
@@ -308,11 +308,11 @@ The following orchestrators are actively working:
 
 **Recommended: Dual-Layer Monitoring Pattern**
 
-1. **Background validation-agents** (one per orchestrator, Sonnet for exit discipline):
+1. **Background validation-test-agents** (one per orchestrator, Sonnet for exit discipline):
 ```python
 for orch in {orch_sessions_str}:
     Task(
-        subagent_type="validation-agent",
+        subagent_type="validation-test-agent",
         model="sonnet",
         run_in_background=True,
         prompt=f"--mode=monitor --session-id={{orch}} --task-list-id={prd_name}"

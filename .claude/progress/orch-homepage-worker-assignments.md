@@ -78,7 +78,7 @@ VALIDATION PROTOCOL (3-Level):
 - Level 2 (API): Not applicable for UI foundation (no API calls yet)
 - Level 3 (E2E): Visual verification - components render correctly in browser
 
-**Do NOT close tasks without validation evidence. Orchestrator will delegate final validation to validation-agent after your completion report.**
+**Do NOT close tasks without validation evidence. Orchestrator will delegate final validation to validation-test-agent after your completion report.**
 ```
 
 ---
@@ -206,7 +206,7 @@ TASKS (Beads):
 ## Validation Worker (Launched After Implementation)
 
 **Session Name**: `worker-homepage-validation`
-**Agent Type**: validation-agent
+**Agent Type**: validation-test-agent
 **Mode**: --mode=implementation
 **Epic**: AT-Epic - 3-Level Validation (dspy-rqz)
 **Trigger**: When Epic 1, 2, 3 implementation complete
@@ -309,13 +309,13 @@ DO NOT INTERVENE - Only observe and report."""
    - Same tmux delegation pattern
 
 4. **Phase 4**: Launch Validation Worker after all implementation complete
-   - Use validation-agent in implementation mode
+   - Use validation-test-agent in implementation mode
    - Validation-agent runs 3-level protocol
    - Validation-agent closes tasks with evidence
 
 5. **Phase 5**: Close functional epics after AT epic closes
    - AT epic closure unblocks Epic 1, 2, 3
-   - Orchestrator delegates epic closures to validation-agent
+   - Orchestrator delegates epic closures to validation-test-agent
    - Finally close business epic (dspy-o2t) after all functional epics closed
 
 ---

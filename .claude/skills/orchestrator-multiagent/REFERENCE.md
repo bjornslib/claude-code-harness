@@ -227,7 +227,7 @@ Run this at the start of every orchestrator session:
 | Frontend | `frontend-dev-expert` | `worker-frontend` | React, Next.js, UI |
 | Backend | `backend-solutions-engineer` | `worker-backend` | Python, FastAPI, APIs |
 | Browser Testing | `tdd-test-engineer` | `worker-tester` | E2E validation |
-| Validator | `validation-agent` | `worker-validator` | Task closure with evidence |
+| Validator | `validation-test-agent` | `worker-validator` | Task closure with evidence |
 | General | `general-purpose` | `worker-general` | Everything else |
 
 ### Team Lifecycle Commands

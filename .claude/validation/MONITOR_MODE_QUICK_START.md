@@ -5,7 +5,7 @@
 Monitor task completion and validate work products in real-time.
 
 ```bash
-python ~/.claude/validation/validation-agent-monitor.py \
+python ~/.claude/validation/validation-test-agent-monitor.py \
     --session-id demo-test \
     --task-list-id shared-tasks \
     --max-iterations 10 \
@@ -35,14 +35,14 @@ python ~/.claude/validation/validation-agent-monitor.py \
 
 ### Monitor Task #15 (Default)
 ```bash
-python ~/.claude/validation/validation-agent-monitor.py \
+python ~/.claude/validation/validation-test-agent-monitor.py \
     --session-id my-session \
     --task-list-id shared-tasks
 ```
 
 ### Fast Polling (Every 5 seconds)
 ```bash
-python ~/.claude/validation/validation-agent-monitor.py \
+python ~/.claude/validation/validation-test-agent-monitor.py \
     --session-id my-session \
     --task-list-id shared-tasks \
     --max-iterations 20 \
@@ -51,7 +51,7 @@ python ~/.claude/validation/validation-agent-monitor.py \
 
 ### Get JSON Output (For Integration)
 ```bash
-python ~/.claude/validation/validation-agent-monitor.py \
+python ~/.claude/validation/validation-test-agent-monitor.py \
     --session-id my-session \
     --task-list-id shared-tasks \
     --json
@@ -59,7 +59,7 @@ python ~/.claude/validation/validation-agent-monitor.py \
 
 ### Monitor Custom Task
 ```bash
-python ~/.claude/validation/validation-agent-monitor.py \
+python ~/.claude/validation/validation-test-agent-monitor.py \
     --session-id my-session \
     --task-list-id shared-tasks \
     --task-id 12
@@ -126,7 +126,7 @@ Check the evidence JSON for `pytest_returncode` field.
 
 | File | Purpose |
 |------|---------|
-| `validation-agent-monitor.py` | Monitor mode implementation |
+| `validation-test-agent-monitor.py` | Monitor mode implementation |
 | `MONITOR_MODE_QUICK_START.md` | This quick reference |
 | `../documentation/VALIDATION_AGENT_MONITOR_MODE.md` | Full documentation |
 

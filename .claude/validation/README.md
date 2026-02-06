@@ -1,6 +1,6 @@
 # Validation Evidence Directory
 
-This directory stores evidence from validation-agent runs.
+This directory stores evidence from validation-test-agent runs.
 
 ## Structure
 

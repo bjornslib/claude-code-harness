@@ -87,7 +87,7 @@ Enable independent monitoring and completion of multiple features without user i
 **Continue to next feature automatically when ALL conditions met:**
 
 1. Current feature validation PASSED (all three levels)
-2. validation-agent closed task with evidence
+2. validation-test-agent closed task with evidence
 3. Git commit successful with `feat(<id>)` message
 4. `bd ready` returns next available task
 5. No regressions detected in spot checks
@@ -236,7 +236,7 @@ Use Markdown-based test specifications:
 
 1. **Generate tests from PRD**:
    ```python
-   # Orchestrator invokes skill (NOT worker, NOT validation-agent)
+   # Orchestrator invokes skill (NOT worker, NOT validation-test-agent)
    Skill("acceptance-test-writer", args="--prd=PRD-XXX --source=.taskmaster/docs/prd.md")
    ```
 
@@ -262,14 +262,14 @@ acceptance-tests/PRD-XXX/
 **Key Rules**:
 - Generate tests in Phase 1 (Planning), NOT Phase 2 (Execution)
 - Orchestrator generates tests, NOT workers
-- validation-agent executes tests in Phase 3 (NOT orchestrator)
+- validation-test-agent executes tests in Phase 3 (NOT orchestrator)
 - Tests are committed to git with the beads hierarchy
 
 **Integration with Validation Gate**:
 ```
 Phase 1: PRD → acceptance-test-writer → acceptance-tests/PRD-XXX/
 Phase 2: Workers implement (reference tests for guidance)
-Phase 3: validation-agent --mode=e2e --prd=PRD-XXX → runs tests → closes tasks
+Phase 3: validation-test-agent --mode=e2e --prd=PRD-XXX → runs tests → closes tasks
 ```
 
 ---

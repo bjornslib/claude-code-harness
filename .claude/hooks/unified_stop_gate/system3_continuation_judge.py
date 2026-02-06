@@ -6,7 +6,7 @@ and determine if a System 3 meta-orchestrator session should be allowed to stop.
 The judge evaluates:
 - Completion promise verification (cs-verify)
 - Post-session reflection (Hindsight retention)
-- Validation evidence (validation-agent usage)
+- Validation evidence (validation-test-agent usage)
 - Cleanup (tmux sessions, message bus)
 - Meaningful work completion
 - Continuation items or genuine completeness
@@ -89,7 +89,7 @@ Step 4 has already enforced that no pending/in_progress tasks remain. You are ev
 Before stopping, System 3 MUST have completed:
 1. **Completion Promises**: All session promises verified with proof (cs-verify), or no promises created
 2. **Post-Session Reflection**: Learnings stored to Hindsight (mcp__hindsight__retain)
-3. **Validation Evidence**: Business outcomes validated via validation-agent (not direct bd close)
+3. **Validation Evidence**: Business outcomes validated via validation-test-agent (not direct bd close)
 4. **Cleanup**: Orchestrator tmux sessions killed, message bus unregistered
 
 ### Layer 2: Work Availability

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The validation-agent **monitor mode** provides continuous monitoring of task completion and work product validation. This is the third operating mode for the validation agent, complementing unit and E2E modes.
+The validation-test-agent **monitor mode** provides continuous monitoring of task completion and work product validation. This is the third operating mode for the validation agent, complementing unit and E2E modes.
 
 **Status**: Fully implemented and tested.
 
@@ -91,7 +91,7 @@ Monitor captures detailed evidence:
 
 ```bash
 # Monitor Task #15 in shared-tasks
-python ~/.claude/validation/validation-agent-monitor.py \
+python ~/.claude/validation/validation-test-agent-monitor.py \
     --session-id demo-test \
     --task-list-id shared-tasks \
     --max-iterations 10 \
@@ -113,7 +113,7 @@ python ~/.claude/validation/validation-agent-monitor.py \
 
 ```bash
 # Fast polling (5 seconds, 20 iterations = 100s max)
-python ~/.claude/validation/validation-agent-monitor.py \
+python ~/.claude/validation/validation-test-agent-monitor.py \
     --session-id demo-test \
     --task-list-id shared-tasks \
     --max-iterations 20 \
@@ -121,7 +121,7 @@ python ~/.claude/validation/validation-agent-monitor.py \
     --json
 
 # Custom task (Task #12)
-python ~/.claude/validation/validation-agent-monitor.py \
+python ~/.claude/validation/validation-test-agent-monitor.py \
     --session-id demo-test \
     --task-list-id shared-tasks \
     --task-id 12 \
@@ -129,7 +129,7 @@ python ~/.claude/validation/validation-agent-monitor.py \
     --interval 5
 
 # Output JSON for integration with orchestrators
-python ~/.claude/validation/validation-agent-monitor.py \
+python ~/.claude/validation/validation-test-agent-monitor.py \
     --session-id demo-test \
     --task-list-id shared-tasks \
     --json > monitor-result.json
@@ -249,7 +249,7 @@ Orchestrators use monitor mode to track worker progress:
 while not all_tasks_complete:
     # Check progress of current task
     result = Task(
-        subagent_type="validation-agent",
+        subagent_type="validation-test-agent",
         prompt="--mode=monitor --session-id orch-123 --task-list-id shared-tasks"
     )
 
@@ -271,7 +271,7 @@ System 3 uses monitor for real-time visibility:
 ```python
 # System 3 monitors orchestrator health
 report = Task(
-    subagent_type="validation-agent",
+    subagent_type="validation-test-agent",
     prompt="--mode=monitor --session-id orch-homepage-123 --task-list-id orch-tasks"
 )
 
@@ -292,7 +292,7 @@ elif completion_percentage < 30 and stuck_for_5_minutes:
 ├── scripts/
 │   └── task-list-monitor.py           # Task polling utility
 ├── validation/
-│   └── validation-agent-monitor.py     # Monitor mode implementation
+│   └── validation-test-agent-monitor.py     # Monitor mode implementation
 └── tests/
     └── demo/
         └── test_monitor_demo.py        # Example work product
@@ -353,7 +353,7 @@ cat > ~/.claude/tasks/shared-tasks/15.json << 'EOF'
 EOF
 
 # 3. Run monitor mode (should find it completed immediately)
-python ~/.claude/validation/validation-agent-monitor.py \
+python ~/.claude/validation/validation-test-agent-monitor.py \
     --session-id demo-test \
     --task-list-id shared-tasks \
     --max-iterations 3 \
@@ -422,7 +422,7 @@ pytest ~/.claude/tests/demo/test_monitor_demo.py -v
 ## See Also
 
 - `task-list-monitor.py` - Underlying polling utility
-- `validation-agent` modes overview - All operating modes
+- `validation-test-agent` modes overview - All operating modes
 - Orchestrator integration patterns - How to use in orchestrators
 - System 3 documentation - Meta-orchestrator integration
 

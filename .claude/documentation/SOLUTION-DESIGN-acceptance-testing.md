@@ -10,7 +10,7 @@
 ## 1. Problem Statement
 
 ### Current State
-The validation-agent checks whether code **runs** but not whether it does what it was **supposed to do**. This creates a critical gap:
+The validation-test-agent checks whether code **runs** but not whether it does what it was **supposed to do**. This creates a critical gap:
 
 ```
 Worker implements feature → Validation-agent runs tests → "TECHNICAL_PASS"
@@ -18,7 +18,7 @@ Worker implements feature → Validation-agent runs tests → "TECHNICAL_PASS"
                           But... does it meet the PRD requirements?
                           Does it achieve the business outcomes?
 
-                          ❌ Unknown - validation-agent lacks this context
+                          ❌ Unknown - validation-test-agent lacks this context
 ```
 
 ### Root Cause
@@ -54,7 +54,7 @@ Worker implements feature → Validation-agent runs tests → "TECHNICAL_PASS"
 │  ┌──────────────────────────────────────────────────────────┼───────────┐  │
 │  │                     IMPLEMENTATION PHASE                 │           │  │
 │  │                                                          ▼           │  │
-│  │  Worker ───▶ Orchestrator ───▶ validation-agent ───▶ acceptance-   │  │
+│  │  Worker ───▶ Orchestrator ───▶ validation-test-agent ───▶ acceptance-   │  │
 │  │  "done"      "validate"        routes to:            test-runner    │  │
 │  │                                --mode=unit  ───▶ pytest/jest        │  │
 │  │                                --mode=e2e   ───▶ acceptance-test-   │  │
@@ -80,7 +80,7 @@ Worker implements feature → Validation-agent runs tests → "TECHNICAL_PASS"
 |-----------|---------|------|
 | `acceptance-test-writer` | Generate executable test scripts from PRD | Skill |
 | `acceptance-test-runner` | Execute tests, capture evidence, report results | Skill |
-| `validation-agent` | Route to appropriate testing mode | Agent (updated) |
+| `validation-test-agent` | Route to appropriate testing mode | Agent (updated) |
 
 ### Validation Modes (Simplified)
 
@@ -311,7 +311,7 @@ evidence:
 **Executed**: 2026-01-24T10:30:00Z
 **Duration**: 47 seconds
 **Environment**: Development (localhost)
-**Triggered By**: validation-agent --mode=e2e --task_id=TASK-101
+**Triggered By**: validation-test-agent --mode=e2e --task_id=TASK-101
 
 ---
 
@@ -482,10 +482,10 @@ The password reset completion endpoint was not implemented. The reset email send
 
 ## 6. Validation Agent Updates
 
-The validation-agent becomes a router that invokes the appropriate skill based on mode:
+The validation-test-agent becomes a router that invokes the appropriate skill based on mode:
 
 ```python
-# Pseudo-code for validation-agent routing logic
+# Pseudo-code for validation-test-agent routing logic
 
 def validate(mode: str, task_id: str, prd: str = None):
     if mode == "unit":
@@ -508,7 +508,7 @@ def validate(mode: str, task_id: str, prd: str = None):
         validate("e2e", task_id, prd)
 ```
 
-**Changes Required to validation-agent**:
+**Changes Required to validation-test-agent**:
 1. Add `--prd` parameter to specify which PRD's acceptance tests to run
 2. Add routing logic to invoke `acceptance-test-runner` skill
 3. Update report aggregation to include acceptance test results
@@ -534,10 +534,10 @@ def validate(mode: str, task_id: str, prd: str = None):
 1. Orchestrator assigns task to worker
 2. Worker implements feature
 3. Worker reports "done"
-4. Orchestrator invokes validation-agent:
+4. Orchestrator invokes validation-test-agent:
 
    Task(
-       subagent_type="validation-agent",
+       subagent_type="validation-test-agent",
        prompt="--mode=e2e --task_id=TASK-123 --prd=PRD-AUTH-001"
    )
 
@@ -582,7 +582,7 @@ When acceptance tests fail:
 | Tests are executable | Runner skill can execute generated tests without manual modification |
 | Evidence captured | Screenshots/responses saved for each criterion |
 | Reports are actionable | Failed tests include specific gap analysis and recommended actions |
-| Integration with validation-agent | `--mode=e2e --prd=X` routes to acceptance-test-runner |
+| Integration with validation-test-agent | `--mode=e2e --prd=X` routes to acceptance-test-runner |
 | Feedback loop works | Failed criteria result in new tasks with specific fix instructions |
 
 ---
@@ -593,7 +593,7 @@ When acceptance tests fail:
 |-------|------|-------|
 | 1 | Create `acceptance-test-writer` skill | skill-development |
 | 2 | Create `acceptance-test-runner` skill | skill-development |
-| 3 | Update validation-agent to route to skills | backend-solutions-engineer |
+| 3 | Update validation-test-agent to route to skills | backend-solutions-engineer |
 | 4 | Test with sample PRD | tdd-test-engineer |
 | 5 | Document in CLAUDE.md | orchestrator |
 
@@ -606,7 +606,7 @@ When acceptance tests fail:
 | Naming convention | `acceptance-test-writer`, `acceptance-test-runner` |
 | Test format | YAML (easier for LLMs to parse) |
 | Sub-agent model | Sonnet per criterion (capability over speed) |
-| Skill vs agent | Skills, invoked by validation-agent |
+| Skill vs agent | Skills, invoked by validation-test-agent |
 | Modes | `--mode=unit` (mocks OK), `--mode=e2e` (real data, tests against acceptance criteria) |
 
 ---

@@ -276,7 +276,7 @@ Teammate(
 
 ## VALIDATION MONITOR INTEGRATION (NEW)
 
-When spawning an orchestrator, launch a validation-agent monitor to enable wake-up notifications.
+When spawning an orchestrator, launch a validation-test-agent monitor to enable wake-up notifications.
 
 ### Set Task List ID in Spawn Sequence
 
@@ -295,7 +295,7 @@ After orchestrator is running, launch a validation monitor:
 def launch_monitor(name, prd_name):
     """Launch validation monitor - must be re-called after each wake-up."""
     return Task(
-        subagent_type="validation-agent",
+        subagent_type="validation-test-agent",
         model="haiku",
         run_in_background=True,
         description=f"Monitor orch-{name}",
@@ -319,7 +319,7 @@ if "MONITOR_STUCK" in result:
 
 elif "MONITOR_COMPLETE" in result:
     # All tasks done - trigger final validation
-    Task(subagent_type="validation-agent",
+    Task(subagent_type="validation-test-agent",
          prompt=f"--mode=e2e --prd=PRD-{prd_name} ...")
 
 elif "MONITOR_HEALTHY" in result:
@@ -422,14 +422,14 @@ When running multiple orchestrators in parallel and you want to wait for ANY one
 # Create tracking tasks for each orchestrator
 TaskCreate(
     subject="Monitor orch-live-form-ui",
-    description="Tracking task for validation-agent monitoring orch-live-form-ui",
+    description="Tracking task for validation-test-agent monitoring orch-live-form-ui",
     activeForm="Monitoring orch-live-form-ui"
 )
 # Returns task ID, e.g., #16
 
 TaskCreate(
     subject="Monitor orch-employer-data-model",
-    description="Tracking task for validation-agent monitoring orch-employer-data-model",
+    description="Tracking task for validation-test-agent monitoring orch-employer-data-model",
     activeForm="Monitoring orch-employer-data-model"
 )
 # Returns task ID, e.g., #17
@@ -441,7 +441,7 @@ Include in monitor prompt:
 
 ```python
 Task(
-    subagent_type="validation-agent",
+    subagent_type="validation-test-agent",
     model="sonnet",
     run_in_background=True,
     description="Monitor orch-live-form-ui",
@@ -466,7 +466,7 @@ Task(
     description="Wait for first monitor to complete",
     prompt="""
 ## Mission
-Poll TaskList until ANY validation-agent monitor task completes.
+Poll TaskList until ANY validation-test-agent monitor task completes.
 
 ## Tracking Tasks
 | Task ID | Orchestrator |
@@ -567,7 +567,7 @@ mcp__hindsight__retain(
 # Did this advance any Key Results?
 for kr in get_key_results_for(business_epic):
     if can_verify_now(kr):
-        Task(subagent_type="validation-agent",
+        Task(subagent_type="validation-test-agent",
              prompt=f"--mode=e2e --prd={prd_id} --task_id={kr.id}")
 ```
 
@@ -658,7 +658,7 @@ Maintain active orchestrators in `.claude/state/active-orchestrators.json`:
 |------|---------|
 | [completion-promise.md](references/completion-promise.md) | Session state tracking, cs-* scripts |
 | [prd-extraction.md](references/prd-extraction.md) | Goal extraction workflow |
-| [validation-workflow.md](references/validation-workflow.md) | 3-level validation, validation-agent |
+| [validation-workflow.md](references/validation-workflow.md) | 3-level validation, validation-test-agent |
 | [okr-tracking.md](references/okr-tracking.md) | Business Epic / Key Result tracking |
 | [spawn-workflow.md](references/spawn-workflow.md) | Complete spawn process |
 | [tmux-commands.md](references/tmux-commands.md) | tmux command reference |

@@ -3,7 +3,7 @@
 Task List Monitor for Validation Agent
 
 Monitors ~/.claude/tasks/{TASK_LIST_ID}/ for status changes.
-Designed to be called periodically by validation-agent --monitor mode.
+Designed to be called periodically by validation-test-agent --monitor mode.
 
 Usage:
     # Get current status snapshot

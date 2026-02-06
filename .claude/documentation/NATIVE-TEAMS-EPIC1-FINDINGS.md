@@ -295,5 +295,5 @@ Both Haiku workers produced high-quality research summaries:
 
 1. **Epic 4**: Test delegate mode tool restrictions (verify Task tool available, Edit/Write removed)
 2. **Epic 5**: Test plan approval workflow (planModeRequired=true)
-3. **Epic 6**: Integrate validation-agent with native team pattern
+3. **Epic 6**: Integrate validation-test-agent with native team pattern
 4. **Epic 7**: Full integration test — System 3 (outside) → Orchestrator as team lead → Workers as teammates

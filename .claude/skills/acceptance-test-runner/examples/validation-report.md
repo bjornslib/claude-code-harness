@@ -4,7 +4,7 @@
 **Executed**: 2026-01-24T10:30:00Z
 **Duration**: 47 seconds
 **Environment**: Development (http://localhost:3000)
-**Triggered By**: validation-agent --mode=e2e --task_id=TASK-101
+**Triggered By**: validation-test-agent --mode=e2e --task_id=TASK-101
 
 ---
 

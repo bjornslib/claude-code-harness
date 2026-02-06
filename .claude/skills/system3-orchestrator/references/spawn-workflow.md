@@ -151,7 +151,7 @@ After orchestrator is running, System3 launches a validation monitor:
 
 ```python
 Task(
-    subagent_type="validation-agent",
+    subagent_type="validation-test-agent",
     model="sonnet",  # ⚠️ MUST be Sonnet - Haiku lacks exit discipline
     run_in_background=True,
     description=f"Validation monitor for orch-{INITIATIVE}",

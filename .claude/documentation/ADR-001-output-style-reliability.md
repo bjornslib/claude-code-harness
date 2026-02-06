@@ -30,7 +30,7 @@ We needed to determine where to place critical operational content that agents m
 
 **Output Style Content (Critical)**:
 - Core workflow patterns (4-phase pattern, PREFLIGHT)
-- Mandatory protocols (validation-agent enforcement, tmux Enter pattern)
+- Mandatory protocols (validation-test-agent enforcement, tmux Enter pattern)
 - Session lifecycle (registration, handoff checklists)
 - Memory integration patterns (Hindsight operations)
 

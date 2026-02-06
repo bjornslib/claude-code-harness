@@ -153,7 +153,7 @@ All task closures MUST go through a validator teammate as the single entry point
 ```python
 # Spawn a validator teammate (once per session, after team creation)
 Task(
-    subagent_type="validation-agent",
+    subagent_type="validation-test-agent",
     team_name="{initiative}-workers",
     name="validator",
     prompt="You are the validator in team {initiative}-workers. When tasks are ready for validation, check TaskList for tasks needing review. Run validation (--mode=unit or --mode=e2e --prd=PRD-XXX). Close tasks with evidence via bd close. Report results via SendMessage to team-lead."

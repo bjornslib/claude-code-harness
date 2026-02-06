@@ -61,11 +61,11 @@ This shapes the entire monitoring design: **monitors must be subagents that COMP
 
 ### Validation-Agent Monitor Mode
 
-System3 uses `validation-agent --mode=monitor` for continuous oversight of orchestrators:
+System3 uses `validation-test-agent --mode=monitor` for continuous oversight of orchestrators:
 
 ```python
 Task(
-    subagent_type="validation-agent",
+    subagent_type="validation-test-agent",
     model="sonnet",  # ⚠️ MUST be Sonnet - Haiku lacks exit discipline
     run_in_background=True,
     prompt="--mode=monitor --session-id=orch-{name} --task-list-id=PRD-{prd}"
@@ -136,7 +136,7 @@ Tasks stored at: `~/.claude/tasks/{CLAUDE_CODE_TASK_LIST_ID}/`
 | File | Purpose |
 |------|---------|
 | `documentation/SYSTEM3_MONITORING_ARCHITECTURE.md` | Full design document |
-| `agents/validation-agent.md` | Monitor mode workflow & exit discipline |
+| `agents/validation-test-agent.md` | Monitor mode workflow & exit discipline |
 | `scripts/task-list-monitor.py` | Efficient change detection |
 | `hooks/decision_guidance/goal_validator.py` | Task validation logic |
 

@@ -11,7 +11,7 @@ Use this template when generating validation reports.
 **Executed**: {ISO8601_timestamp}
 **Duration**: {total_seconds} seconds
 **Environment**: {environment_name} ({base_url})
-**Triggered By**: {trigger_source} (e.g., "validation-agent --mode=e2e --task_id=TASK-123")
+**Triggered By**: {trigger_source} (e.g., "validation-test-agent --mode=e2e --task_id=TASK-123")
 
 ---
 

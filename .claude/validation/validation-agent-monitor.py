@@ -2,10 +2,10 @@
 """
 Validation Agent Monitor Mode
 
-Enhanced validation-agent that monitors task completion and validates work.
+Enhanced validation-test-agent that monitors task completion and validates work.
 
 Usage:
-    python validation-agent-monitor.py --session-id demo-test \
+    python validation-test-agent-monitor.py --session-id demo-test \
         --task-list-id shared-tasks --max-iterations 10
 
 Modes:
@@ -289,11 +289,11 @@ def main():
         epilog="""
 Examples:
   # Monitor task completion and validate work
-  python validation-agent-monitor.py --session-id demo-test \\
+  python validation-test-agent-monitor.py --session-id demo-test \\
       --task-list-id shared-tasks --max-iterations 10
 
   # Custom polling interval (5 seconds)
-  python validation-agent-monitor.py --session-id demo-test \\
+  python validation-test-agent-monitor.py --session-id demo-test \\
       --task-list-id shared-tasks --max-iterations 20 --interval 5
         """
     )

@@ -149,13 +149,13 @@ bo_epic = find_business_epic_enabled_by(enabler_epic)
 # 2. Check if any Key Results are now verifiable
 for kr in get_key_results_for(bo_epic):
     if can_verify_now(kr):
-        # Delegate to validation-agent --mode=e2e --prd=X
+        # Delegate to validation-test-agent --mode=e2e --prd=X
         verify_kr_via_validation_agent(kr, prd=prd_id)
 
 # 3. Check if Business Epic can close
 if all_key_results_verified(bo_epic) and all_enabler_epics_done(bo_epic):
-    # Delegate closure to validation-agent --mode=e2e --prd=X
-    Task(subagent_type="validation-agent",
+    # Delegate closure to validation-test-agent --mode=e2e --prd=X
+    Task(subagent_type="validation-test-agent",
          prompt=f"--mode=e2e --prd={prd_id} --task_id={bo_epic.id}")
 ```
 
@@ -173,7 +173,7 @@ if all_key_results_verified(bo_epic) and all_enabler_epics_done(bo_epic):
 2. Delegate KR verification:
    ```python
    Task(
-       subagent_type="validation-agent",
+       subagent_type="validation-test-agent",
        prompt=f"""
        --mode=e2e --prd={prd_id}
        --task_id={kr_id}
@@ -199,7 +199,7 @@ if all_key_results_verified(bo_epic) and all_enabler_epics_done(bo_epic):
 AT tasks → AT epic → Functional epic → Key Results → Business Epic
 ```
 
-**All business-level closures (KR, BO) go through validation-agent with `--mode=e2e --prd=PRD-XXX`.**
+**All business-level closures (KR, BO) go through validation-test-agent with `--mode=e2e --prd=PRD-XXX`.**
 
 ---
 

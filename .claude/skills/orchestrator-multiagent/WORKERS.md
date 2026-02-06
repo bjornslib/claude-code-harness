@@ -153,7 +153,7 @@ Task(
 
 ```python
 Task(
-    subagent_type="validation-agent",
+    subagent_type="validation-test-agent",
     team_name="{initiative}-workers",
     name="validator",
     prompt="You are the validator in team {initiative}-workers. Check TaskList for validation tasks. Run validation (--mode=unit or --mode=e2e --prd=PRD-XXX). Close tasks with evidence via bd close. Report results via SendMessage to team-lead."

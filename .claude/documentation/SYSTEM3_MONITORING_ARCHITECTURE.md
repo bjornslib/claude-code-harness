@@ -82,7 +82,7 @@ return Summary(tasks_validated=total, issues_found=issues)
 **Launch command**:
 ```
 Task(
-    subagent_type="validation-agent",
+    subagent_type="validation-test-agent",
     prompt="--monitor --list-id PRD-AUTH-001 --max-iterations 30",
     run_in_background=True,
     model="sonnet"  # Sonnet required - Haiku lacks exit discipline  # Fast, cheap for monitoring

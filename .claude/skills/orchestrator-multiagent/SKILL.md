@@ -72,15 +72,15 @@ Task(
 |---------|-------------|-------------|
 | `bd close <id>` | Bypasses validation evidence | Assign to validator teammate via TaskCreate + SendMessage |
 | `bd close <id> --reason "..."` | Same - reason doesn't replace evidence | Validator teammate collects actual evidence |
-| `Skill("acceptance-test-runner")` | Bypasses validation-agent routing | Use validation-agent --mode=e2e |
-| `Skill("acceptance-test-writer")` | Bypasses validation-agent routing | Use validation-agent --mode=e2e |
+| `Skill("acceptance-test-runner")` | Bypasses validation-test-agent routing | Use validation-test-agent --mode=e2e |
+| `Skill("acceptance-test-writer")` | Bypasses validation-test-agent routing | Use validation-test-agent --mode=e2e |
 
 **If you attempt `bd close`**: STOP. Ask yourself:
-1. Did I run validation-agent --mode=unit or --mode=e2e?
-2. Did validation-agent produce passing evidence?
-3. Did validation-agent close the task for me?
+1. Did I run validation-test-agent --mode=unit or --mode=e2e?
+2. Did validation-test-agent produce passing evidence?
+3. Did validation-test-agent close the task for me?
 
-If NO to any: You're violating the validation gate. Delegate to validation-agent first.
+If NO to any: You're violating the validation gate. Delegate to validation-test-agent first.
 
 **Correct vs Incorrect Patterns:**
 
@@ -144,7 +144,7 @@ These types are used as `subagent_type` when spawning teammates via `Task(..., t
 | **Browser Testing** | `tdd-test-engineer` | `worker-tester` | **E2E UI validation, automated browser testing** |
 | Architecture | `solution-design-architect` | `worker-architect` | Design docs, PRDs |
 | General | `Explore` | `worker-explore` | Investigation, code search |
-| **Validator** | `validation-agent` | `validator` | **Task closure with evidence** |
+| **Validator** | `validation-test-agent` | `validator` | **Task closure with evidence** |
 
 **Pattern**: Use `Task(subagent_type="...", team_name="...", name="...")` to spawn teammates. Workers claim tasks from the shared TaskList and report via SendMessage.
 
@@ -429,7 +429,7 @@ git add acceptance-tests/ && git commit -m "test(PRD-AUTH-001): add acceptance t
 - Tests are **NOT executed** in Phase 1 (only generated)
 - Tests become part of **version control**
 - Workers reference tests during Phase 2
-- validation-agent executes tests during Phase 3 closure
+- validation-test-agent executes tests during Phase 3 closure
 
 ---
 
@@ -569,7 +569,7 @@ The autonomous mode protocol provides:
    -- SendMessage to validator
    |
 5. When all epics closed -> System 3 closes uber-epic
-   -- System 3 uses validation-agent --mode=e2e --prd=PRD-XXX for uber-epic
+   -- System 3 uses validation-test-agent --mode=e2e --prd=PRD-XXX for uber-epic
    |
 6. Final commit and summary
    -- `git add . && git commit -m "feat: complete [initiative]"`
@@ -790,7 +790,7 @@ Task(
 
 # 3. Spawn validator teammate (once per session)
 Task(
-    subagent_type="validation-agent",
+    subagent_type="validation-test-agent",
     team_name="{initiative}-workers",
     name="validator",
     prompt="You are the validator in team {initiative}-workers. When tasks are ready for validation, check TaskList for tasks needing review. Run validation (--mode=unit or --mode=e2e --prd=PRD-XXX). Close tasks with evidence via bd close. Report results via SendMessage to team-lead."
@@ -823,7 +823,7 @@ SendMessage(type="message", recipient="validator", content="Validation task avai
 | **E2E Browser Tests** | **`tdd-test-engineer`** | **`worker-tester`** |
 | Architecture | `solution-design-architect` | `worker-architect` |
 | Investigation | `Explore` | `worker-explore` |
-| **Task Closure** | **`validation-agent`** | **`validator`** |
+| **Task Closure** | **`validation-test-agent`** | **`validator`** |
 
 **Parallel workers**: Spawn multiple teammates into the same team. Each claims different tasks from the shared TaskList. Workers coordinate peer-to-peer via SendMessage.
 
@@ -881,7 +881,7 @@ result = Task(
 In fallback mode, validation also uses Task subagents:
 ```python
 Task(
-    subagent_type="validation-agent",
+    subagent_type="validation-test-agent",
     prompt="--mode=e2e --task_id=agencheck-042 --prd=PRD-AUTH-001"
 )
 ```
@@ -927,7 +927,7 @@ The validator is a persistent teammate spawned once per session during PREFLIGHT
 ```python
 # Spawn validator teammate (once per session, after team creation)
 Task(
-    subagent_type="validation-agent",
+    subagent_type="validation-test-agent",
     team_name="{initiative}-workers",
     name="validator",
     prompt="You are the validator in team {initiative}-workers. When tasks are ready for validation, check TaskList for tasks needing review. Run validation (--mode=unit or --mode=e2e --prd=PRD-XXX). Close tasks with evidence via bd close. Report results via SendMessage to team-lead."
