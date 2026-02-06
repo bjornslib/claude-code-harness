@@ -863,14 +863,11 @@ Poll all orchestrators periodically. Report back to System 3 IMMEDIATELY when AN
 5. **ERROR**: Same error repeated 3+ times
 
 ## Monitoring Commands
-Check each orchestrator every 2-3 minutes:
+Check each orchestrator every 30-60 seconds:
 
 ```bash
-# Check orch-live-form-ui
-echo "=== LIVE FORM UI ===" && tmux capture-pane -t "orch-live-form-ui" -p | tail -45
-
-# Check orch-employer-data-model
-echo "=== EMPLOYER DATA MODEL ===" && tmux capture-pane -t "orch-employer-data-model" -p | tail -45
+# Capture recent output (use session name for each orchestrator)
+tmux capture-pane -t "ORCHESTRATOR_NAME" -p -S -100 2>/dev/null | tail -80
 ```
 
 Also check beads progress:
@@ -879,11 +876,26 @@ bd list --status=in_progress
 bd list --status=closed | tail -5
 ```
 
-## Progress Indicators (Good Signs)
+## What "COMPLETE" Looks Like
+
+An orchestrator is DONE when you see these signs in the tmux output:
+
+1. **Final work report** — The orchestrator summarizes what it accomplished (files changed, tasks completed, commits made). This is typically a structured summary near the end of output.
+2. **Code committed and pushed** — You see `git commit` and `git push` commands with successful output (no errors).
+3. **Stop hook passed** — The orchestrator's session is winding down. You may see stop hook output or the Claude Code session exiting.
+4. **Claude Code exited** — The tmux pane shows a bash `$` prompt instead of Claude's `>` prompt, meaning Claude Code has exited.
+5. **tmux session gone** — `tmux has-session -t ORCHESTRATOR_NAME 2>/dev/null` returns non-zero (session no longer exists).
+
+**Any ONE of signs 4 or 5 is definitive** — report COMPLETE immediately.
+**Signs 1+2 together are strong evidence** — report COMPLETE.
+**Sign 1 alone** — wait one more poll cycle to confirm, then report COMPLETE.
+
+## Progress Indicators (Good Signs — Orchestrator Still Working)
 - Tasks being closed (`bd close`)
 - Files being edited matching scope
 - Tests being run
 - Commits being made
+- Workers being spawned or receiving results
 
 ## Red Flags (Report Immediately)
 - "I'm stuck", "blocked", "need help", "waiting for"
@@ -907,7 +919,7 @@ RECOMMENDED_ACTION: [What System 3 should do]
 - Include which specific orchestrator needs help
 - System 3 will send guidance and may relaunch you to continue watching
 
-Begin monitoring now. Check every 2-3 minutes.
+Begin monitoring now.
 '''
 )
 ```
