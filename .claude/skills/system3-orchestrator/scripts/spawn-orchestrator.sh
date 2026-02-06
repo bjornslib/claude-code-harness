@@ -135,6 +135,10 @@ if [ -n "$WISDOM_FILE" ] && [ -f "$WISDOM_FILE" ]; then
     log_info "Injecting wisdom from: $WISDOM_FILE"
     WISDOM_CONTENT=$(cat "$WISDOM_FILE")
     tmux send-keys -t "$SESSION_NAME" "$WISDOM_CONTENT"
+    # CRITICAL: Large pastes need time for Claude Code's bracketed paste mode
+    # to process before Enter is accepted. Without this sleep, Enter gets lost
+    # and the prompt sits unsubmitted.
+    sleep 2
     tmux send-keys -t "$SESSION_NAME" Enter
 else
     log_info "No wisdom file provided, sending default initialization"
@@ -159,6 +163,8 @@ Before ANYTHING else: Skill(\"orchestrator-multiagent\")
 
 Begin work now."
     tmux send-keys -t "$SESSION_NAME" "$DEFAULT_PROMPT"
+    # CRITICAL: Allow time for bracketed paste processing before Enter
+    sleep 2
     tmux send-keys -t "$SESSION_NAME" Enter
 fi
 

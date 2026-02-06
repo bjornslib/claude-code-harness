@@ -213,6 +213,7 @@ sleep 3  # Wait for output style to load fully
 
 # 8. Send initialization prompt (orchestrator output style is now active)
 tmux send-keys -t "orch-[name]" "$(cat /tmp/wisdom-${INITIATIVE}.md)"
+sleep 2  # CRITICAL: Large pastes need time for bracketed paste processing
 tmux send-keys -t "orch-[name]" Enter
 ```
 

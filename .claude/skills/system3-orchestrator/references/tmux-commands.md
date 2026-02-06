@@ -83,6 +83,10 @@ tmux send-keys -t "orch-[name]" Escape  # Escape key
 
 ### Send Multi-line Content
 
+**⚠️ CRITICAL**: Large pastes need a `sleep 2` before Enter. Claude Code's bracketed paste
+mode needs time to process the content. Without the sleep, Enter gets lost and the prompt
+sits unsubmitted.
+
 ```bash
 # Using heredoc
 tmux send-keys -t "orch-[name]" "$(cat << 'EOF'
@@ -90,10 +94,14 @@ Multi-line
 content
 here
 EOF
-)" Enter
+)"
+sleep 2  # Wait for bracketed paste to process
+tmux send-keys -t "orch-[name]" Enter
 
 # From file
-tmux send-keys -t "orch-[name]" "$(cat message.md)" Enter
+tmux send-keys -t "orch-[name]" "$(cat message.md)"
+sleep 2  # Wait for bracketed paste to process
+tmux send-keys -t "orch-[name]" Enter
 ```
 
 ---
@@ -269,7 +277,9 @@ orch-say() {
 tmux new-session -d -s "orch-[name]"
 tmux send-keys -t "orch-[name]" "cd trees/[name]/agencheck && launchcc" Enter
 sleep 5
-tmux send-keys -t "orch-[name]" "$(cat wisdom.md)" Enter
+tmux send-keys -t "orch-[name]" "$(cat wisdom.md)"
+sleep 2  # Wait for bracketed paste to process
+tmux send-keys -t "orch-[name]" Enter
 ```
 
 ### Poll Until Complete

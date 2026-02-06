@@ -653,6 +653,21 @@ tmux send-keys -t orch-epic4 Enter
 
 **Evidence**: Session F091 (headless) hung indefinitely. Session F092 (interactive) completed in 4 minutes.
 
+#### Pattern 4: Large Pastes Need Sleep Before Enter
+
+```bash
+# ❌ WRONG - Enter gets lost during bracketed paste processing
+tmux send-keys -t orch-epic4 "$(cat /tmp/wisdom-file.md)"
+tmux send-keys -t orch-epic4 Enter
+
+# ✅ CORRECT - Sleep allows bracketed paste to complete before Enter
+tmux send-keys -t orch-epic4 "$(cat /tmp/wisdom-file.md)"
+sleep 2  # Wait for bracketed paste processing
+tmux send-keys -t orch-epic4 Enter
+```
+
+**Failure mode**: Prompt is pasted into Claude Code but sits unsubmitted. tmux capture-pane shows `[Pasted text #1 +N lines]` with "Ready" status — the orchestrator is waiting for Enter that was never received. System 3 monitoring may misinterpret this as "not yet started."
+
 ### Complete Spawn Sequence
 
 **Canonical Location**: See `Skill("system3-orchestrator")` for the complete spawn workflow including:

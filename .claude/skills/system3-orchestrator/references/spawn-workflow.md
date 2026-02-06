@@ -114,7 +114,9 @@ tmux send-keys -t "orch-[name]" "export CLAUDE_CODE_TASK_LIST_ID=PRD-[prd-name]"
 
 tmux send-keys -t "orch-[name]" "launchcc" Enter
 sleep 5
-tmux send-keys -t "orch-[name]" "$(cat /tmp/wisdom-${INITIATIVE}.md)" Enter
+tmux send-keys -t "orch-[name]" "$(cat /tmp/wisdom-${INITIATIVE}.md)"
+sleep 2  # CRITICAL: Large pastes need time for bracketed paste processing
+tmux send-keys -t "orch-[name]" Enter
 ```
 
 **🚨 CRITICAL**: System 3 must select the output style via tmux BEFORE sending the wisdom injection. The orchestrator starts in "default" style and won't reliably follow text instructions to change it.
@@ -127,7 +129,7 @@ sleep 2  # Wait for interactive menu
 tmux send-keys -t "orch-[name]" Down   # Navigate to "orchestrator"
 tmux send-keys -t "orch-[name]" Enter  # Select it
 sleep 3  # Wait for style to load
-# THEN send the wisdom file
+# THEN send the wisdom file (with sleep before Enter for large pastes)
 ```
 
 The wisdom file should include:
