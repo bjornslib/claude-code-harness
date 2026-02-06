@@ -114,20 +114,30 @@ tmux send-keys -t "orch-[name]" "export CLAUDE_CODE_TASK_LIST_ID=PRD-[prd-name]"
 
 tmux send-keys -t "orch-[name]" "launchcc" Enter
 sleep 5
-tmux send-keys -t "orch-[name]" "$(cat /tmp/wisdom-${INITIATIVE}.md)" Enter
+tmux send-keys -t "orch-[name]" "$(cat /tmp/wisdom-${INITIATIVE}.md)"
+sleep 2  # CRITICAL: Large pastes need time for bracketed paste processing
+tmux send-keys -t "orch-[name]" Enter
 ```
 
-**🚨 CRITICAL**: The wisdom file (`/tmp/wisdom-${INITIATIVE}.md`) MUST include instruction for the orchestrator's FIRST actions (exact order). Example:
+**🚨 CRITICAL**: System 3 must select the output style via tmux BEFORE sending the wisdom injection. The orchestrator starts in "default" style and won't reliably follow text instructions to change it.
 
+```bash
+# After ccorch launches and initializes (sleep 5):
+tmux send-keys -t "orch-[name]" "/output-style"
+tmux send-keys -t "orch-[name]" Enter
+sleep 2  # Wait for interactive menu
+tmux send-keys -t "orch-[name]" Down   # Navigate to "orchestrator"
+tmux send-keys -t "orch-[name]" Enter  # Select it
+sleep 3  # Wait for style to load
+# THEN send the wisdom file (with sleep before Enter for large pastes)
+```
+
+The wisdom file should include:
 ```markdown
-## FIRST ACTIONS REQUIRED (EXACT ORDER)
-1. IMMEDIATE: `/output-style orchestrator`
-   This loads orchestrator behavior patterns and delegation rules.
+> Your output style was already set to "orchestrator" by System 3 during spawn.
 
-2. THEN: Skill("orchestrator-multiagent")
-   This loads worker coordination patterns essential for proper delegation.
-
-Do NOT skip or reorder these steps - orchestrators without proper output style may violate protocol.
+## FIRST ACTION REQUIRED
+Skill("orchestrator-multiagent") — loads worker coordination patterns essential for proper delegation.
 ```
 
 ### 5. Update Registry
@@ -218,10 +228,10 @@ $meta_wisdom
 ## Domain Patterns
 $domain_wisdom
 
-## Starting Point (EXACT ORDER - DO NOT SKIP)
-1. FIRST: /output-style orchestrator (loads orchestrator behavior patterns)
-2. THEN: Skill("orchestrator-multiagent") (loads coordination patterns)
-3. Run PREFLIGHT checklist
+## Starting Point (DO NOT SKIP)
+> Your output style was already set to "orchestrator" by System 3 during spawn.
+1. FIRST: Skill("orchestrator-multiagent") (loads coordination patterns)
+2. Run PREFLIGHT checklist
 4. Find first task: bd ready
 5. Log progress to .claude/progress/orch-${INITIATIVE}-log.md
 EOF

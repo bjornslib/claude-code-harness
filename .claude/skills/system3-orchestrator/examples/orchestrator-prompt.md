@@ -14,8 +14,8 @@ You are a spawned orchestrator running in an isolated worktree.
 You report to System 3 meta-orchestrator via progress logs.
 
 ## Starting Point (EXACT ORDER - DO NOT SKIP)
-1. FIRST: `/output-style orchestrator` (loads orchestrator behavior patterns)
-2. THEN: `Skill("orchestrator-multiagent")` (loads coordination patterns)
+> Your output style was already set to "orchestrator" by System 3 during spawn.
+1. FIRST: `Skill("orchestrator-multiagent")` (loads coordination patterns)
 3. Complete PREFLIGHT checklist
 4. Find work: `bd ready`
 5. Log progress to: `.claude/progress/orch-[INITIATIVE]-log.md`
@@ -62,8 +62,8 @@ Implement the [FEATURE-NAME] feature as specified in the epic.
 6. Update documentation
 
 ## Starting Point (EXACT ORDER - DO NOT SKIP)
-1. FIRST: `/output-style orchestrator` (loads orchestrator behavior patterns)
-2. THEN: `Skill("orchestrator-multiagent")` (loads coordination patterns)
+> Your output style was already set to "orchestrator" by System 3 during spawn.
+1. FIRST: `Skill("orchestrator-multiagent")` (loads coordination patterns)
 3. Complete PREFLIGHT checklist
 4. Review epic: `.claude/epics/[EPIC-ID].md`
 5. Find first task: `bd ready`
@@ -119,8 +119,8 @@ Investigate, reproduce, and fix bug: [BUG-TITLE]
 - [ ] Related documentation updated
 
 ## Starting Point (EXACT ORDER - DO NOT SKIP)
-1. FIRST: `/output-style orchestrator` (loads orchestrator behavior patterns)
-2. THEN: `Skill("orchestrator-multiagent")` (loads coordination patterns)
+> Your output style was already set to "orchestrator" by System 3 during spawn.
+1. FIRST: `Skill("orchestrator-multiagent")` (loads coordination patterns)
 3. Reproduce bug first
 4. Log findings to: `.claude/progress/orch-[BUG-ID]-log.md`
 
@@ -178,8 +178,8 @@ Refactor [TARGET] to improve [QUALITY_ATTRIBUTE].
 - [ ] Documentation updated
 
 ## Starting Point (EXACT ORDER - DO NOT SKIP)
-1. FIRST: `/output-style orchestrator` (loads orchestrator behavior patterns)
-2. THEN: `Skill("orchestrator-multiagent")` (loads coordination patterns)
+> Your output style was already set to "orchestrator" by System 3 during spawn.
+1. FIRST: `Skill("orchestrator-multiagent")` (loads coordination patterns)
 3. Analyze current code structure
 4. Create refactoring plan
 5. Log progress to: `.claude/progress/orch-[REFACTOR-NAME]-log.md`
@@ -230,8 +230,8 @@ Research and document [RESEARCH-TOPIC] for the team.
 - [ ] Prototype (if applicable)
 
 ## Starting Point (EXACT ORDER - DO NOT SKIP)
-1. FIRST: `/output-style orchestrator` (loads orchestrator behavior patterns)
-2. THEN: `Skill("orchestrator-multiagent")` (loads coordination patterns)
+> Your output style was already set to "orchestrator" by System 3 during spawn.
+1. FIRST: `Skill("orchestrator-multiagent")` (loads coordination patterns)
 3. Start with codebase exploration
 4. Use Hindsight for prior knowledge
 5. Document findings progressively
@@ -291,8 +291,8 @@ Migrate [SOURCE] to [TARGET].
 - Document breaking changes
 
 ## Starting Point (EXACT ORDER - DO NOT SKIP)
-1. FIRST: `/output-style orchestrator` (loads orchestrator behavior patterns)
-2. THEN: `Skill("orchestrator-multiagent")` (loads coordination patterns)
+> Your output style was already set to "orchestrator" by System 3 during spawn.
+1. FIRST: `Skill("orchestrator-multiagent")` (loads coordination patterns)
 3. Create migration plan
 4. Start with lowest-risk files
 5. Log progress to: `.claude/progress/orch-[MIGRATION-NAME]-log.md`

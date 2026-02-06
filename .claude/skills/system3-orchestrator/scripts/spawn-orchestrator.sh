@@ -116,11 +116,29 @@ tmux send-keys -t "$SESSION_NAME" Enter
 log_info "Waiting for Claude Code to initialize (5 seconds)..."
 sleep 5
 
+# CRITICAL: Select orchestrator output style via interactive menu
+# The orchestrator starts in "default" output style. Without the correct
+# output style, the team lead won't follow orchestrator delegation rules.
+# System 3 must physically select it - relying on text instructions is unreliable.
+log_info "Selecting orchestrator output style..."
+tmux send-keys -t "$SESSION_NAME" "/output-style"
+tmux send-keys -t "$SESSION_NAME" Enter
+sleep 2  # Wait for interactive menu to appear
+# Navigate to "orchestrator" (first item alphabetically) and select it
+tmux send-keys -t "$SESSION_NAME" Down
+tmux send-keys -t "$SESSION_NAME" Enter
+log_info "Waiting for output style to load (3 seconds)..."
+sleep 3
+
 # Send initialization prompt if wisdom file provided
 if [ -n "$WISDOM_FILE" ] && [ -f "$WISDOM_FILE" ]; then
     log_info "Injecting wisdom from: $WISDOM_FILE"
     WISDOM_CONTENT=$(cat "$WISDOM_FILE")
     tmux send-keys -t "$SESSION_NAME" "$WISDOM_CONTENT"
+    # CRITICAL: Large pastes need time for Claude Code's bracketed paste mode
+    # to process before Enter is accepted. Without this sleep, Enter gets lost
+    # and the prompt sits unsubmitted.
+    sleep 2
     tmux send-keys -t "$SESSION_NAME" Enter
 else
     log_info "No wisdom file provided, sending default initialization"
@@ -145,6 +163,8 @@ Before ANYTHING else: Skill(\"orchestrator-multiagent\")
 
 Begin work now."
     tmux send-keys -t "$SESSION_NAME" "$DEFAULT_PROMPT"
+    # CRITICAL: Allow time for bracketed paste processing before Enter
+    sleep 2
     tmux send-keys -t "$SESSION_NAME" Enter
 fi
 

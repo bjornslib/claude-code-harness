@@ -198,8 +198,22 @@ tmux send-keys -t "orch-[name]" Enter
 # 6. Wait for initialization
 sleep 5
 
-# 7. Send initialization prompt
+# 7. CRITICAL: Select orchestrator output style via interactive menu
+#    This MUST happen BEFORE the wisdom injection prompt.
+#    The orchestrator starts in "default" output style - it won't reliably
+#    follow output-style instructions embedded in text. System 3 must
+#    physically select it via the /output-style slash command.
+tmux send-keys -t "orch-[name]" "/output-style"
+tmux send-keys -t "orch-[name]" Enter
+sleep 2  # Wait for interactive menu to appear
+# Navigate to "orchestrator" (first item alphabetically) and select it
+tmux send-keys -t "orch-[name]" Down
+tmux send-keys -t "orch-[name]" Enter
+sleep 3  # Wait for output style to load fully
+
+# 8. Send initialization prompt (orchestrator output style is now active)
 tmux send-keys -t "orch-[name]" "$(cat /tmp/wisdom-${INITIATIVE}.md)"
+sleep 2  # CRITICAL: Large pastes need time for bracketed paste processing
 tmux send-keys -t "orch-[name]" Enter
 ```
 
@@ -215,6 +229,9 @@ Include this in your wisdom injection file:
 You are an orchestrator for initiative: [INITIATIVE_NAME]
 
 ## FIRST ACTIONS (Do Not Skip)
+
+> **Note**: Your output style was already set to "orchestrator" by System 3 during spawn.
+> You do NOT need to run `/output-style` — it is already active.
 
 ### 1. Invoke Skill (MANDATORY)
 Before ANYTHING else: `Skill("orchestrator-multiagent")`

@@ -653,6 +653,21 @@ tmux send-keys -t orch-epic4 Enter
 
 **Evidence**: Session F091 (headless) hung indefinitely. Session F092 (interactive) completed in 4 minutes.
 
+#### Pattern 4: Large Pastes Need Sleep Before Enter
+
+```bash
+# ❌ WRONG - Enter gets lost during bracketed paste processing
+tmux send-keys -t orch-epic4 "$(cat /tmp/wisdom-file.md)"
+tmux send-keys -t orch-epic4 Enter
+
+# ✅ CORRECT - Sleep allows bracketed paste to complete before Enter
+tmux send-keys -t orch-epic4 "$(cat /tmp/wisdom-file.md)"
+sleep 2  # Wait for bracketed paste processing
+tmux send-keys -t orch-epic4 Enter
+```
+
+**Failure mode**: Prompt is pasted into Claude Code but sits unsubmitted. tmux capture-pane shows `[Pasted text #1 +N lines]` with "Ready" status — the orchestrator is waiting for Enter that was never received. System 3 monitoring may misinterpret this as "not yet started."
+
 ### Complete Spawn Sequence
 
 **Canonical Location**: See `Skill("system3-orchestrator")` for the complete spawn workflow including:
@@ -684,11 +699,23 @@ tmux send-keys -t "orch-[name]" Enter
 
 **After Environment Variables Are Set:**
 1. Launch Claude Code with `ccorch` (or `launchcc`)
-2. **`/output-style orchestrator`** must be invoked as the VERY FIRST action in the assignment prompt (loads orchestrator behavior patterns)
-3. **Skill("orchestrator-multiagent")** must be invoked IMMEDIATELY AFTER output style (loads coordination patterns)
-4. **Create worker team**: `Teammate(operation="spawnTeam", team_name="{initiative}-workers", description="Workers for {initiative}")` — establishes native team for worker coordination
-5. **Message bus registration** must happen after skill invocation
-6. **Background monitor** should be spawned for real-time message detection
+2. Wait for initialization (`sleep 5`)
+3. **System 3 selects output style via tmux** (orchestrator starts in "default" — it won't reliably follow text instructions to change its own style):
+   ```bash
+   tmux send-keys -t "orch-[name]" "/output-style"
+   tmux send-keys -t "orch-[name]" Enter
+   sleep 2  # Wait for interactive menu
+   tmux send-keys -t "orch-[name]" Down   # Navigate to "orchestrator"
+   tmux send-keys -t "orch-[name]" Enter  # Select it
+   sleep 3  # Wait for style to load
+   ```
+4. **THEN send wisdom injection prompt** — orchestrator is now in the correct output style
+5. **Skill("orchestrator-multiagent")** must be invoked by orchestrator (first action in wisdom prompt)
+6. **Create worker team**: `Teammate(operation="spawnTeam", team_name="{initiative}-workers", description="Workers for {initiative}")` — establishes native team for worker coordination
+7. **Message bus registration** must happen after skill invocation
+8. **Background monitor** should be spawned for real-time message detection
+
+**Why System 3 selects the output style**: Orchestrators start in "default" output style. Embedding `/output-style orchestrator` as a text instruction in the wisdom prompt is unreliable — the orchestrator in default mode may not follow it. System 3 physically typing the slash command via tmux guarantees the correct style is active before any work begins.
 
 **Full Template**: See `.claude/skills/orchestrator-multiagent/ORCHESTRATOR_INITIALIZATION_TEMPLATE.md`
 
@@ -717,19 +744,22 @@ project_patterns = mcp__hindsight__reflect(
 # 3. Format wisdom injection WITH skill invocation reminder
 wisdom = format_wisdom_injection(meta_patterns, project_patterns)
 
-# 4. CRITICAL: Wisdom injection MUST include these instructions (EXACT ORDER)
+# 4. CRITICAL: Wisdom injection MUST include these instructions
+#    NOTE: /output-style is already selected by System 3 via tmux BEFORE
+#    sending this prompt. Do NOT include /output-style in the wisdom text.
 skill_reminder = """
-## FIRST ACTIONS REQUIRED (EXACT ORDER - DO NOT SKIP)
-1. IMMEDIATE: /output-style orchestrator
-   This loads orchestrator behavior patterns and delegation rules.
+## FIRST ACTIONS REQUIRED (DO NOT SKIP)
 
-2. THEN: Skill("orchestrator-multiagent")
+> Your output style was already set to "orchestrator" by System 3 during spawn.
+> You do NOT need to run /output-style — it is already active.
+
+1. IMMEDIATE: Skill("orchestrator-multiagent")
    This loads worker coordination patterns. Without it, you cannot properly delegate to workers.
 
-3. CREATE WORKER TEAM: Teammate(operation="spawnTeam", team_name="{initiative}-workers", description="Workers for {initiative}")
+2. CREATE WORKER TEAM: Teammate(operation="spawnTeam", team_name="{initiative}-workers", description="Workers for {initiative}")
    This creates the native team for worker coordination via TaskCreate + SendMessage.
 
-Do NOT skip or reorder these steps - orchestrators without proper output style may violate protocol.
+Do NOT skip these steps - orchestrators without the multiagent skill cannot properly delegate.
 """
 ```
 
@@ -737,7 +767,9 @@ Do NOT skip or reorder these steps - orchestrators without proper output style m
 ```markdown
 You are an orchestrator for initiative: [NAME]
 
-## FIRST ACTIONS REQUIRED (EXACT ORDER)
+> Your output style was already set to "orchestrator" by System 3 during spawn.
+
+## FIRST ACTIONS REQUIRED
 1. Skill("orchestrator-multiagent") — loads worker coordination patterns
 2. Teammate(operation="spawnTeam", team_name="[NAME]-workers", description="Workers for [NAME]") — creates native team
 
