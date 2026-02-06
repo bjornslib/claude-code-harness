@@ -984,9 +984,29 @@ tmux list-sessions | grep "^orch-"
 - Deviation from learned patterns
 - Files modified outside declared scope
 
-### 🚨 MANDATORY: Cleanup After Orchestrator Completes
+### 🚨 MANDATORY: Review Final Report Before Cleanup
 
-**When an orchestrator reports COMPLETION** (via blocking monitor or message bus):
+**When a monitor reports an orchestrator is COMPLETE, do NOT kill the session immediately.** First, capture and review the orchestrator's final output to understand what was actually accomplished.
+
+#### Step 1: Capture the Orchestrator's Final Report
+
+```bash
+# Capture the last 150 lines — this contains the orchestrator's final summary,
+# git commits, push output, and any completion messages
+tmux capture-pane -t orch-[initiative] -p -S -200 2>/dev/null | tail -150
+```
+
+**Read this output.** Look for:
+- What tasks were completed and what files were changed
+- Whether code was committed and pushed (and to which branch)
+- Any warnings, skipped items, or known issues the orchestrator flagged
+- The orchestrator's own summary of what it accomplished
+
+This is how you verify the monitor's COMPLETE status is real and understand the scope of delivered work.
+
+#### Step 2: Cleanup
+
+Only AFTER reviewing the final report:
 
 ```bash
 # Kill the orchestrator's tmux session
@@ -999,7 +1019,7 @@ echo "Remaining orchestrator sessions: $remaining"
 
 **Note**: Workers are now native teammates managed by the team lead (orchestrator). Shut down workers via `SendMessage(type="shutdown_request")` and clean up teams via `Teammate(operation="cleanup")` before killing the orchestrator tmux session.
 
-**Why this matters**: Without cleanup, orchestrator tmux sessions accumulate, consuming system resources and making `tmux list-sessions` unmanageable.
+**Why review first**: Killing the tmux session destroys the orchestrator's output. If you kill first, you lose visibility into what was done, any issues flagged, and whether the work actually matches expectations.
 
 **Cleanup triggers:**
 | Event | Action |
@@ -2003,14 +2023,17 @@ echo "Remaining orchestrator sessions: $remaining"
 
 **When orchestrator completes (before session end):**
 
-After an orchestrator reports completion via message bus or monitor, immediately kill its session:
+After a monitor reports completion, **always review the final report first** (see "Review Final Report Before Cleanup" above), then kill the session:
 
 ```bash
-# Kill specific completed orchestrator
+# 1. Review final output FIRST
+tmux capture-pane -t orch-[initiative] -p -S -200 2>/dev/null | tail -150
+
+# 2. THEN kill the session
 tmux kill-session -t orch-[initiative] 2>/dev/null && echo "Cleaned up: orch-[initiative]"
 ```
 
-**Why cleanup matters**: Without cleanup, orchestrator tmux sessions accumulate consuming system resources.
+**Why review first**: Killing the tmux session destroys the orchestrator's output permanently.
 
 ---
 
