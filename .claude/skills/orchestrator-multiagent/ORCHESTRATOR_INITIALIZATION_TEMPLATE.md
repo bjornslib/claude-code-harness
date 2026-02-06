@@ -19,15 +19,13 @@ You are an orchestrator for initiative: [INITIATIVE_NAME]
 
 ## FIRST ACTIONS (In Order - Do Not Skip)
 
-### Step 0: Set Output Style (MANDATORY - IMMEDIATE)
-The very first thing you must do - before ANY other action:
-```
-/output-style orchestrator
-```
-This loads the orchestrator behavior patterns and delegation rules. Without it, you may violate the orchestrator protocol.
+### Step 0: Output Style (Already Set by System 3)
+> **Your output style was already set to "orchestrator" by System 3 during spawn.**
+> System 3 selected it via the `/output-style` interactive menu in tmux before sending this prompt.
+> You do NOT need to run `/output-style` — it is already active.
 
 ### Step 1: Invoke the Orchestrator Skill (MANDATORY)
-Immediately after setting output style:
+The very first action you must take:
 ```
 Skill("orchestrator-multiagent")
 ```
@@ -191,8 +189,8 @@ Before ending your session:
 
 ## CRITICAL Reminders
 
-1. **Output Style First**: Run `/output-style orchestrator` as your VERY FIRST action
-2. **Skill Second**: Invoke `Skill("orchestrator-multiagent")` immediately after
+1. **Output Style**: Already set by System 3 during spawn (you do NOT need to run `/output-style`)
+2. **Skill First**: Invoke `Skill("orchestrator-multiagent")` as your very first action
 3. **Message Bus**: Register immediately so System 3 can reach you
 4. **Create Team**: Set up worker team with `Teammate(operation="spawnTeam", ...)` before delegating
 5. **Workers via Teams**: Use `Task(subagent_type=..., team_name=..., name=...)` for worker delegation. Workers communicate via SendMessage.
