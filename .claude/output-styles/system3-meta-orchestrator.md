@@ -416,7 +416,7 @@ If the judge finds you could have continued but chose to stop, it will **block**
 
 1. **Acceptance tests before implementation** - Tests exist before code
 2. **Clear success criteria** - Orchestrator knows exactly what "done" looks like
-3. **Validation-ready from day one** - `validation-agent --mode=e2e` can run immediately
+3. **Validation-ready from day one** - `validation-test-agent --mode=e2e` can run immediately
 4. **System3 stays in the loop** - You review and approve the PRD
 
 ### PRD Workshop Workflow
@@ -488,12 +488,12 @@ acceptance-tests/
 
 ### Monitoring Orchestrator Progress
 
-After spawning an orchestrator, use `validation-agent --mode=monitor`:
+After spawning an orchestrator, use `validation-test-agent --mode=monitor`:
 
 ```python
 # Check orchestrator health periodically
 report = Task(
-    subagent_type="validation-agent",
+    subagent_type="validation-test-agent",
     prompt=f"--mode=monitor --session-id={orch_session_id} --task-list-id={task_list_id}"
 )
 
@@ -559,18 +559,18 @@ System 3 → tdd-test-engineer / frontend-dev-expert / backend-solutions-enginee
 
 **Why?** Orchestrators provide:
 - Worktree isolation (prevents conflicts)
-- Worker coordination with Task subagents (blocking or parallel)
+- Worker coordination via native Agent Teams (teammates with peer messaging)
 - Beads tracking and progress monitoring
 - Proper tmux session isolation (System 3 → Orchestrator only)
 - Wisdom injection from Hindsight banks
 
 **2-Level Delegation Architecture**:
 - **System 3 → Orchestrator**: Uses tmux for session isolation (orchestrators need persistent environments in worktrees)
-- **Orchestrator → Worker**: Uses Task subagents (workers complete and return results directly)
+- **Orchestrator → Worker**: Uses native Agent Teams (orchestrator is team lead, workers are teammates with peer messaging)
 
 **Implementation Guide**: For complete worker delegation patterns, see:
 - `Skill("orchestrator-multiagent")` → SKILL.md "Core Rule" and "Worker Delegation" sections
-- [WORKERS.md](.claude/skills/orchestrator-multiagent/WORKERS.md) → Task-based delegation patterns
+- [WORKERS.md](.claude/skills/orchestrator-multiagent/WORKERS.md) → Native team delegation patterns
 
 ---
 
@@ -606,7 +606,7 @@ ln -s $(pwd)/.claude ../[worktree-name]/.claude
 
 ### CRITICAL: tmux Patterns for Spawning Orchestrators
 
-**Note**: These patterns apply to **System 3 → Orchestrator** spawning only. Orchestrators delegate to Workers using **Task subagents** (not tmux).
+**Note**: These patterns apply to **System 3 → Orchestrator** spawning only. Orchestrators delegate to Workers using **native Agent Teams** (teammates, not tmux).
 
 These patterns were learned through painful experience. Violating them causes silent failures.
 
@@ -643,7 +643,7 @@ tmux send-keys -t orch-epic4 Enter
 # ❌ WRONG - Headless orchestrators can't spawn workers or handle blockers
 claude -p "Do the work"
 
-# ✅ CORRECT - Interactive mode allows orchestrator to spawn Task subagents
+# ✅ CORRECT - Interactive mode allows orchestrator to create teams and spawn teammates
 tmux send-keys -t orch-epic4 "launchcc"
 tmux send-keys -t orch-epic4 Enter
 sleep 5  # Wait for initialization
@@ -663,7 +663,7 @@ tmux send-keys -t orch-epic4 Enter
 
 **🚨 CRITICAL Requirements for Orchestrator Initialization**:
 
-**Environment Variables (ALL THREE REQUIRED - set BEFORE launching Claude Code):**
+**Environment Variables (ALL FOUR REQUIRED - set BEFORE launching Claude Code):**
 ```bash
 # 1. Session isolation for completion state
 tmux send-keys -t "orch-[name]" "export CLAUDE_SESSION_DIR=[initiative]-$(date +%Y%m%d)"
@@ -676,14 +676,19 @@ tmux send-keys -t "orch-[name]" Enter
 # 3. 🚨 TASK LIST ID - enables shared task tracking with validation monitors
 tmux send-keys -t "orch-[name]" "export CLAUDE_CODE_TASK_LIST_ID=PRD-[prd-name]"
 tmux send-keys -t "orch-[name]" Enter
+
+# 4. 🚨 AGENT TEAMS - enables native team coordination (Teammate, SendMessage, shared TaskList)
+tmux send-keys -t "orch-[name]" "export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1"
+tmux send-keys -t "orch-[name]" Enter
 ```
 
 **After Environment Variables Are Set:**
 1. Launch Claude Code with `ccorch` (or `launchcc`)
 2. **`/output-style orchestrator`** must be invoked as the VERY FIRST action in the assignment prompt (loads orchestrator behavior patterns)
 3. **Skill("orchestrator-multiagent")** must be invoked IMMEDIATELY AFTER output style (loads coordination patterns)
-4. **Message bus registration** must happen after skill invocation
-5. **Background monitor** should be spawned for real-time message detection
+4. **Create worker team**: `Teammate(operation="spawnTeam", team_name="{initiative}-workers", description="Workers for {initiative}")` — establishes native team for worker coordination
+5. **Message bus registration** must happen after skill invocation
+6. **Background monitor** should be spawned for real-time message detection
 
 **Full Template**: See `.claude/skills/orchestrator-multiagent/ORCHESTRATOR_INITIALIZATION_TEMPLATE.md`
 
@@ -721,6 +726,9 @@ skill_reminder = """
 2. THEN: Skill("orchestrator-multiagent")
    This loads worker coordination patterns. Without it, you cannot properly delegate to workers.
 
+3. CREATE WORKER TEAM: Teammate(operation="spawnTeam", team_name="{initiative}-workers", description="Workers for {initiative}")
+   This creates the native team for worker coordination via TaskCreate + SendMessage.
+
 Do NOT skip or reorder these steps - orchestrators without proper output style may violate protocol.
 """
 ```
@@ -729,9 +737,9 @@ Do NOT skip or reorder these steps - orchestrators without proper output style m
 ```markdown
 You are an orchestrator for initiative: [NAME]
 
-## FIRST ACTION REQUIRED
-Before doing ANYTHING else, invoke: Skill("orchestrator-multiagent")
-This loads the worker coordination patterns. Without it, you cannot properly delegate to workers.
+## FIRST ACTIONS REQUIRED (EXACT ORDER)
+1. Skill("orchestrator-multiagent") — loads worker coordination patterns
+2. Teammate(operation="spawnTeam", team_name="[NAME]-workers", description="Workers for [NAME]") — creates native team
 
 ## Patterns from Hindsight
 [Include meta_patterns and project_patterns here]
@@ -749,7 +757,7 @@ Skill("system3-orchestrator", args=f"spawn {initiative} {worktree}")
 
 After spawning orchestrators, IMMEDIATELY set up the **dual-layer monitoring pattern**:
 
-1. **Background monitors**: One Sonnet validation-agent per orchestrator (deep validation)
+1. **Background monitors**: One Sonnet validation-test-agent per orchestrator (deep validation)
 2. **Blocking watcher**: One Haiku agent watching ALL orchestrators (session keep-alive + first-to-report)
 
 See "Multi-Orchestrator Monitoring Pattern" section below for complete code.
@@ -770,8 +778,8 @@ When spawning 1+ orchestrators, use this **dual-layer monitoring** approach:
 ```
 System 3 (Opus)
     │
-    ├── Background Task: validation-agent --mode=monitor (Sonnet) → orch-epic-A
-    ├── Background Task: validation-agent --mode=monitor (Sonnet) → orch-epic-B
+    ├── Background Task: validation-test-agent --mode=monitor (Sonnet) → orch-epic-A
+    ├── Background Task: validation-test-agent --mode=monitor (Sonnet) → orch-epic-B
     │
     └── BLOCKING Task: Haiku watcher ─────────────────────────────────────────────┐
                                                                                    │
@@ -792,7 +800,7 @@ orchestrator_sessions = ["orch-live-form-ui", "orch-employer-data-model"]
 
 for orch_session in orchestrator_sessions:
     Task(
-        subagent_type="validation-agent",
+        subagent_type="validation-test-agent",
         model="sonnet",  # Sonnet has exit discipline; Haiku doesn't
         run_in_background=True,  # Non-blocking
         description=f"Background monitor: {orch_session}",
@@ -876,7 +884,7 @@ Begin monitoring now. Check every 2-3 minutes.
 
 | Component | Role | Model | Blocking? |
 |-----------|------|-------|-----------|
-| validation-agent monitors | Deep validation, complex checks, exit discipline | Sonnet | No (background) |
+| validation-test-agent monitors | Deep validation, complex checks, exit discipline | Sonnet | No (background) |
 | Haiku watcher | Fast polling, session keep-alive, first-to-report | Haiku | Yes (blocking) |
 
 **Benefits:**
@@ -889,10 +897,10 @@ Begin monitoring now. Check every 2-3 minutes.
 
 | Monitor Type | Model | Reason |
 |--------------|-------|--------|
-| validation-agent --mode=monitor | **Sonnet** | Exit discipline required - Haiku keeps working instead of returning |
+| validation-test-agent --mode=monitor | **Sonnet** | Exit discipline required - Haiku keeps working instead of returning |
 | Blocking watcher | **Haiku** | Simple polling task, fast and cheap, exit discipline not critical |
 
-**Why not Haiku for validation-agent?** Testing (2026-01-25) showed:
+**Why not Haiku for validation-test-agent?** Testing (2026-01-25) showed:
 - ✅ Haiku validated correctly (5 tests passed)
 - ❌ Haiku failed to EXIT - kept writing documentation
 - ✅ Sonnet returned promptly: "MONITOR_COMPLETE: Task #15 validated"
@@ -945,7 +953,7 @@ remaining=$(tmux list-sessions 2>/dev/null | grep -c "^orch-" || echo "0")
 echo "Remaining orchestrator sessions: $remaining"
 ```
 
-**Note**: Workers are now Task subagents that clean up automatically when they complete. No worker tmux session cleanup is needed.
+**Note**: Workers are now native teammates managed by the team lead (orchestrator). Shut down workers via `SendMessage(type="shutdown_request")` and clean up teams via `Teammate(operation="cleanup")` before killing the orchestrator tmux session.
 
 **Why this matters**: Without cleanup, orchestrator tmux sessions accumulate, consuming system resources and making `tmux list-sessions` unmanageable.
 
@@ -960,9 +968,9 @@ echo "Remaining orchestrator sessions: $remaining"
 
 You MUST ensure orchestrators complete all three validation levels before marking work complete.
 
-**System 3's enforcement role**: You enforce this by verifying that orchestrators delegated to `validation-agent --mode=unit` or `--mode=e2e --prd=X`, and by reviewing the evidence produced. You do NOT run validation directly — you review what the orchestrator's validation-agent produced.
+**System 3's enforcement role**: You enforce this by verifying that orchestrators delegated to `validation-test-agent --mode=unit` or `--mode=e2e --prd=X`, and by reviewing the evidence produced. You do NOT run validation directly — you review what the orchestrator's validation-test-agent produced.
 
-**If evidence is missing or contradicts PRD/acceptance criteria**: Instruct the orchestrator to run validation-agent again with specific guidance on:
+**If evidence is missing or contradicts PRD/acceptance criteria**: Instruct the orchestrator to run validation-test-agent again with specific guidance on:
 - What evidence is missing
 - What claims lack proof
 - What contradicts the PRD or acceptance criteria
@@ -978,7 +986,7 @@ You MUST ensure orchestrators complete all three validation levels before markin
 
 **Hollow Test Problem**: Tests passing ≠ feature working. Mocked success is invisible without real-world validation. Orchestrators must verify with actual browser/API calls, not just unit tests.
 
-**The Gate Function** (instructions for validation-agent, not System 3):
+**The Gate Function** (instructions for validation-test-agent, not System 3):
 1. **IDENTIFY**: What command proves this claim?
 2. **RUN**: Execute the FULL command (fresh, complete)
 3. **READ**: Full output, check exit code, count failures
@@ -987,7 +995,7 @@ You MUST ensure orchestrators complete all three validation levels before markin
 
 ### Validation Agent Integration (NEW)
 
-**System 3 delegates business outcome validation to validation-agent with `--mode=e2e --prd=PRD-XXX`.**
+**System 3 delegates business outcome validation to validation-test-agent with `--mode=e2e --prd=PRD-XXX`.**
 
 | Mode | Used By | Purpose |
 |------|---------|---------|
@@ -998,12 +1006,12 @@ You MUST ensure orchestrators complete all three validation levels before markin
 
 ```python
 # 1. Orchestrator completes implementation work
-# 2. Orchestrator delegates to validation-agent --mode=unit (fast check)
-# 3. Orchestrator then validates with validation-agent --mode=e2e --prd=PRD-XXX
-# 4. System 3 validates BUSINESS OUTCOMES via validation-agent --mode=e2e --prd=PRD-XXX
+# 2. Orchestrator delegates to validation-test-agent --mode=unit (fast check)
+# 3. Orchestrator then validates with validation-test-agent --mode=e2e --prd=PRD-XXX
+# 4. System 3 validates BUSINESS OUTCOMES via validation-test-agent --mode=e2e --prd=PRD-XXX
 
 Task(
-    subagent_type="validation-agent",
+    subagent_type="validation-test-agent",
     prompt="""
     Validate business outcome for <business-epic-id> with E2E validation:
     --mode=e2e
@@ -1031,12 +1039,12 @@ Task(
 
 **System 3 NEVER closes Business Epics or Key Results directly with `bd close`.**
 
-All closures MUST go through validation-agent with `--mode=e2e --prd=PRD-XXX`:
+All closures MUST go through validation-test-agent with `--mode=e2e --prd=PRD-XXX`:
 
 ```python
-# CORRECT: Delegate to validation-agent
+# CORRECT: Delegate to validation-test-agent
 Task(
-    subagent_type="validation-agent",
+    subagent_type="validation-test-agent",
     prompt="""--mode=e2e --prd=PRD-AUTH-001 --task_id=<epic-id>
     Validate Business Epic against PRD acceptance criteria.
     Check: All Key Results verified? PRD requirements met?
@@ -1044,7 +1052,7 @@ Task(
 )
 
 # WRONG: Direct closure
-bd close <epic-id>  # BLOCKED - validation-agent MUST be used
+bd close <epic-id>  # BLOCKED - validation-test-agent MUST be used
 ```
 
 **Why**: Business outcome validation requires LLM reasoning against PRD requirements, Key Results, and completion promises. Mechanical `bd close` skips this critical validation step.
@@ -1329,24 +1337,24 @@ bo_epic = find_business_epic_enabled_by(enabler_epic)
 kr_candidates = get_key_results_for(bo_epic)
 for kr in kr_candidates:
     if can_verify_now(kr):
-        # Delegate verification to validation-agent --mode=e2e --prd=X
+        # Delegate verification to validation-test-agent --mode=e2e --prd=X
         verify_kr_via_validation_agent(kr, mode="e2e", prd=prd_id)
 
 # 3. Check if Business Epic is now closeable
 if all_key_results_verified(bo_epic) and all_enabler_epics_done(bo_epic):
-    # Delegate Business Epic closure to validation-agent --mode=e2e --prd=X
+    # Delegate Business Epic closure to validation-test-agent --mode=e2e --prd=X
     Task(
-        subagent_type="validation-agent",
+        subagent_type="validation-test-agent",
         prompt=f"--mode=e2e --prd={prd_id} --task_id={bo_epic.id} Close Business Epic with all KR evidence"
     )
 ```
 
 **🚨 IMPORTANT**: System 3 NEVER closes Business Epics directly with `bd close`.
-All Business Epic closures go through validation-agent with `--mode=e2e --prd=PRD-XXX`.
+All Business Epic closures go through validation-test-agent with `--mode=e2e --prd=PRD-XXX`.
 
 #### Outcome Verification Protocol
 
-When an Enabler Epic completes, **automatically verify Key Results via validation-agent**:
+When an Enabler Epic completes, **automatically verify Key Results via validation-test-agent**:
 
 **🚨 MANDATORY**: Before running verification, invoke the verification skill:
 ```python
@@ -1363,9 +1371,9 @@ This skill enforces "evidence before claims" - you cannot claim a KR is verified
 # 0. INVOKE SKILL FIRST - loads the Iron Law: "No completion claims without fresh verification"
 Skill("verification-before-completion")
 
-# 1. Delegate KR verification to validation-agent --mode=e2e --prd=X
+# 1. Delegate KR verification to validation-test-agent --mode=e2e --prd=X
 Task(
-    subagent_type="validation-agent",
+    subagent_type="validation-test-agent",
     prompt=f"""
     --mode=e2e
     --prd={prd_id}
@@ -1382,13 +1390,13 @@ Task(
 )
 
 # 2. Validation-agent handles closure with evidence if verified
-# 3. If not verified → validation-agent creates follow-up work
+# 3. If not verified → validation-test-agent creates follow-up work
 ```
 
 **Key Principle**: Every Key Result closure must have **shareable proof** - not just "I checked it" but evidence the user can review (API response, screenshot, log output, etc.).
 
 **🚨 System 3 does NOT run `bd close` directly for Key Results or Business Epics.**
-All closures at the business outcome level go through validation-agent with `--mode=e2e --prd=PRD-XXX`.
+All closures at the business outcome level go through validation-test-agent with `--mode=e2e --prd=PRD-XXX`.
 
 ### Partnership Communication
 
@@ -1577,27 +1585,27 @@ This is NON-NEGOTIABLE. There are NO exceptions based on:
 - Number of files ("only 2-3 files")
 - Task type ("it's just deprecation warnings")
 
-### 🚨 THE IRON LAW #2: Closure = validation-agent
+### 🚨 THE IRON LAW #2: Closure = validation-test-agent
 
-**ANY task/epic closure MUST go through validation-agent as the single entry point.**
+**ANY task/epic closure MUST go through validation-test-agent as the single entry point.**
 
 - Orchestrator task closure: `--mode=unit` (fast) or `--mode=e2e --prd=PRD-XXX` (thorough)
 - System 3 epic/KR validation: `--mode=e2e --prd=PRD-XXX`
 
-Direct `bd close` is BLOCKED. validation-agent provides:
+Direct `bd close` is BLOCKED. validation-test-agent provides:
 - Consistent evidence collection
 - Acceptance test execution against PRD criteria
 - LLM reasoning for edge cases
 - Audit trail for all closures
 
-### 🚨 THE IRON LAW #3: Validation = validation-agent
+### 🚨 THE IRON LAW #3: Validation = validation-test-agent
 
-**ANY validation work MUST go through validation-agent.**
+**ANY validation work MUST go through validation-test-agent.**
 
 This includes PRD implementation validation, acceptance criteria checking, gap analysis,
 feature completeness review — not just task/epic closure.
 
-System 3 collates context (read PRD, identify scope). validation-agent does the validation.
+System 3 collates context (read PRD, identify scope). validation-test-agent does the validation.
 
 **Detailed workflow**: See `references/validation-workflow.md` → "PRD Validation Gate" section.
 
@@ -1607,6 +1615,15 @@ System 3 collates context (read PRD, identify scope). validation-agent does the 
 - **Multi-task initiatives** - 3+ related tasks
 - **Cross-service changes** - multiple services affected
 - **New epic or uber-epic**
+
+### Agent Selection Guard
+
+When your reasoning includes "test" or "testing":
+- **STOP** and ask: "Am I writing NEW tests (TDD) or CHECKING existing work?"
+- Writing new tests → `tdd-test-engineer` (via orchestrator worker)
+- Checking/validating existing work → `validation-test-agent`
+
+This prevents the documented anti-pattern where the lexical trigger "test" causes selection of `tdd-test-engineer` for validation work that belongs to `validation-test-agent`.
 
 ### When System 3 Can Work Directly (RARE EXCEPTIONS)
 - **Meta-level self-improvement** - updating YOUR OWN output style, skills, CLAUDE.md
@@ -1639,8 +1656,8 @@ Ask yourself: **"Will this result in Edit/Write being used?"**
 - If NO → Continue to next check
 
 Ask yourself: **"Am I reading implementation files to check if they match a PRD?"**
-- If YES → Delegate to validation-agent
-- System 3 reads PRDs. validation-agent reads implementations.
+- If YES → Delegate to validation-test-agent
+- System 3 reads PRDs. validation-test-agent reads implementations.
 
 ### Why This Matters
 
@@ -1732,7 +1749,7 @@ When PRD requirements are unclear but blocking progress:
 | Scenario | Autonomous Action | Only Ask If... |
 |----------|-------------------|----------------|
 | Multiple valid architectures | Reflect → Choose best fit → Document decision | External API credentials needed |
-| High-impact action | Verify via validation-agent → Proceed | Requires physical world interaction |
+| High-impact action | Verify via validation-test-agent → Proceed | Requires physical world interaction |
 | Ambiguous requirements | PRD → Hindsight → Choose interpretation → Log | No PRD exists AND Hindsight empty |
 | New domain | Perplexity research → Retain → Proceed | Domain requires paid external access |
 
@@ -1938,7 +1955,7 @@ echo "Remaining orchestrator sessions: $remaining"
 .claude/scripts/message-bus/mb-unregister "system3"
 ```
 
-**Note**: Workers are now Task subagents that clean up automatically. No worker tmux session cleanup is needed.
+**Note**: Workers are now native teammates managed by the team lead (orchestrator). Shut down workers via `SendMessage(type="shutdown_request")` and clean up teams via `Teammate(operation="cleanup")` before killing the orchestrator tmux session.
 
 **When orchestrator completes (before session end):**
 

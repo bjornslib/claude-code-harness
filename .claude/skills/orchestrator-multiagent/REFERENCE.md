@@ -160,6 +160,7 @@ lsof -i :5001 -i :8000 -i :5184 -i :5185 | grep LISTEN
 |----------|---------|
 | `CLAUDE_SESSION_ID` | Session isolation for message bus |
 | `CLAUDE_OUTPUT_STYLE` | Active output style |
+| `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` | Set to `1` to enable native Agent Teams (required for Teammate/SendMessage) |
 
 ---
 
@@ -208,6 +209,8 @@ Run this at the start of every orchestrator session:
 
 ```markdown
 - [ ] Feature complete or cleanly stopped
+- [ ] Shutdown all worker teammates: `SendMessage(type="shutdown_request", recipient="worker-name", ...)`
+- [ ] Clean up team: `Teammate(operation="cleanup")`
 - [ ] `bd sync` - Sync beads state
 - [ ] Update `.claude/progress/` with summary
 - [ ] `git status` clean, changes committed and pushed
@@ -217,31 +220,89 @@ Run this at the start of every orchestrator session:
 
 ---
 
-## Worker Types (via Task Subagents)
+## Worker Types (Native Agent Team Teammates)
 
-| Type | subagent_type | Use For |
-|------|---------------|---------|
-| Frontend | `frontend-dev-expert` | React, Next.js, UI |
-| Backend | `backend-solutions-engineer` | Python, FastAPI, APIs |
-| Browser Testing | `tdd-test-engineer` | E2E validation |
-| General | `general-purpose` | Everything else |
+| Type | subagent_type | Teammate Name | Use For |
+|------|---------------|---------------|---------|
+| Frontend | `frontend-dev-expert` | `worker-frontend` | React, Next.js, UI |
+| Backend | `backend-solutions-engineer` | `worker-backend` | Python, FastAPI, APIs |
+| Browser Testing | `tdd-test-engineer` | `worker-tester` | E2E validation |
+| Validator | `validation-test-agent` | `worker-validator` | Task closure with evidence |
+| General | `general-purpose` | `worker-general` | Everything else |
 
-### Task Delegation Pattern
+### Team Lifecycle Commands
 
 ```python
-# Standard blocking delegation
-result = Task(
-    subagent_type="frontend-dev-expert",
-    description="Implement feature",
-    prompt="[Worker assignment...]"
+# 1. Create team (once per session, during PREFLIGHT)
+Teammate(
+    operation="spawnTeam",
+    team_name="{initiative}-workers",
+    description="Workers for {initiative}"
 )
-# Result returned directly - no monitoring needed
 
-# Parallel workers
-task1 = Task(subagent_type="...", run_in_background=True, ...)
-task2 = Task(subagent_type="...", run_in_background=True, ...)
-result1 = TaskOutput(task_id=task1.agent_id, block=True)
-result2 = TaskOutput(task_id=task2.agent_id, block=True)
+# 2. Create tasks in shared TaskList
+TaskCreate(
+    subject="Implement feature F001",
+    description="[requirements, acceptance criteria, scope]",
+    activeForm="Implementing F001"
+)
+
+# 3. Spawn specialist worker into team
+Task(
+    subagent_type="frontend-dev-expert",
+    team_name="{initiative}-workers",
+    name="worker-frontend",
+    prompt="You are worker-frontend in team {initiative}-workers. Check TaskList for work. Claim tasks, implement, report via SendMessage."
+)
+
+# 4. Notify existing worker of new task
+SendMessage(
+    type="message",
+    recipient="worker-frontend",
+    content="New task available: F002 - Add login form",
+    summary="New task F002 assigned"
+)
+
+# 5. Shutdown workers at session end
+SendMessage(type="shutdown_request", recipient="worker-frontend", content="Session ending")
+
+# 6. Clean up team
+Teammate(operation="cleanup")
+```
+
+### Parallel Workers (Multiple Teammates)
+
+```python
+# Spawn multiple specialists into same team
+Task(subagent_type="frontend-dev-expert", team_name="{initiative}-workers",
+     name="worker-frontend", prompt="...")
+Task(subagent_type="backend-solutions-engineer", team_name="{initiative}-workers",
+     name="worker-backend", prompt="...")
+
+# Each worker claims different tasks from shared TaskList
+# Workers coordinate peer-to-peer via SendMessage
+# Results arrive via SendMessage (auto-delivered to orchestrator)
+```
+
+### SendMessage Patterns
+
+```python
+# Direct message to a worker
+SendMessage(type="message", recipient="worker-backend",
+    content="Task #3 needs API endpoint at /api/auth", summary="Task details for worker")
+
+# Worker reports completion (auto-delivered to orchestrator)
+# Worker sends: SendMessage(type="message", recipient="team-lead",
+#     content="Task #3 complete: implemented /api/auth endpoint", summary="Task 3 done")
+
+# Shutdown request
+SendMessage(type="shutdown_request", recipient="worker-frontend",
+    content="All tasks complete, ending session")
+
+# Broadcast to all workers (use sparingly - expensive)
+SendMessage(type="broadcast",
+    content="Critical: stop all work, regression found in auth module",
+    summary="Critical regression alert")
 ```
 
 ---

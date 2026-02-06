@@ -1,6 +1,6 @@
 # Validation Workflow Reference
 
-Comprehensive 3-level validation and validation-agent usage for ensuring work quality.
+Comprehensive 3-level validation and validation-test-agent usage for ensuring work quality.
 
 ---
 
@@ -145,16 +145,16 @@ def test_create_user():
 | **Unit** | `--mode=unit` | Orchestrators | Fast technical checks (mocks OK) |
 | **E2E** | `--mode=e2e --prd=PRD-XXX` | Orchestrators & System 3 | Full acceptance validation against PRD criteria |
 
-**CRITICAL**: `--prd` parameter is MANDATORY for E2E mode. The validation-agent will invoke `acceptance-test-runner` internally.
+**CRITICAL**: `--prd` parameter is MANDATORY for E2E mode. The validation-test-agent will invoke `acceptance-test-runner` internally.
 
 ### Orchestrator Usage (Unit/E2E Mode)
 
-**Orchestrators delegate ALL task closure to validation-agent.**
+**Orchestrators delegate ALL task closure to validation-test-agent.**
 
 ```python
 # Fast unit check
 Task(
-    subagent_type="validation-agent",
+    subagent_type="validation-test-agent",
     prompt="""
     Validate task <task-id> with unit tests:
     --mode=unit
@@ -169,14 +169,14 @@ Task(
 
 # Full E2E validation with PRD acceptance tests
 Task(
-    subagent_type="validation-agent",
+    subagent_type="validation-test-agent",
     prompt="""
     Validate task <task-id> with E2E validation:
     --mode=e2e
     --prd=PRD-AUTH-001
     --task_id=<task-id>
 
-    validation-agent will invoke acceptance-test-runner internally.
+    validation-test-agent will invoke acceptance-test-runner internally.
     Validation against PRD acceptance criteria.
 
     If ALL criteria pass: Close task with evidence
@@ -191,7 +191,7 @@ Task(
 
 ```python
 Task(
-    subagent_type="validation-agent",
+    subagent_type="validation-test-agent",
     prompt="""
     Validate business outcome for <bo-id> with E2E validation:
     --mode=e2e
@@ -217,7 +217,7 @@ System 3 NEVER validates PRD implementations directly. Follow this context colla
 
 ### Step 1: Context Collation (System 3 does this)
 
-Gather information validation-agent needs:
+Gather information validation-test-agent needs:
 - Read the PRD to understand scope and acceptance criteria
 - Identify the worktree/branch where implementation lives
 - Note specific areas of concern or focus
@@ -230,7 +230,7 @@ to check if they match the PRD" — STOP. That is validation work.
 
 ```python
 Task(
-    subagent_type="validation-agent",
+    subagent_type="validation-test-agent",
     prompt=f"""
     --mode=e2e
     --prd=PRD-{prd_id}
@@ -264,7 +264,7 @@ Task(
 
 ### Step 3: Review Report (System 3 reviews the REPORT, not the code)
 
-After validation-agent returns:
+After validation-test-agent returns:
 1. Read the structured gap analysis report
 2. If all PASS → proceed to next phase (close epic, advance Key Result)
 3. If any FAIL → spawn orchestrator to fix gaps, then re-validate
@@ -351,13 +351,13 @@ curl -s localhost:8000/health | jq .
 
 ```python
 # For tasks - fast unit check (orchestrator)
-Task(subagent_type="validation-agent", prompt="--mode=unit --task_id=<id>")
+Task(subagent_type="validation-test-agent", prompt="--mode=unit --task_id=<id>")
 
 # For tasks - full E2E validation (orchestrator)
-Task(subagent_type="validation-agent", prompt="--mode=e2e --prd=PRD-XXX --task_id=<id>")
+Task(subagent_type="validation-test-agent", prompt="--mode=e2e --prd=PRD-XXX --task_id=<id>")
 
 # For business outcomes (System 3)
-Task(subagent_type="validation-agent", prompt="--mode=e2e --prd=PRD-XXX --task_id=<id>")
+Task(subagent_type="validation-test-agent", prompt="--mode=e2e --prd=PRD-XXX --task_id=<id>")
 ```
 
 ---

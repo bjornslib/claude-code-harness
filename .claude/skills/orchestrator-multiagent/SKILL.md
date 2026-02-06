@@ -1,6 +1,6 @@
 ---
 name: orchestrator-multiagent
-description: Multi-agent orchestration for building software incrementally. Use when coordinating workers via Task subagents, managing task state with Beads, delegating features to specialized workers (frontend-dev-expert, backend-solutions-engineer, etc.), tracking progress across sessions, or implementing the four-phase pattern (ideation → planning → execution → validation). Triggers on orchestration, coordination, multi-agent, beads, worker delegation, session handoff, progress tracking.
+description: Multi-agent orchestration for building software incrementally. Use when coordinating workers via native Agent Teams (Teammate + TaskCreate + SendMessage), managing task state with Beads, delegating features to specialized workers (frontend-dev-expert, backend-solutions-engineer, etc.), tracking progress across sessions, or implementing the four-phase pattern (ideation → planning → execution → validation). Triggers on orchestration, coordination, multi-agent, beads, worker delegation, session handoff, progress tracking, agent teams, teammates.
 ---
 
 # Multi-Agent Orchestrator Skill
@@ -22,11 +22,18 @@ description: Multi-agent orchestration for building software incrementally. Use 
 **Orchestrator = Coordinator. Worker = Implementer.**
 
 ```python
-# ✅ CORRECT - Worker via Task subagent
-result = Task(
-    subagent_type="frontend-dev-expert",
-    description="Implement feature F001",
-    prompt="""
+# ✅ CORRECT - Worker via native team teammate
+# Step 1: Create team (once per session, in PREFLIGHT)
+Teammate(
+    operation="spawnTeam",
+    team_name="{initiative}-workers",
+    description="Workers for {initiative}"
+)
+
+# Step 2: Create work item
+TaskCreate(
+    subject="Implement feature F001",
+    description="""
     ## Task: [Task title from Beads]
 
     **Context**: [investigation summary]
@@ -35,14 +42,25 @@ result = Task(
     **Scope** (ONLY these files): [file list]
 
     **Report back with**: Files modified, tests written/passed, any blockers
-    """
+    """,
+    activeForm="Implementing F001"
 )
-# Result returned directly - no monitoring, no cleanup needed
+
+# Step 3: Spawn specialist worker into team
+Task(
+    subagent_type="frontend-dev-expert",
+    team_name="{initiative}-workers",
+    name="worker-frontend",
+    prompt="You are worker-frontend in team {initiative}-workers. Check TaskList for available work. Claim tasks, implement, report completion via SendMessage to team-lead."
+)
+
+# Step 4: Worker results arrive via SendMessage (auto-delivered to you)
+# Worker sends: SendMessage(type="message", recipient="team-lead", content="Task #X complete: ...")
 ```
 
-**Why Task subagents?** Workers receive the assignment, execute it, and return results directly. No session management, no monitoring loops, no cleanup required. The orchestrator blocks until the worker completes.
+**Why native teams?** Workers are persistent teammates that can claim tasks, communicate with each other, and handle multiple assignments within a single session. The orchestrator creates tasks and workers pick them up -- no blocking, no single-assignment limitation.
 
-**Parallel workers**: Use `run_in_background=True` and collect with `TaskOutput(task_id=...)`.
+**Parallel workers**: Spawn multiple teammates into the same team. Each claims different tasks from the shared TaskList. Workers coordinate peer-to-peer via SendMessage.
 
 ---
 
@@ -52,42 +70,49 @@ result = Task(
 
 | Command | Why Blocked | Alternative |
 |---------|-------------|-------------|
-| `bd close <id>` | Bypasses validation evidence | `Task(subagent_type="validation-agent", ...)` |
-| `bd close <id> --reason "..."` | Same - reason doesn't replace evidence | validation-agent collects actual evidence |
-| `Skill("acceptance-test-runner")` | Bypasses validation-agent routing | Use validation-agent --mode=e2e |
-| `Skill("acceptance-test-writer")` | Bypasses validation-agent routing | Use validation-agent --mode=e2e |
+| `bd close <id>` | Bypasses validation evidence | Assign to validator teammate via TaskCreate + SendMessage |
+| `bd close <id> --reason "..."` | Same - reason doesn't replace evidence | Validator teammate collects actual evidence |
+| `Skill("acceptance-test-runner")` | Bypasses validation-test-agent routing | Use validation-test-agent --mode=e2e |
+| `Skill("acceptance-test-writer")` | Bypasses validation-test-agent routing | Use validation-test-agent --mode=e2e |
 
 **If you attempt `bd close`**: STOP. Ask yourself:
-1. Did I run validation-agent --mode=unit or --mode=e2e?
-2. Did validation-agent produce passing evidence?
-3. Did validation-agent close the task for me?
+1. Did I run validation-test-agent --mode=unit or --mode=e2e?
+2. Did validation-test-agent produce passing evidence?
+3. Did validation-test-agent close the task for me?
 
-If NO to any: You're violating the validation gate. Delegate to validation-agent first.
+If NO to any: You're violating the validation gate. Delegate to validation-test-agent first.
 
 **Correct vs Incorrect Patterns:**
 
 ```python
-# ❌ WRONG: Direct bd close
+# ---- WRONG: Direct bd close ----
 bd close agencheck-042 --reason "Tests passing"
 
-# ❌ WRONG: Direct skill invocation
+# ---- WRONG: Direct skill invocation ----
 Skill("acceptance-test-runner", args="--prd=PRD-001")
 
-# ✅ CORRECT: Fast unit check
-Task(
-    subagent_type="validation-agent",
-    prompt="--mode=unit --task_id=agencheck-042"
-)
+# ---- CORRECT: Assign validation to validator teammate ----
+# (Validator teammate spawned once per session -- see "Validation Agent" section below)
 
-# ✅ CORRECT: Full E2E with PRD acceptance tests
-Task(
-    subagent_type="validation-agent",
-    prompt="--mode=e2e --task_id=agencheck-042 --prd=PRD-AUTH-001"
+# Fast unit check
+TaskCreate(
+    subject="Validate agencheck-042 (unit)",
+    description="--mode=unit --task_id=agencheck-042",
+    activeForm="Validating agencheck-042"
 )
-# validation-agent invokes acceptance-test-runner internally and closes with evidence
+SendMessage(type="message", recipient="validator", content="Unit validation task available for agencheck-042", summary="Validation request")
+
+# Full E2E with PRD acceptance tests
+TaskCreate(
+    subject="Validate agencheck-042 (e2e)",
+    description="--mode=e2e --task_id=agencheck-042 --prd=PRD-AUTH-001\nValidate against acceptance criteria. Close with evidence if passing.",
+    activeForm="Validating agencheck-042"
+)
+SendMessage(type="message", recipient="validator", content="E2E validation task available for agencheck-042", summary="E2E validation request")
+# Validator teammate invokes acceptance-test-runner internally and closes with evidence
 ```
 
-**Exception**: Only validation-agent is authorized to run `bd close` after verification passes.
+**Exception**: Only the validator teammate is authorized to run `bd close` after verification passes.
 
 ---
 
@@ -108,15 +133,20 @@ bd dep list <bd-id>               # Show dependencies
 
 **Quick Reference**: [REFERENCE.md](REFERENCE.md#beads-commands)
 
-### Worker Types (via Task Subagents)
-| Type | subagent_type | Use For |
-|------|---------------|---------|
-| Frontend | `frontend-dev-expert` | React, Next.js, UI, TypeScript |
-| Backend | `backend-solutions-engineer` | Python, FastAPI, PydanticAI, MCP |
-| **Browser Testing** | `tdd-test-engineer` | **E2E UI validation, automated browser testing** |
-| General | `general-purpose` | Scripts, docs, everything else |
+### Worker Types (Spawned as Teammates)
 
-**Pattern**: Use `Task(subagent_type="...", prompt="...")` for all worker delegation. Workers complete and return results directly.
+These types are used as `subagent_type` when spawning teammates via `Task(..., team_name=..., name=...)`:
+
+| Type | subagent_type | Teammate Name | Use For |
+|------|---------------|---------------|---------|
+| Frontend | `frontend-dev-expert` | `worker-frontend` | React, Next.js, UI, TypeScript |
+| Backend | `backend-solutions-engineer` | `worker-backend` | Python, FastAPI, PydanticAI, MCP |
+| **Browser Testing** | `tdd-test-engineer` | `worker-tester` | **E2E UI validation, automated browser testing** |
+| Architecture | `solution-design-architect` | `worker-architect` | Design docs, PRDs |
+| General | `Explore` | `worker-explore` | Investigation, code search |
+| **Validator** | `validation-test-agent` | `validator` | **Task closure with evidence** |
+
+**Pattern**: Use `Task(subagent_type="...", team_name="...", name="...")` to spawn teammates. Workers claim tasks from the shared TaskList and report via SendMessage.
 
 ### Key Directories
 - `.beads/` - Task state (managed by `bd` commands)
@@ -399,7 +429,7 @@ git add acceptance-tests/ && git commit -m "test(PRD-AUTH-001): add acceptance t
 - Tests are **NOT executed** in Phase 1 (only generated)
 - Tests become part of **version control**
 - Workers reference tests during Phase 2
-- validation-agent executes tests during Phase 3 closure
+- validation-test-agent executes tests during Phase 3 closure
 
 ---
 
@@ -410,7 +440,7 @@ bd create --title="[Hotfix Description]" --type=epic --priority=1
 # Skip Phase 0 only for emergency fixes with <3 file changes
 ```
 
-**⚠️ Ignore plan skill's "execute with superpowers:executing-plans"** - we use Task subagents.
+**Warning: Ignore plan skill's "execute with superpowers:executing-plans"** -- we use native Agent Teams teammates.
 
 ---
 
@@ -487,30 +517,31 @@ The autonomous mode protocol provides:
 
 **Quick Reference (Single Feature)**:
 ```
-1. Run PREFLIGHT.md checklist
+1. Run PREFLIGHT.md checklist (includes team creation)
    ↓
-2. `bd ready` → Select next task
+2. `bd ready` -> Select next task
    ↓
 3. `bd update <bd-id> --status in-progress`
    ↓
-4. 🚨 DELEGATE TO WORKER VIA TASK SUBAGENT
-   Task(subagent_type="...", description="...", prompt="...")
+4. DELEGATE TO WORKER TEAMMATE
+   TaskCreate(subject="Implement ...", description="...", activeForm="...")
+   SendMessage(type="message", recipient="worker-backend", content="Task available", summary="New task")
    ↓
-5. Wait for Task to complete (result returned directly)
+5. Worker sends results via SendMessage (auto-delivered to you)
    ↓
-6. Validate completion (3 LEVELS - see WORKFLOWS.md)
-   - Level 1: Unit Tests (pytest + Jest)
-   - Level 2: API Tests (curl endpoints)
-   - Level 3: E2E Browser Tests (chrome-devtools/Playwright)
+6. DELEGATE VALIDATION TO VALIDATOR TEAMMATE
+   TaskCreate(subject="Validate <bd-id>", description="--mode=e2e --task_id=... --prd=PRD-XXX")
+   SendMessage(type="message", recipient="validator", content="Validation ready", summary="Validate request")
    ↓
-7. `bd close <bd-id> --reason "PASS: Unit ✓ API ✓ E2E ✓"`
+7. Validator closes task with evidence (via bd close internally)
    ↓
-7. `git add . && git commit -m "feat(<bd-id>): [description]"`
+8. `git add . && git commit -m "feat(<bd-id>): [description]"`
 ```
 
 **Critical Rules**:
 - One feature at a time. Leave clean state. Commit progress.
-- **Use Task(subagent_type="...") for all worker delegation** - Workers complete and return results
+- **Use TaskCreate + SendMessage for all worker delegation** - Workers claim tasks from shared TaskList
+- **NEVER use `bd close` directly** - Route through validator teammate
 - Orchestrator coordinates; Workers implement
 
 **Legacy feature_list.json**: See [LEGACY_FEATURE_LIST.md](archive/LEGACY_FEATURE_LIST.md) for legacy workflow.
@@ -522,30 +553,33 @@ The autonomous mode protocol provides:
 **Validation Workflow**:
 ```
 1. Verify ALL tasks in functional epic are closed
-   └─ `bd list` - check status
-   ↓
-2. Execute AT epic tasks via validation-agent (--mode=unit first, then --mode=e2e)
-   └─ Validation-agent runs fast unit checks, then PRD-based acceptance tests
-   └─ Validation-agent closes tasks that pass
-   ↓
-3. Close AT epic via validation-agent
-   └─ Delegate: validation-agent --mode=e2e --task_id=<at-epic-id> --prd=PRD-XXX
-   ↓
-4. Close functional epic via validation-agent (now unblocked)
-   └─ Delegate: validation-agent --mode=e2e --task_id=<epic-id> --prd=PRD-XXX
-   ↓
-5. When all epics closed → System 3 closes uber-epic
-   └─ System 3 uses validation-agent --mode=e2e --prd=PRD-XXX for uber-epic
-   ↓
+   -- `bd list` - check status
+   |
+2. Assign AT epic tasks to validator teammate (--mode=unit first, then --mode=e2e)
+   -- TaskCreate + SendMessage to validator
+   -- Validator runs fast unit checks, then PRD-based acceptance tests
+   -- Validator closes tasks that pass (via bd close internally)
+   |
+3. Assign AT epic closure to validator teammate
+   -- TaskCreate: "--mode=e2e --task_id=<at-epic-id> --prd=PRD-XXX"
+   -- SendMessage to validator
+   |
+4. Assign functional epic closure to validator teammate (now unblocked)
+   -- TaskCreate: "--mode=e2e --task_id=<epic-id> --prd=PRD-XXX"
+   -- SendMessage to validator
+   |
+5. When all epics closed -> System 3 closes uber-epic
+   -- System 3 uses validation-test-agent --mode=e2e --prd=PRD-XXX for uber-epic
+   |
 6. Final commit and summary
-   └─ `git add . && git commit -m "feat: complete [initiative]"`
-   └─ Update `.claude/progress/` with final summary
+   -- `git add . && git commit -m "feat: complete [initiative]"`
+   -- Update `.claude/progress/` with final summary
 ```
 
 **Closure Order** (MUST follow):
 ```
-AT tasks → AT epic → Functional epic → Uber-epic
-(All closures via validation-agent, NOT direct bd close)
+AT tasks -> AT epic -> Functional epic -> Uber-epic
+(All closures via validator teammate, NOT direct bd close)
 ```
 
 **Full Validation Protocol**: See [WORKFLOWS.md](WORKFLOWS.md#validation-protocol-3-level)
@@ -732,43 +766,78 @@ This creates a continuous improvement cycle where each task benefits from all pr
 
 ---
 
-## Worker Delegation
+## Worker Delegation (Native Teams)
 
-**Orchestrators use Task subagents for all worker delegation.**
+**Orchestrators use native Agent Teams for all worker delegation.**
+
+### Team Lifecycle
+
+```python
+# 1. Create team (once per session, during PREFLIGHT)
+Teammate(
+    operation="spawnTeam",
+    team_name="{initiative}-workers",
+    description="Workers for {initiative}"
+)
+
+# 2. Spawn specialist workers as persistent teammates
+Task(
+    subagent_type="backend-solutions-engineer",
+    team_name="{initiative}-workers",
+    name="worker-backend",
+    prompt="You are worker-backend in team {initiative}-workers. Check TaskList for available work. Claim tasks, implement, report completion via SendMessage to team-lead."
+)
+
+# 3. Spawn validator teammate (once per session)
+Task(
+    subagent_type="validation-test-agent",
+    team_name="{initiative}-workers",
+    name="validator",
+    prompt="You are the validator in team {initiative}-workers. When tasks are ready for validation, check TaskList for tasks needing review. Run validation (--mode=unit or --mode=e2e --prd=PRD-XXX). Close tasks with evidence via bd close. Report results via SendMessage to team-lead."
+)
+
+# 4. Create work items and notify workers
+TaskCreate(
+    subject="Implement {feature}",
+    description="[task details, requirements, acceptance criteria, file scope]",
+    activeForm="Implementing {feature}"
+)
+SendMessage(type="message", recipient="worker-backend", content="Task available: {feature}", summary="New task assignment")
+
+# 5. Worker results arrive via SendMessage (auto-delivered)
+# 6. Assign validation to validator teammate
+TaskCreate(
+    subject="Validate {feature}",
+    description="--mode=e2e --task_id={bead_id} --prd=PRD-XXX",
+    activeForm="Validating {feature}"
+)
+SendMessage(type="message", recipient="validator", content="Validation task available", summary="Validation request")
+```
 
 ### Quick Worker Selection
 
-| Feature Type | subagent_type |
-|--------------|---------------|
-| React, UI | `frontend-dev-expert` |
-| API, Python | `backend-solutions-engineer` |
-| **E2E Browser Tests** | **`tdd-test-engineer`** |
-| Scripts, docs | `general-purpose` |
+| Feature Type | subagent_type | Teammate Name |
+|--------------|---------------|---------------|
+| React, UI | `frontend-dev-expert` | `worker-frontend` |
+| API, Python | `backend-solutions-engineer` | `worker-backend` |
+| **E2E Browser Tests** | **`tdd-test-engineer`** | **`worker-tester`** |
+| Architecture | `solution-design-architect` | `worker-architect` |
+| Investigation | `Explore` | `worker-explore` |
+| **Task Closure** | **`validation-test-agent`** | **`validator`** |
 
-**Delegation Pattern:**
-```python
-result = Task(
-    subagent_type="frontend-dev-expert",
-    description="Implement [feature]",
-    prompt="[worker assignment from template]"
-)
-# Worker completes, result returned directly
-```
-
-**For parallel workers**: Use `run_in_background=True` and collect with `TaskOutput(task_id=...)`
+**Parallel workers**: Spawn multiple teammates into the same team. Each claims different tasks from the shared TaskList. Workers coordinate peer-to-peer via SendMessage.
 
 ### Browser Testing Worker Pattern
 
 **When to use**: Features requiring actual browser automation (not just unit tests)
 
-**Pattern**: Orchestrator → Task subagent with tdd-test-engineer or browser-mcp
+**Pattern**: Orchestrator creates task, persistent tdd-test-engineer teammate picks it up. Because the tester is a persistent teammate, it can maintain browser sessions across multiple test tasks.
 
 ```python
-# Direct browser testing via Task subagent
-result = Task(
-    subagent_type="tdd-test-engineer",
-    description="E2E browser testing for F084",
-    prompt="""
+# Create browser testing task
+TaskCreate(
+    subject="E2E browser testing for F084",
+    description="""
     MISSION: Validate feature F084 via browser automation
 
     TARGET: http://localhost:5001/[path]
@@ -780,13 +849,46 @@ result = Task(
     - [ ] Capture screenshots as evidence
 
     Report: Pass/Fail per item, screenshots, overall assessment
-    """
+    """,
+    activeForm="Browser testing F084"
 )
-```
+SendMessage(type="message", recipient="worker-tester", content="Browser test task available for F084", summary="Browser test request")
+# Worker-tester picks up task, maintains browser session, reports results via SendMessage
 ```
 
+### Fallback: Task Subagent Mode
+
+**When AGENT_TEAMS is not enabled**, fall back to the original Task subagent pattern:
+
+```python
+result = Task(
+    subagent_type="frontend-dev-expert",
+    description="Implement [feature]",
+    prompt="""
+    ## Task: [Task title from Beads]
+
+    **Context**: [investigation summary]
+    **Requirements**: [list requirements]
+    **Acceptance Criteria**: [list criteria]
+    **Scope** (ONLY these files): [file list]
+
+    **Report back with**: Files modified, tests written/passed, any blockers
+    """
+)
+# Result returned directly - no monitoring, no cleanup needed
+```
+
+In fallback mode, validation also uses Task subagents:
+```python
+Task(
+    subagent_type="validation-test-agent",
+    prompt="--mode=e2e --task_id=agencheck-042 --prd=PRD-AUTH-001"
+)
+```
+
+**How to detect**: Check for `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` in environment. If absent, use fallback.
+
 **Full Guide**: [WORKERS.md](WORKERS.md)
-- Task Delegation Pattern (blocking and parallel)
 - Worker Assignment Template
 - Parallel Worker Pattern
 - Browser Testing Workers (E2E validation)
@@ -816,11 +918,23 @@ lsof -i :5001 -i :8000 -i :5184 -i :5185 | grep LISTEN
 
 ## Testing & Validation
 
-### Validation Agent (NEW - Task Closure Authority)
+### Validation Agent (Teammate -- Task Closure Authority)
 
-**🚨 Orchestrators delegate task closure to validation-agent, NOT direct `bd close`.**
+**Orchestrators delegate task closure to the validator teammate, NOT direct `bd close`.**
 
-The validation-agent operates in two modes:
+The validator is a persistent teammate spawned once per session during PREFLIGHT:
+
+```python
+# Spawn validator teammate (once per session, after team creation)
+Task(
+    subagent_type="validation-test-agent",
+    team_name="{initiative}-workers",
+    name="validator",
+    prompt="You are the validator in team {initiative}-workers. When tasks are ready for validation, check TaskList for tasks needing review. Run validation (--mode=unit or --mode=e2e --prd=PRD-XXX). Close tasks with evidence via bd close. Report results via SendMessage to team-lead."
+)
+```
+
+The validator operates in two modes:
 
 | Mode | Flag | Used By | Purpose |
 |------|------|---------|---------|
@@ -831,28 +945,33 @@ The validation-agent operates in two modes:
 
 ```python
 # Stage 1: Fast unit check (runs first)
-Task(
-    subagent_type="validation-agent",
-    prompt="--mode=unit --task_id=agencheck-042"
+TaskCreate(
+    subject="Validate agencheck-042 (unit)",
+    description="--mode=unit --task_id=agencheck-042",
+    activeForm="Unit validation agencheck-042"
 )
+SendMessage(type="message", recipient="validator", content="Unit validation task for agencheck-042", summary="Unit validation request")
 # Quick validation with mocks, catches obvious breakage
 
 # Stage 2: Full E2E with PRD acceptance tests (if unit passes)
-Task(
-    subagent_type="validation-agent",
-    prompt="--mode=e2e --task_id=agencheck-042 --prd=PRD-AUTH-001"
+TaskCreate(
+    subject="Validate agencheck-042 (e2e)",
+    description="--mode=e2e --task_id=agencheck-042 --prd=PRD-AUTH-001\nValidate against acceptance criteria. Close with evidence if passing.",
+    activeForm="E2E validation agencheck-042"
 )
-# validation-agent invokes acceptance-test-runner internally
+SendMessage(type="message", recipient="validator", content="E2E validation task for agencheck-042", summary="E2E validation request")
+# Validator teammate invokes acceptance-test-runner internally
 # Runs PRD-defined acceptance criteria with real data
 # Closes task with evidence if all criteria pass
 ```
 
 **Key Rules:**
 - Orchestrators NEVER run `bd close` directly
-- Validation-agent handles closure AFTER validation passes
+- Validator teammate handles closure AFTER validation passes
 - NEVER invoke acceptance-test-runner or acceptance-test-writer directly
 - Always include `--prd=PRD-XXX` for e2e mode
 - System 3 uses `--mode=e2e --prd=X` for business outcome validation
+- Validator is a **persistent teammate** -- spawned once, handles multiple validation tasks
 
 ### Validation Types
 
@@ -866,12 +985,18 @@ Task(
 
 **After ANY test suite passes:**
 
-```
-Task(subagent_type="Explore", prompt="Validate <bd-id> works as designed:
-- Test actual user workflow (not mocked)
-- Verify API endpoints return real data
-- Check UI displays expected results
-- Compare against Beads task acceptance criteria")
+```python
+# Create exploration task and assign to explorer teammate (or validator)
+TaskCreate(
+    subject="Post-test validation for <bd-id>",
+    description="""Validate <bd-id> works as designed:
+    - Test actual user workflow (not mocked)
+    - Verify API endpoints return real data
+    - Check UI displays expected results
+    - Compare against Beads task acceptance criteria""",
+    activeForm="Post-test validation <bd-id>"
+)
+SendMessage(type="message", recipient="validator", content="Post-test validation needed for <bd-id>", summary="Post-test validation")
 ```
 
 **Why**: Unit tests can pass with mocks while feature doesn't work (hollow tests).
@@ -946,15 +1071,15 @@ Task(subagent_type="Explore", prompt="Validate <bd-id> works as designed:
 - ✅ Chose correct workflow (Task Master vs Manual)?
 
 **After each feature:**
-- ✅ **Used Task(subagent_type="...") for worker delegation?**
-- ✅ Ran regression check first?
-- ✅ Worker stayed within scope?
-- ✅ Validated feature works (not just tests pass)?
-- ✅ **Delegated closure to validation-agent (--mode=unit or --mode=e2e --prd=X)?**
-- ✅ Committed with message?
-- ✅ Git status clean?
+- Did I use **TaskCreate + SendMessage** for worker delegation (or Task subagent fallback)?
+- Ran regression check first?
+- Worker stayed within scope?
+- Validated feature works (not just tests pass)?
+- **Delegated closure to validator teammate (--mode=unit or --mode=e2e --prd=X)?**
+- Committed with message?
+- Git status clean?
 
-**Pattern**: All worker delegation uses `Task(subagent_type="...")`. Workers complete and return results directly.
+**Pattern**: All worker delegation uses native Agent Teams (TaskCreate + SendMessage to teammates). When AGENT_TEAMS is not enabled, fall back to `Task(subagent_type="...")`.
 
 **Full Guide**: [VALIDATION.md](VALIDATION.md#troubleshooting)
 - Worker Red Flags & Recovery
@@ -967,11 +1092,17 @@ Task(subagent_type="Explore", prompt="Validate <bd-id> works as designed:
 
 ## Message Bus Integration
 
-Real-time communication with System 3 and other orchestrators.
+**Scope**: The message bus handles communication between **System 3 and Orchestrators** only. Worker communication within a team uses native Agent Teams (SendMessage/TaskCreate) -- NOT the message bus.
+
+| Communication Path | Mechanism |
+|--------------------|-----------|
+| System 3 <-> Orchestrator | Message Bus (mb-* commands) |
+| Orchestrator <-> Worker | Native Teams (SendMessage, TaskCreate, TaskList) |
+| Worker <-> Worker (peers) | Native Teams (SendMessage) |
 
 **Architecture Reference**: See [MESSAGE_BUS_ARCHITECTURE.md](../../documentation/MESSAGE_BUS_ARCHITECTURE.md) for the complete architecture overview.
 
-### Session Start: Register + Spawn Monitor
+### Session Start: Register with Message Bus
 
 At the START of every orchestrator session:
 
@@ -985,7 +1116,7 @@ At the START of every orchestrator session:
     --worktree="$(pwd)"
 ```
 
-### Receiving Messages
+### Receiving Messages from System 3
 
 Messages from System 3 are automatically injected via PostToolUse hook.
 
@@ -1025,16 +1156,21 @@ When completing a task or epic:
 }'
 ```
 
-### Session End: Cleanup & Unregister
+### Session End: Cleanup
 
 Before session ends:
 
 ```bash
-# 1. Unregister from message bus
+# 1. Shutdown team (sends shutdown_request to all teammates)
+# Use SendMessage(type="shutdown_request", recipient="worker-backend") for each teammate
+# Wait for shutdown confirmations, then:
+Teammate(operation="cleanup")
+
+# 2. Unregister from message bus
 .claude/scripts/message-bus/mb-unregister "${CLAUDE_SESSION_ID}"
 ```
 
-**Note**: Task subagents clean up automatically - no manual tmux cleanup needed.
+**Note**: Native team teammates are shut down via `SendMessage(type="shutdown_request")`. Team cleanup via `Teammate(operation="cleanup")` removes team directories.
 
 ### Updated Session Handoff Checklist
 
@@ -1042,12 +1178,16 @@ Add to your session start/end routines:
 
 **Session Start:**
 - [ ] Register with message bus (`mb-register`)
+- [ ] Create worker team (`Teammate(operation="spawnTeam")`)
+- [ ] Spawn specialist workers and validator as teammates
 
 **Session End:**
 - [ ] Send completion report to System 3 (`mb-send`)
+- [ ] Shutdown teammates (`SendMessage(type="shutdown_request")`)
+- [ ] Clean up team (`Teammate(operation="cleanup")`)
 - [ ] Unregister from message bus (`mb-unregister`)
 
-### Message Types You May Receive
+### Message Types You May Receive (from System 3)
 
 | Type | From | Action |
 |------|------|--------|
@@ -1060,7 +1200,7 @@ Add to your session start/end routines:
 
 | Command | Purpose |
 |---------|---------|
-| `mb-recv` | Check for pending messages |
+| `mb-recv` | Check for pending messages from System 3 |
 | `mb-send` | Send message to System 3 or other orchestrator |
 | `mb-register` | Register this session |
 | `mb-unregister` | Unregister this session |
@@ -1097,11 +1237,12 @@ Add to your session start/end routines:
 
 ---
 
-**Skill Version**: 4.0 (Task-Based Worker Delegation)
+**Skill Version**: 5.0 (Native Agent Teams Worker Delegation)
 **Progressive Disclosure**: 5 reference files for detailed information
-**Last Updated**: 2026-01-25
+**Last Updated**: 2026-02-06
 **Latest Enhancements**:
-- v4.0: 🆕 **Task-Based Worker Delegation** - Replaced tmux worker delegation with Task subagents. Workers now receive assignments via `Task(subagent_type="...")` and return results directly. No session management, monitoring loops, or cleanup required. Parallel workers use `run_in_background=True` with `TaskOutput()` collection. System 3 → Orchestrator still uses tmux for session isolation; Orchestrator → Worker now uses Task subagents.
+- v5.0: **Native Agent Teams** - Replaced Task subagent worker delegation with native Agent Teams (Teammate + TaskCreate + SendMessage). Workers are now persistent teammates that claim tasks from a shared TaskList, communicate peer-to-peer, and maintain session state across multiple assignments. Validator is a team role (not a separate Task subagent). Message bus scoped to System 3 <-> Orchestrator only; worker communication uses native team inboxes. Fallback to Task subagent mode when AGENT_TEAMS is not enabled.
+- v4.0: **Task-Based Worker Delegation** - Replaced tmux worker delegation with Task subagents. Workers now receive assignments via `Task(subagent_type="...")` and return results directly. No session management, monitoring loops, or cleanup required. Parallel workers use `run_in_background=True` with `TaskOutput()` collection. System 3 -> Orchestrator still uses tmux for session isolation; Orchestrator -> Worker now uses Task subagents.
 - v3.13: 🆕 **Sync Script Finalization** - Sync script now auto-closes Task Master tasks after sync (status=done). Removed mapping file (redundant with beads hierarchy). **IMPORTANT**: Must run from `zenagent/` root to use correct `.beads` database. Updated all docs with correct paths and `--tasks-path` usage.
 - v3.12: **ID Range Filtering** - `--from-id=<id>` and `--to-id=<id>` to filter which Task Master tasks to sync. Essential for multi-PRD projects.
 - v3.11: **Enhanced Sync Script** - `--uber-epic=<id>` for parent-child linking. Auto-maps description, details→design, testStrategy→acceptance.

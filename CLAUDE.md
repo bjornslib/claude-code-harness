@@ -22,9 +22,9 @@ This setup implements a sophisticated multi-agent system with three distinct lev
 │  LEVEL 2: ORCHESTRATOR                                              │
 │  Output Style: orchestrator.md                                      │
 │  Skills: orchestrator-multiagent/                                   │
-│  Role: Feature coordination, worker delegation via Task subagents   │
+│  Role: Feature coordination, worker delegation via native teams     │
 ├─────────────────────────────────────────────────────────────────────┤
-│  LEVEL 3: WORKERS (via Task subagents)                              │
+│  LEVEL 3: WORKERS (native teammates via Agent Teams)                │
 │  Specialists: frontend-dev-expert, backend-solutions-engineer,      │
 │               tdd-test-engineer, solution-architect                 │
 │  Role: Implementation, testing, focused execution                   │
@@ -42,7 +42,7 @@ This setup implements a sophisticated multi-agent system with three distinct lev
 |-------|---------|---------|
 | System 3 | `ccsystem3` | Launch meta-orchestrator with completion promises |
 | Orchestrator | `launchorchestrator [epic-name]` | Launch in isolated worktree (via tmux) |
-| Worker | `Task(subagent_type="...")` | Spawned by orchestrator as Task subagent |
+| Worker | `Task(subagent_type="...", team_name="...", name="...")` | Spawned as native teammate by orchestrator (team lead) |
 
 ## Directory Structure
 
@@ -183,7 +183,7 @@ Configured in `.claude/settings.json`:
 - ✅ Use Read/Grep/Glob to investigate
 - ✅ Analyze, plan, and create task structures
 - 🛑 NEVER use Edit/Write/MultiEdit directly
-- 🛑 MUST delegate implementation to workers via `Task(subagent_type="...")`
+- 🛑 MUST delegate implementation to workers via native Agent Teams (`Teammate` + `TaskCreate` + `SendMessage`)
 
 **Workers** (Level 3):
 - ✅ Implement features using Edit/Write
@@ -216,9 +216,11 @@ bd close <task-id>  # BLOCKED
 
 Each orchestrator session should have:
 - Unique `CLAUDE_SESSION_ID` environment variable
+- `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` for native team coordination
 - Separate worktree (for code-based projects)
 - Message bus registration
 - Completion promise tracking
+- Native team created via `Teammate(operation="spawnTeam")`
 
 ## Environment Variables
 
@@ -230,6 +232,8 @@ Each orchestrator session should have:
 | `ANTHROPIC_API_KEY` | API authentication | `.mcp.json` env |
 | `PERPLEXITY_API_KEY` | Perplexity API key | `.mcp.json` env |
 | `BRAVE_API_KEY` | Brave search API key | `.mcp.json` env |
+| `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` | Enable native Agent Teams (`1`) | `.claude/settings.json` or spawn script |
+| `CLAUDE_CODE_TASK_LIST_ID` | Shared task list ID for team coordination | Spawn script |
 
 ## Testing
 
@@ -296,7 +300,7 @@ The harness is designed to be copied into actual project repositories that conta
 When running as an orchestrator (Level 2):
 1. **Investigation is allowed**: Read/Grep/Glob to understand problems
 2. **Implementation is forbidden**: Never use Edit/Write directly
-3. **Always delegate**: Use `Task(subagent_type="...")` for all code changes
+3. **Always delegate**: Use native Agent Teams (teammates) for all code changes
 4. **No exceptions**: Even "simple" changes must be delegated
 
 This separation ensures proper testing, validation, and architectural consistency.

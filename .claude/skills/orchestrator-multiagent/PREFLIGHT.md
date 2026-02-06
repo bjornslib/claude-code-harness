@@ -8,6 +8,15 @@
 
 ## Phase 1: Environment Setup (30 seconds)
 
+### [ ] Agent Teams Enabled
+
+```bash
+# Verify CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS is set
+echo $CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
+# Must output: 1
+# If not set: export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
+```
+
 ### [ ] Serena Active
 
 ```bash
@@ -39,6 +48,18 @@ lsof -i :5001 -i :8000 -i :5184 -i :5185 | grep LISTEN
 ```bash
 git status
 # Must show clean working tree or only expected staged changes
+```
+
+### [ ] Create Worker Team
+
+```python
+# Create the team for this initiative's workers (once per session)
+Teammate(
+    operation="spawnTeam",
+    team_name="{initiative}-workers",
+    description="Workers for {initiative}"
+)
+# Workers will be spawned into this team as needed during execution
 ```
 
 ---
@@ -181,11 +202,14 @@ bd dep add <epic-a-id> <at-epic-id> --type=blocks
 
 ---
 
-**Version**: 1.1
+**Version**: 1.2
 **Created**: 2025-12-21
-**Updated**: 2026-01-07
+**Updated**: 2026-02-06
 **Source**: Consolidated from CLAUDE.md, SKILL.md, SERVICE_MANAGEMENT.md circuit breaker sections
+**v1.2 Changes**:
+- Added Agent Teams env var check (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`) to Phase 1
+- Added "Create Worker Team" step (`Teammate(operation="spawnTeam", ...)`) to Phase 1
 **v1.1 Changes**:
-- 🆕 **Hindsight-Only Memory** - Removed Serena/Byterover memory checks, replaced with Hindsight `recall` and `reflect`
+- Hindsight-Only Memory - Removed Serena/Byterover memory checks, replaced with Hindsight `recall` and `reflect`
 - Updated Phase 2 to use `mcp__hindsight__recall()` for context loading
 - Updated checkpoints to use Hindsight instead of Serena thinking tools

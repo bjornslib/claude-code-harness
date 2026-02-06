@@ -16,9 +16,9 @@ This project uses a 3-level agent hierarchy for complex multi-feature developmen
 │  LEVEL 2: ORCHESTRATOR                                              │
 │  Output Style: orchestrator.md                                      │
 │  Skills: orchestrator-multiagent/                                   │
-│  Role: Feature coordination, worker delegation via Task subagents   │
+│  Role: Feature coordination, worker delegation via native teams     │
 ├─────────────────────────────────────────────────────────────────────┤
-│  LEVEL 3: WORKERS (via Task subagents)                              │
+│  LEVEL 3: WORKERS (native teammates via Agent Teams)                │
 │  Specialists: frontend-dev-expert, backend-solutions-engineer,      │
 │               tdd-test-engineer, solution-architect                 │
 │  Role: Implementation, testing, focused execution                   │
@@ -31,7 +31,7 @@ This project uses a 3-level agent hierarchy for complex multi-feature developmen
 |-------|---------|---------|
 | System 3 | `ccsystem3` | Launch meta-orchestrator with completion promises |
 | Orchestrator | `launchorchestrator [epic-name]` | Launch in isolated worktree (via tmux) |
-| Worker | `Task(subagent_type="...")` | Spawned by orchestrator as Task subagent |
+| Worker | `Task(subagent_type="...", team_name="...", name="...")` | Spawned as native teammate by orchestrator (team lead) |
 
 ### Key Principle
 
@@ -61,11 +61,11 @@ This shapes the entire monitoring design: **monitors must be subagents that COMP
 
 ### Validation-Agent Monitor Mode
 
-System3 uses `validation-agent --mode=monitor` for continuous oversight of orchestrators:
+System3 uses `validation-test-agent --mode=monitor` for continuous oversight of orchestrators:
 
 ```python
 Task(
-    subagent_type="validation-agent",
+    subagent_type="validation-test-agent",
     model="sonnet",  # ⚠️ MUST be Sonnet - Haiku lacks exit discipline
     run_in_background=True,
     prompt="--mode=monitor --session-id=orch-{name} --task-list-id=PRD-{prd}"
@@ -136,7 +136,7 @@ Tasks stored at: `~/.claude/tasks/{CLAUDE_CODE_TASK_LIST_ID}/`
 | File | Purpose |
 |------|---------|
 | `documentation/SYSTEM3_MONITORING_ARCHITECTURE.md` | Full design document |
-| `agents/validation-agent.md` | Monitor mode workflow & exit discipline |
+| `agents/validation-test-agent.md` | Monitor mode workflow & exit discipline |
 | `scripts/task-list-monitor.py` | Efficient change detection |
 | `hooks/decision_guidance/goal_validator.py` | Task validation logic |
 

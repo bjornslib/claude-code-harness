@@ -27,19 +27,19 @@ Testing infrastructure and troubleshooting for orchestrator sessions.
 
 **Every feature must pass all three levels before closure.**
 
-**🚨 CRITICAL: validation-agent as Single Entry Point**
+**🚨 CRITICAL: validation-test-agent as Single Entry Point**
 
-All validation and task closure MUST go through validation-agent:
+All validation and task closure MUST go through validation-test-agent:
 
 ```python
 # Fast unit check
-Task(subagent_type="validation-agent", prompt="--mode=unit --task_id=X")
+Task(subagent_type="validation-test-agent", prompt="--mode=unit --task_id=X")
 
 # Full E2E with PRD acceptance tests
-Task(subagent_type="validation-agent", prompt="--mode=e2e --task_id=X --prd=PRD-XXX")
+Task(subagent_type="validation-test-agent", prompt="--mode=e2e --task_id=X --prd=PRD-XXX")
 ```
 
-The validation-agent orchestrates the three levels below and closes tasks with evidence. Orchestrators NEVER run these validations directly or invoke acceptance-test-runner/writer skills.
+The validation-test-agent orchestrates the three levels below and closes tasks with evidence. Orchestrators NEVER run these validations directly or invoke acceptance-test-runner/writer skills.
 
 ### Level 1: Unit Tests
 
@@ -108,8 +108,8 @@ curl -X POST http://localhost:8000/agencheck \
                                  │
                                  ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│ 2. WORKER EXECUTION (via Task subagent)                             │
-│    - Orchestrator delegates to Worker via Task(subagent_type=...)  │
+│ 2. WORKER EXECUTION (via native teammate or Task subagent)          │
+│    - Orchestrator delegates to Worker teammate via TaskCreate      │
 │    - Worker reads the test spec Markdown file                      │
 │    - Worker executes tests using chrome-devtools MCP tools         │
 │    - Worker captures screenshots as evidence                       │
@@ -464,7 +464,7 @@ git reset --hard HEAD
 # Task(subagent_type="...", prompt="CRITICAL: ONLY modify these files: [list]. If you need to modify others, report BLOCKED.")
 ```
 
-**Note:** Task subagents clean up automatically - no manual session killing needed.
+**Note:** Native teammates persist across tasks — shut them down via `SendMessage(type="shutdown_request")` when done. Task subagent fallback cleans up automatically.
 
 ### Pattern 2: Feature Too Complex
 
@@ -480,7 +480,7 @@ git reset --hard HEAD
 # 3. Proceed with F00X-part1 (should complete in <1 hour now)
 ```
 
-**Note:** Task subagents clean up automatically when they complete or fail.
+**Note:** Native teammates persist — use `SendMessage(type="shutdown_request")` for cleanup. Task subagent fallback cleans up automatically when complete or failed.
 
 ### Pattern 3: Flaky Tests
 

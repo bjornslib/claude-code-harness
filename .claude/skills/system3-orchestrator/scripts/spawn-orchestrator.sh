@@ -102,6 +102,11 @@ log_info "Setting CLAUDE_SESSION_ID=$SESSION_NAME"
 tmux send-keys -t "$SESSION_NAME" "export CLAUDE_SESSION_ID=$SESSION_NAME"
 tmux send-keys -t "$SESSION_NAME" Enter
 
+# Enable native agent teams for orchestrator
+log_info "Enabling CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS feature"
+tmux send-keys -t "$SESSION_NAME" "export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1"
+tmux send-keys -t "$SESSION_NAME" Enter
+
 # Launch Claude Code (Enter must be separate - critical tmux pattern)
 log_info "Launching Claude Code..."
 tmux send-keys -t "$SESSION_NAME" "launchcc"

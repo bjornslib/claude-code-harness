@@ -24,7 +24,7 @@ Enhance the matryoshka-orchestrator skill to be a complete operational checklist
 |------|---------|-------|
 | `references/completion-promise.md` | Ralph Wiggum pattern, cs-* scripts, session state tracking | ~650 |
 | `references/prd-extraction.md` | PRD goal extraction workflow, Hindsight retention | ~500 |
-| `references/validation-workflow.md` | 3-level validation, validation-agent modes | ~700 |
+| `references/validation-workflow.md` | 3-level validation, validation-test-agent modes | ~700 |
 | `references/okr-tracking.md` | Business Epic / Key Result tracking, OKR hierarchy | ~650 |
 
 **Total new documentation**: ~2,500 words of procedural reference content

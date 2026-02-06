@@ -1,6 +1,6 @@
 # Evidence Capture Templates
 
-Templates for validation-agent to capture evidence at each validation level.
+Templates for validation-test-agent to capture evidence at each validation level.
 
 ## Level 1: Unit Tests
 

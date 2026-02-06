@@ -44,7 +44,17 @@ Register so System 3 can communicate with you:
     --worktree="$(pwd)"
 ```
 
-### Step 3: Spawn Background Monitor
+### Step 3: Create Worker Team
+Create the team that will hold your worker teammates for this initiative:
+```python
+Teammate(
+    operation="spawnTeam",
+    team_name="[INITIATIVE_NAME]-workers",
+    description="Workers for [INITIATIVE_NAME]"
+)
+```
+
+### Step 4: Spawn Background Monitor
 This enables real-time message detection from System 3:
 ```python
 Task(
@@ -68,13 +78,13 @@ Instance ID: ${CLAUDE_SESSION_ID:-orch-[INITIATIVE_NAME]}
 )
 ```
 
-### Step 4: Check for Pending Messages
+### Step 5: Check for Pending Messages
 Before starting work, check if System 3 sent any messages:
 ```bash
 .claude/scripts/message-bus/mb-recv --peek
 ```
 
-### Step 5: Run PREFLIGHT Checklist
+### Step 6: Run PREFLIGHT Checklist
 Now run the standard preflight from the skill.
 
 ---
@@ -156,16 +166,26 @@ Use this format:
 ## Session End Checklist
 
 Before ending your session:
-1. [ ] Send completion/status message to System 3
-2. [ ] Update progress log
-3. [ ] `bd sync` - sync beads state
-4. [ ] `git commit` and `git push`
-5. [ ] Unregister from message bus:
+1. [ ] Shutdown all worker teammates:
+   ```python
+   SendMessage(type="shutdown_request", recipient="worker-frontend", content="Session ending")
+   SendMessage(type="shutdown_request", recipient="worker-backend", content="Session ending")
+   # ... for each active teammate
+   ```
+2. [ ] Clean up team:
+   ```python
+   Teammate(operation="cleanup")
+   ```
+3. [ ] Send completion/status message to System 3
+4. [ ] Update progress log
+5. [ ] `bd sync` - sync beads state
+6. [ ] `git commit` and `git push`
+7. [ ] Unregister from message bus:
    ```bash
    .claude/scripts/message-bus/mb-unregister "${CLAUDE_SESSION_ID:-orch-[INITIATIVE_NAME]}"
    ```
 
-**Note**: Workers are Task subagents that clean up automatically - no manual worker session cleanup needed.
+**Note**: Native teammates persist and must be explicitly shut down. Always send shutdown_request to each worker before cleanup.
 
 ---
 
@@ -174,9 +194,11 @@ Before ending your session:
 1. **Output Style First**: Run `/output-style orchestrator` as your VERY FIRST action
 2. **Skill Second**: Invoke `Skill("orchestrator-multiagent")` immediately after
 3. **Message Bus**: Register immediately so System 3 can reach you
-4. **Workers via Task**: Use `Task(subagent_type="...")` for worker delegation - results return directly
-5. **Stay in Scope**: Only work on tasks for your initiative
-6. **Report Progress**: Keep progress log updated and send completion messages
+4. **Create Team**: Set up worker team with `Teammate(operation="spawnTeam", ...)` before delegating
+5. **Workers via Teams**: Use `Task(subagent_type=..., team_name=..., name=...)` for worker delegation. Workers communicate via SendMessage.
+6. **Stay in Scope**: Only work on tasks for your initiative
+7. **Report Progress**: Keep progress log updated and send completion messages
+8. **Clean Up Team**: Always shut down teammates and run `Teammate(operation="cleanup")` before session end
 ```
 
 ---
@@ -188,6 +210,7 @@ Before sending the initialization prompt, System 3 must:
 - [ ] Created worktree with `/create_worktree`
 - [ ] Symlinked .claude directory: `ln -s $(pwd)/.claude ../[worktree]/.claude`
 - [ ] Set CLAUDE_SESSION_ID in tmux session BEFORE launching Claude Code
+- [ ] Set CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 in tmux session BEFORE launching Claude Code
 - [ ] Gathered wisdom from Hindsight (both banks)
 - [ ] Filled in all `[PLACEHOLDERS]` in template
 
@@ -197,8 +220,10 @@ Before sending the initialization prompt, System 3 must:
 # 1. Create tmux session in worktree
 tmux new-session -d -s "orch-[name]" -c trees/[name]/agencheck
 
-# 2. CRITICAL: Set CLAUDE_SESSION_ID BEFORE launching Claude Code
+# 2. CRITICAL: Set env vars BEFORE launching Claude Code
 tmux send-keys -t "orch-[name]" "export CLAUDE_SESSION_ID=orch-[name]"
+tmux send-keys -t "orch-[name]" Enter
+tmux send-keys -t "orch-[name]" "export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1"
 tmux send-keys -t "orch-[name]" Enter
 
 # 3. Launch Claude Code (Enter MUST be separate command!)
@@ -261,9 +286,9 @@ wisdom = f"""
 
 ---
 
-**Last Updated:** 2026-01-05
+**Last Updated:** 2026-02-06
 **Related Files:**
 - [SKILL.md](SKILL.md) - Main orchestrator skill
-- [WORKER_DELEGATION_GUIDE.md](WORKER_DELEGATION_GUIDE.md) - Worker assignment templates
+- [WORKERS.md](WORKERS.md) - Worker delegation via native Agent Teams
 - [message-bus SKILL.md](../message-bus/SKILL.md) - Message bus operations
 - [system3-orchestrator SKILL.md](../system3-orchestrator/SKILL.md) - Spawn workflow

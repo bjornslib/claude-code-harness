@@ -23,13 +23,14 @@ The orchestrator follows a complete cycle for each feature:
    └── Select next ready feature
 
 2. ASSIGNMENT
-   ├── Determine worker type
+   ├── Determine worker type (specialist teammate)
    ├── Prepare worker context
-   ├── Launch worker (Task subagent)
-   └── Set expectations via prompt
+   ├── Create task in shared TaskList (TaskCreate)
+   ├── Spawn/notify worker teammate
+   └── Set expectations via task description
 
 3. COMPLETION
-   ├── Await Task result
+   ├── Await worker SendMessage notification (auto-delivered)
    ├── Check for red flags in result
    └── Detect completion signals (COMPLETE/BLOCKED)
 
@@ -53,15 +54,15 @@ The orchestrator follows a complete cycle for each feature:
 - Run regression check on 1-2 previously passing features
 - Select first feature where dependencies are satisfied
 
-**Assignment**: Delegate feature to appropriate worker with complete context.
-- Match feature to specialist (frontend/backend/general)
-- Provide context package with acceptance criteria, files, validation command
-- Launch Task subagent with clear expectations via prompt
+**Assignment**: Delegate feature to appropriate worker teammate with complete context.
+- Match feature to specialist teammate (frontend/backend/general)
+- Create task in shared TaskList via `TaskCreate` with acceptance criteria, files, validation command
+- Spawn new worker teammate via `Task(subagent_type=..., team_name=..., name=...)` or notify existing teammate via `SendMessage`
 
-**Completion**: Await worker result.
-- Task subagent completes and returns result directly
+**Completion**: Await worker notification.
+- Worker teammate sends completion via `SendMessage` (auto-delivered to orchestrator)
 - Check result for COMPLETE/BLOCKED signals
-- No monitoring needed - orchestrator blocks until worker completes (or use `run_in_background=True` for parallel workers)
+- Workers persist across tasks -- no need to re-spawn for each feature
 
 **Validation**: Verify feature works as designed, not just that tests pass.
 - Pre-validation: git clean, scope compliance, no incomplete markers
@@ -72,7 +73,8 @@ The orchestrator follows a complete cycle for each feature:
 - Update state file (only the `passes` field)
 - Commit with descriptive message
 - Update progress tracking, document learnings
-- (No cleanup needed - Task subagents clean up automatically)
+- Workers persist in team -- no re-spawn needed for next feature
+- At session end: shutdown teammates and run `Teammate(operation="cleanup")`
 
 ---
 
@@ -85,7 +87,7 @@ Enable independent monitoring and completion of multiple features without user i
 **Continue to next feature automatically when ALL conditions met:**
 
 1. Current feature validation PASSED (all three levels)
-2. validation-agent closed task with evidence
+2. validation-test-agent closed task with evidence
 3. Git commit successful with `feat(<id>)` message
 4. `bd ready` returns next available task
 5. No regressions detected in spot checks
@@ -116,37 +118,51 @@ LOOP:
      bd ready → Pick highest priority unblocked task
      bd update <id> --status in_progress
 
-  3. DELEGATE TO WORKER VIA TASK SUBAGENT
+  3. DELEGATE TO WORKER TEAMMATE
      ```python
-     result = Task(
+     # Create task in shared TaskList
+     TaskCreate(
+         subject="[Feature description]",
+         description="[Worker assignment - context, requirements, criteria]",
+         activeForm="Implementing [feature]"
+     )
+     # Notify existing worker OR spawn new teammate
+     SendMessage(type="message", recipient="worker-[type]",
+         content="New task available: [feature]", summary="New task assigned")
+     # OR if no worker of this type exists yet:
+     Task(
          subagent_type="[frontend-dev-expert|backend-solutions-engineer|etc]",
-         description="[Feature description]",
-         prompt="[Worker assignment template]"
+         team_name="{initiative}-workers",
+         name="worker-[type]",
+         prompt="You are worker-[type] in team {initiative}-workers. Check TaskList for work."
      )
      ```
-     # Worker completes and returns result directly
+     # Worker completes and notifies via SendMessage (auto-delivered)
 
   4. CHECK RESULT
-     - Parse result for COMPLETE/BLOCKED signals
-     - If BLOCKED: provide guidance and re-delegate
+     - Parse worker's SendMessage for COMPLETE/BLOCKED signals
+     - If BLOCKED: send guidance via SendMessage, worker retries
 
   5. VALIDATE (THREE LEVELS - ALL MANDATORY)
      See Validation Protocol below
 
   6. CLOSE OR REMEDIATE
      IF all validation passed:
-       # Delegate closure to validation-agent
-       Task(
-         subagent_type="validation-agent",
-         prompt="--mode=e2e --task_id=<id> --prd=PRD-XXX"
+       # Assign validation to validator teammate
+       TaskCreate(
+         subject="Validate <id> (e2e)",
+         description="--mode=e2e --task_id=<id> --prd=PRD-XXX",
+         activeForm="Validating <id>"
        )
-       # validation-agent closes with evidence if all criteria pass
+       SendMessage(type="message", recipient="worker-validator",
+         content="Validate task <id>", summary="Validation task ready")
+       # validator teammate closes with evidence if all criteria pass
        git add . && git commit -m "feat(<id>): [description]"
        → CONTINUE LOOP
 
      IF validation failed:
        Document failure in scratch pad
-       IF first failure: Provide worker feedback, retry
+       IF first failure: Send feedback to worker via SendMessage, retry
        IF second failure: Decompose task, create sub-beads
        IF third failure: STOP, report to user
 
@@ -220,7 +236,7 @@ Use Markdown-based test specifications:
 
 1. **Generate tests from PRD**:
    ```python
-   # Orchestrator invokes skill (NOT worker, NOT validation-agent)
+   # Orchestrator invokes skill (NOT worker, NOT validation-test-agent)
    Skill("acceptance-test-writer", args="--prd=PRD-XXX --source=.taskmaster/docs/prd.md")
    ```
 
@@ -246,14 +262,14 @@ acceptance-tests/PRD-XXX/
 **Key Rules**:
 - Generate tests in Phase 1 (Planning), NOT Phase 2 (Execution)
 - Orchestrator generates tests, NOT workers
-- validation-agent executes tests in Phase 3 (NOT orchestrator)
+- validation-test-agent executes tests in Phase 3 (NOT orchestrator)
 - Tests are committed to git with the beads hierarchy
 
 **Integration with Validation Gate**:
 ```
 Phase 1: PRD → acceptance-test-writer → acceptance-tests/PRD-XXX/
 Phase 2: Workers implement (reference tests for guidance)
-Phase 3: validation-agent --mode=e2e --prd=PRD-XXX → runs tests → closes tasks
+Phase 3: validation-test-agent --mode=e2e --prd=PRD-XXX → runs tests → closes tasks
 ```
 
 ---
@@ -457,7 +473,8 @@ If you observe these during Phase 2, the decomposition needs improvement:
 1. **Feature State Clean**
    - [ ] Current feature either complete OR cleanly stopped
    - [ ] No uncommitted code changes
-   - [ ] No active background Task agents (check with TaskList)
+   - [ ] All worker teammates shut down (`SendMessage(type="shutdown_request", recipient="worker-name", ...)`)
+   - [ ] Team cleaned up (`Teammate(operation="cleanup")`)
 
 2. **Feature List Updated**
    - [ ] State file updated with latest passes status
@@ -482,6 +499,14 @@ If you observe these during Phase 2, the decomposition needs improvement:
    - [ ] Service status documented in summary.md
 
 **Quick handoff command sequence:**
+```python
+# 0. Shutdown worker teammates and clean up team
+SendMessage(type="shutdown_request", recipient="worker-frontend", content="Session ending")
+SendMessage(type="shutdown_request", recipient="worker-backend", content="Session ending")
+SendMessage(type="shutdown_request", recipient="worker-validator", content="Session ending")
+# Wait for shutdown confirmations, then:
+Teammate(operation="cleanup")
+```
 ```bash
 # 1. Update state and commit
 git add .claude/state/
@@ -495,7 +520,7 @@ git commit -m "docs: update progress after F00X completion"
 git status
 ```
 
-**Note**: Task subagents clean up automatically - no manual session cleanup needed.
+**Note**: Always shut down teammates and clean up the team before ending a session. Unlike ephemeral Task subagents, native teammates persist and must be explicitly terminated.
 
 ### Starting New Session
 
@@ -525,8 +550,8 @@ git status
 
 ---
 
-**Version**: 2.0 (Task-Based Delegation)
+**Version**: 3.0 (Native Agent Teams)
 **Created**: 2026-01-07
-**Last Updated**: 2026-01-25
+**Last Updated**: 2026-02-06
 **Consolidated from**: AUTONOMOUS_MODE.md, ORCHESTRATOR_PROCESS_FLOW.md, FEATURE_DECOMPOSITION.md, PROGRESS_TRACKING.md
-**Major Changes**: v2.0 - Updated to use Task subagents for worker delegation instead of tmux sessions.
+**Major Changes**: v3.0 - Updated to use native Agent Teams (Teammate + TaskCreate + SendMessage) for worker delegation. Workers are persistent teammates that claim tasks from shared TaskList and communicate via SendMessage. v2.0 - Updated to use Task subagents for worker delegation instead of tmux sessions.

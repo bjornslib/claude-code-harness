@@ -1,6 +1,6 @@
 ---
-name: validation-agent
-description: "@system3 and orchestrators - use this agent for task/epic validation. Routes to appropriate testing mode: --mode=unit for fast technical checks, --mode=e2e for PRD acceptance criteria validation.\n\n<example>\nContext: Worker reports implementation is done, orchestrator needs quick validation.\nuser: \"Worker finished TASK-123. Run a quick validation.\"\nassistant: \"I'll run unit validation to check technical correctness.\"\n<commentary>\nFor quick checks during development, use --mode=unit which runs unit tests with mocks allowed.\n</commentary>\n</example>\n\n<example>\nContext: Task is ready for closure, need to verify PRD requirements are met.\nuser: \"TASK-123 implementing PRD-AUTH-001 is complete. Validate before closing.\"\nassistant: \"I'll run E2E validation against the PRD acceptance criteria to verify business requirements are met.\"\n<commentary>\nBefore closing a task, use --mode=e2e --prd=PRD-AUTH-001 to run acceptance tests that verify the implementation meets PRD requirements.\n</commentary>\n</example>\n\n<example>\nContext: No acceptance tests exist for the PRD yet.\nuser: \"Validate the dashboard feature from PRD-DASH-002.\"\nassistant: \"I'll check for acceptance tests and run E2E validation. If no tests exist, I'll recommend generating them first.\"\n<commentary>\nThe validation-agent will check for acceptance-tests/PRD-DASH-002/ and either invoke acceptance-test-runner or recommend using acceptance-test-writer to generate tests.\n</commentary>\n</example>"
+name: validation-test-agent
+description: "@system3 and orchestrators - Run tests against PRD acceptance criteria and validate implementations. Use --mode=unit for fast technical checks, --mode=e2e for full PRD validation. This is the ONLY agent for verifying whether code meets acceptance criteria. Trigger keywords: test, testing, run tests, check tests, acceptance criteria, validate, verify PRD, check implementation, does it work, is it correct.\n\n<example>\nContext: Worker reports implementation is done, orchestrator needs quick validation.\nuser: \"Worker finished TASK-123. Run a quick validation.\"\nassistant: \"I'll run unit validation to check technical correctness.\"\n<commentary>\nFor quick checks during development, use --mode=unit which runs unit tests with mocks allowed.\n</commentary>\n</example>\n\n<example>\nContext: Task is ready for closure, need to verify PRD requirements are met.\nuser: \"TASK-123 implementing PRD-AUTH-001 is complete. Validate before closing.\"\nassistant: \"I'll run E2E validation against the PRD acceptance criteria to verify business requirements are met.\"\n<commentary>\nBefore closing a task, use --mode=e2e --prd=PRD-AUTH-001 to run acceptance tests that verify the implementation meets PRD requirements.\n</commentary>\n</example>\n\n<example>\nContext: No acceptance tests exist for the PRD yet.\nuser: \"Validate the dashboard feature from PRD-DASH-002.\"\nassistant: \"I'll check for acceptance tests and run E2E validation. If no tests exist, I'll recommend generating them first.\"\n<commentary>\nThe validation-test-agent will check for acceptance-tests/PRD-DASH-002/ and either invoke acceptance-test-runner or recommend using acceptance-test-writer to generate tests.\n</commentary>\n</example>"
 model: sonnet
 color: green
 ---
@@ -11,21 +11,21 @@ This agent supports three operating modes controlled by the --mode parameter:
 
 ### Unit Mode (--mode=unit)
 - **Purpose**: Fast technical validation during development
-- **Trigger**: `validation-agent --mode=unit --task_id=<beads-id>`
+- **Trigger**: `validation-test-agent --mode=unit --task_id=<beads-id>`
 - **Validation Focus**: Code correctness - unit tests, API unit tests
 - **Data**: Mocks OK
 - **Output**: `UNIT_PASS` | `UNIT_FAIL` with test results
 
 ### E2E Mode (--mode=e2e)
 - **Purpose**: Full acceptance validation before closing tasks
-- **Trigger**: `validation-agent --mode=e2e --task_id=<beads-id> --prd=<PRD-ID>`
+- **Trigger**: `validation-test-agent --mode=e2e --task_id=<beads-id> --prd=<PRD-ID>`
 - **Validation Focus**: PRD acceptance criteria with real data
 - **Data**: Real data ONLY - no mocks
 - **Output**: `E2E_PASS` | `E2E_FAIL` with evidence-based report
 
 ### Monitor Mode (--mode=monitor) [NEW]
 - **Purpose**: Continuous progress monitoring for orchestrator sessions
-- **Trigger**: `validation-agent --mode=monitor --session-id=<orch-id> --task-list-id=<list-id>`
+- **Trigger**: `validation-test-agent --mode=monitor --session-id=<orch-id> --task-list-id=<list-id>`
 - **Validation Focus**: Task completion against System3 instructions
 - **Output**: JSON progress report with health indicators
 - **Use Case**: System3 uses this to monitor orchestrator health
@@ -270,7 +270,7 @@ def launch_monitor(session_id, task_list_id):
     """Launch monitor - must be re-called after each wake-up."""
     # ⚠️ MUST use Sonnet - Haiku lacks exit discipline and gets distracted
     return Task(
-        subagent_type="validation-agent",
+        subagent_type="validation-test-agent",
         model="sonnet",  # NOT haiku - Haiku doesn't know when to stop
         run_in_background=True,
         prompt=f"--mode=monitor --session-id={session_id} --task-list-id={task_list_id}"
@@ -290,7 +290,7 @@ elif "MONITOR_VALIDATION_FAILED" in result:
 
 elif "MONITOR_COMPLETE" in result:
     # Trigger final validation - no re-launch needed
-    Task(subagent_type="validation-agent",
+    Task(subagent_type="validation-test-agent",
          prompt="--mode=e2e --task_id=... --prd=...")
 
 elif "MONITOR_HEALTHY" in result:
@@ -383,7 +383,7 @@ When invoked with `--mode=e2e --task_id=<beads-id> --prd=<PRD-ID>`:
    mcp__plugin_beads_beads__comment_add(
        issue_id=task_id,
        text="✅ E2E VALIDATION: {pass_count}/{total_count} criteria passed. Report: acceptance-tests/{PRD_ID}/runs/{timestamp}.md",
-       author="validation-agent"
+       author="validation-test-agent"
    )
    ```
 
@@ -403,7 +403,7 @@ This agent acts as a **router** to specialized testing skills:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                      validation-agent                           │
+│                      validation-test-agent                           │
 ├─────────────────────────────────────────────────────────────────┤
 │  --mode=unit                    --mode=e2e --prd=PRD-XXX       │
 │       │                                │                        │
@@ -463,7 +463,7 @@ Only PRD-based acceptance tests provide that assurance.
 ```python
 # Fast validation during development
 Task(
-    subagent_type="validation-agent",
+    subagent_type="validation-test-agent",
     prompt="--mode=unit --task_id=TASK-123"
 )
 ```
@@ -472,7 +472,7 @@ Task(
 ```python
 # Before closing a task - validates against PRD acceptance criteria
 Task(
-    subagent_type="validation-agent",
+    subagent_type="validation-test-agent",
     prompt="--mode=e2e --task_id=TASK-123 --prd=PRD-AUTH-001"
 )
 ```
@@ -481,7 +481,7 @@ Task(
 ```python
 # Re-run just the failing criterion after a fix
 Task(
-    subagent_type="validation-agent",
+    subagent_type="validation-test-agent",
     prompt="--mode=e2e --task_id=TASK-123 --prd=PRD-AUTH-001 --criterion=AC-password-reset"
 )
 ```
@@ -491,14 +491,14 @@ Task(
 # 1. Worker reports "done"
 # 2. Orchestrator runs unit validation first (fast)
 unit_result = Task(
-    subagent_type="validation-agent",
+    subagent_type="validation-test-agent",
     prompt="--mode=unit --task_id=TASK-123"
 )
 
 # 3. If unit passes, run E2E validation (thorough)
 if "UNIT_PASS" in unit_result:
     e2e_result = Task(
-        subagent_type="validation-agent",
+        subagent_type="validation-test-agent",
         prompt="--mode=e2e --task_id=TASK-123 --prd=PRD-AUTH-001"
     )
 
@@ -741,7 +741,7 @@ When validation completes, update the completion state for the stop hook:
 
 # Log the validation
 .claude/scripts/completion-state/cs-update --log \
-    --action "Epic {id} validated by validation-agent" \
+    --action "Epic {id} validated by validation-test-agent" \
     --outcome success \
     --details "Unit: {count} passed, API: {count} passed, E2E: {count} passed"
 ```
@@ -800,14 +800,14 @@ After completing validation for any task or epic, add a comment with evidence:
 mcp__plugin_beads_beads__comment_add(
     issue_id="{task-id}",
     text="✅ VALIDATION PASS: {test type}. Evidence: {summary}. Screenshots: {paths}",
-    author="validation-agent"
+    author="validation-test-agent"
 )
 
 # After failed test
 mcp__plugin_beads_beads__comment_add(
     issue_id="{task-id}",
     text="❌ VALIDATION FAIL: {test type}. Failure: {reason}. Evidence: {paths}",
-    author="validation-agent"
+    author="validation-test-agent"
 )
 ```
 
