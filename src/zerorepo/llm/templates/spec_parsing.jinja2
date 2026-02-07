@@ -45,12 +45,14 @@ Analyze the description thoroughly and extract the following fields as a JSON ob
     - "description": Detailed scope and goals
     - "priority": One of MUST_HAVE, SHOULD_HAVE, NICE_TO_HAVE
     - "estimated_complexity": One of "low", "medium", "high"
+    - "components": List of component names that belong to this epic (from the components list below)
 
 14. **components**: A list of architectural components/modules, each with:
     - "name": Component name (e.g., "API Gateway", "Auth Service", "Database Layer")
     - "description": Responsibilities and purpose
     - "component_type": One of "service", "library", "database", "ui", "middleware", "worker", "other"
     - "technologies": List of technologies used (e.g., ["FastAPI", "PostgreSQL"])
+    - "suggested_module": A Python package name for this component (e.g., "api_gateway", "auth_service")
 
 15. **data_flows**: A list of data flow relationships between components, each with:
     - "source": Source component name
@@ -62,6 +64,26 @@ Analyze the description thoroughly and extract the following fields as a JSON ob
     - "path": Suggested file or directory path (e.g., "src/api/routes.py", "src/models/")
     - "purpose": What this file/directory should contain
     - "component": Associated component name (from the components list above)
+
+17. **functions**: Per-component function/method details. A list of objects, each with:
+    - "name": Function name (e.g., "authenticate_user", "process_payment")
+    - "signature": Full typed signature if inferrable (e.g., "def authenticate_user(username: str, password: str) -> AuthResult")
+    - "description": What the function does
+    - "input_types": List of input parameter types (e.g., ["str", "str"])
+    - "output_type": Return type (e.g., "AuthResult")
+    - "belongs_to_component": Component name this function belongs to
+
+18. **data_models**: Data models/schemas mentioned in the specification. A list of objects, each with:
+    - "name": Model name (e.g., "WorkflowConfig", "UserProfile")
+    - "fields": List of objects with "name", "type", "description" keys
+    - "relationships": List of other model names this relates to
+
+19. **api_endpoints**: API endpoints described in the specification. A list of objects, each with:
+    - "method": HTTP method (GET, POST, PUT, DELETE, PATCH)
+    - "path": URL path (e.g., "/api/v1/users")
+    - "request_schema": Description of request body
+    - "response_schema": Description of response body
+    - "belongs_to_component": Component name this endpoint belongs to
 
 ## Guidelines
 

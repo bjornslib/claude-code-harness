@@ -128,7 +128,7 @@ class SerenaValidator(RPGEncoder):
     # RPGEncoder interface
     # ------------------------------------------------------------------
 
-    def encode(self, graph: RPGGraph) -> RPGGraph:
+    def encode(self, graph: RPGGraph, spec: Any | None = None) -> RPGGraph:
         """Run Serena validation and store drift report in graph metadata."""
         if graph.node_count == 0:
             graph.metadata["validation_report"] = _empty_report("SKIPPED")

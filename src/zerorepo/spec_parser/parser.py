@@ -34,13 +34,16 @@ from zerorepo.llm.gateway import LLMGateway
 from zerorepo.llm.models import GatewayConfig, ModelTier
 from zerorepo.llm.prompt_templates import PromptTemplate
 from zerorepo.spec_parser.models import (
+    APIEndpointSpec,
     Component,
     Constraint,
     ConstraintPriority,
     DataFlow,
+    DataModelSpec,
     DeploymentTarget,
     Epic,
     FileRecommendation,
+    FunctionSpec,
     QualityAttributes,
     RepositorySpec,
     ScopeType,
@@ -77,6 +80,7 @@ class ParsedEpic(BaseModel):
     description: str = Field(default="", description="Epic description")
     priority: str = Field(default="SHOULD_HAVE", description="Priority level")
     estimated_complexity: Optional[str] = Field(default=None, description="Complexity estimate")
+    components: list[str] = Field(default_factory=list, description="Component names in this epic")
 
 
 class ParsedComponent(BaseModel):
@@ -88,6 +92,7 @@ class ParsedComponent(BaseModel):
     description: str = Field(default="", description="Component description")
     component_type: Optional[str] = Field(default=None, description="Component type")
     technologies: list[str] = Field(default_factory=list, description="Technologies used")
+    suggested_module: Optional[str] = Field(default=None, description="Suggested Python package name")
 
 
 class ParsedDataFlow(BaseModel):
@@ -109,6 +114,41 @@ class ParsedFileRecommendation(BaseModel):
     path: str = Field(default="", description="File/directory path")
     purpose: str = Field(default="", description="Purpose of this file")
     component: Optional[str] = Field(default=None, description="Associated component")
+
+
+class ParsedFunctionSpec(BaseModel):
+    """Intermediate representation of a function spec from LLM output."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    name: str = Field(default="", description="Function name")
+    signature: str = Field(default="", description="Typed signature")
+    description: str = Field(default="", description="What the function does")
+    input_types: list[str] = Field(default_factory=list, description="Input parameter types")
+    output_type: str = Field(default="", description="Return type")
+    belongs_to_component: Optional[str] = Field(default=None, description="Parent component name")
+
+
+class ParsedDataModelSpec(BaseModel):
+    """Intermediate representation of a data model spec from LLM output."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    name: str = Field(default="", description="Model name")
+    fields: list[dict[str, str]] = Field(default_factory=list, description="Field definitions")
+    relationships: list[str] = Field(default_factory=list, description="Related model names")
+
+
+class ParsedAPIEndpointSpec(BaseModel):
+    """Intermediate representation of an API endpoint spec from LLM output."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    method: str = Field(default="GET", description="HTTP method")
+    path: str = Field(default="", description="URL path")
+    request_schema: str = Field(default="", description="Request body description")
+    response_schema: str = Field(default="", description="Response body description")
+    belongs_to_component: Optional[str] = Field(default=None, description="Parent component name")
 
 
 class ParsedSpecResponse(BaseModel):
@@ -184,6 +224,18 @@ class ParsedSpecResponse(BaseModel):
     file_recommendations: list[ParsedFileRecommendation] = Field(
         default_factory=list,
         description="Recommended file structure",
+    )
+    functions: list[ParsedFunctionSpec] = Field(
+        default_factory=list,
+        description="Function/method specifications",
+    )
+    data_models: list[ParsedDataModelSpec] = Field(
+        default_factory=list,
+        description="Data model specifications",
+    )
+    api_endpoints: list[ParsedAPIEndpointSpec] = Field(
+        default_factory=list,
+        description="API endpoint specifications",
     )
 
 
@@ -453,6 +505,15 @@ class SpecParser:
             parsed.file_recommendations
         )
 
+        # Build FunctionSpecs
+        functions = _normalize_functions(parsed.functions)
+
+        # Build DataModelSpecs
+        data_models = _normalize_data_models(parsed.data_models)
+
+        # Build APIEndpointSpecs
+        api_endpoints = _normalize_api_endpoints(parsed.api_endpoints)
+
         # Assemble RepositorySpec
         spec = RepositorySpec(
             description=description,
@@ -463,6 +524,9 @@ class SpecParser:
             epics=epics,
             components=components,
             data_flows=data_flows,
+            functions=functions,
+            data_models=data_models,
+            api_endpoints=api_endpoints,
             file_recommendations=file_recommendations,
         )
 
@@ -639,6 +703,7 @@ def _normalize_epics(
                 description=raw.description.strip(),
                 priority=priority,
                 estimated_complexity=raw.estimated_complexity,
+                components=[c.strip() for c in raw.components if c.strip()],
             )
         )
     return result
@@ -669,6 +734,7 @@ def _normalize_components(
                 description=raw.description.strip(),
                 component_type=raw.component_type,
                 technologies=[t.strip() for t in raw.technologies if t.strip()],
+                suggested_module=raw.suggested_module.strip() if raw.suggested_module else None,
             )
         )
     return result
@@ -729,6 +795,106 @@ def _normalize_file_recommendations(
                 path=path,
                 purpose=raw.purpose.strip(),
                 component=raw.component,
+            )
+        )
+    return result
+
+
+def _normalize_functions(
+    raw_functions: list[ParsedFunctionSpec],
+) -> list[FunctionSpec]:
+    """Normalize parsed function specs into proper FunctionSpec instances.
+
+    Filters out entries with empty names.
+
+    Args:
+        raw_functions: List of ParsedFunctionSpec from LLM.
+
+    Returns:
+        List of validated FunctionSpec instances.
+    """
+    result: list[FunctionSpec] = []
+    for raw in raw_functions:
+        name = raw.name.strip()
+        if not name:
+            continue
+
+        result.append(
+            FunctionSpec(
+                name=name,
+                signature=raw.signature.strip(),
+                description=raw.description.strip(),
+                input_types=[t.strip() for t in raw.input_types if t.strip()],
+                output_type=raw.output_type.strip(),
+                belongs_to_component=(
+                    raw.belongs_to_component.strip()
+                    if raw.belongs_to_component
+                    else None
+                ),
+            )
+        )
+    return result
+
+
+def _normalize_data_models(
+    raw_models: list[ParsedDataModelSpec],
+) -> list[DataModelSpec]:
+    """Normalize parsed data model specs into proper DataModelSpec instances.
+
+    Filters out entries with empty names.
+
+    Args:
+        raw_models: List of ParsedDataModelSpec from LLM.
+
+    Returns:
+        List of validated DataModelSpec instances.
+    """
+    result: list[DataModelSpec] = []
+    for raw in raw_models:
+        name = raw.name.strip()
+        if not name:
+            continue
+
+        result.append(
+            DataModelSpec(
+                name=name,
+                fields=raw.fields,
+                relationships=[r.strip() for r in raw.relationships if r.strip()],
+            )
+        )
+    return result
+
+
+def _normalize_api_endpoints(
+    raw_endpoints: list[ParsedAPIEndpointSpec],
+) -> list[APIEndpointSpec]:
+    """Normalize parsed API endpoint specs into proper APIEndpointSpec instances.
+
+    Filters out entries with empty path.
+
+    Args:
+        raw_endpoints: List of ParsedAPIEndpointSpec from LLM.
+
+    Returns:
+        List of validated APIEndpointSpec instances.
+    """
+    result: list[APIEndpointSpec] = []
+    for raw in raw_endpoints:
+        path = raw.path.strip()
+        if not path:
+            continue
+
+        result.append(
+            APIEndpointSpec(
+                method=raw.method.strip().upper() or "GET",
+                path=path,
+                request_schema=raw.request_schema.strip(),
+                response_schema=raw.response_schema.strip(),
+                belongs_to_component=(
+                    raw.belongs_to_component.strip()
+                    if raw.belongs_to_component
+                    else None
+                ),
             )
         )
     return result

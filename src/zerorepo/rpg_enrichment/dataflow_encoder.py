@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
+from typing import Any
 from uuid import UUID
 
 from zerorepo.models.edge import RPGEdge
@@ -93,7 +94,7 @@ class DataFlowEncoder(RPGEncoder):
     - ``metadata["flow_validated"]`` on DATA_FLOW edges (via edge validated field)
     """
 
-    def encode(self, graph: RPGGraph) -> RPGGraph:
+    def encode(self, graph: RPGGraph, spec: Any | None = None) -> RPGGraph:
         """Encode data flow types on inter-module edges."""
         if graph.node_count == 0:
             return graph

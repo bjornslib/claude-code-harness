@@ -64,6 +64,10 @@ class FunctionalityGraphConverter:
         producing a three-level hierarchy: MODULE → COMPONENT → FEATURE.
         Without components the converter falls back to MODULE → FEATURE.
 
+        When the spec contains ``data_flows`` with feature-level source/
+        target names, the converter creates DATA_FLOW edges between the
+        corresponding FEATURE nodes in addition to the module-level edges.
+
         Args:
             func_graph: The FunctionalityGraph to convert.
             spec: Optional RepositorySpec with ``components`` for
@@ -76,7 +80,7 @@ class FunctionalityGraphConverter:
 
         # Track module-name → module-node-UUID for dependency edge mapping
         module_name_to_id: dict[str, UUID] = {}
-        # Track feature-id → feature-node-UUID for potential future use
+        # Track feature-id → feature-node-UUID for feature-level edges
         feature_id_to_uuid: dict[str, UUID] = {}
 
         # Collect spec components for COMPONENT-level node creation
@@ -212,6 +216,30 @@ class FunctionalityGraphConverter:
                 dep=dep,
             )
             rpg.add_edge(data_flow_edge)
+
+        # ----------------------------------------------------------
+        # Phase 3: Create feature-level DATA_FLOW edges from spec
+        # ----------------------------------------------------------
+        if spec is not None:
+            spec_data_flows = getattr(spec, "data_flows", None) or []
+            for flow in spec_data_flows:
+                source_name = str(getattr(flow, "source", "") or "")
+                target_name = str(getattr(flow, "target", "") or "")
+
+                src_uuid = feature_id_to_uuid.get(source_name)
+                tgt_uuid = feature_id_to_uuid.get(target_name)
+
+                if src_uuid and tgt_uuid and src_uuid != tgt_uuid:
+                    flow_desc = str(getattr(flow, "description", "") or "")
+                    flow_protocol = getattr(flow, "protocol", None)
+                    feature_flow_edge = RPGEdge(
+                        source_id=src_uuid,
+                        target_id=tgt_uuid,
+                        edge_type=EdgeType.DATA_FLOW,
+                        data_type=str(flow_protocol) if flow_protocol else "data_flow",
+                        transformation=flow_desc or None,
+                    )
+                    rpg.add_edge(feature_flow_edge)
 
         logger.info(
             "Converted FunctionalityGraph → RPGGraph: "

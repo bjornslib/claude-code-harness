@@ -393,6 +393,10 @@ class Epic(BaseModel):
         default=None,
         description="Estimated complexity (e.g., 'low', 'medium', 'high')",
     )
+    components: list[str] = Field(
+        default_factory=list,
+        description="Names of components belonging to this epic",
+    )
 
 
 class Component(BaseModel):
@@ -430,6 +434,120 @@ class Component(BaseModel):
     technologies: list[str] = Field(
         default_factory=list,
         description="Technologies used in this component (e.g., ['FastAPI', 'PostgreSQL'])",
+    )
+    suggested_module: Optional[str] = Field(
+        default=None,
+        description="Suggested module/package name for this component (e.g., 'auth_service')",
+    )
+
+
+class FunctionSpec(BaseModel):
+    """A function or method specification extracted from the PRD.
+
+    Captures function-level detail including typed signatures, input/output
+    types, and the component to which the function belongs.
+    """
+
+    model_config = ConfigDict(
+        frozen=False,
+        validate_assignment=True,
+        str_strip_whitespace=True,
+    )
+
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=300,
+        description="Function or method name",
+    )
+    signature: str = Field(
+        default="",
+        max_length=1000,
+        description="Full typed signature if inferrable (e.g., 'def process(data: list[str]) -> dict')",
+    )
+    description: str = Field(
+        default="",
+        max_length=2000,
+        description="What the function does",
+    )
+    input_types: list[str] = Field(
+        default_factory=list,
+        description="List of input parameter types",
+    )
+    output_type: str = Field(
+        default="",
+        description="Return type",
+    )
+    belongs_to_component: Optional[str] = Field(
+        default=None,
+        description="Component name this function belongs to",
+    )
+
+
+class DataModelSpec(BaseModel):
+    """A data model or schema extracted from the specification.
+
+    Captures structured data model definitions including fields,
+    types, and relationships to other models.
+    """
+
+    model_config = ConfigDict(
+        frozen=False,
+        validate_assignment=True,
+        str_strip_whitespace=True,
+    )
+
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=300,
+        description="Model name (e.g., 'WorkflowConfig', 'UserProfile')",
+    )
+    fields: list[dict[str, str]] = Field(
+        default_factory=list,
+        description="List of field definitions, each with 'name', 'type', 'description'",
+    )
+    relationships: list[str] = Field(
+        default_factory=list,
+        description="Other model names this model relates to",
+    )
+
+
+class APIEndpointSpec(BaseModel):
+    """An API endpoint specification extracted from the PRD.
+
+    Captures HTTP endpoint details including method, path, request/response
+    schemas, and the component to which it belongs.
+    """
+
+    model_config = ConfigDict(
+        frozen=False,
+        validate_assignment=True,
+        str_strip_whitespace=True,
+    )
+
+    method: str = Field(
+        default="GET",
+        description="HTTP method (GET, POST, PUT, DELETE, PATCH)",
+    )
+    path: str = Field(
+        default="",
+        max_length=500,
+        description="URL path (e.g., '/api/v1/users')",
+    )
+    request_schema: str = Field(
+        default="",
+        max_length=2000,
+        description="Description of the request body schema",
+    )
+    response_schema: str = Field(
+        default="",
+        max_length=2000,
+        description="Description of the response body schema",
+    )
+    belongs_to_component: Optional[str] = Field(
+        default=None,
+        description="Component name this endpoint belongs to",
     )
 
 
@@ -592,6 +710,18 @@ class RepositorySpec(BaseModel):
     data_flows: list[DataFlow] = Field(
         default_factory=list,
         description="Data flow relationships between components",
+    )
+    functions: list[FunctionSpec] = Field(
+        default_factory=list,
+        description="Function/method specifications extracted from the PRD",
+    )
+    data_models: list[DataModelSpec] = Field(
+        default_factory=list,
+        description="Data model/schema specifications extracted from the PRD",
+    )
+    api_endpoints: list[APIEndpointSpec] = Field(
+        default_factory=list,
+        description="API endpoint specifications extracted from the PRD",
     )
     file_recommendations: list[FileRecommendation] = Field(
         default_factory=list,

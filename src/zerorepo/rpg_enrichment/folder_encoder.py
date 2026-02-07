@@ -10,6 +10,7 @@ import keyword
 import logging
 import re
 from collections import deque
+from typing import Any
 from uuid import UUID
 
 from zerorepo.models.enums import EdgeType, NodeLevel
@@ -70,7 +71,7 @@ class FolderEncoder(RPGEncoder):
     def __init__(self, max_files_per_folder: int = _MAX_FILES_PER_FOLDER) -> None:
         self._max_files = max_files_per_folder
 
-    def encode(self, graph: RPGGraph) -> RPGGraph:
+    def encode(self, graph: RPGGraph, spec: Any | None = None) -> RPGGraph:
         """Assign folder_path to all nodes via HIERARCHY BFS."""
         if graph.node_count == 0:
             return graph

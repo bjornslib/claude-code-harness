@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import re
 from collections import defaultdict
+from typing import Any
 from uuid import UUID
 
 from zerorepo.models.edge import RPGEdge
@@ -96,7 +97,7 @@ class BaseClassEncoder(RPGEncoder):
     ) -> None:
         self._min_features = min_features_for_abstraction
 
-    def encode(self, graph: RPGGraph) -> RPGGraph:
+    def encode(self, graph: RPGGraph, spec: Any | None = None) -> RPGGraph:
         """Detect patterns and create base class nodes."""
         if graph.node_count == 0:
             return graph

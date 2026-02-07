@@ -141,10 +141,34 @@ class InterfaceDesignEncoder(RPGEncoder):
     # RPGEncoder interface
     # ------------------------------------------------------------------
 
-    def encode(self, graph: RPGGraph) -> RPGGraph:
-        """Enrich FEATURE nodes with signatures, docstrings, and interface types."""
+    def encode(self, graph: RPGGraph, spec: Any | None = None) -> RPGGraph:
+        """Enrich FEATURE nodes with signatures, docstrings, and interface types.
+
+        When a ``spec`` with ``functions``, ``data_models``, or
+        ``api_endpoints`` is provided, the encoder uses that context to
+        produce higher-quality signatures.  If a matching
+        :class:`FunctionSpec` already carries a ``signature`` field, the
+        LLM call is skipped entirely and the pre-existing signature is
+        used.
+        """
         if graph.node_count == 0:
             return graph
+
+        # Build spec-aware lookups
+        func_lookup: dict[str, Any] = {}  # feature name/id → FunctionSpec
+        data_models: list[Any] = []
+        api_endpoints: list[Any] = []
+
+        if spec is not None:
+            for fn in getattr(spec, "functions", None) or []:
+                fn_name = getattr(fn, "name", None)
+                if fn_name:
+                    func_lookup[str(fn_name)] = fn
+                    # Also index by lower-case, underscore-normalised form
+                    normalised = str(fn_name).lower().replace(" ", "_").replace("-", "_")
+                    func_lookup[normalised] = fn
+            data_models = list(getattr(spec, "data_models", None) or [])
+            api_endpoints = list(getattr(spec, "api_endpoints", None) or [])
 
         # Collect FEATURE-level nodes grouped by file_path
         file_features: dict[str, list[UUID]] = defaultdict(list)
@@ -158,7 +182,10 @@ class InterfaceDesignEncoder(RPGEncoder):
         # Process each file group
         for file_path, feature_ids in file_features.items():
             self._process_file_group(
-                graph, file_path, feature_ids, same_file_deps
+                graph, file_path, feature_ids, same_file_deps,
+                func_lookup=func_lookup,
+                data_models=data_models,
+                api_endpoints=api_endpoints,
             )
 
         return graph
@@ -242,15 +269,63 @@ class InterfaceDesignEncoder(RPGEncoder):
 
         return deps
 
+    @staticmethod
+    def _find_func_spec(
+        node: Any, func_lookup: dict[str, Any]
+    ) -> Any | None:
+        """Look up a FunctionSpec matching an RPGNode.
+
+        Checks (in order):
+        1. ``node.metadata["feature_id"]``
+        2. ``node.name`` (exact)
+        3. ``node.name`` normalised to ``lower_underscore`` form
+
+        Args:
+            node: The RPGNode to look up.
+            func_lookup: Mapping of function names → FunctionSpec objects.
+
+        Returns:
+            The matching FunctionSpec, or None.
+        """
+        if not func_lookup:
+            return None
+
+        # Try feature_id from metadata first
+        feature_id = (node.metadata or {}).get("feature_id")
+        if feature_id and str(feature_id) in func_lookup:
+            return func_lookup[str(feature_id)]
+
+        # Try exact node name
+        if node.name and node.name in func_lookup:
+            return func_lookup[node.name]
+
+        # Try normalised form
+        normalised = (
+            node.name.lower().strip().replace(" ", "_").replace("-", "_")
+            if node.name
+            else ""
+        )
+        if normalised and normalised in func_lookup:
+            return func_lookup[normalised]
+
+        return None
+
     def _process_file_group(
         self,
         graph: RPGGraph,
         file_path: str,
         feature_ids: list[UUID],
         same_file_deps: dict[UUID, set[UUID]],
+        *,
+        func_lookup: dict[str, Any] | None = None,
+        data_models: list[Any] | None = None,
+        api_endpoints: list[Any] | None = None,
     ) -> None:
         """Process all features within a single file."""
         file_id_set = set(feature_ids)
+        func_lookup = func_lookup or {}
+        data_models = data_models or []
+        api_endpoints = api_endpoints or []
 
         # Partition into independent and interdependent groups
         interdependent_ids: set[UUID] = set()
@@ -268,26 +343,37 @@ class InterfaceDesignEncoder(RPGEncoder):
         for fid in independent_ids:
             node = graph.nodes[fid]
             func_name = _safe_function_name(node.name)
+            func_spec = self._find_func_spec(node, func_lookup)
             self._enrich_node(
                 node,
                 interface_type=InterfaceType.FUNCTION,
                 func_name=func_name,
+                func_spec=func_spec,
+                data_models=data_models,
+                api_endpoints=api_endpoints,
             )
 
         # --- Interdependent features → CLASS + METHOD ---
         if len(interdependent_ids) >= _MIN_CLASS_GROUP_SIZE:
             self._process_class_group(
-                graph, file_path, sorted(interdependent_ids), same_file_deps
+                graph, file_path, sorted(interdependent_ids), same_file_deps,
+                func_lookup=func_lookup,
+                data_models=data_models,
+                api_endpoints=api_endpoints,
             )
         else:
             # Fewer than threshold → treat as individual functions
             for fid in interdependent_ids:
                 node = graph.nodes[fid]
                 func_name = _safe_function_name(node.name)
+                func_spec = self._find_func_spec(node, func_lookup)
                 self._enrich_node(
                     node,
                     interface_type=InterfaceType.FUNCTION,
                     func_name=func_name,
+                    func_spec=func_spec,
+                    data_models=data_models,
+                    api_endpoints=api_endpoints,
                 )
 
     def _process_class_group(
@@ -296,6 +382,10 @@ class InterfaceDesignEncoder(RPGEncoder):
         file_path: str,
         member_ids: list[UUID],
         same_file_deps: dict[UUID, set[UUID]],
+        *,
+        func_lookup: dict[str, Any] | None = None,
+        data_models: list[Any] | None = None,
+        api_endpoints: list[Any] | None = None,
     ) -> None:
         """Create a class grouping for interdependent features.
 
@@ -303,6 +393,10 @@ class InterfaceDesignEncoder(RPGEncoder):
         and the rest as METHOD nodes.  Also adds INVOCATION edges between
         members that reference each other.
         """
+        func_lookup = func_lookup or {}
+        data_models = data_models or []
+        api_endpoints = api_endpoints or []
+
         # Sort by name for determinism
         member_ids_sorted = sorted(
             member_ids, key=lambda mid: graph.nodes[mid].name
@@ -316,11 +410,15 @@ class InterfaceDesignEncoder(RPGEncoder):
         for mid in member_ids_sorted:
             node = graph.nodes[mid]
             method_name = _safe_function_name(node.name)
+            func_spec = self._find_func_spec(node, func_lookup)
             self._enrich_node(
                 node,
                 interface_type=InterfaceType.METHOD,
                 func_name=method_name,
                 class_name=class_name,
+                func_spec=func_spec,
+                data_models=data_models,
+                api_endpoints=api_endpoints,
             )
 
         # Add INVOCATION edges between members that reference each other
@@ -358,14 +456,38 @@ class InterfaceDesignEncoder(RPGEncoder):
         interface_type: InterfaceType,
         func_name: str,
         class_name: str | None = None,
+        func_spec: Any | None = None,
+        data_models: list[Any] | None = None,
+        api_endpoints: list[Any] | None = None,
     ) -> None:
-        """Set interface_type, signature, docstring, and node_type on a node."""
-        # Generate signature
-        signature = self._generate_signature(
-            func_name=func_name,
-            description=node.name,
-            class_name=class_name,
-        )
+        """Set interface_type, signature, docstring, and node_type on a node.
+
+        When a ``func_spec`` with a non-empty ``signature`` field is
+        provided, the pre-existing signature is used directly (no LLM
+        call).  Otherwise, the LLM is invoked with enriched context
+        from the func_spec, data_models, and api_endpoints.
+        """
+        used_spec_signature = False
+
+        # Check for pre-existing signature from FunctionSpec
+        spec_sig = ""
+        if func_spec is not None:
+            spec_sig = str(getattr(func_spec, "signature", "") or "").strip()
+
+        if spec_sig and _validate_signature_syntax(spec_sig):
+            # Use the spec-provided signature directly
+            signature = spec_sig
+            used_spec_signature = True
+        else:
+            # Generate signature via LLM with enriched context
+            signature = self._generate_signature(
+                func_name=func_name,
+                description=node.name,
+                class_name=class_name,
+                func_spec=func_spec,
+                data_models=data_models or [],
+                api_endpoints=api_endpoints or [],
+            )
 
         # Validate and fall back if invalid
         if not _validate_signature_syntax(signature):
@@ -393,20 +515,37 @@ class InterfaceDesignEncoder(RPGEncoder):
         node.node_type = NodeType.FUNCTION_AUGMENTED
         node.docstring = docstring
 
-        node.metadata["llm_signature_generated"] = True
+        node.metadata["llm_signature_generated"] = not used_spec_signature
+        if used_spec_signature:
+            node.metadata["spec_signature_used"] = True
+        if func_spec is not None:
+            comp = getattr(func_spec, "belongs_to_component", None)
+            if comp:
+                node.metadata["belongs_to_component"] = str(comp)
 
     def _generate_signature(
         self,
         func_name: str,
         description: str,
         class_name: str | None = None,
+        func_spec: Any | None = None,
+        data_models: list[Any] | None = None,
+        api_endpoints: list[Any] | None = None,
     ) -> str:
         """Call the LLM to generate a typed Python function signature.
+
+        When ``func_spec`` is provided, its ``input_types``,
+        ``output_type``, ``description``, and ``belongs_to_component``
+        fields are included in the LLM prompt.  Relevant ``data_models``
+        and ``api_endpoints`` further improve the generated signature.
 
         Args:
             func_name: The function/method name.
             description: Description of what the function does.
             class_name: If this is a method, the enclosing class name.
+            func_spec: Optional FunctionSpec with type information.
+            data_models: Optional list of DataModelSpec for context.
+            api_endpoints: Optional list of APIEndpointSpec for context.
 
         Returns:
             A ``def ...`` signature line.
@@ -417,8 +556,47 @@ class InterfaceDesignEncoder(RPGEncoder):
         )
         if class_name:
             prompt += f" This is a method of class '{class_name}'."
+
+        # Enrich with FunctionSpec details
+        if func_spec is not None:
+            spec_desc = str(getattr(func_spec, "description", "") or "").strip()
+            if spec_desc:
+                prompt += f"\n\nFunction description: {spec_desc}"
+
+            input_types = getattr(func_spec, "input_types", None) or []
+            if input_types:
+                prompt += f"\nInput types: {', '.join(str(t) for t in input_types)}"
+
+            output_type = str(getattr(func_spec, "output_type", "") or "").strip()
+            if output_type:
+                prompt += f"\nReturn type: {output_type}"
+
+            component = getattr(func_spec, "belongs_to_component", None)
+            if component:
+                prompt += f"\nBelongs to component: {component}"
+
+        # Enrich with relevant data models
+        if data_models:
+            model_names = [
+                str(getattr(m, "name", "")) for m in data_models[:5]
+                if getattr(m, "name", None)
+            ]
+            if model_names:
+                prompt += f"\n\nAvailable data models: {', '.join(model_names)}"
+
+        # Enrich with relevant API endpoints
+        if api_endpoints:
+            endpoint_summaries = []
+            for ep in api_endpoints[:3]:
+                method = getattr(ep, "method", "GET")
+                path = getattr(ep, "path", "")
+                if path:
+                    endpoint_summaries.append(f"{method} {path}")
+            if endpoint_summaries:
+                prompt += f"\nRelevant API endpoints: {'; '.join(endpoint_summaries)}"
+
         prompt += (
-            " Return ONLY the def line with type hints, ending with a colon. "
+            "\n\nReturn ONLY the def line with type hints, ending with a colon. "
             "Example: def process(self, data: list[str]) -> dict[str, int]:"
         )
 

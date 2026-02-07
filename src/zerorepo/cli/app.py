@@ -261,7 +261,7 @@ def generate(
                     f"  [yellow]InterfaceDesignEncoder skipped: {exc}[/yellow]"
                 )
 
-            rpg_graph = rpg_builder.run(rpg_graph)
+            rpg_graph = rpg_builder.run(rpg_graph, spec=spec)
 
             _console.print(
                 f"  [dim]Enriched: {rpg_graph.node_count} nodes, "
