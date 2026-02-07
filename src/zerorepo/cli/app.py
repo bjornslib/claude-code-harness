@@ -17,6 +17,8 @@ from zerorepo.cli.config import load_config
 from zerorepo.cli.errors import error_handler
 from zerorepo.cli.init_cmd import run_init
 from zerorepo.cli.logging_setup import setup_logging
+from zerorepo.cli.ontology import ontology_app
+from zerorepo.cli.spec import spec_app
 
 # ---------------------------------------------------------------------------
 # Application
@@ -30,6 +32,10 @@ app = typer.Typer(
 )
 
 _console = Console(stderr=True)
+
+# Register sub-command groups
+app.add_typer(ontology_app, name="ontology")
+app.add_typer(spec_app, name="spec")
 
 
 # ---------------------------------------------------------------------------

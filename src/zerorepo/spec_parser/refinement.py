@@ -315,7 +315,12 @@ class SpecRefiner:
         new_constraints = [c for c in spec.constraints if c.id != constraint_id]
 
         updated = spec.model_copy(
-            update={"constraints": new_constraints},
+            update={
+                "constraints": new_constraints,
+                "refinement_history": list(spec.refinement_history),
+                "references": list(spec.references),
+                "conflicts": list(spec.conflicts),
+            },
         )
 
         # Record history
@@ -684,13 +689,18 @@ class SpecRefiner:
         core_func = parsed.get("core_functionality", spec.core_functionality)
 
         # Build new spec (preserving id, description, references, conflicts,
-        # history, metadata, and timestamps from original)
+        # metadata, and timestamps from original).
+        # Deep-copy mutable lists to avoid shared-state mutation between
+        # the original and the updated spec.
         updated = spec.model_copy(
             update={
                 "core_functionality": core_func,
                 "technical_requirements": technical_requirements,
                 "quality_attributes": quality_attributes,
                 "constraints": constraints,
+                "refinement_history": list(spec.refinement_history),
+                "references": list(spec.references),
+                "conflicts": list(spec.conflicts),
             },
         )
 

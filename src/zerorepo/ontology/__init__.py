@@ -17,6 +17,10 @@ Service), providing:
 - :class:`OntologyExtensionAPI` -- Domain extension API (Task 2.1.5)
 - :class:`ExtensionResult` -- Result of an extension operation
 - :class:`ConflictResolution` -- Conflict resolution strategy enum
+- :class:`OntologyService` -- Unified facade for the ontology service (Task 2.1.6)
+- :class:`OntologyServiceConfig` -- Configuration for the service facade
+- :class:`BuildResult` -- Result of an ontology build operation
+- :class:`SearchResult` -- Enriched search result with context
 """
 
 from zerorepo.ontology.backend import OntologyBackend
@@ -33,8 +37,16 @@ from zerorepo.ontology.extension import (
 )
 from zerorepo.ontology.llm_backend import LLMBackendConfig, LLMOntologyBackend
 from zerorepo.ontology.models import FeatureNode, FeaturePath, OntologyStats
+from zerorepo.ontology.service import (
+    BuildResult,
+    OntologyService,
+    OntologyServiceConfig,
+    OntologyServiceError,
+    SearchResult,
+)
 
 __all__ = [
+    "BuildResult",
     "ConflictResolution",
     "EmbedderConfig",
     "EmbeddingResult",
@@ -47,6 +59,10 @@ __all__ = [
     "OntologyBackend",
     "OntologyChromaStore",
     "OntologyExtensionAPI",
+    "OntologyService",
+    "OntologyServiceConfig",
+    "OntologyServiceError",
     "OntologyStats",
     "OntologyStoreConfig",
+    "SearchResult",
 ]

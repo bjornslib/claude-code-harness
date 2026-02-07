@@ -781,6 +781,8 @@ class TestLLMAnalysis:
         detector = ConflictDetector(
             config=config, gateway=None, templates=PromptTemplate()
         )
+        # Forcibly clear the gateway (constructor creates one by default)
+        detector.gateway = None
         spec = _make_spec()
         with pytest.raises(ConflictDetectorError, match="requires a configured"):
             detector.detect(spec)
