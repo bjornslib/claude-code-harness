@@ -1,0 +1,381 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": "1",
+        "title": "Setup Benchmark Project Structure and Dependencies",
+        "description": "Create directory structure for benchmarks/repocraft/ and install required dependencies including ast, pytest, sentence-transformers, docker-py.",
+        "details": "Create benchmarks/repocraft/ with subdirs tasks/, metadata.json, taxonomy.json. pip install sentence-transformers docker astor pytest sentence-transformers numpy scikit-learn. Define TestFunction dataclass with fields: id, project, category, subcategory, description, test_code, imports, fixtures, auxiliary_code, loc, difficulty.",
+        "testStrategy": "Verify directory structure exists, check pip list for required packages, validate TestFunction schema with sample data using pydantic validation.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-02-07T15:37:59.877Z"
+      },
+      {
+        "id": "2",
+        "title": "Implement TestHarvester Class",
+        "description": "Build TestHarvester to extract test functions from pytest/unittest files using AST parsing.",
+        "details": "Implement TestHarvester.extract_tests(): walk repo_path for test_*.py files, parse with ast.parse(), find FunctionDef nodes starting with 'test_', call parse_test_function(). Use ast.get_docstring() for descriptions, inspect imports with ast.Import/ImportFrom.",
+        "testStrategy": "Unit test with synthetic test files containing 5 test functions, verify extracted list length and metadata accuracy. Integration test on small repo clone.",
+        "priority": "high",
+        "dependencies": [
+          "1"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-02-07T15:38:02.818Z"
+      },
+      {
+        "id": "3",
+        "title": "Implement TestFunction Parsing Logic",
+        "description": "Create parse_test_function() to convert AST nodes into TestFunction objects.",
+        "details": "Extract function name, source code with ast.get_source_segment(), docstring, line numbers. Analyze body for assert statements using ast.match(). Calculate LOC by counting non-empty lines in source.",
+        "testStrategy": "Pytest on 10 synthetic AST nodes, assert all fields populated correctly, LOC accurate within +/-1.",
+        "priority": "high",
+        "dependencies": [
+          "2"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-02-07T15:38:05.720Z"
+      },
+      {
+        "id": "4",
+        "title": "Implement Hierarchical Categorizer",
+        "description": "Build Categorizer to create hierarchical taxonomy from test categories following project structure.",
+        "details": "Implement Categorizer.build_taxonomy(): parse module paths (e.g., pandas/core/groupby/test.py → pandas.core.groupby), build nested dict with test counts. Use pathlib for path parsing.",
+        "testStrategy": "Test with 50 synthetic TestFunctions across 5 categories, verify taxonomy tree structure and counts match expected.",
+        "priority": "medium",
+        "dependencies": [
+          "1",
+          "2"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-02-07T15:38:08.802Z"
+      },
+      {
+        "id": "5",
+        "title": "Implement Stratified Sampling",
+        "description": "Add stratified_sample() to select proportional tests across categories.",
+        "details": "Use numpy.random.choice with category weights = test_counts / total_tests. Ensure minimum 1 test per category with >0 tests.",
+        "testStrategy": "Test sampling 100 tests from taxonomy with known distribution, verify category proportions within 5% tolerance.",
+        "priority": "medium",
+        "dependencies": [
+          "4"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-02-07T15:38:11.514Z"
+      },
+      {
+        "id": "6",
+        "title": "Implement TestFilter Class",
+        "description": "Create filtering pipeline to remove trivial, flaky, and skipped tests.",
+        "details": "TestFilter.is_trivial(): check loc<10, no assert statements via AST, only import statements. is_flaky(): regex patterns ['requests.get', 'open\\(', 'socket\\.', 'time\\.sleep']. Skip @pytest.mark.skip decorators.",
+        "testStrategy": "Test 20 positive/negative cases per filter rule, verify filter pipeline reduces synthetic dataset correctly.",
+        "priority": "high",
+        "dependencies": [
+          "2",
+          "3"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-02-07T15:38:14.247Z"
+      },
+      {
+        "id": "7",
+        "title": "Build Complete Benchmark Harvesting Pipeline",
+        "description": "Integrate harvesting → categorization → filtering → sampling into end-to-end script.",
+        "details": "scripts/benchmark/build_repocraft.py: for each project in ['scikit-learn','pandas','sympy','statsmodels','requests','django']: clone repo, harvest_tests(), categorize(), filter(), sample(200), save as project-tasks.json.",
+        "testStrategy": "Integration test: run on requests repo, verify ≥100 tasks saved with correct metadata.",
+        "priority": "high",
+        "dependencies": [
+          "2",
+          "3",
+          "4",
+          "5",
+          "6"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-02-07T15:38:16.991Z"
+      },
+      {
+        "id": "8",
+        "title": "Generate Benchmark Metadata and Documentation",
+        "description": "Create metadata.json with statistics and README.md with dataset documentation.",
+        "details": "Aggregate task counts by project/category, calculate averages (loc, difficulty), generate taxonomy visualization. Write README with usage examples and statistics table.",
+        "testStrategy": "Validate JSON schema compliance, manual review of README content accuracy.",
+        "priority": "medium",
+        "dependencies": [
+          "7"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-02-07T15:38:19.736Z"
+      },
+      {
+        "id": "9",
+        "title": "Implement FunctionLocalizer with Sentence Transformers",
+        "description": "Build Stage 1 localization using embedding similarity search.",
+        "details": "pip install sentence-transformers. FunctionLocalizer(model='all-MiniLM-L6-v2'): extract_functions() walks *.py files, parses def statements. localize(): encode task.description + function signatures, cosine_similarity top_k=5.",
+        "testStrategy": "Test with synthetic repo + 10 tasks, verify top candidates have similarity >0.5 for matching functions.",
+        "priority": "high",
+        "dependencies": [
+          "1"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-02-07T15:38:22.646Z"
+      },
+      {
+        "id": "10",
+        "title": "Define FunctionSignature and Task Data Models",
+        "description": "Create Pydantic models for FunctionSignature, Task, ValidationResult, ExecutionResult.",
+        "details": "FunctionSignature: name, module, signature, docstring, file_path, start_line, end_line. Task from benchmark schema. Add validation methods.",
+        "testStrategy": "Model validation tests with valid/invalid data, ensure type safety.",
+        "priority": "high",
+        "dependencies": [
+          "1"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-02-07T15:38:25.480Z"
+      },
+      {
+        "id": "11",
+        "title": "Implement SemanticValidator with Majority Voting",
+        "description": "Build Stage 2 LLM-based validation with 2-round majority voting.",
+        "details": "SemanticValidator(llm_client, num_voters=3, num_rounds=2). Use exact VALIDATION_PROMPT template. Parse responses for YES/NO/PARTIAL. Majority logic: ≥2/3 YES = pass.",
+        "testStrategy": "Mock LLM responses, test all voting scenarios (clear majority, tie → round2, final decision).",
+        "priority": "high",
+        "dependencies": [
+          "10"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-02-07T15:38:28.269Z"
+      },
+      {
+        "id": "12",
+        "title": "Implement ExecutionTester with Docker Isolation",
+        "description": "Build Stage 3 test execution in Docker containers.",
+        "details": "ExecutionTester(timeout=30): adapt_test() rewrites imports (sklearn→ml_lib pattern matching), creates test.py. docker.from_env().containers.run('python:3.11-slim', volumes=tmpdir:/workspace, timeout=30). Check 'TEST_PASSED' in logs.",
+        "testStrategy": "Test passing/failing/timeout cases with synthetic repos. Verify Docker isolation (no host contamination).",
+        "priority": "high",
+        "dependencies": [
+          "10"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-02-07T15:38:31.618Z"
+      },
+      {
+        "id": "13",
+        "title": "Build EvaluationPipeline Orchestrator",
+        "description": "Integrate 3 stages into sequential pipeline with early termination.",
+        "details": "EvaluationPipeline(localizer, validator, tester). evaluate_task(): stage1→candidates, stage2→top3 validated, stage3→execution. Return TaskResult with stage_failed tracking.",
+        "testStrategy": "End-to-end test 5 synthetic tasks through all failure modes, verify correct stage failure reporting.",
+        "priority": "high",
+        "dependencies": [
+          "9",
+          "10",
+          "11",
+          "12"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-02-07T15:38:34.489Z"
+      },
+      {
+        "id": "14",
+        "title": "Implement Repository-Level Evaluation",
+        "description": "Add evaluate_repository() aggregating TaskResults into RepositoryResult.",
+        "details": "Calculate coverage by unique categories with passed tests. Track localized/validated/passed counts. Save results as JSON.",
+        "testStrategy": "Test aggregation math with known input/output, verify coverage calculation matches spec.",
+        "priority": "medium",
+        "dependencies": [
+          "13"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-02-07T15:38:37.326Z"
+      },
+      {
+        "id": "15",
+        "title": "Create BenchmarkRunner for End-to-End Project Evaluation",
+        "description": "Build runner integrating ZeroRepo generation + evaluation.",
+        "details": "BenchmarkRunner(zeropro_pipeline, evaluation_pipeline). run_project(): load_tasks(project), paraphrase_name(), generate_repository(), evaluate_repository(), collect_profiling().",
+        "testStrategy": "Integration test on 'requests' project with 20 tasks, verify full pipeline completes.",
+        "priority": "high",
+        "dependencies": [
+          "7",
+          "13",
+          "14"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-02-07T15:38:40.093Z"
+      },
+      {
+        "id": "16",
+        "title": "Implement MetricsCalculator",
+        "description": "Calculate all paper metrics: coverage, novelty, pass_rate, voting_rate, code_stats.",
+        "details": "coverage(): unique passed categories / total categories. novelty(): generated_categories - reference_categories. code_stats(): LOC counting, token estimation (chars//4).",
+        "testStrategy": "Unit tests for each metric with predefined inputs/expected outputs matching paper definitions.",
+        "priority": "medium",
+        "dependencies": [
+          "14"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-02-07T15:38:43.246Z"
+      },
+      {
+        "id": "17",
+        "title": "Build ProfilingCollector for Token Usage",
+        "description": "Instrument LLM calls and stages for token profiling.",
+        "details": "ProfilingCollector.record_llm_call(stage, prompt_tokens, completion_tokens). get_stage_summary(): aggregate by stage. Integrate into all LLM-using components.",
+        "testStrategy": "Test aggregation accuracy with 20 synthetic calls, verify totals match.",
+        "priority": "medium",
+        "dependencies": [
+          "15"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-02-07T15:38:46.564Z"
+      },
+      {
+        "id": "18",
+        "title": "Generate Comparison Reports",
+        "description": "Create markdown reports comparing to paper metrics.",
+        "details": "ReportGenerator.generate_comparison_report(): tables for per-project + aggregate metrics vs paper (81.5% coverage, 69.7% pass, etc.). Include delta calculations.",
+        "testStrategy": "Test report generation with synthetic BenchmarkResult list, verify table formatting and math.",
+        "priority": "medium",
+        "dependencies": [
+          "15",
+          "16"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-02-07T15:38:49.878Z"
+      },
+      {
+        "id": "19",
+        "title": "Run Full Benchmark on 3 Projects",
+        "description": "Execute complete benchmark on scikit-learn, pandas, sympy.",
+        "details": "scripts/run_full_benchmark.py: for project in ['scikit-learn','pandas','sympy']: BenchmarkRunner.run_project(project), aggregate results, generate_report().",
+        "testStrategy": "Verify all 3 projects complete successfully, metrics within expected ranges, reports generated.",
+        "priority": "high",
+        "dependencies": [
+          "15",
+          "16",
+          "17",
+          "18"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-02-07T15:38:52.970Z"
+      },
+      {
+        "id": "20",
+        "title": "Implement FailureAnalyzer Taxonomy",
+        "description": "Categorize failures into PLANNING/GENERATION/LOCALIZATION/VALIDATION/EXECUTION.",
+        "details": "FailureAnalyzer.categorize_failure(): decision tree based on result fields + error analysis. Check function_exists_different_name(), revalidate_fallback().",
+        "testStrategy": "Test categorization on 50 synthetic failures across all 5 categories, verify accuracy.",
+        "priority": "high",
+        "dependencies": [
+          "13"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-02-07T15:38:56.308Z"
+      },
+      {
+        "id": "21",
+        "title": "Generate Failure Analysis Report",
+        "description": "Analyze failures and generate recommendations.",
+        "details": "FailureAnalyzer.analyze_failures(): Counter by category, sample 10 per category, pattern-based recommendations (>20% planning → improve prompts, etc.).",
+        "testStrategy": "Test with benchmark results, verify recommendations trigger at correct thresholds.",
+        "priority": "medium",
+        "dependencies": [
+          "19",
+          "20"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-02-07T15:38:59.243Z"
+      },
+      {
+        "id": "22",
+        "title": "Build Prompt A/B Testing Framework",
+        "description": "Create framework to test prompt variants empirically.",
+        "details": "PromptABTest(baseline_prompt, variant_prompt). run_test(): split tasks, run both, chi-squared p-value, recommend based on delta + significance.",
+        "testStrategy": "Test with synthetic results showing variant superior/inferior, verify statistical decisions correct.",
+        "priority": "medium",
+        "dependencies": [
+          "15"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-02-07T15:39:02.082Z"
+      },
+      {
+        "id": "23",
+        "title": "Create Regression Test Suite",
+        "description": "Build 50 golden tasks regression suite for prompt changes.",
+        "details": "tests/regression/: golden_tasks.json (10 per project), test_planning_regression(), test_generation_regression() using pytest fixtures.",
+        "testStrategy": "Run suite on current prompts (should pass), simulate prompt change causing failure.",
+        "priority": "medium",
+        "dependencies": [
+          "7",
+          "15"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-02-07T15:39:05.261Z"
+      },
+      {
+        "id": "24",
+        "title": "Implement Embedding and LLM Caching",
+        "description": "Add deterministic caching to reduce token usage.",
+        "details": "EmbeddingCache(cache_dir='.cache/embeddings'): md5(text) → pkl. LLMResponseCache(model:prompt → txt). Integrate into Localizer and Validator.",
+        "testStrategy": "Profile token savings on 100 tasks (should cache ~80% embeddings), verify cache hits return identical results.",
+        "priority": "high",
+        "dependencies": [
+          "9",
+          "11"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-02-07T15:39:08.392Z"
+      },
+      {
+        "id": "25",
+        "title": "Implement Batched Function Generation Optimization",
+        "description": "Optimize token usage with batch_size=5 function generation.",
+        "details": "BatchedFunctionGenerator(max_batch_size=5): create_batch_prompt() with numbered requirements, parse response split by '---FUNCTION---'. Integrate into Phase 3 generation.",
+        "testStrategy": "Profile token reduction vs sequential (target 20% savings), verify generated functions identical quality.",
+        "priority": "high",
+        "dependencies": [
+          "17"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-02-07T15:39:11.282Z"
+      }
+    ],
+    "metadata": {
+      "version": "1.0.0",
+      "lastModified": "2026-02-07T15:39:11.285Z",
+      "taskCount": 25,
+      "completedCount": 25,
+      "tags": [
+        "master"
+      ]
+    }
+  }
+}
