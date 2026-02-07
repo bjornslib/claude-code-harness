@@ -35,7 +35,7 @@ class IntraModuleOrderEncoder(RPGEncoder):
     in arbitrary order and adds a warning.
     """
 
-    def encode(self, graph: RPGGraph, spec: Any | None = None) -> RPGGraph:
+    def encode(self, graph: RPGGraph, spec: Any | None = None, baseline: RPGGraph | None = None) -> RPGGraph:
         """Compute file_order for all MODULE nodes and create ORDERING edges.
 
         After topologically sorting files within each module, creates

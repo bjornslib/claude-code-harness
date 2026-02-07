@@ -97,7 +97,7 @@ class BaseClassEncoder(RPGEncoder):
     ) -> None:
         self._min_features = min_features_for_abstraction
 
-    def encode(self, graph: RPGGraph, spec: Any | None = None) -> RPGGraph:
+    def encode(self, graph: RPGGraph, spec: Any | None = None, baseline: RPGGraph | None = None) -> RPGGraph:
         """Detect patterns and create base class nodes."""
         if graph.node_count == 0:
             return graph

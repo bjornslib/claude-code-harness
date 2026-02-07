@@ -90,7 +90,12 @@ class RPGBuilder:
     # Execution
     # ------------------------------------------------------------------
 
-    def run(self, graph: RPGGraph, spec: Any | None = None) -> RPGGraph:
+    def run(
+        self,
+        graph: RPGGraph,
+        spec: Any | None = None,
+        baseline: RPGGraph | None = None,
+    ) -> RPGGraph:
         """Execute the full pipeline on *graph*.
 
         Runs each encoder sequentially, recording timing and (optionally)
@@ -100,6 +105,8 @@ class RPGBuilder:
             graph: The :class:`RPGGraph` to enrich.
             spec: Optional parsed :class:`RepositorySpec` to pass through
                 to each encoder for context-aware enrichment.
+            baseline: Optional baseline :class:`RPGGraph` to pass through
+                to each encoder for delta-aware enrichment.
 
         Returns:
             The enriched graph (same instance, mutated in-place by the
@@ -117,7 +124,7 @@ class RPGBuilder:
         )
 
         for encoder in self._encoders:
-            step = self._run_encoder(encoder, graph, spec=spec)
+            step = self._run_encoder(encoder, graph, spec=spec, baseline=baseline)
             self._steps.append(step)
 
         logger.info(
@@ -163,6 +170,7 @@ class RPGBuilder:
         encoder: RPGEncoder,
         graph: RPGGraph,
         spec: Any | None = None,
+        baseline: RPGGraph | None = None,
     ) -> EncoderStep:
         """Execute a single encoder and record its step metadata."""
         encoder_name = encoder.name
@@ -172,7 +180,7 @@ class RPGBuilder:
         started_at = datetime.now(timezone.utc)
         t0 = time.perf_counter()
 
-        graph = encoder.encode(graph, spec=spec)
+        graph = encoder.encode(graph, spec=spec, baseline=baseline)
 
         t1 = time.perf_counter()
         duration_ms = (t1 - t0) * 1000

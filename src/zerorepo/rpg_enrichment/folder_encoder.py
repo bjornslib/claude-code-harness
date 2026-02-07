@@ -71,10 +71,34 @@ class FolderEncoder(RPGEncoder):
     def __init__(self, max_files_per_folder: int = _MAX_FILES_PER_FOLDER) -> None:
         self._max_files = max_files_per_folder
 
-    def encode(self, graph: RPGGraph, spec: Any | None = None) -> RPGGraph:
-        """Assign folder_path to all nodes via HIERARCHY BFS."""
+    def encode(self, graph: RPGGraph, spec: Any | None = None, baseline: RPGGraph | None = None) -> RPGGraph:
+        """Assign folder_path to all nodes via HIERARCHY BFS.
+
+        When a ``baseline`` RPGGraph is provided, nodes that match baseline
+        entries by name retain their real folder_path and file_path from the
+        baseline. New nodes follow the baseline's directory conventions.
+        """
         if graph.node_count == 0:
             return graph
+
+        # --- Pre-pass: apply baseline paths to matching nodes ---
+        baseline_lookup: dict[str, Any] = {}
+        baseline_folders: list[str] = []
+        if baseline:
+            for bnode in baseline.nodes.values():
+                baseline_lookup[bnode.name.lower()] = bnode
+                if bnode.folder_path:
+                    baseline_folders.append(bnode.folder_path)
+
+            for nid, node in graph.nodes.items():
+                bnode = baseline_lookup.get(node.name.lower())
+                if bnode:
+                    if bnode.folder_path is not None:
+                        node.folder_path = bnode.folder_path
+                        node.metadata["baseline_folder_used"] = True
+                    if bnode.file_path is not None and node.file_path is None:
+                        node.file_path = bnode.file_path
+                        node.metadata["baseline_file_path_used"] = True
 
         # Build parent→children adjacency from HIERARCHY edges
         children_of: dict[UUID, list[UUID]] = {}
@@ -105,7 +129,7 @@ class FolderEncoder(RPGEncoder):
 
         for root_id in roots:
             node = graph.nodes[root_id]
-            # Roots get empty folder_path (project root)
+            # Roots get empty folder_path (project root) unless baseline already set it
             if node.folder_path is None:
                 node.folder_path = ""
             visited.add(root_id)
@@ -122,6 +146,12 @@ class FolderEncoder(RPGEncoder):
                 visited.add(child_id)
 
                 child_node = graph.nodes[child_id]
+
+                # Skip nodes that already have a baseline-assigned folder_path
+                if child_node.metadata.get("baseline_folder_used"):
+                    queue.append(child_id)
+                    continue
+
                 pkg_name = _to_package_name(child_node.name)
                 child_node.folder_path = f"{parent_path}{pkg_name}/"
 

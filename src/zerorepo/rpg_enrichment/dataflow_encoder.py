@@ -94,10 +94,20 @@ class DataFlowEncoder(RPGEncoder):
     - ``metadata["flow_validated"]`` on DATA_FLOW edges (via edge validated field)
     """
 
-    def encode(self, graph: RPGGraph, spec: Any | None = None) -> RPGGraph:
-        """Encode data flow types on inter-module edges."""
+    def encode(self, graph: RPGGraph, spec: Any | None = None, baseline: RPGGraph | None = None) -> RPGGraph:
+        """Encode data flow types on inter-module edges.
+
+        When a ``baseline`` is provided, existing DATA_FLOW edges from the
+        baseline are used to supplement the current graph's edges. This
+        preserves real dependency relationships with accurate type
+        annotations from previously analysed code.
+        """
         if graph.node_count == 0:
             return graph
+
+        # --- Merge baseline DATA_FLOW edges into the current graph ---
+        if baseline:
+            self._merge_baseline_edges(graph, baseline)
 
         # Map each node to its module (MODULE-level ancestor)
         node_to_module = self._build_module_map(graph)
@@ -169,6 +179,101 @@ class DataFlowEncoder(RPGEncoder):
             errors=errors,
             warnings=warnings,
         )
+
+    @staticmethod
+    def _merge_baseline_edges(graph: RPGGraph, baseline: RPGGraph) -> None:
+        """Merge DATA_FLOW edges from the baseline into the current graph.
+
+        For each baseline DATA_FLOW edge, finds matching source/target nodes
+        in the current graph by name. If both endpoints exist and no
+        equivalent edge already exists, creates a new DATA_FLOW edge with
+        the baseline's type annotations.
+
+        Also updates existing edges with baseline type information when
+        matching edges are found but have inferior type annotations (e.g.
+        ``Any`` replaced by a real Pydantic model name).
+
+        Args:
+            graph: The current RPGGraph to enrich.
+            baseline: The baseline RPGGraph with real dependency data.
+        """
+        # Build name→node lookup for current graph
+        name_to_node: dict[str, Any] = {}
+        for node in graph.nodes.values():
+            name_to_node[node.name.lower()] = node
+
+        # Build existing DATA_FLOW edge set by (source_name, target_name)
+        existing_flows: set[tuple[str, str]] = set()
+        edge_by_names: dict[tuple[str, str], RPGEdge] = {}
+        for edge in graph.edges.values():
+            if edge.edge_type != EdgeType.DATA_FLOW:
+                continue
+            src = graph.nodes.get(edge.source_id)
+            tgt = graph.nodes.get(edge.target_id)
+            if src and tgt:
+                key = (src.name.lower(), tgt.name.lower())
+                existing_flows.add(key)
+                edge_by_names[key] = edge
+
+        # Process baseline DATA_FLOW edges
+        for b_edge in baseline.edges.values():
+            if b_edge.edge_type != EdgeType.DATA_FLOW:
+                continue
+
+            b_src = baseline.nodes.get(b_edge.source_id)
+            b_tgt = baseline.nodes.get(b_edge.target_id)
+            if not b_src or not b_tgt:
+                continue
+
+            src_key = b_src.name.lower()
+            tgt_key = b_tgt.name.lower()
+            current_src = name_to_node.get(src_key)
+            current_tgt = name_to_node.get(tgt_key)
+
+            if not current_src or not current_tgt:
+                continue
+            if current_src.id == current_tgt.id:
+                continue
+
+            key = (src_key, tgt_key)
+
+            if key in existing_flows:
+                # Upgrade type annotation if baseline has better info
+                existing_edge = edge_by_names.get(key)
+                if (
+                    existing_edge
+                    and b_edge.data_type
+                    and (
+                        existing_edge.data_type is None
+                        or existing_edge.data_type == "Any"
+                    )
+                ):
+                    existing_edge.data_type = b_edge.data_type
+                    existing_edge.data_id = b_edge.data_id or existing_edge.data_id
+                    if current_src:
+                        current_src.metadata["baseline_dataflow_upgraded"] = True
+            else:
+                # Create new DATA_FLOW edge from baseline
+                new_edge = RPGEdge(
+                    source_id=current_src.id,
+                    target_id=current_tgt.id,
+                    edge_type=EdgeType.DATA_FLOW,
+                    data_id=b_edge.data_id,
+                    data_type=b_edge.data_type,
+                    validated=True,
+                )
+                graph.add_edge(new_edge)
+                existing_flows.add(key)
+                edge_by_names[key] = new_edge
+
+                # Mark nodes as having baseline-derived edges
+                current_src.metadata["baseline_dataflow_source"] = True
+                current_tgt.metadata["baseline_dataflow_target"] = True
+
+                logger.info(
+                    "Merged baseline DATA_FLOW: %s → %s (type: %s)",
+                    b_src.name, b_tgt.name, b_edge.data_type,
+                )
 
     @staticmethod
     def _build_module_map(graph: RPGGraph) -> dict[UUID, UUID]:

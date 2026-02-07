@@ -68,7 +68,7 @@ class FileEncoder(RPGEncoder):
         self._max_loc = max_loc_per_file
         self._loc_ratio = complexity_loc_ratio
 
-    def encode(self, graph: RPGGraph, spec: Any | None = None) -> RPGGraph:
+    def encode(self, graph: RPGGraph, spec: Any | None = None, baseline: RPGGraph | None = None) -> RPGGraph:
         """Assign file_path to all leaf nodes."""
         if graph.node_count == 0:
             return graph

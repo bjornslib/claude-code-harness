@@ -141,7 +141,7 @@ class InterfaceDesignEncoder(RPGEncoder):
     # RPGEncoder interface
     # ------------------------------------------------------------------
 
-    def encode(self, graph: RPGGraph, spec: Any | None = None) -> RPGGraph:
+    def encode(self, graph: RPGGraph, spec: Any | None = None, baseline: RPGGraph | None = None) -> RPGGraph:
         """Enrich FEATURE nodes with signatures, docstrings, and interface types.
 
         When a ``spec`` with ``functions``, ``data_models``, or
@@ -150,9 +150,22 @@ class InterfaceDesignEncoder(RPGEncoder):
         :class:`FunctionSpec` already carries a ``signature`` field, the
         LLM call is skipped entirely and the pre-existing signature is
         used.
+
+        When a ``baseline`` RPGGraph is provided, FEATURE nodes that match
+        baseline entries with real signatures skip the LLM call entirely
+        and are marked ``serena_validated = True``.
         """
         if graph.node_count == 0:
             return graph
+
+        # Build baseline lookup for FEATURE-level nodes with signatures
+        baseline_lookup: dict[str, Any] = {}
+        if baseline:
+            for bnode in baseline.nodes.values():
+                if bnode.level == NodeLevel.FEATURE:
+                    sig = bnode.metadata.get("signature") or bnode.signature
+                    if sig:
+                        baseline_lookup[bnode.name.lower()] = bnode
 
         # Build spec-aware lookups
         func_lookup: dict[str, Any] = {}  # feature name/id → FunctionSpec
@@ -186,6 +199,7 @@ class InterfaceDesignEncoder(RPGEncoder):
                 func_lookup=func_lookup,
                 data_models=data_models,
                 api_endpoints=api_endpoints,
+                baseline_lookup=baseline_lookup,
             )
 
         return graph
@@ -320,23 +334,51 @@ class InterfaceDesignEncoder(RPGEncoder):
         func_lookup: dict[str, Any] | None = None,
         data_models: list[Any] | None = None,
         api_endpoints: list[Any] | None = None,
+        baseline_lookup: dict[str, Any] | None = None,
     ) -> None:
         """Process all features within a single file."""
         file_id_set = set(feature_ids)
         func_lookup = func_lookup or {}
         data_models = data_models or []
         api_endpoints = api_endpoints or []
+        baseline_lookup = baseline_lookup or {}
 
-        # Partition into independent and interdependent groups
-        interdependent_ids: set[UUID] = set()
+        # --- Pre-pass: apply baseline signatures to matching nodes ---
+        remaining_ids: list[UUID] = []
         for fid in feature_ids:
+            node = graph.nodes[fid]
+            baseline_node = baseline_lookup.get(node.name.lower()) if baseline_lookup else None
+            if baseline_node:
+                sig = baseline_node.metadata.get("signature") or baseline_node.signature
+                if sig and _validate_signature_syntax(sig):
+                    # Use baseline signature directly — skip LLM
+                    node.signature = sig
+                    node.interface_type = baseline_node.interface_type or InterfaceType.FUNCTION
+                    node.node_type = NodeType.FUNCTION_AUGMENTED
+                    node.docstring = baseline_node.docstring or f"{node.name}: baseline-derived."
+                    node.serena_validated = True
+                    node.metadata["baseline_signature_used"] = True
+                    node.metadata["llm_signature_generated"] = False
+                    logger.info(
+                        "Used baseline signature for %s: %s",
+                        node.name, sig,
+                    )
+                    continue
+            remaining_ids.append(fid)
+
+        # Partition remaining into independent and interdependent groups
+        interdependent_ids: set[UUID] = set()
+        remaining_set = set(remaining_ids)
+        for fid in remaining_ids:
             local_deps = same_file_deps.get(fid, set()) & file_id_set
-            if local_deps:
+            # Only count deps among remaining (non-baseline-resolved) nodes
+            local_remaining_deps = local_deps & remaining_set
+            if local_remaining_deps:
                 interdependent_ids.add(fid)
-                interdependent_ids.update(local_deps)
+                interdependent_ids.update(local_remaining_deps)
 
         independent_ids = [
-            fid for fid in feature_ids if fid not in interdependent_ids
+            fid for fid in remaining_ids if fid not in interdependent_ids
         ]
 
         # --- Independent features → FUNCTION ---

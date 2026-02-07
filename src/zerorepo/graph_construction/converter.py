@@ -34,7 +34,7 @@ from zerorepo.graph_construction.builder import FunctionalityGraph
 from zerorepo.graph_construction.dependencies import DependencyEdge
 from zerorepo.graph_construction.partitioner import ModuleSpec
 from zerorepo.models.edge import RPGEdge
-from zerorepo.models.enums import EdgeType, NodeLevel, NodeType
+from zerorepo.models.enums import DeltaStatus, EdgeType, NodeLevel, NodeType
 from zerorepo.models.graph import RPGGraph
 from zerorepo.models.node import RPGNode
 
@@ -55,7 +55,10 @@ class FunctionalityGraphConverter:
     """
 
     def convert(
-        self, func_graph: FunctionalityGraph, spec: Any = None
+        self,
+        func_graph: FunctionalityGraph,
+        spec: Any = None,
+        baseline: RPGGraph | None = None,
     ) -> RPGGraph:
         """Convert a FunctionalityGraph to an RPGGraph.
 
@@ -68,15 +71,26 @@ class FunctionalityGraphConverter:
         target names, the converter creates DATA_FLOW edges between the
         corresponding FEATURE nodes in addition to the module-level edges.
 
+        When a ``baseline`` RPGGraph is provided, nodes are tagged with
+        ``delta_status`` metadata (``DeltaStatus.NEW``, ``EXISTING``,
+        or ``MODIFIED``). Existing nodes preserve their baseline data
+        (signatures, file_paths, docstrings). Without a baseline, no
+        delta_status metadata is set and behaviour is identical to before.
+
         Args:
             func_graph: The FunctionalityGraph to convert.
             spec: Optional RepositorySpec with ``components`` for
                 three-level hierarchy.
+            baseline: Optional baseline RPGGraph for delta-aware
+                graph construction.
 
         Returns:
             A new :class:`RPGGraph` populated with nodes and edges.
         """
         rpg = RPGGraph(metadata={"source": "functionality_graph_converter"})
+
+        if baseline is not None:
+            rpg.metadata["has_baseline"] = True
 
         # Track module-name → module-node-UUID for dependency edge mapping
         module_name_to_id: dict[str, UUID] = {}
@@ -95,6 +109,13 @@ class FunctionalityGraphConverter:
             module_node = self._create_module_node(module)
             rpg.add_node(module_node)
             module_name_to_id[module.name] = module_node.id
+
+            # Delta tagging for MODULE nodes
+            if baseline is not None:
+                bl_node = self._find_matching_baseline_node(
+                    module.name, baseline, level=NodeLevel.MODULE
+                )
+                self._tag_delta_status(module_node, bl_node)
 
             logger.debug(
                 "Created MODULE node '%s' (id=%s) with %d features",
@@ -132,6 +153,13 @@ class FunctionalityGraphConverter:
                         )
                         rpg.add_node(component_node)
 
+                        # Delta tagging for COMPONENT nodes
+                        if baseline is not None:
+                            bl_comp = self._find_matching_baseline_node(
+                                comp_name, baseline, level=NodeLevel.COMPONENT
+                            )
+                            self._tag_delta_status(component_node, bl_comp)
+
                         # HIERARCHY edge: MODULE → COMPONENT
                         hierarchy_edge = RPGEdge(
                             source_id=module_node.id,
@@ -156,6 +184,14 @@ class FunctionalityGraphConverter:
                             rpg.add_node(feature_node)
                             feature_id_to_uuid[feature_id] = feature_node.id
 
+                            # Delta tagging for FEATURE nodes
+                            if baseline is not None:
+                                bl_feat = self._find_matching_baseline_node(
+                                    feature_node.name, baseline,
+                                    level=NodeLevel.FEATURE,
+                                )
+                                self._tag_delta_status(feature_node, bl_feat)
+
                             # HIERARCHY edge: COMPONENT → FEATURE
                             feat_edge = RPGEdge(
                                 source_id=component_node.id,
@@ -178,6 +214,14 @@ class FunctionalityGraphConverter:
                         rpg.add_node(feature_node)
                         feature_id_to_uuid[feature_id] = feature_node.id
 
+                        # Delta tagging for unclaimed FEATURE nodes
+                        if baseline is not None:
+                            bl_feat = self._find_matching_baseline_node(
+                                feature_node.name, baseline,
+                                level=NodeLevel.FEATURE,
+                            )
+                            self._tag_delta_status(feature_node, bl_feat)
+
                         hierarchy_edge = RPGEdge(
                             source_id=module_node.id,
                             target_id=feature_node.id,
@@ -187,12 +231,14 @@ class FunctionalityGraphConverter:
                 else:
                     # No components matched this module – flat hierarchy
                     self._add_flat_features(
-                        rpg, module, module_node, feature_id_to_uuid
+                        rpg, module, module_node, feature_id_to_uuid,
+                        baseline=baseline,
                     )
             else:
                 # --- Two-level hierarchy: MODULE → FEATURE ---
                 self._add_flat_features(
-                    rpg, module, module_node, feature_id_to_uuid
+                    rpg, module, module_node, feature_id_to_uuid,
+                    baseline=baseline,
                 )
 
         # ----------------------------------------------------------
@@ -339,6 +385,7 @@ class FunctionalityGraphConverter:
         module: ModuleSpec,
         module_node: RPGNode,
         feature_id_to_uuid: dict[str, UUID],
+        baseline: RPGGraph | None = None,
     ) -> None:
         """Add FEATURE nodes as direct children of a MODULE node.
 
@@ -347,6 +394,7 @@ class FunctionalityGraphConverter:
             module: The module specification.
             module_node: The module RPGNode.
             feature_id_to_uuid: Mapping to populate.
+            baseline: Optional baseline RPGGraph for delta tagging.
         """
         for feature_id in module.feature_ids:
             feature_node = FunctionalityGraphConverter._create_feature_node(
@@ -356,6 +404,13 @@ class FunctionalityGraphConverter:
             )
             rpg.add_node(feature_node)
             feature_id_to_uuid[feature_id] = feature_node.id
+
+            # Delta tagging for flat FEATURE nodes
+            if baseline is not None:
+                bl_feat = FunctionalityGraphConverter._find_matching_baseline_node(
+                    feature_node.name, baseline, level=NodeLevel.FEATURE,
+                )
+                FunctionalityGraphConverter._tag_delta_status(feature_node, bl_feat)
 
             hierarchy_edge = RPGEdge(
                 source_id=module_node.id,
@@ -488,3 +543,83 @@ class FunctionalityGraphConverter:
             data_type=dep.dependency_type,
             transformation=dep.rationale or None,
         )
+
+    # ------------------------------------------------------------------
+    # Baseline / delta helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _find_matching_baseline_node(
+        name: str,
+        baseline: RPGGraph,
+        level: NodeLevel | None = None,
+    ) -> RPGNode | None:
+        """Find a node in the baseline that matches by name.
+
+        Uses exact match first, then normalized (case-insensitive,
+        underscore-normalized) match. When ``level`` is provided,
+        only nodes at that level are considered.
+
+        Args:
+            name: The name to search for.
+            baseline: The baseline RPGGraph to search.
+            level: Optional level filter.
+
+        Returns:
+            The matching RPGNode, or None if no match found.
+        """
+        # Exact name match
+        for node in baseline.nodes.values():
+            if level is not None and node.level != level:
+                continue
+            if node.name == name:
+                return node
+
+        # Normalized name match
+        normalized = name.lower().replace(" ", "_").replace("-", "_")
+        for node in baseline.nodes.values():
+            if level is not None and node.level != level:
+                continue
+            node_normalized = node.name.lower().replace(" ", "_").replace("-", "_")
+            if node_normalized == normalized:
+                return node
+
+        return None
+
+    @staticmethod
+    def _tag_delta_status(
+        node: RPGNode,
+        baseline_node: RPGNode | None,
+    ) -> None:
+        """Tag a node with delta_status metadata.
+
+        If a matching baseline node is found, the node is tagged as
+        EXISTING and enriched with baseline data. Otherwise it is tagged
+        as NEW.
+
+        Args:
+            node: The newly created node to tag.
+            baseline_node: The matching baseline node, or None.
+        """
+        if baseline_node is None:
+            node.metadata["delta_status"] = DeltaStatus.NEW.value
+            return
+
+        # Existing node – preserve baseline data
+        node.metadata["delta_status"] = DeltaStatus.EXISTING.value
+        node.metadata["baseline_node_id"] = str(baseline_node.id)
+
+        # Copy enrichment data from baseline
+        if baseline_node.folder_path and not node.folder_path:
+            node.folder_path = baseline_node.folder_path
+        if baseline_node.file_path and not node.file_path:
+            node.file_path = baseline_node.file_path
+        if baseline_node.signature and not node.signature:
+            node.signature = baseline_node.signature
+        if baseline_node.docstring and not node.docstring:
+            node.docstring = baseline_node.docstring
+        if baseline_node.interface_type and not node.interface_type:
+            node.interface_type = baseline_node.interface_type
+        if baseline_node.node_type != NodeType.FUNCTIONALITY:
+            # Preserve enriched node_type from baseline
+            node.node_type = baseline_node.node_type

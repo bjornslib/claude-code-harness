@@ -103,10 +103,27 @@ def init(
         None,
         help="Target directory to initialise. Defaults to current directory.",
     ),
+    project_path: Optional[Path] = typer.Option(
+        None,
+        "--project-path",
+        help="Path to codebase to analyse for baseline generation.",
+    ),
+    baseline_output: Optional[Path] = typer.Option(
+        None,
+        "--output",
+        help="Override baseline output path (default: .zerorepo/baseline.json).",
+    ),
+    exclude: Optional[str] = typer.Option(
+        None,
+        "--exclude",
+        help="Comma-separated exclude patterns for codebase walk (e.g. 'tests,docs').",
+    ),
 ) -> None:
     """Initialise a new ZeroRepo project.
 
     Creates the ``.zerorepo/`` directory structure with default configuration.
+    When ``--project-path`` is provided, also walks the codebase and generates
+    a baseline RPGGraph.
     """
     with error_handler(_console):
         project_dir = run_init(path)
@@ -119,6 +136,23 @@ def init(
             _console.print(
                 "[yellow]Warning: Not a git repository. "
                 "ZeroRepo works best inside a git repo.[/yellow]"
+            )
+
+        # Generate baseline if --project-path provided
+        if project_path is not None:
+            from zerorepo.cli.init_cmd import run_baseline_generation
+
+            exclude_patterns = (
+                [p.strip() for p in exclude.split(",") if p.strip()]
+                if exclude
+                else None
+            )
+            run_baseline_generation(
+                project_dir=project_dir,
+                project_path=project_path,
+                output_path=baseline_output,
+                exclude_patterns=exclude_patterns,
+                console=_console,
             )
 
 
@@ -143,6 +177,12 @@ def generate(
         "--model",
         "-m",
         help="LLM model to use for enrichment.",
+    ),
+    baseline: Optional[Path] = typer.Option(
+        None,
+        "--baseline",
+        "-b",
+        help="Path to baseline RPGGraph JSON for delta-aware enrichment.",
     ),
     skip_enrichment: bool = typer.Option(
         False,
@@ -189,6 +229,20 @@ def generate(
         from zerorepo.spec_parser.parser import SpecParser
 
         # ----------------------------------------------------------
+        # Load baseline if provided
+        # ----------------------------------------------------------
+        baseline_graph = None
+        if baseline is not None:
+            from zerorepo.serena.baseline import BaselineManager
+
+            mgr = BaselineManager()
+            baseline_graph = mgr.load(baseline)
+            _console.print(
+                f"[bold]Baseline:[/bold] Loaded {baseline_graph.node_count} nodes, "
+                f"{baseline_graph.edge_count} edges from {baseline}"
+            )
+
+        # ----------------------------------------------------------
         # Stage 1: Parse specification
         # ----------------------------------------------------------
         _console.print(f"[bold]Stage 1:[/bold] Parsing specification from {spec_file}...")
@@ -198,7 +252,7 @@ def generate(
 
         parser_config = ParserConfig(model=model)
         parser = SpecParser(config=parser_config)
-        spec = parser.parse(spec_text)
+        spec = parser.parse(spec_text, baseline=baseline_graph)
         _console.print(
             f"  [dim]Loaded spec: {spec.description[:80]}...[/dim]"
         )
@@ -224,7 +278,7 @@ def generate(
         # ----------------------------------------------------------
         _console.print("[bold]Stage 3:[/bold] Converting to RPGGraph...")
         converter = FunctionalityGraphConverter()
-        rpg_graph = converter.convert(func_graph, spec=spec)
+        rpg_graph = converter.convert(func_graph, spec=spec, baseline=baseline_graph)
         _console.print(
             f"  [dim]RPGGraph: {rpg_graph.node_count} nodes, "
             f"{rpg_graph.edge_count} edges[/dim]"
@@ -261,7 +315,7 @@ def generate(
                     f"  [yellow]InterfaceDesignEncoder skipped: {exc}[/yellow]"
                 )
 
-            rpg_graph = rpg_builder.run(rpg_graph, spec=spec)
+            rpg_graph = rpg_builder.run(rpg_graph, spec=spec, baseline=baseline_graph)
 
             _console.print(
                 f"  [dim]Enriched: {rpg_graph.node_count} nodes, "
@@ -320,6 +374,24 @@ def generate(
             )
             report_path.write_text(report_content, encoding="utf-8")
             _console.print(f"  [green]Saved report to {report_path}[/green]")
+
+            # Write delta report when baseline was provided
+            if baseline_graph is not None:
+                from zerorepo.serena.delta_report import DeltaReportGenerator
+
+                delta_gen = DeltaReportGenerator()
+                delta_summary = delta_gen.summarize(rpg_graph)
+                delta_report = delta_gen.generate(rpg_graph)
+                delta_path = output / "05-delta-report.md"
+                delta_path.write_text(delta_report, encoding="utf-8")
+                _console.print(
+                    f"  [green]Saved delta report to {delta_path}[/green]"
+                )
+                _console.print(
+                    f"  [dim]Delta: {delta_summary.existing} existing, "
+                    f"{delta_summary.modified} modified, "
+                    f"{delta_summary.new} new[/dim]"
+                )
 
         if not json_output and not output:
             _console.print(

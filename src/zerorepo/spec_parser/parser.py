@@ -33,6 +33,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from zerorepo.llm.gateway import LLMGateway
 from zerorepo.llm.models import GatewayConfig, ModelTier
 from zerorepo.llm.prompt_templates import PromptTemplate
+from zerorepo.models.enums import NodeLevel
+from zerorepo.models.graph import RPGGraph
 from zerorepo.spec_parser.models import (
     APIEndpointSpec,
     Component,
@@ -322,6 +324,7 @@ class SpecParser:
         self,
         description: str,
         context: str | None = None,
+        baseline: RPGGraph | None = None,
     ) -> RepositorySpec:
         """Parse a natural language description into a RepositorySpec.
 
@@ -334,6 +337,10 @@ class SpecParser:
         Args:
             description: Natural language repository description (10-50000 chars).
             context: Optional additional context to include in the prompt.
+            baseline: Optional baseline RPGGraph. When provided, the LLM
+                prompt is augmented with existing codebase structure so
+                the parser can indicate which components are new, existing,
+                or modified.
 
         Returns:
             A validated RepositorySpec instance.
@@ -356,11 +363,29 @@ class SpecParser:
                 f"{self.config.max_description_length} characters"
             )
 
+        # Build baseline context if available
+        baseline_context = ""
+        if baseline is not None:
+            baseline_context = self._build_baseline_context(baseline)
+            logger.debug(
+                "Built baseline context (%d chars) from %d nodes",
+                len(baseline_context),
+                baseline.node_count,
+            )
+
+        # Merge baseline context with user-supplied context
+        combined_context = context or ""
+        if baseline_context:
+            if combined_context:
+                combined_context = f"{combined_context}\n\n{baseline_context}"
+            else:
+                combined_context = baseline_context
+
         # Render prompt
         prompt = self.templates.render(
             self.config.template_name,
             description=description,
-            context=context or "",
+            context=combined_context,
         )
         logger.debug("Rendered spec parsing prompt (%d chars)", len(prompt))
 
@@ -384,6 +409,77 @@ class SpecParser:
         )
 
         return spec
+
+    @staticmethod
+    def _build_baseline_context(baseline: RPGGraph) -> str:
+        """Build a structured context block from a baseline RPGGraph.
+
+        Extracts MODULE, COMPONENT, and FEATURE nodes and formats them
+        into a human-readable context string for the LLM prompt.
+
+        Args:
+            baseline: An existing RPGGraph to use as baseline context.
+
+        Returns:
+            A formatted string describing the existing codebase structure.
+        """
+        lines = [
+            "## Existing Codebase Structure (Baseline)",
+            "",
+            "The following modules, components, and features ALREADY EXIST "
+            "in the codebase. When extracting components, for each one "
+            'indicate whether it is "existing" (unchanged), "modified" '
+            '(changed from baseline), or "new" (not in baseline).',
+            "",
+        ]
+
+        # Group nodes by level
+        modules: list[Any] = []
+        components: list[Any] = []
+        features: list[Any] = []
+
+        for node in baseline.nodes.values():
+            if node.level == NodeLevel.MODULE:
+                modules.append(node)
+            elif node.level == NodeLevel.COMPONENT:
+                components.append(node)
+            elif node.level == NodeLevel.FEATURE:
+                features.append(node)
+
+        # Build a parent_id → children mapping
+        children: dict[str, list[Any]] = {}
+        for node in list(components) + list(features):
+            pid = str(node.parent_id) if node.parent_id else "orphan"
+            children.setdefault(pid, []).append(node)
+
+        for mod in modules:
+            mod_id = str(mod.id)
+            folder = mod.folder_path or "(no folder)"
+            lines.append(f"### {mod.name} ({folder})")
+            if mod.docstring:
+                lines.append(f"  {mod.docstring[:200]}")
+
+            # List children (components / features under this module)
+            for child in children.get(mod_id, []):
+                level_tag = child.level.value
+                sig = child.signature or ""
+                sig_str = f": {sig}" if sig else ""
+                lines.append(f"  - [{level_tag}] {child.name}{sig_str}")
+
+                # If this child is a COMPONENT, show its features
+                child_id = str(child.id)
+                for feat in children.get(child_id, []):
+                    feat_sig = feat.signature or ""
+                    feat_str = f": {feat_sig}" if feat_sig else ""
+                    lines.append(f"    - [FEATURE] {feat.name}{feat_str}")
+
+            lines.append("")
+
+        if not modules:
+            lines.append("(No modules found in baseline)")
+            lines.append("")
+
+        return "\n".join(lines)
 
     def _call_llm(self, messages: list[dict[str, Any]]) -> str:
         """Call the LLM and return the raw response text.

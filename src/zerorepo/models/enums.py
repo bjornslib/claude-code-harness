@@ -37,6 +37,19 @@ class TestStatus(str, Enum):
     SKIPPED = "SKIPPED"
 
 
+class DeltaStatus(str, Enum):
+    """Delta status for nodes in a baseline-aware RPG.
+
+    Indicates whether a node is new (not in the baseline), existing
+    (unchanged from baseline), or modified (present in baseline but
+    changed in the new spec).
+    """
+
+    NEW = "new"
+    EXISTING = "existing"
+    MODIFIED = "modified"
+
+
 class EdgeType(str, Enum):
     """Type classification for RPG edges."""
 

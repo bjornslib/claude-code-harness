@@ -22,7 +22,7 @@ class RPGEncoder(ABC):
     Example::
 
         class TypeInferenceEncoder(RPGEncoder):
-            def encode(self, graph: RPGGraph, spec: Any | None = None) -> RPGGraph:
+            def encode(self, graph: RPGGraph, spec: Any | None = None, baseline: RPGGraph | None = None) -> RPGGraph:
                 for node in graph.nodes.values():
                     node.metadata["inferred_types"] = infer(node)
                 return graph
@@ -41,7 +41,12 @@ class RPGEncoder(ABC):
         return self.__class__.__name__
 
     @abstractmethod
-    def encode(self, graph: RPGGraph, spec: Any | None = None) -> RPGGraph:
+    def encode(
+        self,
+        graph: RPGGraph,
+        spec: Any | None = None,
+        baseline: RPGGraph | None = None,
+    ) -> RPGGraph:
         """Run this enrichment stage on *graph*.
 
         The encoder may mutate the graph in-place (since Pydantic models
@@ -52,6 +57,9 @@ class RPGEncoder(ABC):
             graph: The RPGGraph to enrich.
             spec: Optional parsed :class:`RepositorySpec` for context-aware
                 enrichment.  Encoders that don't need the spec may ignore it.
+            baseline: Optional baseline :class:`RPGGraph` from a previous
+                codebase analysis.  Encoders may use this for delta-aware
+                enrichment.  Defaults to ``None``.
 
         Returns:
             The enriched RPGGraph (same instance, mutated in-place).
