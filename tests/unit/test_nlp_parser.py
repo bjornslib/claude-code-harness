@@ -103,7 +103,7 @@ class TestParserConfig:
     def test_default_values(self) -> None:
         """ParserConfig should have sensible defaults."""
         config = ParserConfig()
-        assert config.model == "gpt-4o-mini"
+        assert config.model == "gpt-5.2"
         assert config.tier == ModelTier.CHEAP
         assert config.template_name == "spec_parsing"
         assert config.max_description_length == 50000
@@ -398,6 +398,7 @@ class TestCallLLM:
             messages=[{"role": "user", "content": "test"}],
             model="gpt-4o",
             tier=ModelTier.STRONG,
+            temperature=0,
             response_format={"type": "json_object"},
         )
 

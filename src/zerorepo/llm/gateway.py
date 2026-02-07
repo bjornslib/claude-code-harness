@@ -92,6 +92,7 @@ def _truncate_messages(
 # ---------------------------------------------------------------------------
 
 SUPPORTED_MODELS: set[str] = {
+    "gpt-5.2",
     "gpt-4o",
     "gpt-4o-mini",
     "claude-3-haiku-20240307",
@@ -124,7 +125,7 @@ class LLMGateway:
         gw = LLMGateway()
         response = gw.complete(
             messages=[{"role": "user", "content": "Hello!"}],
-            model="gpt-4o-mini",
+            model="gpt-5.2",
         )
 
     For structured output::
@@ -134,7 +135,7 @@ class LLMGateway:
 
         result = gw.complete_json(
             messages=[{"role": "user", "content": "What is 2+2?"}],
-            model="gpt-4o-mini",
+            model="gpt-5.2",
             response_schema=Answer,
         )
     """
@@ -182,7 +183,7 @@ class LLMGateway:
                 If unavailable, falls back to the cheapest available provider.
 
         Returns:
-            A model identifier string (e.g. ``"gpt-4o-mini"``).
+            A model identifier string (e.g. ``"gpt-5.2"``).
 
         Raises:
             ConfigurationError: If no model can be found for the given tier.
@@ -220,7 +221,7 @@ class LLMGateway:
 
         Args:
             messages: A list of chat messages (``{"role": …, "content": …}``).
-            model: The model identifier (e.g. ``"gpt-4o-mini"``).
+            model: The model identifier (e.g. ``"gpt-5.2"``).
             tier: Optional tier for logging purposes.
             **kwargs: Additional keyword arguments forwarded to ``litellm.completion()``.
 

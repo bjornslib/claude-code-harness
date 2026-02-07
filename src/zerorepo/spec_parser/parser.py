@@ -34,9 +34,13 @@ from zerorepo.llm.gateway import LLMGateway
 from zerorepo.llm.models import GatewayConfig, ModelTier
 from zerorepo.llm.prompt_templates import PromptTemplate
 from zerorepo.spec_parser.models import (
+    Component,
     Constraint,
     ConstraintPriority,
+    DataFlow,
     DeploymentTarget,
+    Epic,
+    FileRecommendation,
     QualityAttributes,
     RepositorySpec,
     ScopeType,
@@ -62,6 +66,49 @@ class ParsedConstraint(BaseModel):
     description: str = Field(default="", description="Constraint description")
     priority: str = Field(default="SHOULD_HAVE", description="Priority level")
     category: Optional[str] = Field(default=None, description="Optional category")
+
+
+class ParsedEpic(BaseModel):
+    """Intermediate representation of an epic from LLM output."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    title: str = Field(default="", description="Epic title")
+    description: str = Field(default="", description="Epic description")
+    priority: str = Field(default="SHOULD_HAVE", description="Priority level")
+    estimated_complexity: Optional[str] = Field(default=None, description="Complexity estimate")
+
+
+class ParsedComponent(BaseModel):
+    """Intermediate representation of a component from LLM output."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    name: str = Field(default="", description="Component name")
+    description: str = Field(default="", description="Component description")
+    component_type: Optional[str] = Field(default=None, description="Component type")
+    technologies: list[str] = Field(default_factory=list, description="Technologies used")
+
+
+class ParsedDataFlow(BaseModel):
+    """Intermediate representation of a data flow from LLM output."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    source: str = Field(default="", description="Source component")
+    target: str = Field(default="", description="Target component")
+    description: str = Field(default="", description="Flow description")
+    protocol: Optional[str] = Field(default=None, description="Communication protocol")
+
+
+class ParsedFileRecommendation(BaseModel):
+    """Intermediate representation of a file recommendation from LLM output."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    path: str = Field(default="", description="File/directory path")
+    purpose: str = Field(default="", description="Purpose of this file")
+    component: Optional[str] = Field(default=None, description="Associated component")
 
 
 class ParsedSpecResponse(BaseModel):
@@ -122,6 +169,22 @@ class ParsedSpecResponse(BaseModel):
         default_factory=list,
         description="Extracted constraints",
     )
+    epics: list[ParsedEpic] = Field(
+        default_factory=list,
+        description="High-level feature groupings",
+    )
+    components: list[ParsedComponent] = Field(
+        default_factory=list,
+        description="Architectural components",
+    )
+    data_flows: list[ParsedDataFlow] = Field(
+        default_factory=list,
+        description="Data flow relationships",
+    )
+    file_recommendations: list[ParsedFileRecommendation] = Field(
+        default_factory=list,
+        description="Recommended file structure",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -135,7 +198,7 @@ class ParserConfig(BaseModel):
     model_config = ConfigDict(frozen=False, validate_assignment=True)
 
     model: str = Field(
-        default="gpt-4o-mini",
+        default="gpt-5.2",
         description="Model identifier for LLM calls",
     )
     tier: ModelTier = Field(
@@ -273,13 +336,15 @@ class SpecParser:
     def _call_llm(self, messages: list[dict[str, Any]]) -> str:
         """Call the LLM and return the raw response text.
 
+        Uses temperature=0 for deterministic, reproducible spec extraction.
+
         Args:
             messages: Chat messages for the LLM.
 
         Returns:
             Raw response text from the LLM.
         """
-        kwargs: dict[str, Any] = {}
+        kwargs: dict[str, Any] = {"temperature": 0}
         if self.config.use_json_mode:
             kwargs["response_format"] = {"type": "json_object"}
 
@@ -340,7 +405,8 @@ class SpecParser:
         """Assemble a RepositorySpec from the parsed intermediate response.
 
         Handles normalization of enum values, filtering of invalid entries,
-        and construction of properly typed Pydantic models.
+        and construction of properly typed Pydantic models. Includes a
+        validation pass that logs warnings for missing critical fields.
 
         Args:
             description: The original user description.
@@ -373,14 +439,37 @@ class SpecParser:
         # Build Constraints
         constraints = _normalize_constraints(parsed.constraints)
 
+        # Build Epics
+        epics = _normalize_epics(parsed.epics)
+
+        # Build Components
+        components = _normalize_components(parsed.components)
+
+        # Build DataFlows
+        data_flows = _normalize_data_flows(parsed.data_flows)
+
+        # Build FileRecommendations
+        file_recommendations = _normalize_file_recommendations(
+            parsed.file_recommendations
+        )
+
         # Assemble RepositorySpec
-        return RepositorySpec(
+        spec = RepositorySpec(
             description=description,
             core_functionality=parsed.core_functionality,
             technical_requirements=technical_requirements,
             quality_attributes=quality_attributes,
             constraints=constraints,
+            epics=epics,
+            components=components,
+            data_flows=data_flows,
+            file_recommendations=file_recommendations,
         )
+
+        # Validation pass: warn about missing critical fields
+        _validation_pass(spec)
+
+        return spec
 
 
 # ---------------------------------------------------------------------------
@@ -521,3 +610,166 @@ def _normalize_constraints(
             )
         )
     return result
+
+
+def _normalize_epics(
+    raw_epics: list[ParsedEpic],
+) -> list[Epic]:
+    """Normalize parsed epics into proper Epic instances.
+
+    Filters out entries with empty titles.
+
+    Args:
+        raw_epics: List of ParsedEpic from LLM.
+
+    Returns:
+        List of validated Epic instances.
+    """
+    result: list[Epic] = []
+    for raw in raw_epics:
+        title = raw.title.strip()
+        if not title:
+            continue
+
+        priority = _normalize_constraint_priority(raw.priority)
+
+        result.append(
+            Epic(
+                title=title,
+                description=raw.description.strip(),
+                priority=priority,
+                estimated_complexity=raw.estimated_complexity,
+            )
+        )
+    return result
+
+
+def _normalize_components(
+    raw_components: list[ParsedComponent],
+) -> list[Component]:
+    """Normalize parsed components into proper Component instances.
+
+    Filters out entries with empty names.
+
+    Args:
+        raw_components: List of ParsedComponent from LLM.
+
+    Returns:
+        List of validated Component instances.
+    """
+    result: list[Component] = []
+    for raw in raw_components:
+        name = raw.name.strip()
+        if not name:
+            continue
+
+        result.append(
+            Component(
+                name=name,
+                description=raw.description.strip(),
+                component_type=raw.component_type,
+                technologies=[t.strip() for t in raw.technologies if t.strip()],
+            )
+        )
+    return result
+
+
+def _normalize_data_flows(
+    raw_flows: list[ParsedDataFlow],
+) -> list[DataFlow]:
+    """Normalize parsed data flows into proper DataFlow instances.
+
+    Filters out entries with empty source or target.
+
+    Args:
+        raw_flows: List of ParsedDataFlow from LLM.
+
+    Returns:
+        List of validated DataFlow instances.
+    """
+    result: list[DataFlow] = []
+    for raw in raw_flows:
+        source = raw.source.strip()
+        target = raw.target.strip()
+        if not source or not target:
+            continue
+
+        result.append(
+            DataFlow(
+                source=source,
+                target=target,
+                description=raw.description.strip(),
+                protocol=raw.protocol,
+            )
+        )
+    return result
+
+
+def _normalize_file_recommendations(
+    raw_recs: list[ParsedFileRecommendation],
+) -> list[FileRecommendation]:
+    """Normalize parsed file recommendations into proper FileRecommendation instances.
+
+    Filters out entries with empty paths.
+
+    Args:
+        raw_recs: List of ParsedFileRecommendation from LLM.
+
+    Returns:
+        List of validated FileRecommendation instances.
+    """
+    result: list[FileRecommendation] = []
+    for raw in raw_recs:
+        path = raw.path.strip()
+        if not path:
+            continue
+
+        result.append(
+            FileRecommendation(
+                path=path,
+                purpose=raw.purpose.strip(),
+                component=raw.component,
+            )
+        )
+    return result
+
+
+def _validation_pass(spec: RepositorySpec) -> None:
+    """Run a validation pass on the assembled RepositorySpec.
+
+    Logs warnings for missing critical fields that downstream
+    pipeline stages depend on. This does not raise exceptions;
+    it provides observability for parse quality.
+
+    Args:
+        spec: The assembled RepositorySpec to validate.
+    """
+    if not spec.core_functionality:
+        logger.warning(
+            "Validation: core_functionality is empty — downstream planning "
+            "may produce lower-quality results"
+        )
+
+    if not spec.technical_requirements.languages:
+        logger.warning(
+            "Validation: no programming languages extracted — "
+            "file recommendations may be generic"
+        )
+
+    if not spec.technical_requirements.frameworks:
+        logger.warning(
+            "Validation: no frameworks extracted — "
+            "component identification may be incomplete"
+        )
+
+    if not spec.epics:
+        logger.warning(
+            "Validation: no epics extracted — "
+            "consider providing a more detailed specification"
+        )
+
+    if not spec.components:
+        logger.warning(
+            "Validation: no components extracted — "
+            "architecture analysis may be incomplete"
+        )

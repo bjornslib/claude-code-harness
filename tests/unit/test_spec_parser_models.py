@@ -8,10 +8,14 @@ import pytest
 from pydantic import ValidationError
 
 from zerorepo.spec_parser.models import (
+    Component,
     Constraint,
     ConstraintPriority,
     ConflictSeverity,
+    DataFlow,
     DeploymentTarget,
+    Epic,
+    FileRecommendation,
     QualityAttributes,
     ReferenceMaterial,
     ReferenceMaterialType,
@@ -866,3 +870,264 @@ class TestEnumStringValues:
         """DeploymentTarget enum values are strings."""
         for target in DeploymentTarget:
             assert isinstance(target.value, str)
+
+
+# ---------------------------------------------------------------------------
+# Epic tests
+# ---------------------------------------------------------------------------
+
+
+class TestEpic:
+    """Test Epic model creation and validation."""
+
+    def test_create_minimal(self) -> None:
+        """Create Epic with only required fields."""
+        epic = Epic(title="User Authentication")
+        assert epic.title == "User Authentication"
+        assert epic.description == ""
+        assert epic.priority == ConstraintPriority.SHOULD_HAVE
+        assert epic.estimated_complexity is None
+        assert isinstance(epic.id, UUID)
+
+    def test_create_full(self) -> None:
+        """Create Epic with all fields populated."""
+        epic = Epic(
+            title="Real-time Messaging",
+            description="WebSocket-based chat system with rooms",
+            priority=ConstraintPriority.MUST_HAVE,
+            estimated_complexity="high",
+        )
+        assert epic.title == "Real-time Messaging"
+        assert epic.priority == ConstraintPriority.MUST_HAVE
+        assert epic.estimated_complexity == "high"
+
+    def test_empty_title_rejected(self) -> None:
+        """Empty title raises ValidationError."""
+        with pytest.raises(ValidationError):
+            Epic(title="")
+
+    def test_title_max_length(self) -> None:
+        """Title exceeding max length raises ValidationError."""
+        with pytest.raises(ValidationError):
+            Epic(title="x" * 501)
+
+    def test_serialization_roundtrip(self) -> None:
+        """Epic survives JSON roundtrip."""
+        epic = Epic(
+            title="Auth System",
+            description="JWT auth",
+            priority=ConstraintPriority.MUST_HAVE,
+        )
+        data = epic.model_dump(mode="json")
+        restored = Epic.model_validate(data)
+        assert restored.title == epic.title
+        assert restored.priority == epic.priority
+
+
+# ---------------------------------------------------------------------------
+# Component tests
+# ---------------------------------------------------------------------------
+
+
+class TestComponent:
+    """Test Component model creation and validation."""
+
+    def test_create_minimal(self) -> None:
+        """Create Component with only required fields."""
+        comp = Component(name="API Gateway")
+        assert comp.name == "API Gateway"
+        assert comp.description == ""
+        assert comp.component_type is None
+        assert comp.technologies == []
+        assert isinstance(comp.id, UUID)
+
+    def test_create_full(self) -> None:
+        """Create Component with all fields populated."""
+        comp = Component(
+            name="Auth Service",
+            description="Handles authentication and authorization",
+            component_type="service",
+            technologies=["FastAPI", "PyJWT"],
+        )
+        assert comp.name == "Auth Service"
+        assert comp.component_type == "service"
+        assert "FastAPI" in comp.technologies
+
+    def test_empty_name_rejected(self) -> None:
+        """Empty name raises ValidationError."""
+        with pytest.raises(ValidationError):
+            Component(name="")
+
+    def test_serialization_roundtrip(self) -> None:
+        """Component survives JSON roundtrip."""
+        comp = Component(
+            name="Database Layer",
+            technologies=["PostgreSQL", "SQLAlchemy"],
+        )
+        data = comp.model_dump(mode="json")
+        restored = Component.model_validate(data)
+        assert restored.name == comp.name
+        assert restored.technologies == comp.technologies
+
+
+# ---------------------------------------------------------------------------
+# DataFlow tests
+# ---------------------------------------------------------------------------
+
+
+class TestDataFlow:
+    """Test DataFlow model creation and validation."""
+
+    def test_create_minimal(self) -> None:
+        """Create DataFlow with only required fields."""
+        flow = DataFlow(source="API Gateway", target="Auth Service")
+        assert flow.source == "API Gateway"
+        assert flow.target == "Auth Service"
+        assert flow.description == ""
+        assert flow.protocol is None
+        assert isinstance(flow.id, UUID)
+
+    def test_create_full(self) -> None:
+        """Create DataFlow with all fields populated."""
+        flow = DataFlow(
+            source="Frontend",
+            target="API Gateway",
+            description="HTTP requests for data",
+            protocol="REST",
+        )
+        assert flow.source == "Frontend"
+        assert flow.protocol == "REST"
+
+    def test_empty_source_rejected(self) -> None:
+        """Empty source raises ValidationError."""
+        with pytest.raises(ValidationError):
+            DataFlow(source="", target="DB")
+
+    def test_empty_target_rejected(self) -> None:
+        """Empty target raises ValidationError."""
+        with pytest.raises(ValidationError):
+            DataFlow(source="API", target="")
+
+    def test_serialization_roundtrip(self) -> None:
+        """DataFlow survives JSON roundtrip."""
+        flow = DataFlow(
+            source="API",
+            target="DB",
+            protocol="direct",
+        )
+        data = flow.model_dump(mode="json")
+        restored = DataFlow.model_validate(data)
+        assert restored.source == flow.source
+        assert restored.target == flow.target
+
+
+# ---------------------------------------------------------------------------
+# FileRecommendation tests
+# ---------------------------------------------------------------------------
+
+
+class TestFileRecommendation:
+    """Test FileRecommendation model creation and validation."""
+
+    def test_create_minimal(self) -> None:
+        """Create FileRecommendation with only required fields."""
+        rec = FileRecommendation(path="src/main.py")
+        assert rec.path == "src/main.py"
+        assert rec.purpose == ""
+        assert rec.component is None
+        assert isinstance(rec.id, UUID)
+
+    def test_create_full(self) -> None:
+        """Create FileRecommendation with all fields populated."""
+        rec = FileRecommendation(
+            path="src/api/routes.py",
+            purpose="API route definitions and endpoint handlers",
+            component="API Gateway",
+        )
+        assert rec.path == "src/api/routes.py"
+        assert rec.component == "API Gateway"
+
+    def test_empty_path_rejected(self) -> None:
+        """Empty path raises ValidationError."""
+        with pytest.raises(ValidationError):
+            FileRecommendation(path="")
+
+    def test_serialization_roundtrip(self) -> None:
+        """FileRecommendation survives JSON roundtrip."""
+        rec = FileRecommendation(
+            path="src/models/user.py",
+            purpose="User data model",
+        )
+        data = rec.model_dump(mode="json")
+        restored = FileRecommendation.model_validate(data)
+        assert restored.path == rec.path
+        assert restored.purpose == rec.purpose
+
+
+# ---------------------------------------------------------------------------
+# RepositorySpec deep extraction field tests
+# ---------------------------------------------------------------------------
+
+
+class TestRepositorySpecDeepFields:
+    """Test RepositorySpec with new deep extraction fields."""
+
+    def test_default_deep_fields_empty(self) -> None:
+        """New deep extraction fields default to empty lists."""
+        spec = RepositorySpec(
+            description="Build a web application with React frontend",
+        )
+        assert spec.epics == []
+        assert spec.components == []
+        assert spec.data_flows == []
+        assert spec.file_recommendations == []
+
+    def test_create_with_deep_fields(self) -> None:
+        """Create RepositorySpec with all deep extraction fields."""
+        spec = RepositorySpec(
+            description="Build a real-time chat application with authentication",
+            epics=[
+                Epic(title="Authentication System"),
+                Epic(title="Messaging Engine"),
+            ],
+            components=[
+                Component(name="API Gateway", technologies=["FastAPI"]),
+                Component(name="Message Queue", technologies=["Redis"]),
+            ],
+            data_flows=[
+                DataFlow(source="API Gateway", target="Message Queue", protocol="direct"),
+            ],
+            file_recommendations=[
+                FileRecommendation(path="src/api/routes.py", purpose="API routes"),
+            ],
+        )
+        assert len(spec.epics) == 2
+        assert len(spec.components) == 2
+        assert len(spec.data_flows) == 1
+        assert len(spec.file_recommendations) == 1
+
+    def test_deep_fields_serialization_roundtrip(self) -> None:
+        """RepositorySpec with deep fields survives JSON roundtrip."""
+        spec = RepositorySpec(
+            description="Build a backend API service with database layer",
+            epics=[Epic(title="Core API")],
+            components=[Component(name="DB Layer")],
+            data_flows=[DataFlow(source="API", target="DB")],
+            file_recommendations=[FileRecommendation(path="src/main.py")],
+        )
+        json_str = spec.to_json()
+        restored = RepositorySpec.from_json(json_str)
+        assert len(restored.epics) == 1
+        assert restored.epics[0].title == "Core API"
+        assert len(restored.components) == 1
+        assert restored.components[0].name == "DB Layer"
+        assert len(restored.data_flows) == 1
+        assert len(restored.file_recommendations) == 1
+
+    def test_json_schema_includes_deep_fields(self) -> None:
+        """RepositorySpec JSON schema includes the new deep extraction fields."""
+        schema = RepositorySpec.model_json_schema()
+        assert "epics" in schema["properties"]
+        assert "components" in schema["properties"]
+        assert "data_flows" in schema["properties"]
+        assert "file_recommendations" in schema["properties"]

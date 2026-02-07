@@ -1,4 +1,4 @@
-You are a software specification analyst. Parse the following natural language repository description and extract structured information.
+You are a software specification analyst and architect. Parse the following natural language repository description and extract structured information with deep architectural analysis.
 
 ## Repository Description
 
@@ -12,7 +12,9 @@ You are a software specification analyst. Parse the following natural language r
 
 ## Instructions
 
-Analyze the description and extract the following fields as a JSON object:
+Analyze the description thoroughly and extract the following fields as a JSON object. Think carefully about the architecture and decompose the specification into epics, components, data flows, and file structure.
+
+### Core Fields
 
 1. **core_functionality**: A concise summary of what the repository does (1-3 sentences).
 2. **languages**: A list of programming languages mentioned or implied (e.g., ["Python", "TypeScript"]).
@@ -20,16 +22,55 @@ Analyze the description and extract the following fields as a JSON object:
 4. **platforms**: A list of target platforms (e.g., ["Web", "Linux", "Mobile"]).
 5. **deployment_targets**: A list from these options: CLOUD, ON_PREMISES, EDGE, SERVERLESS, HYBRID, OTHER.
 6. **scope**: One of: BACKEND_ONLY, FRONTEND_ONLY, FULL_STACK, LIBRARY, CLI_TOOL, OTHER.
+
+### Quality Attributes
+
 7. **performance**: Performance requirements if mentioned (string or null).
 8. **security**: Security requirements if mentioned (string or null).
 9. **scalability**: Scalability requirements if mentioned (string or null).
 10. **reliability**: Reliability requirements if mentioned (string or null).
 11. **maintainability**: Maintainability requirements if mentioned (string or null).
+
+### Constraints
+
 12. **constraints**: A list of objects with:
     - "description": What the constraint says
     - "priority": One of MUST_HAVE, SHOULD_HAVE, NICE_TO_HAVE
     - "category": Optional grouping (e.g., "security", "performance", "architecture")
 
-Be thorough but conservative: only extract information that is explicitly stated or strongly implied by the description. Do not invent requirements that aren't present. If a field has no relevant information, use null for strings or empty lists for arrays.
+### Deep Extraction Fields
+
+13. **epics**: A list of high-level feature groupings, each with:
+    - "title": Short descriptive title (e.g., "User Authentication System")
+    - "description": Detailed scope and goals
+    - "priority": One of MUST_HAVE, SHOULD_HAVE, NICE_TO_HAVE
+    - "estimated_complexity": One of "low", "medium", "high"
+
+14. **components**: A list of architectural components/modules, each with:
+    - "name": Component name (e.g., "API Gateway", "Auth Service", "Database Layer")
+    - "description": Responsibilities and purpose
+    - "component_type": One of "service", "library", "database", "ui", "middleware", "worker", "other"
+    - "technologies": List of technologies used (e.g., ["FastAPI", "PostgreSQL"])
+
+15. **data_flows**: A list of data flow relationships between components, each with:
+    - "source": Source component name
+    - "target": Target component name
+    - "description": What data flows and how
+    - "protocol": Communication protocol (e.g., "REST", "gRPC", "WebSocket", "message_queue", "direct")
+
+16. **file_recommendations**: A list of recommended files/directories, each with:
+    - "path": Suggested file or directory path (e.g., "src/api/routes.py", "src/models/")
+    - "purpose": What this file/directory should contain
+    - "component": Associated component name (from the components list above)
+
+## Guidelines
+
+- Be thorough but conservative: only extract information that is explicitly stated or strongly implied by the description.
+- Do not invent requirements that aren't present.
+- If a field has no relevant information, use null for strings or empty lists for arrays.
+- For epics, identify 2-5 major feature groupings when possible.
+- For components, identify the key architectural building blocks.
+- For data flows, focus on the most important inter-component communication paths.
+- For file recommendations, suggest a practical project structure that follows conventions for the identified languages/frameworks.
 
 Respond ONLY with valid JSON. Do not include markdown formatting, code blocks, or explanatory text.

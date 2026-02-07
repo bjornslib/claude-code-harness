@@ -64,6 +64,9 @@ from zerorepo.graph_construction.partitioner import (
     PartitionerConfig,
     PartitionResult,
 )
+from zerorepo.graph_construction.converter import (
+    FunctionalityGraphConverter,
+)
 from zerorepo.graph_construction.export import (
     ExportConfig,
     ExportFormat,
@@ -90,6 +93,7 @@ __all__ = [
     "DependencyResult",
     "FunctionalityGraph",
     "FunctionalityGraphBuilder",
+    "FunctionalityGraphConverter",
     "MetricsConfig",
     "ModularityResult",
     "ModulePartitioner",

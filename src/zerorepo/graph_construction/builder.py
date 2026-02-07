@@ -497,6 +497,133 @@ class FunctionalityGraphBuilder:
             },
         )
 
+    def build_from_spec(
+        self,
+        spec: Any,
+    ) -> FunctionalityGraph:
+        """Build a functionality graph from a RepositorySpec.
+
+        Creates ModuleSpec objects from the spec's epics (if available),
+        with components becoming features within modules.  Spec data_flows
+        are mapped to DependencyEdge objects.
+
+        This method is designed to work with the extended RepositorySpec
+        that includes ``epics``, ``components``, ``data_flows``, and
+        ``file_recommendations`` fields.  It degrades gracefully when
+        those fields are absent (e.g. with the base RepositorySpec).
+
+        Args:
+            spec: A RepositorySpec instance (possibly with extended fields
+                added by the spec-to-graph bridge).
+
+        Returns:
+            A FunctionalityGraph built from the specification.
+
+        Raises:
+            ValueError: If no modules can be derived from the spec.
+        """
+        # Extract epics – each becomes a module
+        epics = getattr(spec, "epics", None) or []
+        components = getattr(spec, "components", None) or []
+        data_flows = getattr(spec, "data_flows", None) or []
+
+        modules: list[ModuleSpec] = []
+
+        if epics:
+            for epic in epics:
+                # Each epic becomes a module.  Components within the
+                # epic become its feature_ids.
+                epic_name = getattr(epic, "name", None) or getattr(epic, "title", str(epic))
+                epic_desc = getattr(epic, "description", "") or ""
+                epic_id = getattr(epic, "id", epic_name)
+
+                # Gather feature IDs: look for sub-components or use the
+                # epic's own ID as a single feature.
+                epic_components = getattr(epic, "components", None) or []
+                feature_ids: list[str] = []
+                for comp in epic_components:
+                    comp_id = getattr(comp, "id", None) or getattr(comp, "name", str(comp))
+                    feature_ids.append(str(comp_id))
+
+                if not feature_ids:
+                    # Use the epic's ID itself as a feature placeholder
+                    feature_ids = [str(epic_id)]
+
+                modules.append(
+                    ModuleSpec(
+                        name=str(epic_name),
+                        description=str(epic_desc),
+                        feature_ids=feature_ids,
+                        public_interface=feature_ids[:1],
+                        rationale=f"Derived from spec epic: {epic_name}",
+                    )
+                )
+        elif components:
+            # Fallback: group all components into a single module
+            feature_ids = []
+            for comp in components:
+                comp_id = getattr(comp, "id", None) or getattr(comp, "name", str(comp))
+                feature_ids.append(str(comp_id))
+
+            if feature_ids:
+                core_func = getattr(spec, "core_functionality", None) or "Main"
+                modules.append(
+                    ModuleSpec(
+                        name=str(core_func)[:200],
+                        description=getattr(spec, "description", "")[:500] or "",
+                        feature_ids=feature_ids,
+                        public_interface=feature_ids[:1],
+                        rationale="Derived from spec components",
+                    )
+                )
+
+        if not modules:
+            raise ValueError(
+                "Cannot build graph from spec: no epics or components found. "
+                "Ensure the RepositorySpec has been extended with epic/component fields."
+            )
+
+        logger.info(
+            "Built %d module(s) from spec with %d total features",
+            len(modules),
+            sum(m.feature_count for m in modules),
+        )
+
+        # Build dependencies from data_flows
+        dep_edges: list[DependencyEdge] = []
+        module_names = {m.name for m in modules}
+
+        for flow in data_flows:
+            source_name = getattr(flow, "source", None) or ""
+            target_name = getattr(flow, "target", None) or ""
+            flow_type = getattr(flow, "type", "data_flow") or "data_flow"
+            flow_desc = getattr(flow, "description", "") or ""
+
+            if str(source_name) in module_names and str(target_name) in module_names:
+                if str(source_name) != str(target_name):
+                    dep_edges.append(
+                        DependencyEdge(
+                            source=str(source_name),
+                            target=str(target_name),
+                            dependency_type=str(flow_type),
+                            weight=0.8,
+                            confidence=0.9,
+                            rationale=str(flow_desc),
+                        )
+                    )
+
+        return FunctionalityGraph(
+            modules=modules,
+            dependencies=dep_edges,
+            is_acyclic=True,
+            metadata={
+                "source": "repository_spec",
+                "spec_id": str(getattr(spec, "id", "unknown")),
+                "total_modules": len(modules),
+                "total_dependencies": len(dep_edges),
+            },
+        )
+
     def build_from_modules(
         self,
         modules: list[ModuleSpec],

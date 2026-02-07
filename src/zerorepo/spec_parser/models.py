@@ -353,6 +353,161 @@ class RefinementEntry(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Deep extraction models (Epic, Component, DataFlow, FileRecommendation)
+# ---------------------------------------------------------------------------
+
+
+class Epic(BaseModel):
+    """A high-level feature grouping extracted from the specification.
+
+    Epics represent major deliverable units that can be decomposed into
+    smaller tasks during the planning phase.
+    """
+
+    model_config = ConfigDict(
+        frozen=False,
+        validate_assignment=True,
+        str_strip_whitespace=True,
+    )
+
+    id: UUID = Field(
+        default_factory=uuid4,
+        description="Unique epic identifier",
+    )
+    title: str = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="Short descriptive title for the epic",
+    )
+    description: str = Field(
+        default="",
+        max_length=5000,
+        description="Detailed description of the epic's scope and goals",
+    )
+    priority: ConstraintPriority = Field(
+        default=ConstraintPriority.SHOULD_HAVE,
+        description="Priority level for this epic",
+    )
+    estimated_complexity: Optional[str] = Field(
+        default=None,
+        description="Estimated complexity (e.g., 'low', 'medium', 'high')",
+    )
+
+
+class Component(BaseModel):
+    """An architectural component identified in the specification.
+
+    Components represent distinct modules, services, or subsystems
+    that the repository will contain.
+    """
+
+    model_config = ConfigDict(
+        frozen=False,
+        validate_assignment=True,
+        str_strip_whitespace=True,
+    )
+
+    id: UUID = Field(
+        default_factory=uuid4,
+        description="Unique component identifier",
+    )
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=200,
+        description="Component name (e.g., 'API Gateway', 'Auth Service')",
+    )
+    description: str = Field(
+        default="",
+        max_length=5000,
+        description="What this component does and its responsibilities",
+    )
+    component_type: Optional[str] = Field(
+        default=None,
+        description="Type classification (e.g., 'service', 'library', 'database', 'ui')",
+    )
+    technologies: list[str] = Field(
+        default_factory=list,
+        description="Technologies used in this component (e.g., ['FastAPI', 'PostgreSQL'])",
+    )
+
+
+class DataFlow(BaseModel):
+    """A data flow relationship between components.
+
+    Represents how data moves through the system, capturing
+    source/target components and the nature of the data exchange.
+    """
+
+    model_config = ConfigDict(
+        frozen=False,
+        validate_assignment=True,
+        str_strip_whitespace=True,
+    )
+
+    id: UUID = Field(
+        default_factory=uuid4,
+        description="Unique data flow identifier",
+    )
+    source: str = Field(
+        ...,
+        min_length=1,
+        max_length=200,
+        description="Source component or entity name",
+    )
+    target: str = Field(
+        ...,
+        min_length=1,
+        max_length=200,
+        description="Target component or entity name",
+    )
+    description: str = Field(
+        default="",
+        max_length=2000,
+        description="Description of what data flows and how",
+    )
+    protocol: Optional[str] = Field(
+        default=None,
+        description="Communication protocol (e.g., 'REST', 'gRPC', 'WebSocket', 'message queue')",
+    )
+
+
+class FileRecommendation(BaseModel):
+    """A recommended file or directory for the repository structure.
+
+    Captures the parser's suggestion for how the codebase should be
+    organized based on the specification analysis.
+    """
+
+    model_config = ConfigDict(
+        frozen=False,
+        validate_assignment=True,
+        str_strip_whitespace=True,
+    )
+
+    id: UUID = Field(
+        default_factory=uuid4,
+        description="Unique recommendation identifier",
+    )
+    path: str = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="Suggested file or directory path (e.g., 'src/api/routes.py')",
+    )
+    purpose: str = Field(
+        default="",
+        max_length=2000,
+        description="What this file/directory should contain and why",
+    )
+    component: Optional[str] = Field(
+        default=None,
+        description="Associated component name, if applicable",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Top-level specification model
 # ---------------------------------------------------------------------------
 
@@ -368,6 +523,10 @@ class RepositorySpec(BaseModel):
     - Technical requirements (languages, frameworks, platforms)
     - Quality attributes (performance, security, scalability)
     - Constraints with priority classification (must-have vs nice-to-have)
+    - Epics (high-level feature groupings)
+    - Components (architectural modules and services)
+    - Data flows (inter-component data relationships)
+    - File recommendations (suggested repository structure)
     - Reference materials (API docs, code samples, papers)
     - Conflict detection results
     - Refinement history for iterative updates
@@ -421,6 +580,22 @@ class RepositorySpec(BaseModel):
     constraints: list[Constraint] = Field(
         default_factory=list,
         description="Explicit constraints with priority classification",
+    )
+    epics: list[Epic] = Field(
+        default_factory=list,
+        description="High-level feature groupings extracted from the specification",
+    )
+    components: list[Component] = Field(
+        default_factory=list,
+        description="Architectural components identified in the specification",
+    )
+    data_flows: list[DataFlow] = Field(
+        default_factory=list,
+        description="Data flow relationships between components",
+    )
+    file_recommendations: list[FileRecommendation] = Field(
+        default_factory=list,
+        description="Recommended file/directory structure for the repository",
     )
     references: list[ReferenceMaterial] = Field(
         default_factory=list,
