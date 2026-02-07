@@ -125,7 +125,7 @@ class EvaluationPipeline:
         )
 
         return RepositoryResult(
-            project_name=tasks[0].project if tasks else "",
+            project_name=tasks[0].project if tasks else "unknown",
             total_tasks=len(tasks),
             localized=sum(r.localized for r in results),
             validated=sum(r.validated for r in results),
