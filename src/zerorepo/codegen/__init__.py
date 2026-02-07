@@ -16,6 +16,16 @@ This package implements Phase 4 of the RPG system, providing:
 - :class:`RepositoryStateManager` -- File state tracking and validation
 - :class:`ProgressLogger` -- Progress logging with ETA
 - :class:`GracefulShutdownHandler` -- Signal-based graceful shutdown
+- :class:`TDDLoop` -- Test-driven development generation loop
+- :class:`LLMImplementationGenerator` -- LLM-backed code generation
+- :class:`DockerSandboxExecutor` -- Docker sandbox test executor
+- :class:`MajorityVoteDiagnoser` -- Majority-vote failure diagnosis
+- :class:`CodegenOrchestrator` -- Main code generation orchestrator
+- :class:`UnitValidator` -- Staged unit test validation
+- :class:`RegressionDetector` -- Cross-iteration regression detection
+- :class:`IntegrationGenerator` -- Cross-node integration test generation
+- :class:`MajorityVoter` -- Majority voting for test result consensus
+- :class:`TestArtifactStore` -- Test artifact lifecycle management
 """
 
 from zerorepo.codegen.checkpoint import CheckpointManager
@@ -103,6 +113,78 @@ from zerorepo.codegen.state import (
 )
 from zerorepo.codegen.traversal import TraversalEngine, TraversalReport
 
+# Epic 4.2: TDD Generation Loop
+from zerorepo.codegen.codegen_orchestrator import (
+    CodegenOrchestrator,
+    OrchestratorConfig,
+    OrchestratorResult,
+)
+from zerorepo.codegen.debugging_loop import (
+    MajorityVoteDiagnoser,
+)
+from zerorepo.codegen.impl_generator import (
+    GeneratedCode,
+    LLMImplementationGenerator,
+)
+from zerorepo.codegen.sandbox_executor import (
+    DockerSandboxExecutor,
+    InProcessSandboxExecutor,
+    SandboxExecutorConfig,
+)
+from zerorepo.codegen.tdd_loop import (
+    DiagnosisResult,
+    SandboxResult,
+    TDDIterationResult,
+    TDDLoop,
+    TDDLoopResult,
+)
+
+# Epic 4.5: Staged Test Validation
+from zerorepo.codegen.integration_generator import (
+    DependencyEdge,
+    IntegrationGenerator,
+    IntegrationGeneratorConfig,
+    IntegrationTestCase,
+    IntegrationTestSuite,
+    IntegrationTestType,
+    NodeInterface,
+)
+from zerorepo.codegen.majority_vote import (
+    MajorityVoteConfig,
+    MajorityVoter,
+    NodeVoteResult,
+    TestRunVote,
+    TestVerdictDetail,
+    VoteConfidence,
+    VoteOutcome,
+)
+from zerorepo.codegen.regression_detector import (
+    Regression,
+    RegressionDetector,
+    RegressionDetectorConfig,
+    RegressionReport,
+    RegressionSeverity,
+    RegressionType,
+    TestSnapshot,
+)
+from zerorepo.codegen.test_artifacts import (
+    ArtifactQuery,
+    ArtifactStatus,
+    ArtifactStoreConfig,
+    ArtifactSummary,
+    ArtifactType,
+    TestArtifact,
+    TestArtifactStore,
+)
+from zerorepo.codegen.unit_validator import (
+    SingleTestResult,
+    TestOutcome,
+    UnitValidator,
+    UnitValidatorConfig,
+    ValidationResult,
+    ValidationStage,
+)
+
 __all__ = [
     # Epic 4.1: Traversal
     "CheckpointManager",
@@ -161,6 +243,60 @@ __all__ = [
     "render_setup_py",
     "resolve_imports_for_file",
     "validate_file_structure",
+    # Epic 4.2: TDD Generation Loop
+    "CodegenOrchestrator",
+    "DiagnosisResult",
+    "DockerSandboxExecutor",
+    "GeneratedCode",
+    "InProcessSandboxExecutor",
+    "LLMImplementationGenerator",
+    "MajorityVoteDiagnoser",
+    "OrchestratorConfig",
+    "OrchestratorResult",
+    "SandboxExecutorConfig",
+    "SandboxResult",
+    "TDDIterationResult",
+    "TDDLoop",
+    "TDDLoopResult",
+    # Epic 4.5: Staged Test Validation - Unit Validator
+    "SingleTestResult",
+    "TestOutcome",
+    "UnitValidator",
+    "UnitValidatorConfig",
+    "ValidationResult",
+    "ValidationStage",
+    # Epic 4.5: Staged Test Validation - Regression Detector
+    "Regression",
+    "RegressionDetector",
+    "RegressionDetectorConfig",
+    "RegressionReport",
+    "RegressionSeverity",
+    "RegressionType",
+    "TestSnapshot",
+    # Epic 4.5: Staged Test Validation - Integration Generator
+    "DependencyEdge",
+    "IntegrationGenerator",
+    "IntegrationGeneratorConfig",
+    "IntegrationTestCase",
+    "IntegrationTestSuite",
+    "IntegrationTestType",
+    "NodeInterface",
+    # Epic 4.5: Staged Test Validation - Majority Vote
+    "MajorityVoteConfig",
+    "MajorityVoter",
+    "NodeVoteResult",
+    "TestRunVote",
+    "TestVerdictDetail",
+    "VoteConfidence",
+    "VoteOutcome",
+    # Epic 4.5: Staged Test Validation - Test Artifacts
+    "ArtifactQuery",
+    "ArtifactStatus",
+    "ArtifactStoreConfig",
+    "ArtifactSummary",
+    "ArtifactType",
+    "TestArtifact",
+    "TestArtifactStore",
     # Epic 4.7: Workspace Management
     "BatchedFileWriter",
     "GracefulShutdownHandler",
