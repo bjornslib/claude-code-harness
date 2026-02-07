@@ -42,6 +42,7 @@ from zerorepo.spec_parser.models import (
     ConstraintPriority,
     DataFlow,
     DataModelSpec,
+    DeltaClassification,
     DeploymentTarget,
     Epic,
     FileRecommendation,
@@ -95,6 +96,9 @@ class ParsedComponent(BaseModel):
     component_type: Optional[str] = Field(default=None, description="Component type")
     technologies: list[str] = Field(default_factory=list, description="Technologies used")
     suggested_module: Optional[str] = Field(default=None, description="Suggested Python package name")
+    delta_status: Optional[str] = Field(default=None, description="Delta classification: existing, modified, or new")
+    baseline_match_name: Optional[str] = Field(default=None, description="Exact baseline component name match")
+    change_summary: Optional[str] = Field(default=None, description="Summary of changes for modified/new components")
 
 
 class ParsedDataFlow(BaseModel):
@@ -386,6 +390,7 @@ class SpecParser:
             self.config.template_name,
             description=description,
             context=combined_context,
+            has_baseline=(baseline is not None),
         )
         logger.debug("Rendered spec parsing prompt (%d chars)", len(prompt))
 
@@ -824,6 +829,19 @@ def _normalize_components(
         if not name:
             continue
 
+        # Normalize delta_status to DeltaClassification enum if present
+        delta_status = None
+        if raw.delta_status is not None:
+            raw_delta = raw.delta_status.strip().lower()
+            try:
+                delta_status = DeltaClassification(raw_delta)
+            except ValueError:
+                logger.warning(
+                    "Unknown delta_status '%s' for component '%s', ignoring",
+                    raw.delta_status,
+                    name,
+                )
+
         result.append(
             Component(
                 name=name,
@@ -831,6 +849,17 @@ def _normalize_components(
                 component_type=raw.component_type,
                 technologies=[t.strip() for t in raw.technologies if t.strip()],
                 suggested_module=raw.suggested_module.strip() if raw.suggested_module else None,
+                delta_status=delta_status,
+                baseline_match_name=(
+                    raw.baseline_match_name.strip()
+                    if raw.baseline_match_name
+                    else None
+                ),
+                change_summary=(
+                    raw.change_summary.strip()
+                    if raw.change_summary
+                    else None
+                ),
             )
         )
     return result

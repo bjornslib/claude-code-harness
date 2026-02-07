@@ -83,6 +83,18 @@ class DeploymentTarget(str, Enum):
     OTHER = "OTHER"
 
 
+class DeltaClassification(str, Enum):
+    """Delta classification for components relative to a baseline.
+
+    Used by the LLM-based spec parser to classify each extracted component
+    as existing, modified, or new relative to an existing codebase baseline.
+    """
+
+    EXISTING = "existing"
+    MODIFIED = "modified"
+    NEW = "new"
+
+
 # ---------------------------------------------------------------------------
 # Component models
 # ---------------------------------------------------------------------------
@@ -438,6 +450,30 @@ class Component(BaseModel):
     suggested_module: Optional[str] = Field(
         default=None,
         description="Suggested module/package name for this component (e.g., 'auth_service')",
+    )
+    delta_status: Optional[DeltaClassification] = Field(
+        default=None,
+        description=(
+            "Delta classification relative to baseline: 'existing' (unchanged), "
+            "'modified' (changed from baseline), or 'new' (not in baseline). "
+            "Only set when a baseline is provided."
+        ),
+    )
+    baseline_match_name: Optional[str] = Field(
+        default=None,
+        description=(
+            "Exact name of the matching baseline module/component. "
+            "Copied character-for-character from the baseline structure. "
+            "Set to null for 'new' components."
+        ),
+    )
+    change_summary: Optional[str] = Field(
+        default=None,
+        description=(
+            "For 'modified' components, describes what changed. "
+            "For 'new' components, briefly describes the new functionality. "
+            "Set to null for 'existing' components."
+        ),
     )
 
 

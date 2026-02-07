@@ -53,6 +53,9 @@ Analyze the description thoroughly and extract the following fields as a JSON ob
     - "component_type": One of "service", "library", "database", "ui", "middleware", "worker", "other"
     - "technologies": List of technologies used (e.g., ["FastAPI", "PostgreSQL"])
     - "suggested_module": A Python package name for this component (e.g., "api_gateway", "auth_service")
+    - "delta_status": (only when baseline provided) One of "existing", "modified", "new"
+    - "baseline_match_name": (only when baseline provided) Exact name from baseline, or null
+    - "change_summary": (only when baseline provided) Description of changes, or null
 
 15. **data_flows**: A list of data flow relationships between components, each with:
     - "source": Source component name
@@ -94,5 +97,27 @@ Analyze the description thoroughly and extract the following fields as a JSON ob
 - For components, identify the key architectural building blocks.
 - For data flows, focus on the most important inter-component communication paths.
 - For file recommendations, suggest a practical project structure that follows conventions for the identified languages/frameworks.
+
+{% if has_baseline is defined and has_baseline %}
+## Baseline-Aware Delta Classification
+
+The existing codebase structure is provided in the Additional Context section above. For EACH component you extract, you MUST also classify it against the baseline:
+
+- **delta_status**: One of "existing", "modified", or "new"
+  - "existing": Maps directly to an existing baseline module/component with no changes needed
+  - "modified": Maps to an existing baseline module/component but with changes described in the PRD
+  - "new": No existing baseline component matches this functionality
+
+- **baseline_match_name**: The EXACT name of the matching baseline module/component (copy it character-for-character from the baseline structure above). Set to null for "new" components.
+
+- **change_summary**: For "modified" components, briefly describe what changes. For "existing", set to null. For "new", briefly describe the new functionality.
+
+### Classification Rules
+1. Copy baseline node names EXACTLY from the structure above - do not paraphrase or abbreviate
+2. Prefer mapping to existing components over creating new ones
+3. For existing/modified components, use the baseline name as the component name
+4. Only classify as "new" when there is genuinely no existing component that covers this functionality
+5. Each component object must include delta_status, baseline_match_name, and change_summary fields
+{% endif %}
 
 Respond ONLY with valid JSON. Do not include markdown formatting, code blocks, or explanatory text.

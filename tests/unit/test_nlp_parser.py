@@ -857,6 +857,7 @@ class TestFullParsePipeline:
             "spec_parsing",
             description=_default_description(),
             context="Extra context here",
+            has_baseline=False,
         )
 
     def test_context_defaults_to_empty_string(self) -> None:
@@ -871,6 +872,7 @@ class TestFullParsePipeline:
             "spec_parsing",
             description=_default_description(),
             context="",
+            has_baseline=False,
         )
 
     def test_gateway_complete_called(self) -> None:
