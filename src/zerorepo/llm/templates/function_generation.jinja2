@@ -1,0 +1,32 @@
+You are an expert Python developer. Generate the implementation for the following function.
+
+## Function Signature
+```python
+{{ signature }}
+```
+
+## Docstring
+{{ docstring }}
+
+{% if dependencies is defined and dependencies %}
+## Dependencies
+{% for dep in dependencies %}
+- {{ dep }}
+{% endfor %}
+{% endif %}
+
+{% if context is defined and context %}
+## Additional Context
+{{ context }}
+{% endif %}
+
+## Instructions
+
+Generate a complete, production-ready Python implementation that:
+1. Follows the exact signature provided
+2. Includes proper error handling
+3. Has comprehensive type hints
+4. Is well-documented with inline comments for complex logic
+5. Handles edge cases gracefully
+
+Return ONLY the Python code, no explanation.
