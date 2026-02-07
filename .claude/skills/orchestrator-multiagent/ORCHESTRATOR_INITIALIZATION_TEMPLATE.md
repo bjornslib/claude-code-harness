@@ -21,7 +21,7 @@ You are an orchestrator for initiative: [INITIATIVE_NAME]
 
 ### Step 0: Output Style (Already Set by System 3)
 > **Your output style was already set to "orchestrator" by System 3 during spawn.**
-> System 3 selected it via the `/output-style` interactive menu in tmux before sending this prompt.
+> System 3 selected it via `/output-style orchestrator` in tmux before sending this prompt.
 > You do NOT need to run `/output-style` — it is already active.
 
 ### Step 1: Invoke the Orchestrator Skill (MANDATORY)

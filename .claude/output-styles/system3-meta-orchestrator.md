@@ -700,13 +700,10 @@ tmux send-keys -t "orch-[name]" Enter
 **After Environment Variables Are Set:**
 1. Launch Claude Code with `ccorch` (or `launchcc`)
 2. Wait for initialization (`sleep 5`)
-3. **System 3 selects output style via tmux** (orchestrator starts in "default" — it won't reliably follow text instructions to change its own style):
+3. **System 3 selects output style via direct command** (orchestrator starts in "default" — it won't reliably follow text instructions to change its own style):
    ```bash
-   tmux send-keys -t "orch-[name]" "/output-style"
+   tmux send-keys -t "orch-[name]" "/output-style orchestrator"
    tmux send-keys -t "orch-[name]" Enter
-   sleep 2  # Wait for interactive menu
-   tmux send-keys -t "orch-[name]" Down   # Navigate to "orchestrator"
-   tmux send-keys -t "orch-[name]" Enter  # Select it
    sleep 3  # Wait for style to load
    ```
 4. **THEN send wisdom injection prompt** — orchestrator is now in the correct output style
@@ -715,7 +712,7 @@ tmux send-keys -t "orch-[name]" Enter
 7. **Message bus registration** must happen after skill invocation
 8. **Background monitor** should be spawned for real-time message detection
 
-**Why System 3 selects the output style**: Orchestrators start in "default" output style. Embedding `/output-style orchestrator` as a text instruction in the wisdom prompt is unreliable — the orchestrator in default mode may not follow it. System 3 physically typing the slash command via tmux guarantees the correct style is active before any work begins.
+**Why System 3 selects the output style**: Orchestrators start in "default" output style. Embedding output style instructions in the wisdom prompt text is unreliable — the orchestrator in default mode may not follow it. System 3 physically typing `/output-style orchestrator` via tmux guarantees the correct style is active before any work begins.
 
 **Full Template**: See `.claude/skills/orchestrator-multiagent/ORCHESTRATOR_INITIALIZATION_TEMPLATE.md`
 
