@@ -17,6 +17,7 @@ from typing import Optional
 
 from zerorepo.ontology.models import FeatureNode
 from zerorepo.ontology.scrapers.base import SeedGenerator
+from zerorepo.ontology.scrapers.expander import TaxonomyExpander
 from zerorepo.ontology.scrapers.github_topics import GitHubTopicsGenerator
 from zerorepo.ontology.scrapers.library_docs import LibraryDocsGenerator
 from zerorepo.ontology.scrapers.stackoverflow_tags import StackOverflowTagsGenerator
@@ -285,6 +286,8 @@ def build_ontology(
     include_github: bool = True,
     include_stackoverflow: bool = True,
     include_libraries: bool = True,
+    include_expander: bool = True,
+    target_count: int = 50000,
 ) -> OntologyBuilder:
     """Convenience function to build the full ontology with all generators.
 
@@ -293,6 +296,10 @@ def build_ontology(
         include_github: Whether to include GitHub Topics generator.
         include_stackoverflow: Whether to include SO Tags generator.
         include_libraries: Whether to include Library Docs generator.
+        include_expander: Whether to include the combinatorial expander
+            (needed to reach 50K+ target).
+        target_count: Target node count for the expander. Only used
+            when ``include_expander`` is True.
 
     Returns:
         The built :class:`OntologyBuilder` instance with all nodes.
@@ -311,6 +318,8 @@ def build_ontology(
         builder.add_generator(StackOverflowTagsGenerator())
     if include_libraries:
         builder.add_generator(LibraryDocsGenerator())
+    if include_expander:
+        builder.add_generator(TaxonomyExpander(target_count=target_count))
 
     builder.build()
 

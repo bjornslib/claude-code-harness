@@ -6,6 +6,7 @@ seed data generators that produce hierarchical feature ontology trees:
 - :class:`GitHubTopicsGenerator` -- GitHub-style topic hierarchy generator
 - :class:`StackOverflowTagsGenerator` -- Stack Overflow tag hierarchy generator
 - :class:`LibraryDocsGenerator` -- Library documentation hierarchy generator
+- :class:`TaxonomyExpander` -- Combinatorial expansion for 50K+ nodes
 - :func:`build_ontology` -- Orchestrates generators, deduplicates, exports CSV
 """
 
@@ -13,6 +14,7 @@ from zerorepo.ontology.scrapers.build_ontology import (
     OntologyBuilder,
     build_ontology,
 )
+from zerorepo.ontology.scrapers.expander import TaxonomyExpander
 from zerorepo.ontology.scrapers.github_topics import GitHubTopicsGenerator
 from zerorepo.ontology.scrapers.library_docs import LibraryDocsGenerator
 from zerorepo.ontology.scrapers.stackoverflow_tags import StackOverflowTagsGenerator
@@ -22,5 +24,6 @@ __all__ = [
     "LibraryDocsGenerator",
     "OntologyBuilder",
     "StackOverflowTagsGenerator",
+    "TaxonomyExpander",
     "build_ontology",
 ]

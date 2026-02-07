@@ -20,6 +20,20 @@ from zerorepo.spec_parser.parser import (
     SpecParser,
     SpecParserError,
 )
+from zerorepo.spec_parser.conflict_detector import (
+    ConflictDetector,
+    ConflictDetectorError,
+    DetectorConfig,
+    LLMConflictItem,
+    LLMConflictResponse,
+)
+from zerorepo.spec_parser.refinement import (
+    RefinerConfig,
+    RefinementError,
+    SpecRefiner,
+    Suggestion,
+    SuggestionResponse,
+)
 from zerorepo.spec_parser.reference_processor import (
     CodeContentExtractor,
     ConceptExtractionError,
@@ -35,14 +49,19 @@ from zerorepo.spec_parser.reference_processor import (
 __all__ = [
     "CodeContentExtractor",
     "ConceptExtractionError",
+    "ConflictDetector",
+    "ConflictDetectorError",
     "Constraint",
     "ConstraintPriority",
     "ConflictSeverity",
     "ContentExtractor",
     "DeploymentTarget",
+    "DetectorConfig",
     "ExtractionError",
     "ExtractionResult",
     "InlineContentExtractor",
+    "LLMConflictItem",
+    "LLMConflictResponse",
     "PDFContentExtractor",
     "ParserConfig",
     "ParsedSpecResponse",
@@ -51,11 +70,16 @@ __all__ = [
     "ReferenceMaterial",
     "ReferenceMaterialType",
     "ReferenceProcessor",
+    "RefinerConfig",
     "RefinementEntry",
+    "RefinementError",
     "RepositorySpec",
     "ScopeType",
     "SpecConflict",
     "SpecParser",
     "SpecParserError",
+    "SpecRefiner",
+    "Suggestion",
+    "SuggestionResponse",
     "TechnicalRequirement",
 ]

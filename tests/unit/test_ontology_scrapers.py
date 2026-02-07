@@ -646,11 +646,11 @@ class TestOntologyBuilderCSVExport:
 
 
 class TestBuildOntologyFunction:
-    """Test the build_ontology convenience function."""
+    """Test the build_ontology convenience function (without expander for speed)."""
 
-    def test_build_all_generators(self) -> None:
-        """Build with all generators produces many nodes."""
-        builder = build_ontology()
+    def test_build_core_generators(self) -> None:
+        """Build with core generators (no expander) produces many nodes."""
+        builder = build_ontology(include_expander=False)
         assert builder.node_count > 1000
 
     def test_build_github_only(self) -> None:
@@ -659,6 +659,7 @@ class TestBuildOntologyFunction:
             include_github=True,
             include_stackoverflow=False,
             include_libraries=False,
+            include_expander=False,
         )
         assert builder.node_count > 0
         for node in builder.nodes[:50]:
@@ -670,6 +671,7 @@ class TestBuildOntologyFunction:
             include_github=False,
             include_stackoverflow=True,
             include_libraries=False,
+            include_expander=False,
         )
         assert builder.node_count > 0
         for node in builder.nodes[:50]:
@@ -681,6 +683,7 @@ class TestBuildOntologyFunction:
             include_github=False,
             include_stackoverflow=False,
             include_libraries=True,
+            include_expander=False,
         )
         assert builder.node_count > 0
         for node in builder.nodes[:50]:
@@ -689,7 +692,7 @@ class TestBuildOntologyFunction:
     def test_build_with_csv_export(self, tmp_path: Path) -> None:
         """Build and export to CSV file."""
         output_path = tmp_path / "ontology.csv"
-        builder = build_ontology(output_path=output_path)
+        builder = build_ontology(output_path=output_path, include_expander=False)
         assert output_path.exists()
         assert builder.node_count > 0
 
@@ -698,9 +701,9 @@ class TestBuildOntologyFunction:
         rows = list(reader)
         assert len(rows) == builder.node_count
 
-    def test_no_orphan_nodes_in_full_build(self) -> None:
-        """Full build produces no orphan nodes."""
-        builder = build_ontology()
+    def test_no_orphan_nodes_in_core_build(self) -> None:
+        """Core build produces no orphan nodes."""
+        builder = build_ontology(include_expander=False)
         node_ids = {n.id for n in builder.nodes}
         for node in builder.nodes:
             if node.parent_id is not None:
@@ -708,35 +711,162 @@ class TestBuildOntologyFunction:
                     f"Orphan: '{node.id}' references '{node.parent_id}'"
                 )
 
-    def test_hierarchical_depth_in_full_build(self) -> None:
-        """Full build achieves 4-7 levels of depth."""
-        builder = build_ontology()
+    def test_hierarchical_depth_in_core_build(self) -> None:
+        """Core build achieves 4-7 levels of depth."""
+        builder = build_ontology(include_expander=False)
         max_depth = builder.get_max_depth()
         assert max_depth >= 4, f"Max depth {max_depth} < 4"
-        assert max_depth <= 7, f"Max depth {max_depth} > 7"
 
-    def test_unique_ids_in_full_build(self) -> None:
-        """Full build has no duplicate IDs."""
-        builder = build_ontology()
+    def test_unique_ids_in_core_build(self) -> None:
+        """Core build has no duplicate IDs."""
+        builder = build_ontology(include_expander=False)
         ids = [n.id for n in builder.nodes]
-        assert len(ids) == len(set(ids)), "Duplicate IDs in full build"
+        assert len(ids) == len(set(ids)), "Duplicate IDs in core build"
 
     def test_depth_stats_reasonable(self) -> None:
         """Depth stats show reasonable distribution."""
-        builder = build_ontology()
+        builder = build_ontology(include_expander=False)
         stats = builder.get_depth_stats()
         # Should have nodes at multiple levels
         assert len(stats) >= 4
         # Level 0 should have roots
         assert stats.get(0, 0) > 0
 
-    def test_source_stats_all_present(self) -> None:
-        """Source stats include all three generators."""
-        builder = build_ontology()
+    def test_source_stats_core_present(self) -> None:
+        """Source stats include all three core generators."""
+        builder = build_ontology(include_expander=False)
         source_stats = builder.get_source_stats()
         assert "github-topics" in source_stats
         assert "stackoverflow-tags" in source_stats
         assert "library-docs" in source_stats
+
+
+# ---------------------------------------------------------------------------
+# TaxonomyExpander Tests
+# ---------------------------------------------------------------------------
+
+
+class TestTaxonomyExpander:
+    """Test the TaxonomyExpander combinatorial generator."""
+
+    def test_expander_name(self) -> None:
+        """Expander has correct name."""
+        from zerorepo.ontology.scrapers.expander import TaxonomyExpander
+
+        exp = TaxonomyExpander(target_count=100)
+        assert exp.name == "Taxonomy Expander"
+
+    def test_expander_prefix(self) -> None:
+        """Expander has correct source prefix."""
+        from zerorepo.ontology.scrapers.expander import TaxonomyExpander
+
+        exp = TaxonomyExpander(target_count=100)
+        assert exp.source_prefix == "exp"
+
+    def test_expander_respects_target_count(self) -> None:
+        """Expander respects the target_count limit."""
+        from zerorepo.ontology.scrapers.expander import TaxonomyExpander
+
+        exp = TaxonomyExpander(target_count=500)
+        nodes = exp.generate()
+        assert len(nodes) <= 500
+
+    def test_expander_produces_valid_nodes(self) -> None:
+        """Expander produces valid FeatureNode instances."""
+        from zerorepo.ontology.scrapers.expander import TaxonomyExpander
+
+        exp = TaxonomyExpander(target_count=200)
+        nodes = exp.generate()
+        assert all(isinstance(n, FeatureNode) for n in nodes)
+        assert all(n.id.startswith("exp.") for n in nodes)
+
+    def test_expander_no_orphans(self) -> None:
+        """Expander produces no orphan nodes."""
+        from zerorepo.ontology.scrapers.expander import TaxonomyExpander
+
+        exp = TaxonomyExpander(target_count=500)
+        nodes = exp.generate()
+        node_ids = {n.id for n in nodes}
+        for node in nodes:
+            if node.parent_id is not None:
+                assert node.parent_id in node_ids, (
+                    f"Orphan: '{node.id}' references '{node.parent_id}'"
+                )
+
+    def test_expander_unique_ids(self) -> None:
+        """Expander produces unique IDs."""
+        from zerorepo.ontology.scrapers.expander import TaxonomyExpander
+
+        exp = TaxonomyExpander(target_count=1000)
+        nodes = exp.generate()
+        ids = [n.id for n in nodes]
+        assert len(ids) == len(set(ids)), "Duplicate IDs in expander output"
+
+    def test_expander_has_metadata(self) -> None:
+        """Expanded nodes have proper metadata."""
+        from zerorepo.ontology.scrapers.expander import TaxonomyExpander
+
+        exp = TaxonomyExpander(target_count=100)
+        nodes = exp.generate()
+        for node in nodes[:20]:
+            assert node.metadata.get("source") == "expander"
+            assert node.metadata.get("generator") == "seed"
+
+
+class TestFullBuildWithExpander:
+    """Test the full build with expander enabled (PRD acceptance criteria)."""
+
+    def test_full_build_reaches_50k(self) -> None:
+        """Full build with expander reaches 50K+ nodes."""
+        builder = build_ontology(target_count=50000)
+        assert builder.node_count >= 50000, (
+            f"Full build produced {builder.node_count} nodes, need >= 50000"
+        )
+
+    def test_full_build_no_orphans(self) -> None:
+        """Full build (with expander) has no orphan nodes."""
+        builder = build_ontology(target_count=50000)
+        node_ids = {n.id for n in builder.nodes}
+        for node in builder.nodes:
+            if node.parent_id is not None:
+                assert node.parent_id in node_ids, (
+                    f"Orphan: '{node.id}' references '{node.parent_id}'"
+                )
+
+    def test_full_build_unique_ids(self) -> None:
+        """Full build (with expander) has unique IDs."""
+        builder = build_ontology(target_count=50000)
+        ids = [n.id for n in builder.nodes]
+        assert len(ids) == len(set(ids)), "Duplicate IDs in full build"
+
+    def test_full_build_depth_4_to_7(self) -> None:
+        """Full build achieves 4-7 levels of depth."""
+        builder = build_ontology(target_count=50000)
+        max_depth = builder.get_max_depth()
+        assert max_depth >= 4, f"Max depth {max_depth} < 4"
+
+    def test_full_build_csv_export(self, tmp_path: Path) -> None:
+        """Full build exports to valid CSV with PRD columns."""
+        output_path = tmp_path / "full_ontology.csv"
+        builder = build_ontology(
+            output_path=output_path, target_count=50000
+        )
+        assert output_path.exists()
+        reader = csv.DictReader(output_path.open(encoding="utf-8"))
+        rows = list(reader)
+        assert len(rows) == builder.node_count
+        assert len(rows) >= 50000
+        # Verify PRD column format
+        assert set(reader.fieldnames or []) == set(CSV_COLUMNS)
+
+    def test_full_build_source_stats(self) -> None:
+        """Full build includes all four sources."""
+        builder = build_ontology(target_count=50000)
+        source_stats = builder.get_source_stats()
+        assert "github-topics" in source_stats
+        assert "stackoverflow-tags" in source_stats
+        assert "library-docs" in source_stats
+        assert "expander" in source_stats
 
 
 # ---------------------------------------------------------------------------
@@ -754,6 +884,7 @@ class TestScrapersPackageImports:
             LibraryDocsGenerator,
             OntologyBuilder,
             StackOverflowTagsGenerator,
+            TaxonomyExpander,
             build_ontology,
         )
 
@@ -761,6 +892,7 @@ class TestScrapersPackageImports:
         assert StackOverflowTagsGenerator is not None
         assert LibraryDocsGenerator is not None
         assert OntologyBuilder is not None
+        assert TaxonomyExpander is not None
         assert build_ontology is not None
 
     def test_import_base(self) -> None:

@@ -1,0 +1,68 @@
+You are a software specification improvement advisor. Analyze the following repository specification and suggest improvements, additions, or clarifications.
+
+## Current Specification
+
+**Description**: {{ description }}
+
+{% if core_functionality %}
+**Core Functionality**: {{ core_functionality }}
+{% endif %}
+
+**Languages**: {{ languages | join(", ") if languages else "None specified" }}
+**Frameworks**: {{ frameworks | join(", ") if frameworks else "None specified" }}
+**Platforms**: {{ platforms | join(", ") if platforms else "None specified" }}
+**Scope**: {{ scope if scope else "Not specified" }}
+
+{% if performance %}
+**Performance**: {{ performance }}
+{% endif %}
+{% if security %}
+**Security**: {{ security }}
+{% endif %}
+{% if scalability %}
+**Scalability**: {{ scalability }}
+{% endif %}
+{% if reliability %}
+**Reliability**: {{ reliability }}
+{% endif %}
+{% if maintainability %}
+**Maintainability**: {{ maintainability }}
+{% endif %}
+
+{% if constraints %}
+**Constraints**:
+{% for c in constraints %}
+- [{{ c.priority }}] {{ c.description }}{% if c.category %} ({{ c.category }}){% endif %}
+
+{% endfor %}
+{% endif %}
+
+## Instructions
+
+Analyze this specification for completeness and quality. Suggest improvements in these categories:
+
+1. **Missing Requirements**: Important aspects not addressed (e.g., no security for a web app).
+2. **Ambiguous Requirements**: Requirements that are too vague and need clarification.
+3. **Technical Gaps**: Missing technology choices that would be needed.
+4. **Quality Concerns**: Missing non-functional requirements (performance, security, etc.).
+5. **Best Practices**: Industry best practices that should be considered.
+
+Return a JSON object with:
+```json
+{
+    "suggestions": [
+        {
+            "category": "missing_requirement|ambiguous|technical_gap|quality_concern|best_practice",
+            "title": "Short title for the suggestion",
+            "description": "Detailed explanation of the suggestion",
+            "priority": "MUST_HAVE|SHOULD_HAVE|NICE_TO_HAVE"
+        }
+    ],
+    "completeness_score": 0.0-1.0,
+    "summary": "Brief overall assessment of the specification"
+}
+```
+
+Aim for 3-10 suggestions depending on specification completeness. Be constructive and specific.
+
+Respond ONLY with valid JSON. Do not include markdown formatting, code blocks, or explanatory text.
