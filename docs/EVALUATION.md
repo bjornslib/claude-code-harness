@@ -826,3 +826,388 @@ The `ABTestResult` model captures prompt comparison results:
 | Pass Rate     | 70.0% | 69.7% | +0.3%  |
 | Voting Rate   | 76.0% | 75.0% | +1.0%  |
 ```
+
+---
+
+## Benchmark Construction Pipeline
+
+### BenchmarkPipeline (`scripts/benchmark/build_repocraft.py`)
+
+The `BenchmarkPipeline` constructs RepoCraft benchmark tasks from a Python
+repository through a 4-step pipeline:
+
+```
+Repository source code
+       │
+       ▼
+┌──────────────────────────────────────────────┐
+│  Step 1: HARVEST (TestHarvester)             │
+│  AST-parse test_*.py files                   │
+│  Extract test functions → BenchmarkTask      │
+├──────────────────────────────────────────────┤
+│  Step 2: FILTER (TestFilter)                 │
+│  Remove trivial, flaky, skipped tests        │
+├──────────────────────────────────────────────┤
+│  Step 3: CATEGORIZE (Categorizer)            │
+│  Build hierarchical taxonomy from categories │
+├──────────────────────────────────────────────┤
+│  Step 4: SAMPLE (Categorizer)                │
+│  Stratified sampling for balanced subset     │
+└──────────────────────────────────────────────┘
+       │
+       ▼
+  {project}-tasks.json
+```
+
+**Configuration (`PipelineConfig`):**
+
+| Field               | Default | Description                                   |
+|---------------------|---------|-----------------------------------------------|
+| `project_name`      | `""`    | Human-readable project name                   |
+| `sample_size`       | `200`   | Target tasks after sampling (0 = keep all)    |
+| `seed`              | `42`    | RNG seed for reproducible sampling            |
+| `min_loc`           | `10`    | Minimum LOC for test filtering                |
+| `require_assertions`| `True`  | Drop tests without assertions                 |
+| `filter_flaky`      | `True`  | Drop tests with external IO patterns          |
+| `filter_skipped`    | `True`  | Drop tests with skip decorators               |
+
+**Result (`PipelineResult`):**
+
+| Field             | Description                                 |
+|-------------------|---------------------------------------------|
+| `project_name`    | Name of the processed project               |
+| `harvested_count` | Total test functions extracted               |
+| `filtered_count`  | Tasks remaining after quality filtering      |
+| `sampled_count`   | Tasks in the final sample                    |
+| `tasks`           | Final list of `BenchmarkTask` instances      |
+| `taxonomy`        | Hierarchical `Taxonomy` built from the tasks |
+
+**Single project:**
+```python
+from scripts.benchmark.build_repocraft import BenchmarkPipeline, PipelineConfig
+
+config = PipelineConfig(project_name="scikit-learn", sample_size=200, seed=42)
+pipeline = BenchmarkPipeline(config)
+result = pipeline.run("/path/to/scikit-learn")
+
+print(f"Harvested: {result.harvested_count}")
+print(f"Filtered:  {result.filtered_count}")
+print(f"Sampled:   {result.sampled_count}")
+
+output_path = pipeline.save_tasks(result, "./benchmark-tasks")
+# Creates: ./benchmark-tasks/scikit-learn-tasks.json
+```
+
+**Multiple projects:**
+```python
+from scripts.benchmark.build_repocraft import run_multiple
+
+results = run_multiple(
+    projects={
+        "scikit-learn": "/repos/scikit-learn",
+        "pandas": "/repos/pandas",
+        "sympy": "/repos/sympy",
+    },
+    output_dir="./benchmark-tasks",
+    sample_size=200,
+    seed=42,
+)
+```
+
+---
+
+## Test Harvesting
+
+### TestHarvester (`scripts/benchmark/harvest_tests.py`)
+
+Extracts test functions from Python repositories using AST parsing to produce
+`BenchmarkTask` objects.
+
+**Extraction process:**
+
+```
+Repository
+  └── test_*.py files (recursive glob)
+        │
+        ▼ ast.parse()
+        │
+        ├── File-level imports extracted
+        │
+        └── For each test_* FunctionDef:
+              ├── Test code (including decorators)
+              ├── Function-local imports
+              ├── Docstring → task description (or auto-generated from name)
+              ├── LOC count (non-empty, non-comment lines)
+              ├── Category from file path:
+              │     tests/linear_model/test_ridge.py → linear_model.ridge
+              ├── Difficulty estimate:
+              │     LOC < 15 → EASY
+              │     LOC < 40 → MEDIUM
+              │     LOC >= 40 → HARD
+              └── Unique task ID:
+                    {project}-{category}-{subcategory}-{counter:03d}
+```
+
+**Key methods:**
+
+| Method                  | Description                                          |
+|-------------------------|------------------------------------------------------|
+| `extract_tests(path)`   | Extract all `test_*` functions from repository       |
+| `_parse_test_function()`| Parse AST `FunctionDef` into `BenchmarkTask`         |
+| `_path_to_category()`   | Convert file path to dotted category string          |
+| `_extract_file_imports()`| Collect top-level import statements from module     |
+| `_extract_function_imports()` | Collect imports inside a function body          |
+| `_has_assertions()`     | Detect `assert`, `self.assertXxx()` in function body |
+| `_name_to_description()`| Convert `test_*` name to natural language            |
+| `_estimate_difficulty()` | LOC-based difficulty heuristic                      |
+
+**Usage:**
+```python
+from scripts.benchmark.harvest_tests import TestHarvester
+
+harvester = TestHarvester(project_name="scikit-learn")
+tasks = harvester.extract_tests("/path/to/scikit-learn")
+print(f"Extracted {len(tasks)} test functions")
+```
+
+---
+
+## Full Benchmark Runner Script
+
+### BenchmarkRunner (`scripts/benchmark/run_full_benchmark.py`)
+
+Integrates ZeroRepo generation with evaluation for end-to-end benchmark runs.
+
+**Configuration (`BenchmarkConfig`):**
+
+| Field                   | Default                                   | Description                          |
+|-------------------------|-------------------------------------------|--------------------------------------|
+| `projects`              | `["scikit-learn", "pandas", "sympy"]`     | Projects to benchmark                |
+| `tasks_dir`             | `"benchmarks/repocraft/tasks"`            | Directory containing task JSON files |
+| `output_dir`            | `"benchmarks/results"`                    | Directory for result output          |
+| `max_tasks_per_project` | `200`                                     | Cap on tasks loaded per project      |
+| `paraphrase_names`      | `True`                                    | Use paraphrased project names        |
+
+**Built-in paraphrase mappings:**
+
+| Project        | Paraphrased Name |
+|----------------|------------------|
+| `scikit-learn` | `ml_lib`         |
+| `pandas`       | `data_frames`    |
+| `sympy`        | `math_engine`    |
+| `statsmodels`  | `stat_toolkit`   |
+| `requests`     | `http_client`    |
+| `django`       | `web_framework`  |
+
+**Key functions:**
+
+| Function                | Description                                           |
+|-------------------------|-------------------------------------------------------|
+| `BenchmarkRunner.run_project(project)` | Run full benchmark for a single project  |
+| `BenchmarkRunner.run_all()`            | Run benchmark for all configured projects|
+| `load_project_tasks(tasks_dir, name)`  | Load tasks from a `*-tasks.json` file    |
+| `build_project_configs(projects, ...)`  | Build config dicts from project list    |
+| `generate_report(summary)`             | Generate Markdown report from `RunSummary` |
+
+**Usage:**
+```python
+from scripts.benchmark.run_full_benchmark import BenchmarkRunner, BenchmarkConfig
+
+runner = BenchmarkRunner(
+    config=BenchmarkConfig(
+        projects=["scikit-learn", "pandas"],
+        max_tasks_per_project=100,
+    ),
+    zerorepo_pipeline=my_generator,     # Optional: ZeroRepoPipeline
+    evaluation_pipeline=my_evaluator,    # Optional: EvaluationPipeline
+    profiling_collector=my_profiler,     # Optional: ProfilingCollector
+)
+
+# Single project
+result = runner.run_project("scikit-learn")
+
+# All projects
+results = runner.run_all()
+```
+
+---
+
+## CLI Reference
+
+### Build benchmark tasks from a repository
+
+```bash
+python -m scripts.benchmark.build_repocraft \
+    --repo-path /path/to/python-repo \
+    --project-name scikit-learn \
+    --output-dir ./benchmark-tasks \
+    --sample-size 200 \
+    --seed 42 \
+    --min-loc 10 \
+    -v
+```
+
+| Flag                 | Default            | Description                            |
+|----------------------|--------------------|----------------------------------------|
+| `--repo-path`        | *(required)*       | Path to the Python repository          |
+| `--project-name`     | `"project"`        | Human-readable project name            |
+| `--output-dir`       | `./benchmark-tasks`| Output directory for JSON              |
+| `--sample-size`      | `200`              | Tasks to sample (0 = no sampling)      |
+| `--seed`             | `42`               | RNG seed for reproducibility           |
+| `--min-loc`          | `10`               | Minimum LOC threshold for filtering    |
+| `--no-filter-flaky`  | *(off)*            | Disable flaky test detection           |
+| `--no-filter-skipped`| *(off)*            | Disable skip decorator detection       |
+| `-v, --verbose`      | *(off)*            | Enable DEBUG logging                   |
+
+**Output:** `{output-dir}/{project-name}-tasks.json` containing:
+```json
+{
+  "project": "scikit-learn",
+  "summary": {
+    "harvested": 1200,
+    "filtered": 450,
+    "sampled": 200
+  },
+  "tasks": [
+    {
+      "id": "scikit-learn-linear_model_ridge-fit_intercept-001",
+      "project": "scikit-learn",
+      "category": "linear_model.ridge",
+      "subcategory": "fit_intercept",
+      "description": "Test that fit intercept works correctly",
+      "test_code": "def test_fit_intercept(): ...",
+      "imports": ["from sklearn.linear_model import Ridge"],
+      "loc": 15,
+      "difficulty": "medium"
+    }
+  ]
+}
+```
+
+### Run end-to-end benchmark
+
+```bash
+python -m scripts.benchmark.run_full_benchmark \
+    --projects scikit-learn pandas sympy
+```
+
+Loads tasks from `benchmarks/repocraft/tasks/`, runs generation and evaluation,
+saves results to `benchmarks/results/`.
+
+---
+
+## Benchmark Data Directory
+
+```
+benchmarks/
+  repocraft/
+    metadata.json         # Benchmark suite metadata (name, version, description)
+    taxonomy.json         # Hierarchical task taxonomy (roots, categories, counts)
+    tasks/                # Per-project task JSON files (created by build_repocraft)
+      .gitkeep
+      scikit-learn-tasks.json
+      pandas-tasks.json
+      ...
+```
+
+**`metadata.json`**: Contains benchmark suite metadata including `name`,
+`version`, `description`, and aggregate task/project counts.
+
+**`taxonomy.json`**: Stores the hierarchical taxonomy built by `Categorizer`,
+with nested `TaxonomyNode` roots and totals.
+
+---
+
+## Result Interpretation Guide
+
+### Understanding the Evaluation Funnel
+
+Results follow a narrowing funnel. Each stage reduces the count of passing tasks:
+
+```
+Total Tasks:     200  (100%)
+  ↓
+Localized:       185  (92.5%)  ← Functions found in generated repo
+  ↓
+Validated:       160  (80.0%)  ← LLM confirms correct implementation
+  ↓
+Passed:          140  (70.0%)  ← Tests actually pass in Docker sandbox
+```
+
+**Healthy profile**: Gradual narrowing (e.g., 92% → 80% → 70%). Large drops
+indicate specific problems:
+
+| Drop Location          | Symptom                              | Likely Cause                                  | Recommended Fix                              |
+|------------------------|--------------------------------------|-----------------------------------------------|----------------------------------------------|
+| Localization → low     | Many tasks find no candidate         | Generated repo missing functions              | Improve generation prompts, check coverage   |
+| Localization → Validation | Large drop (>15pp)               | Functions exist but are wrong                 | Improve code generation quality              |
+| Validation → Execution | Large drop (>10pp)                   | Semantic review passes but tests fail         | Fix import mappings, sandbox config, deps    |
+
+### Key Metrics Explained
+
+| Metric             | What It Measures                                   | How to Improve                                |
+|--------------------|----------------------------------------------------|-----------------------------------------------|
+| **Pass Rate**      | End-to-end success (all 3 stages passed)           | Improve weakest stage (see funnel analysis)   |
+| **Coverage**       | Category breadth (% categories with >=1 pass)      | Generate more diverse functionality           |
+| **Voting Rate**    | LLM-assessed correctness (Stage 2 pass rate)       | Improve generation quality or tune validation |
+| **Novelty**        | % of categories not in reference taxonomy           | Encourage creative generation beyond training |
+| **Localization Rate** | Function matching success (Stage 1 pass rate)   | Better embeddings or function naming          |
+
+### Comparing Against Paper Targets
+
+The `ReportGenerator` produces a delta table:
+
+| Metric       | Ours  | Paper  | Delta  | Interpretation               |
+|--------------|-------|--------|--------|------------------------------|
+| Coverage     | 82.0% | 81.5%  | +0.5%  | On par with paper            |
+| Pass Rate    | 65.0% | 69.7%  | -4.7%  | Below target -- investigate  |
+| Voting Rate  | 76.0% | 75.0%  | +1.0%  | Slightly above target        |
+
+**Positive deltas** (your pipeline outperforms the paper):
+- Indicates strong generation or evaluation improvements.
+
+**Negative deltas** (below paper targets):
+- Use `FailureAnalyzer` to identify which stage is the bottleneck.
+- Check `category_counts` to see if failures cluster in specific categories.
+
+### Reading Failure Reports
+
+The `FailureReport` from `FailureAnalyzer.analyze_failures()` provides:
+
+1. **`total_failures`**: Count of tasks that did not pass end-to-end.
+2. **`category_counts`**: Breakdown by `FailureCategory` (planning, generation,
+   localization, validation, execution, unknown).
+3. **`samples`**: Up to `max_samples_per_category` representative failures per
+   category -- examine these to understand common patterns.
+4. **`recommendations`**: Threshold-based actionable suggestions. If a category
+   exceeds its threshold, a specific recommendation is generated.
+
+**Example interpretation:**
+```
+Total failures: 60/200
+Categories:
+  generation: 25    (12.5%)  ← Below 15% threshold, OK
+  localization: 15  (7.5%)   ← Below 25% threshold, OK
+  validation: 12    (6.0%)   ← Below 20% threshold, OK
+  execution: 8      (4.0%)   ← Below 15% threshold, OK
+
+Recommendation: "Failure distribution is within acceptable thresholds."
+```
+
+If any category exceeds its threshold, the report generates a specific
+recommendation explaining what to fix.
+
+### Profiling Insights
+
+| Metric                  | What to Look For                                  |
+|-------------------------|---------------------------------------------------|
+| **Token usage by stage**| Which stage consumes the most tokens (= most cost)|
+| **Stage timings**       | Which stage is the bottleneck for wall-clock time  |
+| **Total cost (USD)**    | Estimated at $10/million tokens (rough)            |
+| **Cache hit rate**      | High hit rate = savings from repeated runs         |
+
+Common optimizations:
+- High validation tokens → reduce `num_voters` or `num_rounds`
+- Low cache hit rate → enable `EmbeddingCache` and `LLMResponseCache`
+- Slow localization → pre-extract functions once, reuse across tasks
+- High generation cost → use `BatchedFunctionGenerator` for batch prompts
