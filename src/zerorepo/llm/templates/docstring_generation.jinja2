@@ -1,0 +1,60 @@
+You are an expert Python documentation writer. Generate a comprehensive Google-style docstring for the following function.
+
+## Function Name
+{{ function_name }}
+
+## Signature
+```python
+{{ signature }}
+```
+
+{% if implementation is defined and implementation %}
+## Implementation
+```python
+{{ implementation }}
+```
+{% endif %}
+
+{% if context is defined and context %}
+## Context
+{{ context }}
+{% endif %}
+
+{% if existing_docstring is defined and existing_docstring %}
+## Existing Docstring (to improve)
+{{ existing_docstring }}
+{% endif %}
+
+## Instructions
+
+Generate a Google-style docstring that includes:
+1. **Summary**: A concise one-line summary of the function's purpose
+2. **Extended description**: A more detailed explanation if needed
+3. **Args**: Document each parameter with type and description
+4. **Returns**: Document the return value with type and description
+5. **Raises**: Document any exceptions that may be raised
+6. **Example**: A brief usage example if appropriate
+
+Follow these guidelines:
+- Use Google-style docstring format
+- Be concise but thorough
+- Include type information in the Args section
+- Document edge cases in the description
+- Use imperative mood for the summary line
+
+Return ONLY the docstring content (without the triple quotes), for example:
+```
+Summary line here.
+
+Extended description if needed.
+
+Args:
+    param1 (str): Description of param1.
+    param2 (int): Description of param2.
+
+Returns:
+    bool: Description of return value.
+
+Raises:
+    ValueError: If param1 is empty.
+```
