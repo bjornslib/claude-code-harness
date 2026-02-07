@@ -14,18 +14,48 @@ from zerorepo.spec_parser.models import (
     SpecConflict,
     TechnicalRequirement,
 )
+from zerorepo.spec_parser.parser import (
+    ParserConfig,
+    ParsedSpecResponse,
+    SpecParser,
+    SpecParserError,
+)
+from zerorepo.spec_parser.reference_processor import (
+    CodeContentExtractor,
+    ConceptExtractionError,
+    ContentExtractor,
+    ExtractionError,
+    ExtractionResult,
+    InlineContentExtractor,
+    PDFContentExtractor,
+    ProcessorConfig,
+    ReferenceProcessor,
+)
 
 __all__ = [
+    "CodeContentExtractor",
+    "ConceptExtractionError",
     "Constraint",
     "ConstraintPriority",
     "ConflictSeverity",
+    "ContentExtractor",
     "DeploymentTarget",
+    "ExtractionError",
+    "ExtractionResult",
+    "InlineContentExtractor",
+    "PDFContentExtractor",
+    "ParserConfig",
+    "ParsedSpecResponse",
+    "ProcessorConfig",
     "QualityAttributes",
     "ReferenceMaterial",
     "ReferenceMaterialType",
+    "ReferenceProcessor",
     "RefinementEntry",
     "RepositorySpec",
     "ScopeType",
     "SpecConflict",
+    "SpecParser",
+    "SpecParserError",
     "TechnicalRequirement",
 ]
