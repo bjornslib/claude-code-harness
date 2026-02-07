@@ -1,0 +1,40 @@
+You are a technical concept extraction specialist. Analyze the following reference material and extract key technical concepts relevant to software development.
+
+## Reference Material Type
+
+{{ material_type }}
+
+{% if title %}
+## Title
+
+{{ title }}
+{% endif %}
+
+## Content
+
+{{ content }}
+
+## Instructions
+
+Extract the key technical concepts from this material. Focus on:
+
+1. **Named APIs, classes, functions, or methods** (e.g., "GridSearchCV", "useState", "Pipeline")
+2. **Design patterns or architectural concepts** (e.g., "Observer pattern", "microservices", "event sourcing")
+3. **Technologies, frameworks, or libraries** (e.g., "WebSocket", "Redis", "PostgreSQL")
+4. **Algorithms or data structures** (e.g., "B-tree", "quicksort", "hash map")
+5. **Domain-specific terms** (e.g., "cross-validation", "tokenization", "dependency injection")
+
+Rules:
+- Extract only concepts that are explicitly present or strongly implied in the content
+- Keep each concept as a short phrase (1-5 words)
+- Aim for 5-50 concepts depending on material length
+- Prefer specific concepts over generic ones (e.g., "GridSearchCV" over "search")
+- Do not include common programming keywords (e.g., "if", "for", "class") unless they represent a named entity
+
+Respond ONLY with a JSON object in this format:
+{
+    "concepts": ["concept1", "concept2", "concept3"],
+    "summary": "A one-sentence summary of what this reference material covers"
+}
+
+Do not include markdown formatting, code blocks, or explanatory text.

@@ -1,0 +1,64 @@
+You are a software specification refinement specialist. You have an existing repository specification and the user has requested a change. Update the specification based on the requested refinement.
+
+## Current Specification
+
+**Description**: {{ description }}
+
+{% if core_functionality %}
+**Core Functionality**: {{ core_functionality }}
+{% endif %}
+
+**Languages**: {{ languages | join(", ") if languages else "None specified" }}
+**Frameworks**: {{ frameworks | join(", ") if frameworks else "None specified" }}
+**Platforms**: {{ platforms | join(", ") if platforms else "None specified" }}
+
+{% if performance %}
+**Performance**: {{ performance }}
+{% endif %}
+{% if security %}
+**Security**: {{ security }}
+{% endif %}
+{% if scalability %}
+**Scalability**: {{ scalability }}
+{% endif %}
+
+{% if constraints %}
+**Existing Constraints**:
+{% for c in constraints %}
+- [{{ c.priority }}] {{ c.description }}{% if c.category %} ({{ c.category }}){% endif %}
+
+{% endfor %}
+{% endif %}
+
+## Refinement Request
+
+**Action**: {{ action }}
+**Details**: {{ details }}
+
+{% if context %}
+## Additional Context
+
+{{ context }}
+{% endif %}
+
+## Instructions
+
+Based on the refinement request, update the specification. Return a JSON object with these fields:
+
+1. **core_functionality**: Updated core functionality summary (or null if unchanged).
+2. **languages**: Updated list of programming languages.
+3. **frameworks**: Updated list of frameworks.
+4. **platforms**: Updated list of platforms.
+5. **deployment_targets**: Updated list from: CLOUD, ON_PREMISES, EDGE, SERVERLESS, HYBRID, OTHER.
+6. **scope**: Updated scope: BACKEND_ONLY, FRONTEND_ONLY, FULL_STACK, LIBRARY, CLI_TOOL, OTHER.
+7. **performance**: Updated performance requirements (string or null).
+8. **security**: Updated security requirements (string or null).
+9. **scalability**: Updated scalability requirements (string or null).
+10. **reliability**: Updated reliability requirements (string or null).
+11. **maintainability**: Updated maintainability requirements (string or null).
+12. **constraints**: Updated list of constraints with description, priority, and category.
+13. **changes_summary**: A brief description of what was changed in this refinement.
+
+Only modify fields that are affected by the refinement request. Keep unchanged fields as they are.
+
+Respond ONLY with valid JSON. Do not include markdown formatting, code blocks, or explanatory text.

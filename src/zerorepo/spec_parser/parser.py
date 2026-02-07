@@ -1,0 +1,523 @@
+"""NLP-based specification parser using the LLM Gateway.
+
+Implements Task 2.4.2 from PRD-RPG-P2-001: Extracts structured data from
+natural language repository descriptions using LLM calls via the LLMGateway.
+The output conforms to the RepositorySpec schema defined in Task 2.4.1.
+
+The parser uses a two-phase approach:
+1. **Extraction**: LLM parses natural language into a structured intermediate
+   JSON response matching ParsedSpecResponse.
+2. **Assembly**: The intermediate response is assembled into a fully validated
+   RepositorySpec instance with proper enums, UUIDs, and timestamps.
+
+Usage::
+
+    from zerorepo.spec_parser.parser import SpecParser, ParserConfig
+
+    parser = SpecParser()
+    spec = parser.parse(
+        "Build a real-time chat app with React and WebSocket"
+    )
+    print(spec.core_functionality)
+    print(spec.technical_requirements.frameworks)
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from typing import Any, Optional
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from zerorepo.llm.gateway import LLMGateway
+from zerorepo.llm.models import GatewayConfig, ModelTier
+from zerorepo.llm.prompt_templates import PromptTemplate
+from zerorepo.spec_parser.models import (
+    Constraint,
+    ConstraintPriority,
+    DeploymentTarget,
+    QualityAttributes,
+    RepositorySpec,
+    ScopeType,
+    TechnicalRequirement,
+)
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Intermediate response schema (what the LLM returns)
+# ---------------------------------------------------------------------------
+
+_VALID_DEPLOYMENT_TARGETS = {t.value for t in DeploymentTarget}
+_VALID_SCOPES = {s.value for s in ScopeType}
+_VALID_PRIORITIES = {p.value for p in ConstraintPriority}
+
+
+class ParsedConstraint(BaseModel):
+    """Intermediate representation of a constraint from LLM output."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    description: str = Field(default="", description="Constraint description")
+    priority: str = Field(default="SHOULD_HAVE", description="Priority level")
+    category: Optional[str] = Field(default=None, description="Optional category")
+
+
+class ParsedSpecResponse(BaseModel):
+    """Intermediate JSON schema for the LLM's parsed specification output.
+
+    This schema is intentionally lenient (all strings, no strict enums)
+    because LLM output may contain slight variations. The assembly phase
+    handles normalization and validation.
+    """
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    core_functionality: Optional[str] = Field(
+        default=None,
+        description="Core functionality summary",
+    )
+    languages: list[str] = Field(
+        default_factory=list,
+        description="Programming languages",
+    )
+    frameworks: list[str] = Field(
+        default_factory=list,
+        description="Frameworks and libraries",
+    )
+    platforms: list[str] = Field(
+        default_factory=list,
+        description="Target platforms",
+    )
+    deployment_targets: list[str] = Field(
+        default_factory=list,
+        description="Deployment environments",
+    )
+    scope: Optional[str] = Field(
+        default=None,
+        description="Project scope type",
+    )
+    performance: Optional[str] = Field(
+        default=None,
+        description="Performance requirements",
+    )
+    security: Optional[str] = Field(
+        default=None,
+        description="Security requirements",
+    )
+    scalability: Optional[str] = Field(
+        default=None,
+        description="Scalability requirements",
+    )
+    reliability: Optional[str] = Field(
+        default=None,
+        description="Reliability requirements",
+    )
+    maintainability: Optional[str] = Field(
+        default=None,
+        description="Maintainability requirements",
+    )
+    constraints: list[ParsedConstraint] = Field(
+        default_factory=list,
+        description="Extracted constraints",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Parser configuration
+# ---------------------------------------------------------------------------
+
+
+class ParserConfig(BaseModel):
+    """Configuration for the specification parser."""
+
+    model_config = ConfigDict(frozen=False, validate_assignment=True)
+
+    model: str = Field(
+        default="gpt-4o-mini",
+        description="Model identifier for LLM calls",
+    )
+    tier: ModelTier = Field(
+        default=ModelTier.CHEAP,
+        description="Model tier for cost/quality selection",
+    )
+    template_name: str = Field(
+        default="spec_parsing",
+        description="Name of the prompt template to use",
+    )
+    max_description_length: int = Field(
+        default=50000,
+        gt=0,
+        description="Maximum description length in characters",
+    )
+    use_json_mode: bool = Field(
+        default=True,
+        description="Whether to request JSON response format from the LLM",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Main parser class
+# ---------------------------------------------------------------------------
+
+
+class SpecParser:
+    """LLM-based natural language specification parser.
+
+    Parses free-form repository descriptions into structured RepositorySpec
+    instances using the LLMGateway for LLM calls and Jinja2 templates for
+    prompt construction.
+
+    Example::
+
+        parser = SpecParser()
+        spec = parser.parse(
+            "Build a real-time chat application with React, WebSocket, "
+            "and PostgreSQL. Must support 10K concurrent users."
+        )
+        assert "React" in spec.technical_requirements.frameworks
+        assert spec.quality_attributes.scalability is not None
+
+    Attributes:
+        config: Parser configuration (model, template, etc.)
+        gateway: LLMGateway instance for making LLM calls
+        templates: PromptTemplate instance for rendering prompts
+    """
+
+    def __init__(
+        self,
+        config: ParserConfig | None = None,
+        gateway: LLMGateway | None = None,
+        templates: PromptTemplate | None = None,
+    ) -> None:
+        """Initialise the parser.
+
+        Args:
+            config: Parser configuration. Defaults to ParserConfig().
+            gateway: Pre-configured LLMGateway. If None, creates a new one.
+            templates: Pre-configured PromptTemplate. If None, creates one
+                using the default template directory.
+        """
+        self.config = config or ParserConfig()
+        self.gateway = gateway or LLMGateway()
+        self.templates = templates or PromptTemplate()
+
+    def parse(
+        self,
+        description: str,
+        context: str | None = None,
+    ) -> RepositorySpec:
+        """Parse a natural language description into a RepositorySpec.
+
+        This is the main entry point. It:
+        1. Renders the prompt template with the description
+        2. Calls the LLM via complete_json or complete
+        3. Parses the intermediate response
+        4. Assembles the final RepositorySpec
+
+        Args:
+            description: Natural language repository description (10-50000 chars).
+            context: Optional additional context to include in the prompt.
+
+        Returns:
+            A validated RepositorySpec instance.
+
+        Raises:
+            ValueError: If the description is empty or too long.
+            zerorepo.llm.exceptions.ConfigurationError: If LLM is misconfigured.
+            zerorepo.llm.exceptions.RetryExhaustedError: If LLM calls fail.
+            SpecParserError: If the LLM response cannot be parsed.
+        """
+        # Validate input
+        description = description.strip()
+        if len(description) < 10:
+            raise ValueError(
+                f"Description must be at least 10 characters, got {len(description)}"
+            )
+        if len(description) > self.config.max_description_length:
+            raise ValueError(
+                f"Description exceeds maximum length of "
+                f"{self.config.max_description_length} characters"
+            )
+
+        # Render prompt
+        prompt = self.templates.render(
+            self.config.template_name,
+            description=description,
+            context=context or "",
+        )
+        logger.debug("Rendered spec parsing prompt (%d chars)", len(prompt))
+
+        # Call LLM
+        messages = [{"role": "user", "content": prompt}]
+
+        raw_response = self._call_llm(messages)
+        logger.debug("LLM response received (%d chars)", len(raw_response))
+
+        # Parse intermediate response
+        parsed = self._parse_response(raw_response)
+
+        # Assemble final RepositorySpec
+        spec = self._assemble_spec(description, parsed)
+
+        logger.info(
+            "Parsed specification: %d languages, %d frameworks, %d constraints",
+            len(spec.technical_requirements.languages),
+            len(spec.technical_requirements.frameworks),
+            len(spec.constraints),
+        )
+
+        return spec
+
+    def _call_llm(self, messages: list[dict[str, Any]]) -> str:
+        """Call the LLM and return the raw response text.
+
+        Args:
+            messages: Chat messages for the LLM.
+
+        Returns:
+            Raw response text from the LLM.
+        """
+        kwargs: dict[str, Any] = {}
+        if self.config.use_json_mode:
+            kwargs["response_format"] = {"type": "json_object"}
+
+        return self.gateway.complete(
+            messages=messages,
+            model=self.config.model,
+            tier=self.config.tier,
+            **kwargs,
+        )
+
+    def _parse_response(self, raw_response: str) -> ParsedSpecResponse:
+        """Parse the raw LLM response into a ParsedSpecResponse.
+
+        Handles common LLM output quirks like markdown code blocks and
+        trailing text after JSON.
+
+        Args:
+            raw_response: Raw text from the LLM.
+
+        Returns:
+            A ParsedSpecResponse instance.
+
+        Raises:
+            SpecParserError: If the response cannot be parsed as valid JSON.
+        """
+        text = raw_response.strip()
+
+        # Strip markdown code fences if present
+        if text.startswith("```"):
+            # Remove opening fence (e.g. ```json)
+            first_newline = text.find("\n")
+            if first_newline != -1:
+                text = text[first_newline + 1:]
+            # Remove closing fence
+            if text.endswith("```"):
+                text = text[:-3].rstrip()
+
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError as e:
+            raise SpecParserError(
+                f"LLM response is not valid JSON: {e}\n"
+                f"Response preview: {text[:200]}"
+            ) from e
+
+        try:
+            return ParsedSpecResponse.model_validate(data)
+        except Exception as e:
+            raise SpecParserError(
+                f"LLM response does not match expected schema: {e}"
+            ) from e
+
+    def _assemble_spec(
+        self,
+        description: str,
+        parsed: ParsedSpecResponse,
+    ) -> RepositorySpec:
+        """Assemble a RepositorySpec from the parsed intermediate response.
+
+        Handles normalization of enum values, filtering of invalid entries,
+        and construction of properly typed Pydantic models.
+
+        Args:
+            description: The original user description.
+            parsed: The intermediate parsed response from the LLM.
+
+        Returns:
+            A validated RepositorySpec instance.
+        """
+        # Build TechnicalRequirement
+        deployment_targets = _normalize_deployment_targets(parsed.deployment_targets)
+        scope = _normalize_scope(parsed.scope)
+
+        technical_requirements = TechnicalRequirement(
+            languages=parsed.languages,
+            frameworks=parsed.frameworks,
+            platforms=parsed.platforms,
+            deployment_targets=deployment_targets,
+            scope=scope,
+        )
+
+        # Build QualityAttributes
+        quality_attributes = QualityAttributes(
+            performance=parsed.performance,
+            security=parsed.security,
+            scalability=parsed.scalability,
+            reliability=parsed.reliability,
+            maintainability=parsed.maintainability,
+        )
+
+        # Build Constraints
+        constraints = _normalize_constraints(parsed.constraints)
+
+        # Assemble RepositorySpec
+        return RepositorySpec(
+            description=description,
+            core_functionality=parsed.core_functionality,
+            technical_requirements=technical_requirements,
+            quality_attributes=quality_attributes,
+            constraints=constraints,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Custom exception
+# ---------------------------------------------------------------------------
+
+
+class SpecParserError(Exception):
+    """Raised when the specification parser encounters an unrecoverable error.
+
+    Examples: LLM response is not valid JSON, response doesn't match schema,
+    or required fields are missing from the parsed output.
+    """
+
+
+# ---------------------------------------------------------------------------
+# Normalization helpers
+# ---------------------------------------------------------------------------
+
+
+def _normalize_deployment_targets(
+    raw_targets: list[str],
+) -> list[DeploymentTarget]:
+    """Normalize deployment target strings to DeploymentTarget enum values.
+
+    Handles case variations and unknown values (mapped to OTHER).
+
+    Args:
+        raw_targets: List of deployment target strings from LLM.
+
+    Returns:
+        List of DeploymentTarget enum values.
+    """
+    result: list[DeploymentTarget] = []
+    for target in raw_targets:
+        normalized = target.strip().upper().replace(" ", "_").replace("-", "_")
+        if normalized in _VALID_DEPLOYMENT_TARGETS:
+            result.append(DeploymentTarget(normalized))
+        else:
+            logger.warning(
+                "Unknown deployment target '%s', mapping to OTHER", target
+            )
+            result.append(DeploymentTarget.OTHER)
+    return result
+
+
+def _normalize_scope(raw_scope: str | None) -> ScopeType | None:
+    """Normalize a scope string to a ScopeType enum value.
+
+    Handles case variations and common synonyms.
+
+    Args:
+        raw_scope: Scope string from LLM, or None.
+
+    Returns:
+        ScopeType enum value, or None if input is None.
+    """
+    if raw_scope is None:
+        return None
+
+    normalized = raw_scope.strip().upper().replace(" ", "_").replace("-", "_")
+
+    # Handle common synonyms
+    synonyms: dict[str, str] = {
+        "BACKEND": "BACKEND_ONLY",
+        "FRONTEND": "FRONTEND_ONLY",
+        "FULLSTACK": "FULL_STACK",
+        "FULL-STACK": "FULL_STACK",
+        "LIB": "LIBRARY",
+        "CLI": "CLI_TOOL",
+        "COMMAND_LINE": "CLI_TOOL",
+    }
+
+    normalized = synonyms.get(normalized, normalized)
+
+    if normalized in _VALID_SCOPES:
+        return ScopeType(normalized)
+
+    logger.warning("Unknown scope '%s', mapping to OTHER", raw_scope)
+    return ScopeType.OTHER
+
+
+def _normalize_constraint_priority(
+    raw_priority: str,
+) -> ConstraintPriority:
+    """Normalize a priority string to a ConstraintPriority enum value.
+
+    Args:
+        raw_priority: Priority string from LLM.
+
+    Returns:
+        ConstraintPriority enum value.
+    """
+    normalized = raw_priority.strip().upper().replace(" ", "_").replace("-", "_")
+
+    # Handle common synonyms
+    synonyms: dict[str, str] = {
+        "REQUIRED": "MUST_HAVE",
+        "MANDATORY": "MUST_HAVE",
+        "IMPORTANT": "SHOULD_HAVE",
+        "OPTIONAL": "NICE_TO_HAVE",
+    }
+
+    normalized = synonyms.get(normalized, normalized)
+
+    if normalized in _VALID_PRIORITIES:
+        return ConstraintPriority(normalized)
+
+    return ConstraintPriority.SHOULD_HAVE
+
+
+def _normalize_constraints(
+    raw_constraints: list[ParsedConstraint],
+) -> list[Constraint]:
+    """Normalize parsed constraints into proper Constraint instances.
+
+    Filters out empty descriptions and normalizes priority values.
+
+    Args:
+        raw_constraints: List of ParsedConstraint from LLM.
+
+    Returns:
+        List of validated Constraint instances.
+    """
+    result: list[Constraint] = []
+    for raw in raw_constraints:
+        desc = raw.description.strip()
+        if not desc:
+            continue
+
+        priority = _normalize_constraint_priority(raw.priority)
+
+        result.append(
+            Constraint(
+                description=desc,
+                priority=priority,
+                category=raw.category,
+            )
+        )
+    return result

@@ -1,0 +1,19 @@
+You are a software architect. Plan the module decomposition for the following project.
+
+## Project Name
+{{ project_name }}
+
+## Features
+{% for feature in features %}
+- {{ feature.name }}: {{ feature.description }}
+{% endfor %}
+
+## Instructions
+
+Decompose the features into logical modules. For each module, specify:
+1. **Module Name**: A descriptive name
+2. **Responsibility**: What this module handles
+3. **Components**: List of components within the module
+4. **Dependencies**: Other modules this depends on
+
+Aim for high cohesion within modules and low coupling between them.

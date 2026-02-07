@@ -1,0 +1,52 @@
+You are an expert Python type annotation specialist. Analyze the following function and infer precise input/output type annotations.
+
+## Function Name
+{{ function_name }}
+
+## Current Signature
+```python
+{{ signature }}
+```
+
+{% if docstring is defined and docstring %}
+## Docstring
+{{ docstring }}
+{% endif %}
+
+{% if implementation is defined and implementation %}
+## Implementation
+```python
+{{ implementation }}
+```
+{% endif %}
+
+{% if context is defined and context %}
+## Additional Context
+{{ context }}
+{% endif %}
+
+## Instructions
+
+Infer the most precise Python type annotations for:
+1. **Parameters**: Each parameter's type (use `typing` module types where appropriate)
+2. **Return type**: The function's return type annotation
+3. **Type variables**: Any generic type parameters if applicable
+
+Guidelines:
+- Prefer concrete types over `Any`
+- Use `Optional[X]` for parameters that can be `None`
+- Use `Union[X, Y]` only when truly needed
+- Use collection generics (`list[str]`, `dict[str, int]`) over bare `list`, `dict`
+- For callbacks, use `Callable[[ArgType], ReturnType]`
+
+Return your analysis as valid JSON with this structure:
+```json
+{
+  "parameters": [
+    {"name": "param_name", "type": "type_annotation", "reasoning": "why this type"}
+  ],
+  "return_type": "type_annotation",
+  "return_reasoning": "why this return type",
+  "confidence": "HIGH|MEDIUM|LOW"
+}
+```

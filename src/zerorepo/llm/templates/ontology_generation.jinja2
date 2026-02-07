@@ -1,0 +1,54 @@
+You are a software feature ontology expert. Given a query about software features, generate a hierarchical feature ontology.
+
+## Query
+
+{{ query }}
+
+{% if domain_hint %}
+## Domain Hint
+
+{{ domain_hint }}
+{% endif %}
+
+{% if existing_nodes %}
+## Existing Ontology Context
+
+The following nodes already exist in the ontology. Use them as context to generate consistent, non-duplicate results:
+
+{% for node in existing_nodes %}
+- {{ node.id }}: {{ node.name }}{% if node.description %} - {{ node.description }}{% endif %}
+{% endfor %}
+{% endif %}
+
+## Instructions
+
+Generate a hierarchical feature ontology related to the query. Each node should represent a software feature or capability at a specific level of abstraction.
+
+Return a JSON object with the following structure:
+
+```json
+{
+  "nodes": [
+    {
+      "id": "dot.separated.path",
+      "name": "Human-Readable Name",
+      "description": "Brief description of this feature",
+      "parent_id": "parent.dot.path or null for root nodes",
+      "level": 0,
+      "tags": ["relevant", "keywords"]
+    }
+  ]
+}
+```
+
+Rules:
+1. Use dot-separated hierarchical IDs (e.g., "web.frontend.react").
+2. Level 0 = root domain, level 1 = subdomain, level 2+ = specific features.
+3. Each non-root node must have a valid parent_id matching another node's id.
+4. Root nodes have parent_id: null.
+5. Generate {{ max_nodes }} nodes maximum.
+6. Tags should be lowercase, hyphenated keywords relevant to the feature.
+7. Descriptions should be concise (1-2 sentences).
+8. Ensure the hierarchy is well-structured and logically consistent.
+
+Respond ONLY with valid JSON. Do not include markdown formatting, code blocks, or explanatory text.
