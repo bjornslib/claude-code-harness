@@ -94,7 +94,11 @@ class FolderEncoder(RPGEncoder):
                 bnode = baseline_lookup.get(node.name.lower())
                 if bnode:
                     if bnode.folder_path is not None:
-                        node.folder_path = bnode.folder_path
+                        # Normalize: ensure trailing slash for consistency
+                        bp = bnode.folder_path
+                        if bp and not bp.endswith('/'):
+                            bp = f"{bp}/"
+                        node.folder_path = bp
                         node.metadata["baseline_folder_used"] = True
                     if bnode.file_path is not None and node.file_path is None:
                         node.file_path = bnode.file_path

@@ -212,7 +212,11 @@ class FileEncoder(RPGEncoder):
                     file_name = f"{file_name[:-3]}_{idx}.py"
                 used_names.add(file_name)
 
-                file_path = f"{folder}{file_name}"
+                # Normalize folder to ensure trailing slash
+                norm_folder = folder
+                if norm_folder and not norm_folder.endswith('/'):
+                    norm_folder = f"{norm_folder}/"
+                file_path = f"{norm_folder}{file_name}"
 
                 for nid in sub_group:
                     node = graph.nodes[nid]

@@ -283,6 +283,50 @@ class TestFolderEncoderEdgeCases:
 class TestFolderEncoderBaselineIntegration:
     """Test FolderEncoder handles baseline graphs with conflicting file_path values."""
 
+    def test_baseline_folder_path_without_trailing_slash_gets_normalized(self) -> None:
+        """Regression test: baseline folder_path without trailing slash should be normalized.
+
+        When folder_path comes from baseline and lacks trailing slash, it must be
+        normalized to ensure trailing slash for consistency. This prevents file_path
+        concatenation bugs like "helpersconfiguration.py" instead of "helpers/configuration.py".
+        """
+        # Create baseline graph with folder_path lacking trailing slash
+        baseline = RPGGraph()
+        baseline_node = _make_node("helpers", level=NodeLevel.MODULE)
+        baseline_node.folder_path = "helpers"  # No trailing slash (bug scenario)
+        baseline.add_node(baseline_node)
+
+        # Create target graph with matching node
+        graph = RPGGraph()
+        target_node = _make_node("helpers", level=NodeLevel.MODULE)
+        graph.add_node(target_node)
+
+        # Encode with baseline
+        enc = FolderEncoder()
+        enc.encode(graph, baseline=baseline)
+
+        # Verify folder_path was normalized with trailing slash
+        assert target_node.folder_path == "helpers/"
+        assert target_node.metadata.get("baseline_folder_used") is True
+
+    def test_baseline_empty_folder_path_preserved(self) -> None:
+        """Empty string folder_path from baseline should remain empty (root level)."""
+        baseline = RPGGraph()
+        baseline_node = _make_node("root", level=NodeLevel.MODULE)
+        baseline_node.folder_path = ""  # Root folder
+        baseline.add_node(baseline_node)
+
+        graph = RPGGraph()
+        target_node = _make_node("root", level=NodeLevel.MODULE)
+        graph.add_node(target_node)
+
+        enc = FolderEncoder()
+        enc.encode(graph, baseline=baseline)
+
+        # Empty string should remain empty (no trailing slash added)
+        assert target_node.folder_path == ""
+        assert target_node.metadata.get("baseline_folder_used") is True
+
     def test_file_path_cleared_when_incompatible_with_new_folder_path(self) -> None:
         """Regression test: file_path must be cleared before folder_path reassignment.
 
