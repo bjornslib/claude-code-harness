@@ -6,6 +6,7 @@ Execution workflows for multi-feature development.
 - [4-Phase Pattern](#4-phase-pattern)
 - [Autonomous Mode Protocol](#autonomous-mode-protocol)
 - [Acceptance Test Generation (After PRD Parse)](#acceptance-test-generation-after-prd-parse)
+- [Codebase-Aware Task Creation (ZeroRepo)](#codebase-aware-task-creation-zerorepo)
 - [Feature Decomposition (MAKER)](#feature-decomposition-maker)
 - [Progress Tracking](#progress-tracking)
 - [Session Handoffs](#session-handoffs)
@@ -271,6 +272,91 @@ Phase 1: PRD → acceptance-test-writer → acceptance-tests/PRD-XXX/
 Phase 2: Workers implement (reference tests for guidance)
 Phase 3: validation-test-agent --mode=e2e --prd=PRD-XXX → runs tests → closes tasks
 ```
+
+---
+
+## Codebase-Aware Task Creation (ZeroRepo)
+
+Use ZeroRepo delta analysis to produce precise, scoped task descriptions instead of blind decompositions. Run this after PRD creation and before Task Master parsing.
+
+### Delta Status to Task Mapping
+
+| Delta Status | Task Implication | Worker Context to Include |
+|---|---|---|
+| **EXISTING** | Skip -- no task needed | "This component exists at `<path>/` and needs no changes. Reference only." |
+| **MODIFIED** | Create scoped modification task | "Modify `<path>/` to add `<change>`. See change_summary from delta report." |
+| **NEW** | Create full implementation task | "Create new `<module>/` module. See suggested interfaces from delta report." |
+
+### Enriched Worker Assignment Template
+
+Include delta context in every TaskCreate description:
+
+```python
+TaskCreate(
+    subject="[MODIFIED] Add form handler to eddy_validate",
+    description="""
+    ## Task: Add multi-form validation handler
+
+    **Delta Status**: MODIFIED
+    **Existing Files** (modify these):
+    - eddy_validate/app.py (add new route handler)
+    - eddy_validate/validators.py (add FormValidator class)
+
+    **Reference Files** (EXISTING -- do not modify):
+    - voice_agent/pipeline.py (call pattern for validators)
+    - shared/models.py (existing Pydantic models to extend)
+
+    **Change Summary** (from delta report):
+    Add support for multi-form university contact types.
+    Extend existing SingleFormValidator to handle FormArray input.
+
+    **Acceptance Criteria**:
+    - FormValidator accepts list of form entries
+    - Each entry validated independently
+    - Errors collected and returned as structured response
+    """,
+    activeForm="Adding form handler to eddy_validate"
+)
+```
+
+### Before vs After: Task Description Quality
+
+**Without ZeroRepo** (vague, worker must explore):
+```
+Subject: Implement validation service
+Description: Create a validation service for university contacts.
+  Files: TBD
+  Requirements: Validate contact information
+```
+
+**With ZeroRepo** (precise, worker can start immediately):
+```
+Subject: [MODIFIED] Add contact validator to eddy_validate
+Description:
+  Delta Status: MODIFIED
+  Existing Files: eddy_validate/app.py, eddy_validate/validators.py
+  Change: Add UniversityContactValidator class extending BaseValidator
+  Reference (EXISTING): shared/models.py (UniversityContact model)
+  Reference (EXISTING): voice_agent/pipeline.py (validation call pattern)
+```
+
+### Workflow Integration
+
+```
+Phase 1 Planning:
+  Step 2: Create PRD
+  Step 2.5: Run ZeroRepo (init + generate)    ← NEW
+  Step 3: Read delta report, annotate PRD
+  Step 4: Parse PRD with Task Master
+  Step 5: Sync to Beads
+  Step 6: Generate acceptance tests
+
+Phase 2 Execution:
+  Include delta file paths in every TaskCreate
+  Workers receive precise scope from day one
+```
+
+For detailed ZeroRepo CLI commands and troubleshooting, see [ZEROREPO.md](ZEROREPO.md).
 
 ---
 
@@ -550,8 +636,8 @@ git status
 
 ---
 
-**Version**: 3.0 (Native Agent Teams)
+**Version**: 3.1 (ZeroRepo Codebase-Aware Task Creation)
 **Created**: 2026-01-07
-**Last Updated**: 2026-02-06
+**Last Updated**: 2026-02-08
 **Consolidated from**: AUTONOMOUS_MODE.md, ORCHESTRATOR_PROCESS_FLOW.md, FEATURE_DECOMPOSITION.md, PROGRESS_TRACKING.md
-**Major Changes**: v3.0 - Updated to use native Agent Teams (Teammate + TaskCreate + SendMessage) for worker delegation. Workers are persistent teammates that claim tasks from shared TaskList and communicate via SendMessage. v2.0 - Updated to use Task subagents for worker delegation instead of tmux sessions.
+**Major Changes**: v3.1 - Added Codebase-Aware Task Creation section integrating ZeroRepo delta analysis for precise worker task scoping. v3.0 - Updated to use native Agent Teams (Teammate + TaskCreate + SendMessage) for worker delegation. Workers are persistent teammates that claim tasks from shared TaskList and communicate via SendMessage. v2.0 - Updated to use Task subagents for worker delegation instead of tmux sessions.

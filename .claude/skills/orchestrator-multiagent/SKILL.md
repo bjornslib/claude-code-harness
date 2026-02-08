@@ -356,6 +356,20 @@ bd create --title="[Initiative from Ideation]" --type=epic --priority=1
 # 2. Create PRD from design document (if not exists)
 # Location: agencheck/.taskmaster/docs/[project]-prd.md
 
+# 2.5. Codebase Analysis with ZeroRepo (Recommended)
+# For detailed workflow, see ZEROREPO.md
+#
+# Run ZeroRepo to map PRD against existing codebase:
+zerorepo init --project-path . --exclude node_modules,__pycache__,.git,trees,venv,.zerorepo  # Once per project
+LITELLM_REQUEST_TIMEOUT=1200 zerorepo generate .taskmaster/docs/prd.md \
+  --baseline .zerorepo/baseline.json --model claude-sonnet-4-20250514 --output .zerorepo/output
+# Read delta report: .zerorepo/output/05-delta-report.md
+# Use EXISTING/MODIFIED/NEW classification to enrich task descriptions:
+#   EXISTING → Skip (no task needed, reference only)
+#   MODIFIED → Scoped task with current file path + specific changes
+#   NEW      → Full implementation task with suggested module structure
+# Include delta context in worker TaskCreate descriptions (file paths, change summaries)
+
 # 3. Note current highest task ID before parsing
 cd agencheck && task-master list | tail -5  # e.g., last task is ID 170
 
@@ -1223,6 +1237,7 @@ Add to your session start/end routines:
 
 **During Ideation + Planning (Phase 0-1):**
 - **[WORKFLOWS.md](WORKFLOWS.md#feature-decomposition-maker)** - 🚨 MANDATORY READ before Phase 1 - Contains MAKER checklist, decision tree, red flags
+- **[ZEROREPO.md](ZEROREPO.md)** - Codebase analysis with ZeroRepo. Delta classification (EXISTING/MODIFIED/NEW), CLI commands, troubleshooting, worker context enrichment
 
 **During Execution (Phase 2):**
 - **[WORKFLOWS.md](WORKFLOWS.md)** - 4-Phase Pattern, Autonomous Mode Protocol, Validation (Unit + API + E2E), Progress Tracking, Session Handoffs
@@ -1237,10 +1252,11 @@ Add to your session start/end routines:
 
 ---
 
-**Skill Version**: 5.0 (Native Agent Teams Worker Delegation)
-**Progressive Disclosure**: 5 reference files for detailed information
-**Last Updated**: 2026-02-06
+**Skill Version**: 5.1 (ZeroRepo Codebase-Aware Orchestration)
+**Progressive Disclosure**: 6 reference files for detailed information
+**Last Updated**: 2026-02-08
 **Latest Enhancements**:
+- v5.1: **ZeroRepo Integration** - Added codebase-aware orchestration via ZeroRepo delta analysis. New Step 2.5 in Phase 1 planning runs `zerorepo init` + `zerorepo generate` to classify PRD components as EXISTING/MODIFIED/NEW. Delta context enriches worker task assignments with precise file paths and change summaries. New ZEROREPO.md reference guide. Three wrapper scripts (`zerorepo-init.sh`, `zerorepo-generate.sh`, `zerorepo-update.sh`). Codebase-Aware Task Creation workflow added to WORKFLOWS.md.
 - v5.0: **Native Agent Teams** - Replaced Task subagent worker delegation with native Agent Teams (Teammate + TaskCreate + SendMessage). Workers are now persistent teammates that claim tasks from a shared TaskList, communicate peer-to-peer, and maintain session state across multiple assignments. Validator is a team role (not a separate Task subagent). Message bus scoped to System 3 <-> Orchestrator only; worker communication uses native team inboxes. Fallback to Task subagent mode when AGENT_TEAMS is not enabled.
 - v4.0: **Task-Based Worker Delegation** - Replaced tmux worker delegation with Task subagents. Workers now receive assignments via `Task(subagent_type="...")` and return results directly. No session management, monitoring loops, or cleanup required. Parallel workers use `run_in_background=True` with `TaskOutput()` collection. System 3 -> Orchestrator still uses tmux for session isolation; Orchestrator -> Worker now uses Task subagents.
 - v3.13: 🆕 **Sync Script Finalization** - Sync script now auto-closes Task Master tasks after sync (status=done). Removed mapping file (redundant with beads hierarchy). **IMPORTANT**: Must run from `zenagent/` root to use correct `.beads` database. Updated all docs with correct paths and `--tasks-path` usage.
