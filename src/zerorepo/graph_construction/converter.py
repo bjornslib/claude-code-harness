@@ -153,12 +153,11 @@ class FunctionalityGraphConverter:
                         )
                         rpg.add_node(component_node)
 
-                        # Delta tagging for COMPONENT nodes
+                        # Delta tagging for COMPONENT nodes - prefer LLM classification
                         if baseline is not None:
-                            bl_comp = self._find_matching_baseline_node(
-                                comp_name, baseline, level=NodeLevel.COMPONENT
+                            self._tag_delta_status_from_llm(
+                                component_node, comp, baseline
                             )
-                            self._tag_delta_status(component_node, bl_comp)
 
                         # HIERARCHY edge: MODULE → COMPONENT
                         hierarchy_edge = RPGEdge(
@@ -623,3 +622,78 @@ class FunctionalityGraphConverter:
         if baseline_node.node_type != NodeType.FUNCTIONALITY:
             # Preserve enriched node_type from baseline
             node.node_type = baseline_node.node_type
+
+    @staticmethod
+    def _tag_delta_status_from_llm(
+        node: RPGNode,
+        component: Any,
+        baseline: RPGGraph | None,
+    ) -> None:
+        """Tag node with delta_status using LLM classification when available.
+
+        Prefers LLM-provided delta classification over name-based matching.
+        Falls back to the existing ``_find_matching_baseline_node()`` +
+        ``_tag_delta_status()`` behaviour when the component carries no
+        LLM classification fields.
+
+        Priority:
+            1. If component has ``delta_status`` set (from LLM), use it directly
+            2. Look up baseline node by ``baseline_match_name`` for enrichment
+            3. Fall back to existing ``_find_matching_baseline_node()`` behaviour
+
+        Args:
+            node: The newly created RPGNode to tag.
+            component: A spec Component (or any object with optional
+                ``delta_status``, ``baseline_match_name``, ``change_summary``
+                attributes).
+            baseline: Optional baseline RPGGraph for enrichment lookups.
+        """
+        delta_status = getattr(component, "delta_status", None)
+        baseline_match = getattr(component, "baseline_match_name", None)
+        change_summary = getattr(component, "change_summary", None)
+
+        if delta_status is not None:
+            # LLM provided classification – use it
+            node.metadata["delta_status"] = (
+                delta_status.value
+                if hasattr(delta_status, "value")
+                else str(delta_status)
+            )
+            node.metadata["delta_source"] = "llm"
+
+            if baseline_match and baseline is not None:
+                node.metadata["baseline_match_name"] = baseline_match
+                # Try to find the baseline node for data enrichment
+                bl_node = (
+                    FunctionalityGraphConverter._find_matching_baseline_node(
+                        baseline_match, baseline, level=node.level
+                    )
+                )
+                if bl_node:
+                    node.metadata["baseline_node_id"] = str(bl_node.id)
+                    # Copy enrichment data from baseline
+                    if bl_node.folder_path and not node.folder_path:
+                        node.folder_path = bl_node.folder_path
+                    if bl_node.file_path and not node.file_path:
+                        node.file_path = bl_node.file_path
+                    if bl_node.signature and not node.signature:
+                        node.signature = bl_node.signature
+                    if bl_node.docstring and not node.docstring:
+                        node.docstring = bl_node.docstring
+                    if bl_node.interface_type and not node.interface_type:
+                        node.interface_type = bl_node.interface_type
+                    if bl_node.node_type != NodeType.FUNCTIONALITY:
+                        node.node_type = bl_node.node_type
+
+            if change_summary:
+                node.metadata["change_summary"] = change_summary
+            return
+
+        # Fall back to existing name-matching behavior
+        if baseline is not None:
+            bl_node = (
+                FunctionalityGraphConverter._find_matching_baseline_node(
+                    node.name, baseline, level=node.level
+                )
+            )
+            FunctionalityGraphConverter._tag_delta_status(node, bl_node)
