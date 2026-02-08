@@ -280,6 +280,74 @@ class TestFolderEncoderEdgeCases:
             assert "estimated_files" in root.metadata
 
 
+class TestFolderEncoderBaselineIntegration:
+    """Test FolderEncoder handles baseline graphs with conflicting file_path values."""
+
+    def test_file_path_cleared_when_incompatible_with_new_folder_path(self) -> None:
+        """Regression test: file_path must be cleared before folder_path reassignment.
+
+        This tests the fix for the validation error that occurred when:
+        1. Node has a file_path set (e.g., from converter baseline matching)
+        2. FolderEncoder's BFS assigns new folder_path based on hierarchy
+        3. Pydantic validation fails because file_path doesn't start with folder_path
+
+        The fix: Clear conflicting file_path BEFORE assigning new folder_path.
+        """
+        # Build graph with node that has file_path but no folder_path yet
+        graph = RPGGraph()
+        root = _make_node("Voice Mode Integration", level=NodeLevel.MODULE)
+        graph.add_node(root)
+
+        child = _make_node(
+            "Voice Agent",
+            level=NodeLevel.FEATURE,
+            node_type=NodeType.FILE_AUGMENTED,
+        )
+        # Simulate converter copying file_path from baseline (but not folder_path)
+        # This creates a mismatch: file_path doesn't match the hierarchy-based folder_path
+        child.file_path = "agencheck-communication-agent/livekit_prototype/cli_poc/voice_agent/agent.py"
+        graph.add_node(child)
+        graph.add_edge(_make_hierarchy_edge(root.id, child.id))
+
+        # Encode should NOT raise validation error
+        enc = FolderEncoder()
+        try:
+            enc.encode(graph)
+        except ValueError as e:
+            pytest.fail(f"FolderEncoder raised validation error: {e}")
+
+        # Verify folder_path was assigned correctly based on hierarchy
+        assert root.folder_path == ""
+        assert child.folder_path == "voice_agent/"
+
+        # Verify conflicting file_path was cleared (FileEncoder will reassign later)
+        assert child.file_path is None
+
+    def test_file_path_preserved_when_compatible_with_new_folder_path(self) -> None:
+        """When file_path is already compatible with new folder_path, preserve it."""
+        graph = RPGGraph()
+        root = _make_node("Evaluation", level=NodeLevel.MODULE)
+        graph.add_node(root)
+
+        child = _make_node(
+            "metrics",
+            level=NodeLevel.FEATURE,
+            node_type=NodeType.FILE_AUGMENTED,
+        )
+        # Set file_path that will be compatible with the hierarchy-based folder_path
+        child.file_path = "metrics/accuracy.py"
+        graph.add_node(child)
+        graph.add_edge(_make_hierarchy_edge(root.id, child.id))
+
+        enc = FolderEncoder()
+        enc.encode(graph)
+
+        # Folder_path assigned based on hierarchy
+        assert child.folder_path == "metrics/"
+        # Compatible file_path should be preserved
+        assert child.file_path == "metrics/accuracy.py"
+
+
 class TestFolderEncoderInPipeline:
     """Test FolderEncoder works correctly in RPGBuilder pipeline."""
 

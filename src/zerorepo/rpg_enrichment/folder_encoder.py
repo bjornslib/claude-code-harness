@@ -153,14 +153,16 @@ class FolderEncoder(RPGEncoder):
                     continue
 
                 pkg_name = _to_package_name(child_node.name)
-                child_node.folder_path = f"{parent_path}{pkg_name}/"
+                new_folder = f"{parent_path}{pkg_name}/"
 
-                # For FILE_AUGMENTED or FUNCTION_AUGMENTED leaf nodes that also
-                # have a file_path, ensure file_path is under the folder
-                if child_node.file_path and not child_node.file_path.startswith(
-                    child_node.folder_path
-                ):
-                    child_node.file_path = f"{child_node.folder_path}{child_node.file_path.rsplit('/', 1)[-1]}"
+                # Clear stale file_path BEFORE assigning new folder_path
+                # (validate_assignment=True triggers cross-field validation immediately)
+                if child_node.file_path and not child_node.file_path.startswith(new_folder):
+                    child_node.file_path = None
+
+                child_node.folder_path = new_folder
+
+                # FileEncoder will assign a fresh file_path later if needed
 
                 queue.append(child_id)
 
