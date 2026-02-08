@@ -29,25 +29,23 @@ if ! python -m zerorepo --version &>/dev/null; then
     exit 1
 fi
 
-# Backup existing baseline if it exists
-if [ -f "${BASELINE}" ]; then
-    echo ""
-    echo "Backing up current baseline to: ${BACKUP}"
-    cp "${BASELINE}" "${BACKUP}"
-else
-    echo ""
-    echo "No existing baseline found. Running fresh init."
-fi
-
-# Regenerate baseline
 echo ""
-echo "Regenerating baseline..."
-zerorepo init "${PROJECT_PATH}" \
+echo "Running update via Python runner (backup + re-init)..."
+
+# Use the centralized Python runner (handles backup internally)
+RUNNER_SCRIPT="$(dirname "$0")/zerorepo-run-pipeline.py"
+
+python "${RUNNER_SCRIPT}" \
+    --operation update \
     --project-path "${PROJECT_PATH}" \
     --exclude "${EXCLUDE}"
 
-echo ""
-echo "Baseline updated at: ${BASELINE}"
-echo "Previous baseline: ${BACKUP}"
-echo "Updated: ${TIMESTAMP}"
-echo "=== Done ==="
+exit_code=$?
+if [ $exit_code -eq 0 ]; then
+    echo ""
+    echo "Updated: ${TIMESTAMP}"
+    echo "=== Done ==="
+else
+    echo "=== Update Failed ==="
+    exit $exit_code
+fi

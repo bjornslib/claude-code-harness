@@ -294,6 +294,112 @@ zerorepo generate spec.md --output .zerorepo/output-v2
 
 ---
 
+## Pipeline Runner Script
+
+The wrapper scripts (`zerorepo-init.sh`, `zerorepo-generate.sh`, `zerorepo-update.sh`) all delegate to a centralized Python runner at `.claude/skills/orchestrator-multiagent/scripts/zerorepo-run-pipeline.py`.
+
+### Why a Python Runner?
+
+The previous inline `python -c "..."` approach was fragile:
+- Timeout settings got lost during execution
+- String escaping was complex and error-prone
+- No diagnostic output for troubleshooting
+- Not reusable across operations
+
+The Python runner solves these issues with:
+- Belt-and-suspenders timeout setup (environment var + direct monkey-patch)
+- Comprehensive diagnostic output (baseline size, prompt estimate, timeout value)
+- Proper error handling with specific timeout detection
+- Single source of truth for all operations
+
+### Direct Usage
+
+While the shell wrappers are recommended for most use cases, you can call the runner directly for advanced scenarios:
+
+```bash
+# Generate with custom timeout and model
+python .claude/skills/orchestrator-multiagent/scripts/zerorepo-run-pipeline.py \
+  --operation generate \
+  --prd /path/to/prd.md \
+  --baseline /path/to/baseline.json \
+  --output /path/to/output \
+  --timeout 1800 \
+  --model claude-opus-4-20250514
+
+# Init with custom exclude patterns
+python .claude/skills/orchestrator-multiagent/scripts/zerorepo-run-pipeline.py \
+  --operation init \
+  --project-path /path/to/project \
+  --exclude "node_modules,dist,build,.next,venv"
+
+# Update (backup + re-init)
+python .claude/skills/orchestrator-multiagent/scripts/zerorepo-run-pipeline.py \
+  --operation update \
+  --project-path .
+```
+
+### Parameters Reference
+
+| Parameter | Operations | Default | Description |
+|-----------|-----------|---------|-------------|
+| `--operation` | all | `generate` | Operation type: `init`, `generate`, `update` |
+| `--prd` | generate | (required) | Path to PRD file |
+| `--baseline` | generate | (optional) | Path to baseline JSON |
+| `--model` | generate | `claude-sonnet-4-20250514` | LLM model for analysis |
+| `--output` | generate | `.zerorepo/output` | Output directory |
+| `--skip-enrichment` | generate | `True` | Skip enrichment stage |
+| `--timeout` | generate | `1200` | LLM request timeout (seconds) |
+| `--project-path` | init, update | `.` | Project root directory |
+| `--exclude` | init, update | `node_modules,...` | Comma-separated exclude patterns |
+
+### Timeout Handling
+
+The runner implements a belt-and-suspenders approach to timeout configuration:
+
+1. **Pre-import environment setup**: Sets `LITELLM_REQUEST_TIMEOUT` before importing any modules
+2. **Direct monkey-patch**: Also sets `litellm.request_timeout` after import as a fallback
+3. **Diagnostic output**: Prints timeout value and baseline size for troubleshooting
+4. **Timeout detection**: Catches timeout errors and provides actionable suggestions
+
+This dual approach ensures the timeout propagates correctly even if litellm doesn't read the environment variable properly in certain execution contexts.
+
+### Diagnostic Output
+
+The runner provides comprehensive diagnostic information before executing:
+
+```
+=== ZeroRepo Generate ===
+PRD file: /path/to/prd.md
+Estimated prompt size: ~1,250 tokens
+Baseline: /path/to/baseline.json
+Baseline node count: 3,037 nodes
+Model: claude-sonnet-4-20250514
+Output directory: .zerorepo/output
+Skip enrichment: True
+Timeout: 1200s
+
+[zerorepo-runner] LITELLM_REQUEST_TIMEOUT set to 1200s
+[zerorepo-runner] Also set litellm.request_timeout=1200 (fallback)
+[zerorepo-runner] Running pipeline (5 stages, ~2-3 minutes)...
+```
+
+If a timeout occurs, the runner prints additional diagnosis:
+
+```
+[TIMEOUT DIAGNOSIS]
+- LITELLM_REQUEST_TIMEOUT was set to: 1200s
+- Baseline size: 3037 nodes
+- Estimated prompt: ~1,250 tokens
+
+Suggestions:
+1. Increase --timeout (try 1800 or 2400)
+2. Use a faster model (claude-sonnet-3-5-20241022)
+3. Split the PRD into smaller specifications
+4. Check API rate limits
+```
+
+---
+
 ## Integration with Orchestrator Phases
 
 | Phase | ZeroRepo Role |

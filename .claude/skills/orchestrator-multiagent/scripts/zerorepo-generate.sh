@@ -51,17 +51,27 @@ if [ ! -f "${BASELINE}" ]; then
 fi
 
 echo ""
-echo "Running pipeline (5 stages, ~2.5 minutes)..."
-echo "Setting LITELLM_REQUEST_TIMEOUT=1200"
+echo "Running pipeline via Python runner..."
+
+# Use the centralized Python runner
+RUNNER_SCRIPT="$(dirname "$0")/zerorepo-run-pipeline.py"
 
 export LITELLM_REQUEST_TIMEOUT=1200
 
-zerorepo generate "${SPEC_FILE}" \
+python "${RUNNER_SCRIPT}" \
+    --operation generate \
+    --prd "${SPEC_FILE}" \
     --baseline "${BASELINE}" \
     --model "${MODEL}" \
-    --output "${OUTPUT}"
+    --output "${OUTPUT}" \
+    --timeout 1200
 
-echo ""
-echo "Pipeline complete."
-echo "Delta report: ${OUTPUT}/05-delta-report.md"
-echo "=== Done ==="
+exit_code=$?
+if [ $exit_code -eq 0 ]; then
+    echo ""
+    echo "Delta report: ${OUTPUT}/05-delta-report.md"
+    echo "=== Done ==="
+else
+    echo "=== Generate Failed ==="
+    exit $exit_code
+fi

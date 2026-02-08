@@ -23,11 +23,20 @@ if ! python -m zerorepo --version &>/dev/null; then
 fi
 
 echo ""
-echo "Generating baseline..."
-zerorepo init "${PROJECT_PATH}" \
+echo "Running init via Python runner..."
+
+# Use the centralized Python runner
+RUNNER_SCRIPT="$(dirname "$0")/zerorepo-run-pipeline.py"
+
+python "${RUNNER_SCRIPT}" \
+    --operation init \
     --project-path "${PROJECT_PATH}" \
     --exclude "${EXCLUDE}"
 
-echo ""
-echo "Baseline generated at: ${PROJECT_PATH}/.zerorepo/baseline.json"
-echo "=== Done ==="
+exit_code=$?
+if [ $exit_code -eq 0 ]; then
+    echo "=== Done ==="
+else
+    echo "=== Init Failed ==="
+    exit $exit_code
+fi
