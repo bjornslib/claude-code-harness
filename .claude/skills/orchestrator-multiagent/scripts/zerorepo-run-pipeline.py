@@ -158,6 +158,7 @@ def run_generate(
     # Build sys.argv
     sys.argv = [
         "zerorepo",
+        "-v",  # Enable verbose/DEBUG logging for progress visibility
         "generate",
         str(prd_path),
         "--model", model,
@@ -269,8 +270,8 @@ Examples:
     parser.add_argument(
         "--skip-enrichment",
         action="store_true",
-        default=True,
-        help="Skip enrichment stage (default: True)"
+        default=False,
+        help="Skip enrichment stage (default: run enrichment)"
     )
 
     parser.add_argument(
