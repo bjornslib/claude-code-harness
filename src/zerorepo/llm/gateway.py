@@ -13,11 +13,21 @@ from __future__ import annotations
 import json
 import os
 import time
+import warnings
 from datetime import datetime, timezone
 from typing import Any, Optional, Type
 from uuid import uuid4
 
 from pydantic import BaseModel
+
+# Suppress litellm/Pydantic serialization warnings for response objects
+# These occur because litellm's Message/Choices types don't match Pydantic's
+# expected field counts, but text extraction works correctly regardless.
+warnings.filterwarnings(
+    "ignore",
+    message="Pydantic serializer warnings",
+    category=UserWarning,
+)
 
 from zerorepo.llm.exceptions import (
     ConfigurationError,
@@ -99,6 +109,7 @@ SUPPORTED_MODELS: set[str] = {
     "claude-3-haiku-20240307",
     "claude-3-5-sonnet-20241022",
     "claude-sonnet-4-20250514",
+    "claude-sonnet-4-5-20250929",
     "ollama/llama3.2",
 }
 

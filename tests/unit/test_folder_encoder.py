@@ -392,6 +392,33 @@ class TestFolderEncoderBaselineIntegration:
         assert child.file_path == "metrics/accuracy.py"
 
 
+    def test_baseline_folder_path_hyphens_normalized(self) -> None:
+        """Baseline folder_path with hyphens should be normalized to underscores."""
+        graph = RPGGraph()
+        baseline = RPGGraph()
+
+        # Baseline node with hyphenated folder path (real filesystem)
+        bnode = _make_node("dispatch_work_history_call", level=NodeLevel.COMPONENT)
+        bnode.folder_path = "agencheck-communication-agent/helpers/"
+        baseline.add_node(bnode)
+
+        # New graph node with matching name
+        node = _make_node("dispatch_work_history_call", level=NodeLevel.COMPONENT)
+        graph.add_node(node)
+
+        enc = FolderEncoder()
+        enc.encode(graph, baseline=baseline)
+
+        # Hyphens should be normalized to underscores
+        assert node.folder_path == "agencheck_communication_agent/helpers/"
+        assert "_" in node.folder_path
+        assert "-" not in node.folder_path
+
+        # Validation should pass (valid Python identifiers)
+        result = enc.validate(graph)
+        assert result.passed is True
+
+
 class TestFolderEncoderInPipeline:
     """Test FolderEncoder works correctly in RPGBuilder pipeline."""
 

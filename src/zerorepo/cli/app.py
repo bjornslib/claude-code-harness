@@ -450,7 +450,7 @@ def _build_generate_report(
     ])
 
     for mod in func_graph.modules:
-        lines.append(f"- **{mod.name}** ({mod.feature_count} features): {mod.description[:100]}")
+        lines.append(f"- **{mod.name}** ({mod.feature_count} features): {mod.description}")
 
     lines.extend([
         "",

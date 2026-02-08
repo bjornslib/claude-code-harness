@@ -40,7 +40,7 @@ DEFAULT_TIER_MODELS: dict[ModelTier, dict[str, str]] = {
     },
     ModelTier.STRONG: {
         "openai": "gpt-5.2",
-        "anthropic": "claude-sonnet-4-20250514",
+        "anthropic": "claude-sonnet-4-5-20250929",
         "ollama": "ollama/llama3.2",
     },
 }
@@ -58,7 +58,7 @@ TOKEN_PRICING: dict[str, dict[str, float]] = {
     "gpt-4o": {"input": 2.50, "output": 10.0},
     "claude-3-haiku-20240307": {"input": 0.25, "output": 1.25},
     "claude-3-5-sonnet-20241022": {"input": 3.0, "output": 15.0},
-    "claude-sonnet-4-20250514": {"input": 3.0, "output": 15.0},
+    "claude-sonnet-4-5-20250929": {"input": 3.0, "output": 15.0},
 }
 
 
