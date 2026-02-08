@@ -10,6 +10,7 @@ Complete guide to using ZeroRepo for generating software repositories from natur
 - [CLI Reference](#cli-reference)
   - [Global Options](#global-options)
   - [zerorepo init](#zerorepo-init)
+  - [zerorepo generate](#zerorepo-generate)
   - [zerorepo spec](#zerorepo-spec)
   - [zerorepo ontology](#zerorepo-ontology)
 - [Python API Reference](#python-api-reference)
@@ -18,6 +19,7 @@ Complete guide to using ZeroRepo for generating software repositories from natur
   - [Feature Ontology](#feature-ontology)
   - [Graph Construction](#graph-construction)
   - [Subtree Selection](#subtree-selection)
+  - [Generate Pipeline with Delta Classification](#generate-pipeline-with-delta-classification)
   - [Code Generation](#code-generation)
   - [Evaluation Pipeline](#evaluation-pipeline)
 - [End-to-End Walkthrough](#end-to-end-walkthrough)
@@ -318,6 +320,50 @@ zerorepo spec history SPEC_FILE [OPTIONS]
 | Option | Short | Default | Description |
 |--------|-------|---------|-------------|
 | `--json` | `-j` | False | Output history as JSON |
+
+---
+
+### zerorepo generate
+
+Run the full planning pipeline from a PRD/specification document through graph construction,
+with optional baseline comparison for delta classification.
+
+```bash
+zerorepo generate PRD [OPTIONS]
+```
+
+| Argument/Option | Required | Default | Description |
+|-----------------|----------|---------|-------------|
+| `PRD` | Yes | - | Path to the PRD or specification document |
+| `--model TEXT` | No | `gpt-4o-mini` | LLM model to use for planning |
+| `--output PATH` | No | `./output` | Output directory for generated artifacts |
+| `--baseline PATH` | No | None | Baseline RPG graph JSON for delta classification |
+| `--skip-enrichment` | No | False | Skip the enrichment stage (faster, planning-only) |
+
+**Examples:**
+
+```bash
+# Basic generation from a PRD
+zerorepo generate my-app-prd.md --model gpt-4o --output ./planning-output
+
+# Generate with delta classification against existing codebase graph
+zerorepo generate my-app-prd.md --model gpt-4o --output ./planning-output \
+  --baseline ./previous-run/rpg-graph.json
+
+# Quick planning pass (skip enrichment for faster iteration)
+zerorepo generate my-app-prd.md --model gpt-4o-mini --output ./draft \
+  --skip-enrichment
+```
+
+**Output artifacts:**
+
+| File | Description |
+|------|-------------|
+| `01-spec.json` | Parsed specification |
+| `02-ontology.json` | Feature ontology |
+| `03-graph.json` | Functionality graph |
+| `04-enriched-graph.json` | Enriched RPG graph (skipped with `--skip-enrichment`) |
+| `05-delta-report.md` | Delta classification report (only with `--baseline`) |
 
 ---
 
@@ -729,6 +775,79 @@ The code generation pipeline follows this flow:
 4. **Checkpointing**: Saves state periodically for resume capability
 5. **Signal handling**: Supports graceful shutdown via `SIGTERM`/`SIGINT`
 
+### Generate Pipeline with Delta Classification
+
+Run the full planning pipeline programmatically, with optional baseline comparison.
+
+```python
+from pathlib import Path
+from zerorepo.spec_parser.parser import SpecParser
+from zerorepo.graph_construction.converter import GraphConverter
+from zerorepo.models.graph import RPGGraph
+from zerorepo.llm.gateway import LLMGateway
+
+gateway = LLMGateway()
+
+# Load a baseline graph (from a previous run)
+baseline_json = Path("previous-run/rpg-graph.json").read_text()
+baseline_graph = RPGGraph.from_json(baseline_json)
+
+# Parse spec with baseline context
+parser = SpecParser(gateway=gateway)
+spec = parser.parse(
+    description=open("my-app-prd.md").read(),
+    baseline_graph=baseline_graph,  # Enables delta classification
+)
+
+# The converter tags delta status on each component
+converter = GraphConverter(gateway=gateway)
+graph = converter.convert(spec, baseline_graph=baseline_graph)
+
+# Inspect delta classifications
+from zerorepo.models.node import DeltaClassification
+
+for node in graph.nodes.values():
+    if node.delta_status:
+        print(f"[{node.delta_status.value}] {node.name}")
+        if node.delta_status == DeltaClassification.MODIFIED:
+            print(f"  Changed: {node.change_summary}")
+        if node.baseline_match_name:
+            print(f"  Baseline match: {node.baseline_match_name}")
+
+# Generate delta report
+from zerorepo.serena.delta_report import DeltaReportGenerator
+
+reporter = DeltaReportGenerator()
+report_md = reporter.generate(graph, baseline_graph)
+Path("output/05-delta-report.md").write_text(report_md)
+```
+
+#### Delta Classification Workflow
+
+The typical workflow for incremental repository planning:
+
+```bash
+# Step 1: Initialize project
+zerorepo init
+
+# Step 2: First run (no baseline -- all components are NEW)
+zerorepo generate prd-v1.md --model gpt-4o --output ./v1
+
+# Step 3: Update PRD with new requirements
+# ... edit prd-v2.md ...
+
+# Step 4: Re-generate with baseline (enables delta classification)
+zerorepo generate prd-v2.md --model gpt-4o --output ./v2 \
+  --baseline ./v1/03-graph.json
+
+# Step 5: Review delta report
+cat ./v2/05-delta-report.md
+# Shows: 15 EXISTING, 3 MODIFIED, 8 NEW components
+```
+
+The delta report helps you understand exactly what changed between PRD versions,
+enabling focused code generation on only the modified and new components.
+
 ### Evaluation Pipeline
 
 Evaluate generated repositories against benchmark tasks using a 3-stage pipeline.
@@ -964,6 +1083,28 @@ Ensure file paths are correct. The CLI validates file existence before processin
 - Verify your API key is set: `echo $OPENAI_API_KEY`
 - Check model availability: not all providers support all models
 - LiteLLM retries automatically with exponential backoff for rate limits and connection errors
+
+**LLM timeout errors during `zerorepo generate`**
+
+Large PRDs or baseline graphs can cause LLM requests to exceed default timeouts.
+Two solutions:
+
+```bash
+# Option 1: Set the timeout environment variable before running
+export LITELLM_REQUEST_TIMEOUT=1200
+zerorepo generate large-prd.md --model gpt-4o --output ./output --baseline baseline.json
+
+# Option 2: Use the zerorepo-run-pipeline.py runner script (handles timeouts automatically)
+python .claude/skills/orchestrator-multiagent/scripts/zerorepo-run-pipeline.py \
+  --prd large-prd.md \
+  --model gpt-4o \
+  --output ./output \
+  --baseline baseline.json
+```
+
+The `zerorepo-run-pipeline.py` runner script applies a belt-and-suspenders timeout fix:
+it sets the `LITELLM_REQUEST_TIMEOUT` environment variable before importing litellm,
+then monkey-patches `litellm.request_timeout` as a fallback.
 
 **Docker sandbox failures**
 
