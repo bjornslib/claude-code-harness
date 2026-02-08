@@ -356,19 +356,29 @@ bd create --title="[Initiative from Ideation]" --type=epic --priority=1
 # 2. Create PRD from design document (if not exists)
 # Location: agencheck/.taskmaster/docs/[project]-prd.md
 
-# 2.5. Codebase Analysis with ZeroRepo (Recommended)
+# 2.5a. Codebase Analysis with ZeroRepo (Recommended)
 # For detailed workflow, see ZEROREPO.md
 #
 # Run ZeroRepo to map PRD against existing codebase:
-zerorepo init --project-path . --exclude node_modules,__pycache__,.git,trees,venv,.zerorepo  # Once per project
-LITELLM_REQUEST_TIMEOUT=1200 zerorepo generate .taskmaster/docs/prd.md \
-  --baseline .zerorepo/baseline.json --model claude-sonnet-4-20250514 --output .zerorepo/output
+# Using runner script (recommended for reliable timeout handling):
+python .claude/skills/orchestrator-multiagent/scripts/zerorepo-run-pipeline.py \
+  --operation init --project-path .  # Once per project
+python .claude/skills/orchestrator-multiagent/scripts/zerorepo-run-pipeline.py \
+  --operation generate --prd .taskmaster/docs/prd.md \
+  --baseline .zerorepo/baseline.json --model claude-sonnet-4-5-20250929 \
+  --output .zerorepo/output
 # Read delta report: .zerorepo/output/05-delta-report.md
+# Read 01-spec.json + 03-graph.json to validate/enrich PRD
 # Use EXISTING/MODIFIED/NEW classification to enrich task descriptions:
 #   EXISTING → Skip (no task needed, reference only)
 #   MODIFIED → Scoped task with current file path + specific changes
 #   NEW      → Full implementation task with suggested module structure
 # Include delta context in worker TaskCreate descriptions (file paths, change summaries)
+
+# 2.5b. Enrich Beads with RPG Graph Context (After sync in step 5)
+# For each bead created by sync, update --design with context from 04-rpg.json:
+# bd update <bead-id> --design "Delta: NEW | Files: ... | Interface: ... | Dependencies: ..."
+# See ZEROREPO.md "Enriching Beads with RPG Graph Context" for full pattern
 
 # 3. Note current highest task ID before parsing
 cd agencheck && task-master list | tail -5  # e.g., last task is ID 170
@@ -1252,10 +1262,11 @@ Add to your session start/end routines:
 
 ---
 
-**Skill Version**: 5.1 (ZeroRepo Codebase-Aware Orchestration)
+**Skill Version**: 5.2 (ZeroRepo Bead Enrichment + Model Upgrade)
 **Progressive Disclosure**: 6 reference files for detailed information
 **Last Updated**: 2026-02-08
 **Latest Enhancements**:
+- v5.2: **Bead Enrichment from RPG Graph** - Added Phase 1.5 workflow to inject 04-rpg.json context into beads after Task Master sync. New "Enriching Beads with RPG Graph Context" section in ZEROREPO.md documents the enrichment pattern with real examples. Updated model from claude-sonnet-4-20250514 to claude-sonnet-4-5-20250929. Step 2.5 now split into 2.5a (generate delta) and 2.5b (enrich beads). Workers receive implementation-ready specs with file paths, interfaces, and technology stacks extracted from RPG graph.
 - v5.1: **ZeroRepo Integration** - Added codebase-aware orchestration via ZeroRepo delta analysis. New Step 2.5 in Phase 1 planning runs `zerorepo init` + `zerorepo generate` to classify PRD components as EXISTING/MODIFIED/NEW. Delta context enriches worker task assignments with precise file paths and change summaries. New ZEROREPO.md reference guide. Three wrapper scripts (`zerorepo-init.sh`, `zerorepo-generate.sh`, `zerorepo-update.sh`). Codebase-Aware Task Creation workflow added to WORKFLOWS.md.
 - v5.0: **Native Agent Teams** - Replaced Task subagent worker delegation with native Agent Teams (Teammate + TaskCreate + SendMessage). Workers are now persistent teammates that claim tasks from a shared TaskList, communicate peer-to-peer, and maintain session state across multiple assignments. Validator is a team role (not a separate Task subagent). Message bus scoped to System 3 <-> Orchestrator only; worker communication uses native team inboxes. Fallback to Task subagent mode when AGENT_TEAMS is not enabled.
 - v4.0: **Task-Based Worker Delegation** - Replaced tmux worker delegation with Task subagents. Workers now receive assignments via `Task(subagent_type="...")` and return results directly. No session management, monitoring loops, or cleanup required. Parallel workers use `run_in_background=True` with `TaskOutput()` collection. System 3 -> Orchestrator still uses tmux for session isolation; Orchestrator -> Worker now uses Task subagents.

@@ -12,6 +12,8 @@ ZeroRepo provides a codebase context graph that maps PRD requirements against ex
 | **generate** | Analyze PRD against baseline, produce delta report | Once per PRD during Phase 1 planning | ~2.5 min |
 | **update** | Regenerate baseline after implementation completes | End of Phase 2, before next initiative | ~5s |
 
+> **Prerequisites**: Python 3.12+, `zerorepo` installed (`pip install -e .` from source), LLM API key set, `LITELLM_REQUEST_TIMEOUT=1200` for generate operations.
+
 ---
 
 ## Operation 1: Initialize Baseline
@@ -19,12 +21,7 @@ ZeroRepo provides a codebase context graph that maps PRD requirements against ex
 Generate a structural snapshot of the existing codebase. This baseline serves as the reference point for all delta comparisons.
 
 ```bash
-# Using wrapper script (recommended)
 .claude/skills/orchestrator-multiagent/scripts/zerorepo-init.sh
-
-# Manual command
-zerorepo init --project-path . \
-  --exclude node_modules,__pycache__,.git,trees,venv,.zerorepo
 ```
 
 **Arguments**:
@@ -48,15 +45,8 @@ zerorepo init --project-path . \
 Analyze a PRD (or design spec) against the baseline to classify every referenced component.
 
 ```bash
-# Using wrapper script (recommended)
 .claude/skills/orchestrator-multiagent/scripts/zerorepo-generate.sh \
   .taskmaster/docs/prd.md
-
-# Manual command
-LITELLM_REQUEST_TIMEOUT=1200 zerorepo generate .taskmaster/docs/prd.md \
-  --baseline .zerorepo/baseline.json \
-  --model claude-sonnet-4-20250514 \
-  --output .zerorepo/output
 ```
 
 **Arguments**:
@@ -84,13 +74,7 @@ LITELLM_REQUEST_TIMEOUT=1200 zerorepo generate .taskmaster/docs/prd.md \
 After completing an implementation phase, regenerate the baseline to reflect new code.
 
 ```bash
-# Using wrapper script (recommended -- handles backup automatically)
 .claude/skills/orchestrator-multiagent/scripts/zerorepo-update.sh
-
-# Manual steps
-cp .zerorepo/baseline.json .zerorepo/baseline.prev.json
-zerorepo init --project-path . \
-  --exclude node_modules,__pycache__,.git,trees,venv,.zerorepo
 ```
 
 The wrapper script backs up the current baseline to `baseline.prev.json` before regenerating, preserving a rollback point.
@@ -198,204 +182,100 @@ TaskCreate(
 
 ---
 
-## Environment Requirements
-
-| Requirement | Value | Notes |
-|-------------|-------|-------|
-| Python | 3.12+ | ZeroRepo uses modern Python features |
-| `LITELLM_REQUEST_TIMEOUT` | `1200` | Must be set for generate operation (LLM calls can take 60-90s per stage) |
-| `zerorepo` package | Installed via pip | `pip install -e .` from zerorepo source, or `pip install zerorepo` |
-| LLM API key | Set via environment | `ANTHROPIC_API_KEY` for Claude models, or other provider keys |
-
-### Verifying Installation
-
-```bash
-python -m zerorepo --version
-# Expected: zerorepo X.Y.Z
-
-# If not installed:
-# pip install zerorepo
-# Or from source: cd trees/rpg-improve && pip install -e .
-```
-
----
-
-## Performance Characteristics
-
-| Operation | Duration | Resource Usage | Notes |
-|-----------|----------|----------------|-------|
-| `init` | ~5 seconds | CPU-bound (AST parsing) | Scales with codebase size; 3000+ node projects take ~5s |
-| `generate` | ~2.5 minutes | LLM API calls (5 stages) | Dominated by LLM latency; set `LITELLM_REQUEST_TIMEOUT=1200` |
-| `update` | ~5 seconds | Same as init | Backup adds negligible overhead |
-| Delta report parsing | < 1 second | File I/O only | Read and interpret markdown output |
-
----
-
 ## Troubleshooting
 
-### Large Baselines
-
-**Symptom**: Init takes longer than expected or produces very large baseline files.
-
-**Cause**: Scanning directories that should be excluded (node_modules, virtual environments, build artifacts).
-
-**Fix**: Add patterns to the `--exclude` flag:
-```bash
-zerorepo init --project-path . \
-  --exclude node_modules,__pycache__,.git,trees,venv,.zerorepo,dist,build,.next
-```
-
-### LLM Timeout During Generate
-
-**Symptom**: Pipeline fails mid-stage with timeout errors.
-
-**Cause**: Default LiteLLM timeout is too short for large specs or complex codebases.
-
-**Fix**: Increase the timeout:
-```bash
-LITELLM_REQUEST_TIMEOUT=1200 zerorepo generate ...
-```
-
-If timeouts persist with very large PRDs, consider splitting the PRD into smaller specifications and running generate on each.
-
-### Naming Mismatch (Low Delta Accuracy)
-
-**Symptom**: Delta report shows most components as NEW even though they clearly exist in the codebase.
-
-**Cause**: The LLM generates abstract module names (e.g., `authentication_module`) that do not match the actual codebase names (e.g., `auth/`). The converter uses exact-match, so mismatches produce 0 EXISTING classifications.
-
-**Known Limitation**: Delta classification accuracy depends on LLM naming alignment with the actual codebase. Expect the following accuracy levels:
-
-| Codebase Convention | Expected Accuracy | Notes |
-|--------------------|--------------------|-------|
-| Descriptive names (`voice_agent/`, `email_service/`) | High (~80%+) | LLM naturally generates similar names |
-| Abbreviated names (`va/`, `es/`) | Low (~20%) | LLM cannot guess abbreviations |
-| Mixed conventions | Medium (~50%) | Some matches, some misses |
-
-**Mitigation**: Review the delta report manually. Reclassify obvious mismatches before enriching task descriptions. This manual review typically takes 2-3 minutes and significantly improves task quality.
-
-### Missing Baseline File
-
-**Symptom**: Generate fails with "baseline file not found".
-
-**Fix**: Run init first:
-```bash
-zerorepo init --project-path . --exclude node_modules,__pycache__,.git,trees,venv,.zerorepo
-```
-
-### Output Directory Already Exists
-
-**Symptom**: Generate warns about existing output files.
-
-**Fix**: The pipeline overwrites existing output by default. To preserve previous runs, specify a different output directory:
-```bash
-zerorepo generate spec.md --output .zerorepo/output-v2
-```
+| Problem | Cause | Fix |
+|---------|-------|-----|
+| Init slow / large baseline | Scanning excluded dirs | Add patterns to `--exclude`: `node_modules,dist,build,.next,venv` |
+| LLM timeout during generate | Default timeout too short | Set `LITELLM_REQUEST_TIMEOUT=1200` (or higher for large PRDs) |
+| Most components show as NEW | LLM names don't match codebase names | Manual review of delta report (~2-3 min). Reclassify obvious mismatches |
+| Baseline file not found | Init not run yet | Run `zerorepo init` first |
+| Output dir already exists | Previous run artifacts | Pipeline overwrites by default, or use `--output .zerorepo/output-v2` |
 
 ---
 
 ## Pipeline Runner Script
 
-The wrapper scripts (`zerorepo-init.sh`, `zerorepo-generate.sh`, `zerorepo-update.sh`) all delegate to a centralized Python runner at `.claude/skills/orchestrator-multiagent/scripts/zerorepo-run-pipeline.py`.
+The wrapper scripts delegate to `scripts/zerorepo-run-pipeline.py`. For direct runner usage, parameter reference, and timeout diagnostics, run `python scripts/zerorepo-run-pipeline.py --help`.
 
-### Why a Python Runner?
+---
 
-The previous inline `python -c "..."` approach was fragile:
-- Timeout settings got lost during execution
-- String escaping was complex and error-prone
-- No diagnostic output for troubleshooting
-- Not reusable across operations
+## Enriching Beads with RPG Graph Context
 
-The Python runner solves these issues with:
-- Belt-and-suspenders timeout setup (environment var + direct monkey-patch)
-- Comprehensive diagnostic output (baseline size, prompt estimate, timeout value)
-- Proper error handling with specific timeout detection
-- Single source of truth for all operations
+After creating beads via Task Master sync, use the RPG graph (04-rpg.json) to inject precise technical context into each bead's design field. This transforms generic task descriptions into implementation-ready specifications.
 
-### Direct Usage
+### Pipeline Output Files Reference
 
-While the shell wrappers are recommended for most use cases, you can call the runner directly for advanced scenarios:
+| File | Content | Use In Orchestration |
+|------|---------|---------------------|
+| `01-spec.json` | LLM-parsed spec with components, features, technical requirements | **PRD validation** -- compare against PRD to surface missing requirements, unstated dependencies, and missing API contracts |
+| `03-graph.json` | FunctionalityGraph: modules, features, dependency ordering | **PRD validation** -- verify module boundaries map 1:1 to PRD epics, check dependency ordering is correct |
+| `04-rpg.json` | Full RPGGraph: nodes with folder/file paths, interfaces, signatures, docstrings | **Bead enrichment** -- extract per-component file paths, interface signatures, and technology stack for worker context |
+| `05-delta-report.md` | Human-readable delta summary + implementation order | **Task scoping** -- use NEW vs MODIFIED classification to determine task scope and existing file references |
+
+### Workflow
+
+```
+1. Generate delta report (Operation 2)
+   ↓
+2. Validate PRD against 01-spec.json + 03-graph.json
+   - Verify modules map 1:1 to PRD epics
+   - Surface missing requirements, unstated dependencies
+   - Enrich PRD with identified gaps
+   ↓
+3. Parse enriched PRD with Task Master
+   task-master parse-prd .taskmaster/docs/prd.md --research --append
+   ↓
+4. Sync to Beads (standard workflow from SKILL.md)
+   node scripts/sync-taskmaster-to-beads.js --uber-epic=<epic-id> ...
+   ↓
+5. Enrich beads with RPG graph context (NEW STEP)
+   - Read 04-rpg.json nodes
+   - For each bead, update --design with delta, files, interfaces
+   ↓
+6. Review and commit
+```
+
+### Bead Enrichment Pattern
+
+For each bead created by the sync script, update its design field with context extracted from the corresponding RPG graph nodes:
 
 ```bash
-# Generate with custom timeout and model
-python .claude/skills/orchestrator-multiagent/scripts/zerorepo-run-pipeline.py \
-  --operation generate \
-  --prd /path/to/prd.md \
-  --baseline /path/to/baseline.json \
-  --output /path/to/output \
-  --timeout 1800 \
-  --model claude-opus-4-20250514
-
-# Init with custom exclude patterns
-python .claude/skills/orchestrator-multiagent/scripts/zerorepo-run-pipeline.py \
-  --operation init \
-  --project-path /path/to/project \
-  --exclude "node_modules,dist,build,.next,venv"
-
-# Update (backup + re-init)
-python .claude/skills/orchestrator-multiagent/scripts/zerorepo-run-pipeline.py \
-  --operation update \
-  --project-path .
+bd update <bead-id> --design "
+Delta: NEW | MODIFIED | EXISTING
+Epic: <epic-name>
+TM-ID: <task-master-id>
+Files:
+- path/to/file.py (NEW | MODIFIED - <change description>)
+- path/to/other.py (EXISTING - reference only)
+Components: ComponentName1, ComponentName2
+Technologies: Python, FastAPI, PostgreSQL, etc.
+Interface:
+  async def method_name(param: Type) -> ReturnType
+  class ModelName(BaseModel): field1, field2, ...
+Dependencies: blocks <bead-id> | blocked by <bead-id> | None
+"
 ```
 
-### Parameters Reference
+### Real Example (from Work History Phase 1)
 
-| Parameter | Operations | Default | Description |
-|-----------|-----------|---------|-------------|
-| `--operation` | all | `generate` | Operation type: `init`, `generate`, `update` |
-| `--prd` | generate | (required) | Path to PRD file |
-| `--baseline` | generate | (optional) | Path to baseline JSON |
-| `--model` | generate | `claude-sonnet-4-20250514` | LLM model for analysis |
-| `--output` | generate | `.zerorepo/output` | Output directory |
-| `--skip-enrichment` | generate | `True` | Skip enrichment stage |
-| `--timeout` | generate | `1200` | LLM request timeout (seconds) |
-| `--project-path` | init, update | `.` | Project root directory |
-| `--exclude` | init, update | `node_modules,...` | Comma-separated exclude patterns |
-
-### Timeout Handling
-
-The runner implements a belt-and-suspenders approach to timeout configuration:
-
-1. **Pre-import environment setup**: Sets `LITELLM_REQUEST_TIMEOUT` before importing any modules
-2. **Direct monkey-patch**: Also sets `litellm.request_timeout` after import as a fallback
-3. **Diagnostic output**: Prints timeout value and baseline size for troubleshooting
-4. **Timeout detection**: Catches timeout errors and provides actionable suggestions
-
-This dual approach ensures the timeout propagates correctly even if litellm doesn't read the environment variable properly in certain execution contexts.
-
-### Diagnostic Output
-
-The runner provides comprehensive diagnostic information before executing:
-
-```
-=== ZeroRepo Generate ===
-PRD file: /path/to/prd.md
-Estimated prompt size: ~1,250 tokens
-Baseline: /path/to/baseline.json
-Baseline node count: 3,037 nodes
-Model: claude-sonnet-4-20250514
-Output directory: .zerorepo/output
-Skip enrichment: True
-Timeout: 1200s
-
-[zerorepo-runner] LITELLM_REQUEST_TIMEOUT set to 1200s
-[zerorepo-runner] Also set litellm.request_timeout=1200 (fallback)
-[zerorepo-runner] Running pipeline (5 stages, ~2-3 minutes)...
-```
-
-If a timeout occurs, the runner prints additional diagnosis:
-
-```
-[TIMEOUT DIAGNOSIS]
-- LITELLM_REQUEST_TIMEOUT was set to: 1200s
-- Baseline size: 3037 nodes
-- Estimated prompt: ~1,250 tokens
-
-Suggestions:
-1. Increase --timeout (try 1800 or 2400)
-2. Use a faster model (claude-sonnet-3-5-20241022)
-3. Split the PRD into smaller specifications
-4. Check API rate limits
+```bash
+bd update zenagent-irpn --design "
+Delta: NEW + MODIFIED
+Epic: 1.3 - SendGrid Email Templates (GAP 7)
+TM-ID: 175
+Files:
+- agencheck-support-agent/utils/sendgrid_client.py (MODIFIED - extend with Dynamic Templates)
+- agencheck-support-agent/templates/verification_request.html (NEW)
+Components: SendGridTemplateIntegration, EmailTemplateHTML, SendGridClientExtension
+Technologies: SendGrid, Python, HTML, CSS
+Interface:
+  async def send_verification_email(verifier_email: str, token: str, candidate_name: str, company_name: str) -> None
+  Handlebars fields: {{candidate_name}}, {{company_name}}, {{verification_url}}, {{verifier_name}}, {{expiry_days}}
+  Webhook: /api/v1/sendgrid/webhook for delivery/open/click tracking
+CAN-SPAM: Unsubscribe link required
+Dependencies: None (can start immediately, independent of other epics)
+"
 ```
 
 ---
@@ -405,13 +285,14 @@ Suggestions:
 | Phase | ZeroRepo Role |
 |-------|---------------|
 | **Phase 0: Ideation** | Not used -- focus on design and research |
-| **Phase 1: Planning** | Run init + generate. Use delta report to enrich PRD before Task Master parsing |
-| **Phase 2: Execution** | Include delta context in worker task assignments (file paths, change summaries) |
+| **Phase 1: Planning (Step 2.5a)** | Run init + generate. Validate PRD against 01-spec.json + 03-graph.json. Enrich PRD with identified gaps |
+| **Phase 1: Planning (Step 2.5b)** | After Task Master sync, enrich beads with 04-rpg.json context (file paths, interfaces, delta status) |
+| **Phase 2: Execution** | Workers reference enriched bead design fields for precise implementation scope |
 | **Phase 3: Validation** | Not directly used -- validation focuses on test results |
 | **Post-initiative** | Run update to refresh baseline for next initiative |
 
 ---
 
-**Reference Version**: 1.0
+**Reference Version**: 2.1
 **Created**: 2026-02-08
 **CLI Source**: `src/zerorepo/cli/` (in trees/rpg-improve worktree)
