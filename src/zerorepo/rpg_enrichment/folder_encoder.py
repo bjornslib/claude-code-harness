@@ -94,14 +94,16 @@ class FolderEncoder(RPGEncoder):
                 bnode = baseline_lookup.get(node.name.lower())
                 if bnode:
                     if bnode.folder_path is not None:
-                        # Normalize: ensure trailing slash for consistency
-                        bp = bnode.folder_path
+                        # Normalize filesystem hyphens to Python identifier underscores
+                        bp = bnode.folder_path.replace("-", "_")
                         if bp and not bp.endswith('/'):
                             bp = f"{bp}/"
                         node.folder_path = bp
                         node.metadata["baseline_folder_used"] = True
                     if bnode.file_path is not None and node.file_path is None:
-                        node.file_path = bnode.file_path
+                        # Normalize hyphens in directory components to match folder_path convention
+                        fp = bnode.file_path.replace("-", "_")
+                        node.file_path = fp
                         node.metadata["baseline_file_path_used"] = True
 
         # Build parent→children adjacency from HIERARCHY edges

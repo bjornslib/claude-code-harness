@@ -1011,7 +1011,7 @@ class TestSelectModelAdditional:
             (ModelTier.MEDIUM, "openai"): "gpt-5.2",
             (ModelTier.MEDIUM, "anthropic"): "claude-3-5-sonnet-20241022",
             (ModelTier.STRONG, "openai"): "gpt-5.2",
-            (ModelTier.STRONG, "anthropic"): "claude-sonnet-4-20250514",
+            (ModelTier.STRONG, "anthropic"): "claude-sonnet-4-5-20250929",
         }
         for (tier, provider), model in expected.items():
             assert gw.select_model(tier, provider) == model
