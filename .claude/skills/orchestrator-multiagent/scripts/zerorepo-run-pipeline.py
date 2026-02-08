@@ -194,7 +194,7 @@ def run_generate(
             print(f"- Estimated prompt: ~{prompt_size:,} tokens", flush=True)
             print("\nSuggestions:", flush=True)
             print("1. Increase --timeout (try 1800 or 2400)", flush=True)
-            print("2. Use a faster model (claude-sonnet-3-5-20241022)", flush=True)
+            print("2. Use a faster model (claude-3-5-sonnet-20241022)", flush=True)
             print("3. Split the PRD into smaller specifications", flush=True)
             print("4. Check API rate limits", flush=True)
 
@@ -256,8 +256,8 @@ Examples:
 
     parser.add_argument(
         "--model",
-        default="claude-sonnet-4-20250514",
-        help="LLM model for analysis (default: claude-sonnet-4-20250514)"
+        default="claude-sonnet-4-5-20250929",
+        help="LLM model for analysis (default: claude-sonnet-4-5-20250929)"
     )
 
     parser.add_argument(

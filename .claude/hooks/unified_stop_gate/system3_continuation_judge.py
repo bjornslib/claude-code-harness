@@ -1,15 +1,9 @@
-"""System 3 continuation judge checker using Haiku API for session evaluation.
+"""Tiered continuation judge checker using Haiku API for session evaluation.
 
-This checker uses Claude Haiku 4.5 to analyze the last 5 conversation turns
-and determine if a System 3 meta-orchestrator session should be allowed to stop.
-
-The judge evaluates:
-- Completion promise verification (cs-verify)
-- Post-session reflection (Hindsight retention)
-- Validation evidence (validation-test-agent usage)
-- Cleanup (tmux sessions, message bus)
-- Meaningful work completion
-- Continuation items or genuine completeness
+Supports three strictness levels:
+- System 3 (system3-*): Full strict evaluation (promises, reflection, validation, cleanup)
+- Orchestrators (orch-*): Light evaluation (work completion, team cleanup)
+- Other sessions: Light evaluation (just check for obviously incomplete work)
 """
 
 from dataclasses import dataclass
@@ -138,14 +132,46 @@ Default to BLOCK (should_continue=true) when:
 - No AskUserQuestion was presented despite work being exhausted"""
 
 
+# Light judge prompt for orchestrators and other sessions
+LIGHT_JUDGE_SYSTEM_PROMPT = """You are a session completion evaluator for a Claude Code agent.
+
+Your job: Quickly evaluate whether this agent session has done meaningful work before stopping.
+
+## Key Principle
+Be LENIENT. Default to ALLOWING the stop. Only BLOCK if there's clear evidence of:
+1. Work that was started but obviously left incomplete mid-task
+2. A critical error that the agent acknowledged but didn't address
+3. The agent explicitly said it would do something but didn't
+
+## What to IGNORE (do NOT block for these)
+- No AskUserQuestion needed (that's a System 3 requirement, not for workers/orchestrators)
+- No Hindsight reflection needed
+- No completion promises needed
+- Available beads/work in the queue (the agent may have finished its assigned scope)
+- Cleanup tasks (tmux, message bus) — informational only
+
+## Response Format
+RESPOND with JSON only:
+{"should_continue": boolean, "reason": "brief explanation", "suggestion": "what to do if continuing"}
+
+should_continue=true means BLOCK (only for obviously incomplete work)
+should_continue=false means ALLOW (default — let the session stop)
+
+**Default to should_continue=false (ALLOW stop) in almost all cases.**
+Only block if you see clear, unambiguous evidence of abandoned mid-task work."""
+
+
 class System3ContinuationJudgeChecker:
-    """P3.5: System 3 session continuation evaluator using Haiku API.
+    """P3.5: Tiered session continuation evaluator using Haiku API.
 
-    This checker uses a Haiku 4.5 API call to analyze the last 5 conversation
-    turns and determine if a System 3 session has properly completed its work
-    before stopping.
+    Uses Haiku 4.5 to analyze conversation turns and determine if a session
+    has properly completed its work before stopping.
 
-    Only active for System 3 sessions (session ID starts with 'system3-').
+    Strictness tiers:
+    - System 3 (system3-*): Strict — requires promises, reflection, AskUserQuestion
+    - Orchestrators (orch-*): Light — just checks for obviously incomplete work
+    - Other sessions: Light — same as orchestrators
+
     Fails open on any errors to avoid blocking valid stops.
     """
 
@@ -167,14 +193,8 @@ class System3ContinuationJudgeChecker:
             - passed=True if not System3, no transcript, judge approves, or error (fail-open)
             - passed=False if judge blocks stop (session has more work to do)
         """
-        # Guard: Only run for System 3 sessions
-        if not self.config.is_system3:
-            return CheckResult(
-                priority=Priority.P3_5_SYSTEM3_JUDGE,
-                passed=True,
-                message="Not a System 3 session - judge check skipped",
-                blocking=True,
-            )
+        # Determine strictness tier
+        self._is_strict = self.config.is_system3  # system3-* = strict, everything else = light
 
         # Guard: Check if transcript exists, with fallback to session_id search
         transcript_path = self.session.transcript_path
@@ -434,11 +454,18 @@ class System3ContinuationJudgeChecker:
         if work_state:
             prompt_parts.append(f"## WORK STATE AND TASK PRIMITIVES\n\n{work_state}\n")
 
-        prompt_parts.append(
-            "## KEY QUESTION\n"
-            "Has System 3 sincerely exhausted all options to continue productive work "
-            "independently, AND presented option questions to the user via AskUserQuestion?\n"
-        )
+        if self._is_strict:
+            prompt_parts.append(
+                "## KEY QUESTION\n"
+                "Has System 3 sincerely exhausted all options to continue productive work "
+                "independently, AND presented option questions to the user via AskUserQuestion?\n"
+            )
+        else:
+            prompt_parts.append(
+                "## KEY QUESTION\n"
+                "Has this agent completed its assigned work? Is there any obviously "
+                "incomplete mid-task work that should be finished before stopping?\n"
+            )
 
         prompt_parts.append(f"## CONVERSATION (last turns)\n\n{conversation}")
 
@@ -466,10 +493,13 @@ class System3ContinuationJudgeChecker:
         try:
             client = Anthropic(api_key=api_key)
 
+            # Use strict prompt for System 3, light prompt for everything else
+            system_prompt = SYSTEM3_JUDGE_SYSTEM_PROMPT if self._is_strict else LIGHT_JUDGE_SYSTEM_PROMPT
+
             response = client.messages.create(
                 model="claude-haiku-4-5-20251001",
                 max_tokens=500,
-                system=SYSTEM3_JUDGE_SYSTEM_PROMPT,
+                system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
                 timeout=30.0,  # 30 second timeout
             )

@@ -1,19 +1,20 @@
-# Runtime state (created during usage)
-.claude/state/*
-.claude/message-bus/queue.db
-.claude/message-bus/signals/*
-.claude/completion-state/*
-.claude/worker-assignments/*
-.claude/test
+# Ignore generated Codex review reports (prevent stale report issues)
+reports/post-push/codex-review-*.md
 
-# Keep directory structure but ignore contents
-!.claude/state/.gitkeep
-!.claude/message-bus/signals/.gitkeep
-!.claude/completion-state/.gitkeep
-!.claude/worker-assignments/.gitkeep
+# Keep the directory structure and other files
+!reports/post-push/.gitkeep
 
-# Local settings override (user-specific paths and preferences)
-.claude/settings.local.json
+# Session-specific runtime state (completion promises, session tracking)
+completion-state/promises/
+completion-state/sessions/
+completion-state/default/
+completion-state/history/
+
+# Keep directory structure
+!completion-state/.gitkeep
+!completion-state/promises/.gitkeep
+!completion-state/sessions/.gitkeep
+!completion-state/history/.gitkeep
 
 # MCP configuration with API keys (users should copy from .mcp.json.example)
 .mcp.json
