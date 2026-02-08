@@ -11,6 +11,7 @@ This module implements the complete LLM Gateway (Epic 1.3) with:
 from __future__ import annotations
 
 import json
+import os
 import time
 from datetime import datetime, timezone
 from typing import Any, Optional, Type
@@ -212,6 +213,7 @@ class LLMGateway:
         messages: list[dict[str, Any]],
         model: str,
         tier: ModelTier | None = None,
+        timeout: int | None = None,
         **kwargs: Any,
     ) -> str:
         """Send a chat completion request and return the response text.
@@ -235,6 +237,10 @@ class LLMGateway:
         if model not in SUPPORTED_MODELS:
             raise ConfigurationError(f"Unsupported model: {model!r}")
 
+        # Resolve timeout from parameter or environment (litellm default is 600s)
+        if timeout is None:
+            timeout = int(os.environ.get("LITELLM_REQUEST_TIMEOUT", 600))
+
         request_id = uuid4()
         start = time.monotonic()
         last_error: Exception | None = None
@@ -244,6 +250,7 @@ class LLMGateway:
                 response = litellm_completion(
                     model=model,
                     messages=messages,
+                    timeout=timeout,
                     **kwargs,
                 )
                 elapsed_ms = (time.monotonic() - start) * 1000
