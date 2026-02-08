@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict, deque
+from typing import Any
 from uuid import UUID
 
+from zerorepo.models.edge import RPGEdge
 from zerorepo.models.enums import EdgeType, NodeLevel
 from zerorepo.models.graph import RPGGraph
 from zerorepo.rpg_enrichment.base import RPGEncoder
@@ -33,8 +35,15 @@ class IntraModuleOrderEncoder(RPGEncoder):
     in arbitrary order and adds a warning.
     """
 
-    def encode(self, graph: RPGGraph) -> RPGGraph:
-        """Compute file_order for all MODULE nodes."""
+    def encode(self, graph: RPGGraph, spec: Any | None = None, baseline: RPGGraph | None = None) -> RPGGraph:
+        """Compute file_order for all MODULE nodes and create ORDERING edges.
+
+        After topologically sorting files within each module, creates
+        :class:`RPGEdge` objects with ``EdgeType.ORDERING`` between
+        representative nodes for consecutive files in the sorted order.
+        This makes the ordering explicit in the graph structure, not
+        just in metadata.
+        """
         if graph.node_count == 0:
             return graph
 
@@ -49,6 +58,20 @@ class IntraModuleOrderEncoder(RPGEncoder):
         for nid, node in graph.nodes.items():
             if node.file_path:
                 node_to_file[nid] = node.file_path
+
+        # Build reverse map: file_path → representative node_id
+        # (first node found for each file, preferring FEATURE-level)
+        file_to_node: dict[str, UUID] = {}
+        for nid, node in graph.nodes.items():
+            if node.file_path:
+                existing = file_to_node.get(node.file_path)
+                if existing is None:
+                    file_to_node[node.file_path] = nid
+                elif node.level == NodeLevel.FEATURE:
+                    # Prefer FEATURE-level representatives
+                    existing_node = graph.nodes.get(existing)
+                    if existing_node and existing_node.level != NodeLevel.FEATURE:
+                        file_to_node[node.file_path] = nid
 
         # Build file-level dependency edges from DATA_FLOW and INVOCATION
         dep_types = {EdgeType.DATA_FLOW, EdgeType.INVOCATION}
@@ -100,7 +123,55 @@ class IntraModuleOrderEncoder(RPGEncoder):
                 order,
             )
 
+            # Create ORDERING edges between consecutive files
+            self._create_ordering_edges(graph, order, file_to_node)
+
         return graph
+
+    @staticmethod
+    def _create_ordering_edges(
+        graph: RPGGraph,
+        file_order: list[str],
+        file_to_node: dict[str, UUID],
+    ) -> None:
+        """Create ORDERING RPGEdge objects between consecutive files.
+
+        For each adjacent pair (file_i, file_i+1) in the sorted order,
+        finds representative nodes and creates an ORDERING edge from
+        the earlier file's node to the later file's node.
+
+        Args:
+            graph: The RPGGraph to add edges to.
+            file_order: Topologically sorted file paths.
+            file_to_node: Mapping from file_path to representative node UUID.
+        """
+        if len(file_order) < 2:
+            return
+
+        # Collect existing ORDERING edges to avoid duplicates
+        existing_ordering: set[tuple[UUID, UUID]] = set()
+        for edge in graph.edges.values():
+            if edge.edge_type == EdgeType.ORDERING:
+                existing_ordering.add((edge.source_id, edge.target_id))
+
+        for i in range(len(file_order) - 1):
+            earlier_file = file_order[i]
+            later_file = file_order[i + 1]
+
+            src_id = file_to_node.get(earlier_file)
+            tgt_id = file_to_node.get(later_file)
+
+            if src_id and tgt_id and src_id != tgt_id:
+                pair = (src_id, tgt_id)
+                if pair not in existing_ordering:
+                    graph.add_edge(
+                        RPGEdge(
+                            source_id=src_id,
+                            target_id=tgt_id,
+                            edge_type=EdgeType.ORDERING,
+                        )
+                    )
+                    existing_ordering.add(pair)
 
     def validate(self, graph: RPGGraph) -> ValidationResult:
         """Validate that MODULE nodes have file_order."""

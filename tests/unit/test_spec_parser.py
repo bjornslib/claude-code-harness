@@ -15,23 +15,35 @@ import pytest
 
 from zerorepo.llm.models import ModelTier
 from zerorepo.spec_parser.models import (
+    Component,
     Constraint,
     ConstraintPriority,
+    DataFlow,
     DeploymentTarget,
+    Epic,
+    FileRecommendation,
     QualityAttributes,
     RepositorySpec,
     ScopeType,
     TechnicalRequirement,
 )
 from zerorepo.spec_parser.parser import (
+    ParsedComponent,
     ParsedConstraint,
+    ParsedDataFlow,
+    ParsedEpic,
+    ParsedFileRecommendation,
     ParsedSpecResponse,
     ParserConfig,
     SpecParser,
     SpecParserError,
+    _normalize_components,
     _normalize_constraint_priority,
     _normalize_constraints,
+    _normalize_data_flows,
     _normalize_deployment_targets,
+    _normalize_epics,
+    _normalize_file_recommendations,
     _normalize_scope,
 )
 
@@ -54,6 +66,10 @@ def _make_llm_response(
     reliability: str | None = None,
     maintainability: str | None = None,
     constraints: list[dict[str, Any]] | None = None,
+    epics: list[dict[str, Any]] | None = None,
+    components: list[dict[str, Any]] | None = None,
+    data_flows: list[dict[str, Any]] | None = None,
+    file_recommendations: list[dict[str, Any]] | None = None,
 ) -> str:
     """Build a mock LLM JSON response string."""
     data = {
@@ -69,6 +85,10 @@ def _make_llm_response(
         "reliability": reliability,
         "maintainability": maintainability,
         "constraints": constraints or [],
+        "epics": epics or [],
+        "components": components or [],
+        "data_flows": data_flows or [],
+        "file_recommendations": file_recommendations or [],
     }
     return json.dumps(data)
 
@@ -104,9 +124,9 @@ class TestParserConfig:
     """Test ParserConfig model."""
 
     def test_default_config(self) -> None:
-        """Default config uses gpt-4o-mini and CHEAP tier."""
+        """Default config uses gpt-5.2 and CHEAP tier."""
         config = ParserConfig()
-        assert config.model == "gpt-4o-mini"
+        assert config.model == "gpt-5.2"
         assert config.tier == ModelTier.CHEAP
         assert config.template_name == "spec_parsing"
         assert config.max_description_length == 50000
@@ -410,6 +430,16 @@ class TestSpecParserParse:
 
         call_kwargs = parser.gateway.complete.call_args.kwargs
         assert "response_format" not in call_kwargs
+
+    def test_parse_uses_temperature_zero(self) -> None:
+        """Parser calls LLM with temperature=0 for deterministic output."""
+        parser = _make_parser()
+        parser.parse(
+            "Build a real-time chat application with React support"
+        )
+
+        call_kwargs = parser.gateway.complete.call_args.kwargs
+        assert call_kwargs.get("temperature") == 0
 
     def test_parse_preserves_original_description(self) -> None:
         """The original description is preserved in the output."""
@@ -724,3 +754,256 @@ class TestSpecParserEndToEnd:
         assert spec.constraints[1].priority == ConstraintPriority.MUST_HAVE
         assert spec.constraints[2].priority == ConstraintPriority.NICE_TO_HAVE
         assert spec.constraints[3].priority == ConstraintPriority.SHOULD_HAVE
+
+
+# ---------------------------------------------------------------------------
+# Deep extraction tests (epics, components, data flows, file recommendations)
+# ---------------------------------------------------------------------------
+
+
+class TestDeepExtractionParsing:
+    """Test parsing of deep extraction fields."""
+
+    def test_parse_with_epics(self) -> None:
+        """Parse extracts epics from LLM response."""
+        llm_response = _make_llm_response(
+            epics=[
+                {
+                    "title": "User Authentication",
+                    "description": "JWT-based auth with OAuth2",
+                    "priority": "MUST_HAVE",
+                    "estimated_complexity": "high",
+                },
+                {
+                    "title": "Real-time Messaging",
+                    "description": "WebSocket-based chat system",
+                    "priority": "MUST_HAVE",
+                    "estimated_complexity": "high",
+                },
+            ],
+        )
+        parser = _make_parser(llm_response)
+        spec = parser.parse(
+            "Build a chat application with authentication and messaging"
+        )
+
+        assert len(spec.epics) == 2
+        assert spec.epics[0].title == "User Authentication"
+        assert spec.epics[0].priority == ConstraintPriority.MUST_HAVE
+        assert spec.epics[0].estimated_complexity == "high"
+        assert spec.epics[1].title == "Real-time Messaging"
+
+    def test_parse_with_components(self) -> None:
+        """Parse extracts components from LLM response."""
+        llm_response = _make_llm_response(
+            components=[
+                {
+                    "name": "API Gateway",
+                    "description": "Central entry point for all API requests",
+                    "component_type": "service",
+                    "technologies": ["FastAPI", "uvicorn"],
+                },
+                {
+                    "name": "Database Layer",
+                    "description": "PostgreSQL with SQLAlchemy ORM",
+                    "component_type": "database",
+                    "technologies": ["PostgreSQL", "SQLAlchemy"],
+                },
+            ],
+        )
+        parser = _make_parser(llm_response)
+        spec = parser.parse(
+            "Build a backend API with PostgreSQL database"
+        )
+
+        assert len(spec.components) == 2
+        assert spec.components[0].name == "API Gateway"
+        assert spec.components[0].component_type == "service"
+        assert "FastAPI" in spec.components[0].technologies
+        assert spec.components[1].name == "Database Layer"
+
+    def test_parse_with_data_flows(self) -> None:
+        """Parse extracts data flows from LLM response."""
+        llm_response = _make_llm_response(
+            data_flows=[
+                {
+                    "source": "API Gateway",
+                    "target": "Auth Service",
+                    "description": "JWT token validation",
+                    "protocol": "REST",
+                },
+                {
+                    "source": "API Gateway",
+                    "target": "Database Layer",
+                    "description": "CRUD operations via ORM",
+                    "protocol": "direct",
+                },
+            ],
+        )
+        parser = _make_parser(llm_response)
+        spec = parser.parse(
+            "Build a system with API gateway and authentication"
+        )
+
+        assert len(spec.data_flows) == 2
+        assert spec.data_flows[0].source == "API Gateway"
+        assert spec.data_flows[0].target == "Auth Service"
+        assert spec.data_flows[0].protocol == "REST"
+
+    def test_parse_with_file_recommendations(self) -> None:
+        """Parse extracts file recommendations from LLM response."""
+        llm_response = _make_llm_response(
+            file_recommendations=[
+                {
+                    "path": "src/api/routes.py",
+                    "purpose": "API route definitions",
+                    "component": "API Gateway",
+                },
+                {
+                    "path": "src/models/user.py",
+                    "purpose": "User data model",
+                    "component": "Database Layer",
+                },
+            ],
+        )
+        parser = _make_parser(llm_response)
+        spec = parser.parse(
+            "Build a backend API with user management"
+        )
+
+        assert len(spec.file_recommendations) == 2
+        assert spec.file_recommendations[0].path == "src/api/routes.py"
+        assert spec.file_recommendations[0].component == "API Gateway"
+
+    def test_parse_empty_deep_extraction_fields(self) -> None:
+        """Parse handles empty deep extraction fields gracefully."""
+        parser = _make_parser()
+        spec = parser.parse(
+            "Build a simple command line tool for file conversion"
+        )
+
+        assert spec.epics == []
+        assert spec.components == []
+        assert spec.data_flows == []
+        assert spec.file_recommendations == []
+
+
+class TestNormalizeEpics:
+    """Test _normalize_epics helper."""
+
+    def test_valid_epics(self) -> None:
+        """Valid epics are normalized."""
+        raw = [
+            ParsedEpic(title="Auth System", description="Authentication", priority="MUST_HAVE"),
+            ParsedEpic(title="Messaging", description="Chat features", priority="SHOULD_HAVE"),
+        ]
+        result = _normalize_epics(raw)
+        assert len(result) == 2
+        assert result[0].title == "Auth System"
+        assert result[0].priority == ConstraintPriority.MUST_HAVE
+        assert result[1].title == "Messaging"
+
+    def test_empty_titles_filtered(self) -> None:
+        """Epics with empty titles are filtered out."""
+        raw = [
+            ParsedEpic(title="Valid Epic", description="has a title"),
+            ParsedEpic(title="", description="no title"),
+            ParsedEpic(title="   ", description="whitespace title"),
+        ]
+        result = _normalize_epics(raw)
+        assert len(result) == 1
+
+    def test_empty_list(self) -> None:
+        """Empty input returns empty output."""
+        assert _normalize_epics([]) == []
+
+
+class TestNormalizeComponents:
+    """Test _normalize_components helper."""
+
+    def test_valid_components(self) -> None:
+        """Valid components are normalized."""
+        raw = [
+            ParsedComponent(
+                name="API Gateway",
+                description="Entry point",
+                component_type="service",
+                technologies=["FastAPI"],
+            ),
+        ]
+        result = _normalize_components(raw)
+        assert len(result) == 1
+        assert result[0].name == "API Gateway"
+        assert result[0].technologies == ["FastAPI"]
+
+    def test_empty_names_filtered(self) -> None:
+        """Components with empty names are filtered out."""
+        raw = [
+            ParsedComponent(name="Valid", description="ok"),
+            ParsedComponent(name="", description="no name"),
+        ]
+        result = _normalize_components(raw)
+        assert len(result) == 1
+
+    def test_whitespace_technologies_cleaned(self) -> None:
+        """Whitespace-only technologies are removed."""
+        raw = [
+            ParsedComponent(name="Test", technologies=["FastAPI", "", "  ", "Redis"]),
+        ]
+        result = _normalize_components(raw)
+        assert result[0].technologies == ["FastAPI", "Redis"]
+
+
+class TestNormalizeDataFlows:
+    """Test _normalize_data_flows helper."""
+
+    def test_valid_flows(self) -> None:
+        """Valid data flows are normalized."""
+        raw = [
+            ParsedDataFlow(
+                source="API",
+                target="DB",
+                description="CRUD ops",
+                protocol="REST",
+            ),
+        ]
+        result = _normalize_data_flows(raw)
+        assert len(result) == 1
+        assert result[0].source == "API"
+        assert result[0].target == "DB"
+
+    def test_empty_source_or_target_filtered(self) -> None:
+        """Flows with empty source or target are filtered."""
+        raw = [
+            ParsedDataFlow(source="API", target="DB"),
+            ParsedDataFlow(source="", target="DB"),
+            ParsedDataFlow(source="API", target=""),
+        ]
+        result = _normalize_data_flows(raw)
+        assert len(result) == 1
+
+
+class TestNormalizeFileRecommendations:
+    """Test _normalize_file_recommendations helper."""
+
+    def test_valid_recommendations(self) -> None:
+        """Valid file recommendations are normalized."""
+        raw = [
+            ParsedFileRecommendation(
+                path="src/api/routes.py",
+                purpose="API routes",
+                component="API Gateway",
+            ),
+        ]
+        result = _normalize_file_recommendations(raw)
+        assert len(result) == 1
+        assert result[0].path == "src/api/routes.py"
+
+    def test_empty_paths_filtered(self) -> None:
+        """Recommendations with empty paths are filtered."""
+        raw = [
+            ParsedFileRecommendation(path="src/main.py", purpose="entry point"),
+            ParsedFileRecommendation(path="", purpose="no path"),
+        ]
+        result = _normalize_file_recommendations(raw)
+        assert len(result) == 1

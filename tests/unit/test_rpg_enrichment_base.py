@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from zerorepo.models.enums import InterfaceType, NodeLevel, NodeType
@@ -19,7 +21,7 @@ from zerorepo.rpg_enrichment.models import ValidationResult
 class StubPassEncoder(RPGEncoder):
     """Concrete encoder that sets metadata on every node and always validates."""
 
-    def encode(self, graph: RPGGraph) -> RPGGraph:
+    def encode(self, graph: RPGGraph, spec: Any | None = None, baseline: RPGGraph | None = None) -> RPGGraph:
         for node in graph.nodes.values():
             node.metadata["stub_enriched"] = True
         return graph
@@ -36,7 +38,7 @@ class StubPassEncoder(RPGEncoder):
 class StubFailEncoder(RPGEncoder):
     """Concrete encoder whose validate always reports errors."""
 
-    def encode(self, graph: RPGGraph) -> RPGGraph:
+    def encode(self, graph: RPGGraph, spec: Any | None = None, baseline: RPGGraph | None = None) -> RPGGraph:
         return graph
 
     def validate(self, graph: RPGGraph) -> ValidationResult:
@@ -50,7 +52,7 @@ class StubFailEncoder(RPGEncoder):
 class StubWarningEncoder(RPGEncoder):
     """Encoder that passes but emits warnings."""
 
-    def encode(self, graph: RPGGraph) -> RPGGraph:
+    def encode(self, graph: RPGGraph, spec: Any | None = None, baseline: RPGGraph | None = None) -> RPGGraph:
         return graph
 
     def validate(self, graph: RPGGraph) -> ValidationResult:
@@ -68,7 +70,7 @@ class NamedEncoder(RPGEncoder):
     def name(self) -> str:
         return "custom-encoder-v2"
 
-    def encode(self, graph: RPGGraph) -> RPGGraph:
+    def encode(self, graph: RPGGraph, spec: Any | None = None, baseline: RPGGraph | None = None) -> RPGGraph:
         return graph
 
     def validate(self, graph: RPGGraph) -> ValidationResult:
@@ -131,7 +133,7 @@ class TestRPGEncoderABC:
         """Subclass missing validate() cannot be instantiated."""
 
         class MissingValidate(RPGEncoder):
-            def encode(self, graph: RPGGraph) -> RPGGraph:
+            def encode(self, graph: RPGGraph, spec: Any | None = None, baseline: RPGGraph | None = None) -> RPGGraph:
                 return graph
 
         with pytest.raises(TypeError, match="abstract method"):

@@ -33,10 +33,20 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from zerorepo.llm.gateway import LLMGateway
 from zerorepo.llm.models import GatewayConfig, ModelTier
 from zerorepo.llm.prompt_templates import PromptTemplate
+from zerorepo.models.enums import NodeLevel
+from zerorepo.models.graph import RPGGraph
 from zerorepo.spec_parser.models import (
+    APIEndpointSpec,
+    Component,
     Constraint,
     ConstraintPriority,
+    DataFlow,
+    DataModelSpec,
+    DeltaClassification,
     DeploymentTarget,
+    Epic,
+    FileRecommendation,
+    FunctionSpec,
     QualityAttributes,
     RepositorySpec,
     ScopeType,
@@ -62,6 +72,89 @@ class ParsedConstraint(BaseModel):
     description: str = Field(default="", description="Constraint description")
     priority: str = Field(default="SHOULD_HAVE", description="Priority level")
     category: Optional[str] = Field(default=None, description="Optional category")
+
+
+class ParsedEpic(BaseModel):
+    """Intermediate representation of an epic from LLM output."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    title: str = Field(default="", description="Epic title")
+    description: str = Field(default="", description="Epic description")
+    priority: str = Field(default="SHOULD_HAVE", description="Priority level")
+    estimated_complexity: Optional[str] = Field(default=None, description="Complexity estimate")
+    components: list[str] = Field(default_factory=list, description="Component names in this epic")
+
+
+class ParsedComponent(BaseModel):
+    """Intermediate representation of a component from LLM output."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    name: str = Field(default="", description="Component name")
+    description: str = Field(default="", description="Component description")
+    component_type: Optional[str] = Field(default=None, description="Component type")
+    technologies: list[str] = Field(default_factory=list, description="Technologies used")
+    suggested_module: Optional[str] = Field(default=None, description="Suggested Python package name")
+    delta_status: Optional[str] = Field(default=None, description="Delta classification: existing, modified, or new")
+    baseline_match_name: Optional[str] = Field(default=None, description="Exact baseline component name match")
+    change_summary: Optional[str] = Field(default=None, description="Summary of changes for modified/new components")
+
+
+class ParsedDataFlow(BaseModel):
+    """Intermediate representation of a data flow from LLM output."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    source: str = Field(default="", description="Source component")
+    target: str = Field(default="", description="Target component")
+    description: str = Field(default="", description="Flow description")
+    protocol: Optional[str] = Field(default=None, description="Communication protocol")
+
+
+class ParsedFileRecommendation(BaseModel):
+    """Intermediate representation of a file recommendation from LLM output."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    path: str = Field(default="", description="File/directory path")
+    purpose: str = Field(default="", description="Purpose of this file")
+    component: Optional[str] = Field(default=None, description="Associated component")
+
+
+class ParsedFunctionSpec(BaseModel):
+    """Intermediate representation of a function spec from LLM output."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    name: str = Field(default="", description="Function name")
+    signature: str = Field(default="", description="Typed signature")
+    description: str = Field(default="", description="What the function does")
+    input_types: list[str] = Field(default_factory=list, description="Input parameter types")
+    output_type: str = Field(default="", description="Return type")
+    belongs_to_component: Optional[str] = Field(default=None, description="Parent component name")
+
+
+class ParsedDataModelSpec(BaseModel):
+    """Intermediate representation of a data model spec from LLM output."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    name: str = Field(default="", description="Model name")
+    fields: list[dict[str, str]] = Field(default_factory=list, description="Field definitions")
+    relationships: list[str] = Field(default_factory=list, description="Related model names")
+
+
+class ParsedAPIEndpointSpec(BaseModel):
+    """Intermediate representation of an API endpoint spec from LLM output."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    method: str = Field(default="GET", description="HTTP method")
+    path: str = Field(default="", description="URL path")
+    request_schema: str = Field(default="", description="Request body description")
+    response_schema: str = Field(default="", description="Response body description")
+    belongs_to_component: Optional[str] = Field(default=None, description="Parent component name")
 
 
 class ParsedSpecResponse(BaseModel):
@@ -122,6 +215,34 @@ class ParsedSpecResponse(BaseModel):
         default_factory=list,
         description="Extracted constraints",
     )
+    epics: list[ParsedEpic] = Field(
+        default_factory=list,
+        description="High-level feature groupings",
+    )
+    components: list[ParsedComponent] = Field(
+        default_factory=list,
+        description="Architectural components",
+    )
+    data_flows: list[ParsedDataFlow] = Field(
+        default_factory=list,
+        description="Data flow relationships",
+    )
+    file_recommendations: list[ParsedFileRecommendation] = Field(
+        default_factory=list,
+        description="Recommended file structure",
+    )
+    functions: list[ParsedFunctionSpec] = Field(
+        default_factory=list,
+        description="Function/method specifications",
+    )
+    data_models: list[ParsedDataModelSpec] = Field(
+        default_factory=list,
+        description="Data model specifications",
+    )
+    api_endpoints: list[ParsedAPIEndpointSpec] = Field(
+        default_factory=list,
+        description="API endpoint specifications",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -135,7 +256,7 @@ class ParserConfig(BaseModel):
     model_config = ConfigDict(frozen=False, validate_assignment=True)
 
     model: str = Field(
-        default="gpt-4o-mini",
+        default="gpt-5.2",
         description="Model identifier for LLM calls",
     )
     tier: ModelTier = Field(
@@ -207,6 +328,7 @@ class SpecParser:
         self,
         description: str,
         context: str | None = None,
+        baseline: RPGGraph | None = None,
     ) -> RepositorySpec:
         """Parse a natural language description into a RepositorySpec.
 
@@ -219,6 +341,10 @@ class SpecParser:
         Args:
             description: Natural language repository description (10-50000 chars).
             context: Optional additional context to include in the prompt.
+            baseline: Optional baseline RPGGraph. When provided, the LLM
+                prompt is augmented with existing codebase structure so
+                the parser can indicate which components are new, existing,
+                or modified.
 
         Returns:
             A validated RepositorySpec instance.
@@ -241,11 +367,30 @@ class SpecParser:
                 f"{self.config.max_description_length} characters"
             )
 
+        # Build baseline context if available
+        baseline_context = ""
+        if baseline is not None:
+            baseline_context = self._build_baseline_context(baseline)
+            logger.debug(
+                "Built baseline context (%d chars) from %d nodes",
+                len(baseline_context),
+                baseline.node_count,
+            )
+
+        # Merge baseline context with user-supplied context
+        combined_context = context or ""
+        if baseline_context:
+            if combined_context:
+                combined_context = f"{combined_context}\n\n{baseline_context}"
+            else:
+                combined_context = baseline_context
+
         # Render prompt
         prompt = self.templates.render(
             self.config.template_name,
             description=description,
-            context=context or "",
+            context=combined_context,
+            has_baseline=(baseline is not None),
         )
         logger.debug("Rendered spec parsing prompt (%d chars)", len(prompt))
 
@@ -270,8 +415,81 @@ class SpecParser:
 
         return spec
 
+    @staticmethod
+    def _build_baseline_context(baseline: RPGGraph) -> str:
+        """Build a structured context block from a baseline RPGGraph.
+
+        Extracts MODULE, COMPONENT, and FEATURE nodes and formats them
+        into a human-readable context string for the LLM prompt.
+
+        Args:
+            baseline: An existing RPGGraph to use as baseline context.
+
+        Returns:
+            A formatted string describing the existing codebase structure.
+        """
+        lines = [
+            "## Existing Codebase Structure (Baseline)",
+            "",
+            "The following modules, components, and features ALREADY EXIST "
+            "in the codebase. When extracting components, for each one "
+            'indicate whether it is "existing" (unchanged), "modified" '
+            '(changed from baseline), or "new" (not in baseline).',
+            "",
+        ]
+
+        # Group nodes by level
+        modules: list[Any] = []
+        components: list[Any] = []
+        features: list[Any] = []
+
+        for node in baseline.nodes.values():
+            if node.level == NodeLevel.MODULE:
+                modules.append(node)
+            elif node.level == NodeLevel.COMPONENT:
+                components.append(node)
+            elif node.level == NodeLevel.FEATURE:
+                features.append(node)
+
+        # Build a parent_id → children mapping
+        children: dict[str, list[Any]] = {}
+        for node in list(components) + list(features):
+            pid = str(node.parent_id) if node.parent_id else "orphan"
+            children.setdefault(pid, []).append(node)
+
+        for mod in modules:
+            mod_id = str(mod.id)
+            folder = mod.folder_path or "(no folder)"
+            lines.append(f"### {mod.name} ({folder})")
+            if mod.docstring:
+                lines.append(f"  {mod.docstring[:200]}")
+
+            # List children (components / features under this module)
+            for child in children.get(mod_id, []):
+                level_tag = child.level.value
+                sig = child.signature or ""
+                sig_str = f": {sig}" if sig else ""
+                lines.append(f"  - [{level_tag}] {child.name}{sig_str}")
+
+                # If this child is a COMPONENT, show its features
+                child_id = str(child.id)
+                for feat in children.get(child_id, []):
+                    feat_sig = feat.signature or ""
+                    feat_str = f": {feat_sig}" if feat_sig else ""
+                    lines.append(f"    - [FEATURE] {feat.name}{feat_str}")
+
+            lines.append("")
+
+        if not modules:
+            lines.append("(No modules found in baseline)")
+            lines.append("")
+
+        return "\n".join(lines)
+
     def _call_llm(self, messages: list[dict[str, Any]]) -> str:
         """Call the LLM and return the raw response text.
+
+        Uses temperature=0 for deterministic, reproducible spec extraction.
 
         Args:
             messages: Chat messages for the LLM.
@@ -279,7 +497,7 @@ class SpecParser:
         Returns:
             Raw response text from the LLM.
         """
-        kwargs: dict[str, Any] = {}
+        kwargs: dict[str, Any] = {"temperature": 0}
         if self.config.use_json_mode:
             kwargs["response_format"] = {"type": "json_object"}
 
@@ -340,7 +558,8 @@ class SpecParser:
         """Assemble a RepositorySpec from the parsed intermediate response.
 
         Handles normalization of enum values, filtering of invalid entries,
-        and construction of properly typed Pydantic models.
+        and construction of properly typed Pydantic models. Includes a
+        validation pass that logs warnings for missing critical fields.
 
         Args:
             description: The original user description.
@@ -373,14 +592,49 @@ class SpecParser:
         # Build Constraints
         constraints = _normalize_constraints(parsed.constraints)
 
+        # Build Epics
+        epics = _normalize_epics(parsed.epics)
+
+        # Build Components
+        components = _normalize_components(parsed.components)
+
+        # Build DataFlows
+        data_flows = _normalize_data_flows(parsed.data_flows)
+
+        # Build FileRecommendations
+        file_recommendations = _normalize_file_recommendations(
+            parsed.file_recommendations
+        )
+
+        # Build FunctionSpecs
+        functions = _normalize_functions(parsed.functions)
+
+        # Build DataModelSpecs
+        data_models = _normalize_data_models(parsed.data_models)
+
+        # Build APIEndpointSpecs
+        api_endpoints = _normalize_api_endpoints(parsed.api_endpoints)
+
         # Assemble RepositorySpec
-        return RepositorySpec(
+        spec = RepositorySpec(
             description=description,
             core_functionality=parsed.core_functionality,
             technical_requirements=technical_requirements,
             quality_attributes=quality_attributes,
             constraints=constraints,
+            epics=epics,
+            components=components,
+            data_flows=data_flows,
+            functions=functions,
+            data_models=data_models,
+            api_endpoints=api_endpoints,
+            file_recommendations=file_recommendations,
         )
+
+        # Validation pass: warn about missing critical fields
+        _validation_pass(spec)
+
+        return spec
 
 
 # ---------------------------------------------------------------------------
@@ -521,3 +775,292 @@ def _normalize_constraints(
             )
         )
     return result
+
+
+def _normalize_epics(
+    raw_epics: list[ParsedEpic],
+) -> list[Epic]:
+    """Normalize parsed epics into proper Epic instances.
+
+    Filters out entries with empty titles.
+
+    Args:
+        raw_epics: List of ParsedEpic from LLM.
+
+    Returns:
+        List of validated Epic instances.
+    """
+    result: list[Epic] = []
+    for raw in raw_epics:
+        title = raw.title.strip()
+        if not title:
+            continue
+
+        priority = _normalize_constraint_priority(raw.priority)
+
+        result.append(
+            Epic(
+                title=title,
+                description=raw.description.strip(),
+                priority=priority,
+                estimated_complexity=raw.estimated_complexity,
+                components=[c.strip() for c in raw.components if c.strip()],
+            )
+        )
+    return result
+
+
+def _normalize_components(
+    raw_components: list[ParsedComponent],
+) -> list[Component]:
+    """Normalize parsed components into proper Component instances.
+
+    Filters out entries with empty names.
+
+    Args:
+        raw_components: List of ParsedComponent from LLM.
+
+    Returns:
+        List of validated Component instances.
+    """
+    result: list[Component] = []
+    for raw in raw_components:
+        name = raw.name.strip()
+        if not name:
+            continue
+
+        # Normalize delta_status to DeltaClassification enum if present
+        delta_status = None
+        if raw.delta_status is not None:
+            raw_delta = raw.delta_status.strip().lower()
+            try:
+                delta_status = DeltaClassification(raw_delta)
+            except ValueError:
+                logger.warning(
+                    "Unknown delta_status '%s' for component '%s', ignoring",
+                    raw.delta_status,
+                    name,
+                )
+
+        result.append(
+            Component(
+                name=name,
+                description=raw.description.strip(),
+                component_type=raw.component_type,
+                technologies=[t.strip() for t in raw.technologies if t.strip()],
+                suggested_module=raw.suggested_module.strip() if raw.suggested_module else None,
+                delta_status=delta_status,
+                baseline_match_name=(
+                    raw.baseline_match_name.strip()
+                    if raw.baseline_match_name
+                    else None
+                ),
+                change_summary=(
+                    raw.change_summary.strip()
+                    if raw.change_summary
+                    else None
+                ),
+            )
+        )
+    return result
+
+
+def _normalize_data_flows(
+    raw_flows: list[ParsedDataFlow],
+) -> list[DataFlow]:
+    """Normalize parsed data flows into proper DataFlow instances.
+
+    Filters out entries with empty source or target.
+
+    Args:
+        raw_flows: List of ParsedDataFlow from LLM.
+
+    Returns:
+        List of validated DataFlow instances.
+    """
+    result: list[DataFlow] = []
+    for raw in raw_flows:
+        source = raw.source.strip()
+        target = raw.target.strip()
+        if not source or not target:
+            continue
+
+        result.append(
+            DataFlow(
+                source=source,
+                target=target,
+                description=raw.description.strip(),
+                protocol=raw.protocol,
+            )
+        )
+    return result
+
+
+def _normalize_file_recommendations(
+    raw_recs: list[ParsedFileRecommendation],
+) -> list[FileRecommendation]:
+    """Normalize parsed file recommendations into proper FileRecommendation instances.
+
+    Filters out entries with empty paths.
+
+    Args:
+        raw_recs: List of ParsedFileRecommendation from LLM.
+
+    Returns:
+        List of validated FileRecommendation instances.
+    """
+    result: list[FileRecommendation] = []
+    for raw in raw_recs:
+        path = raw.path.strip()
+        if not path:
+            continue
+
+        result.append(
+            FileRecommendation(
+                path=path,
+                purpose=raw.purpose.strip(),
+                component=raw.component,
+            )
+        )
+    return result
+
+
+def _normalize_functions(
+    raw_functions: list[ParsedFunctionSpec],
+) -> list[FunctionSpec]:
+    """Normalize parsed function specs into proper FunctionSpec instances.
+
+    Filters out entries with empty names.
+
+    Args:
+        raw_functions: List of ParsedFunctionSpec from LLM.
+
+    Returns:
+        List of validated FunctionSpec instances.
+    """
+    result: list[FunctionSpec] = []
+    for raw in raw_functions:
+        name = raw.name.strip()
+        if not name:
+            continue
+
+        result.append(
+            FunctionSpec(
+                name=name,
+                signature=raw.signature.strip(),
+                description=raw.description.strip(),
+                input_types=[t.strip() for t in raw.input_types if t.strip()],
+                output_type=raw.output_type.strip(),
+                belongs_to_component=(
+                    raw.belongs_to_component.strip()
+                    if raw.belongs_to_component
+                    else None
+                ),
+            )
+        )
+    return result
+
+
+def _normalize_data_models(
+    raw_models: list[ParsedDataModelSpec],
+) -> list[DataModelSpec]:
+    """Normalize parsed data model specs into proper DataModelSpec instances.
+
+    Filters out entries with empty names.
+
+    Args:
+        raw_models: List of ParsedDataModelSpec from LLM.
+
+    Returns:
+        List of validated DataModelSpec instances.
+    """
+    result: list[DataModelSpec] = []
+    for raw in raw_models:
+        name = raw.name.strip()
+        if not name:
+            continue
+
+        result.append(
+            DataModelSpec(
+                name=name,
+                fields=raw.fields,
+                relationships=[r.strip() for r in raw.relationships if r.strip()],
+            )
+        )
+    return result
+
+
+def _normalize_api_endpoints(
+    raw_endpoints: list[ParsedAPIEndpointSpec],
+) -> list[APIEndpointSpec]:
+    """Normalize parsed API endpoint specs into proper APIEndpointSpec instances.
+
+    Filters out entries with empty path.
+
+    Args:
+        raw_endpoints: List of ParsedAPIEndpointSpec from LLM.
+
+    Returns:
+        List of validated APIEndpointSpec instances.
+    """
+    result: list[APIEndpointSpec] = []
+    for raw in raw_endpoints:
+        path = raw.path.strip()
+        if not path:
+            continue
+
+        result.append(
+            APIEndpointSpec(
+                method=raw.method.strip().upper() or "GET",
+                path=path,
+                request_schema=raw.request_schema.strip(),
+                response_schema=raw.response_schema.strip(),
+                belongs_to_component=(
+                    raw.belongs_to_component.strip()
+                    if raw.belongs_to_component
+                    else None
+                ),
+            )
+        )
+    return result
+
+
+def _validation_pass(spec: RepositorySpec) -> None:
+    """Run a validation pass on the assembled RepositorySpec.
+
+    Logs warnings for missing critical fields that downstream
+    pipeline stages depend on. This does not raise exceptions;
+    it provides observability for parse quality.
+
+    Args:
+        spec: The assembled RepositorySpec to validate.
+    """
+    if not spec.core_functionality:
+        logger.warning(
+            "Validation: core_functionality is empty — downstream planning "
+            "may produce lower-quality results"
+        )
+
+    if not spec.technical_requirements.languages:
+        logger.warning(
+            "Validation: no programming languages extracted — "
+            "file recommendations may be generic"
+        )
+
+    if not spec.technical_requirements.frameworks:
+        logger.warning(
+            "Validation: no frameworks extracted — "
+            "component identification may be incomplete"
+        )
+
+    if not spec.epics:
+        logger.warning(
+            "Validation: no epics extracted — "
+            "consider providing a more detailed specification"
+        )
+
+    if not spec.components:
+        logger.warning(
+            "Validation: no components extracted — "
+            "architecture analysis may be incomplete"
+        )

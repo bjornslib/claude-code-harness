@@ -118,7 +118,21 @@ zerorepo spec refine spec.json --clarify "Which database?|PostgreSQL with SQLAlc
 zerorepo spec history spec.json
 ```
 
-### 4. Build the Feature Ontology
+### 4. Generate the Repository Planning Graph
+
+```bash
+# Generate from a PRD (all components classified as NEW)
+zerorepo generate spec.txt --model gpt-4o --output ./output
+
+# Generate with baseline comparison (enables delta classification)
+zerorepo generate spec.txt --model gpt-4o --output ./output \
+  --baseline previous-graph.json
+
+# Check the delta report
+cat ./output/05-delta-report.md
+```
+
+### 5. Build the Feature Ontology
 
 ```bash
 # Build from all seed generators
@@ -140,7 +154,7 @@ zerorepo ontology extend --csv custom_features.csv
 zerorepo ontology export --output ontology.csv
 ```
 
-### 5. Detect Conflicts
+### 6. Detect Conflicts
 
 ```bash
 # Rule-based + LLM conflict detection
@@ -153,7 +167,7 @@ zerorepo spec conflicts spec.json --no-llm
 zerorepo spec conflicts spec.json --attach
 ```
 
-### 6. Get Improvement Suggestions
+### 7. Get Improvement Suggestions
 
 ```bash
 zerorepo spec suggest spec.json
@@ -245,6 +259,7 @@ Options:
 | Command | Description |
 |---------|-------------|
 | `zerorepo init [PATH]` | Initialize a new ZeroRepo project |
+| `zerorepo generate PRD [OPTIONS]` | Run the full planning pipeline (spec parsing through graph construction) |
 | `zerorepo spec parse FILE` | Parse a natural language specification |
 | `zerorepo spec refine FILE` | Refine an existing specification |
 | `zerorepo spec conflicts FILE` | Detect conflicting requirements |
@@ -256,6 +271,39 @@ Options:
 | `zerorepo ontology stats` | Display ontology statistics |
 | `zerorepo ontology extend` | Extend ontology with custom features |
 | `zerorepo ontology export` | Export ontology to CSV |
+
+### Three-Operation Lifecycle
+
+ZeroRepo follows a three-operation lifecycle for repository planning:
+
+```
+zerorepo init       Initialize project configuration
+       │
+       ▼
+zerorepo generate   Run planning pipeline (spec → graph → enrichment)
+       │            Optionally compare against a --baseline graph
+       ▼
+zerorepo update     Incrementally update an existing graph (future)
+```
+
+### zerorepo generate
+
+Run the full planning pipeline from a PRD document:
+
+```bash
+zerorepo generate <prd> --model <model> --output <dir> [--baseline <file>] [--skip-enrichment]
+```
+
+| Option | Description |
+|--------|-------------|
+| `<prd>` | Path to the PRD/specification document (required) |
+| `--model <model>` | LLM model to use (e.g., `gpt-4o`, `claude-sonnet-4-5-20250929`) |
+| `--output <dir>` | Output directory for generated artifacts |
+| `--baseline <file>` | Baseline RPG graph JSON for delta classification |
+| `--skip-enrichment` | Skip the enrichment stage (faster, planning-only) |
+
+When `--baseline` is provided, the pipeline produces a `05-delta-report.md` file
+classifying each component as EXISTING, MODIFIED, or NEW relative to the baseline.
 
 ## Configuration
 

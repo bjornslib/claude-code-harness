@@ -255,6 +255,56 @@ class TestFileEncoderEdgeCases:
         assert "mod_b" in fb.file_path
 
 
+class TestFileEncoderBaselineIntegration:
+    """Test FileEncoder handles folder_path without trailing slash correctly."""
+
+    def test_folder_path_without_trailing_slash_handled_correctly(self) -> None:
+        """Regression test: folder_path without trailing slash should not break file_path construction.
+
+        When folder_path lacks trailing slash (e.g., from baseline), FileEncoder must
+        normalize it before concatenating with file_name. This prevents bugs like
+        "helpersconfiguration.py" instead of "helpers/configuration.py".
+        """
+        # Build graph with leaf node that has folder_path without trailing slash
+        graph, ids = _build_module_with_leaves("helpers", ["load_config"])
+
+        # Manually set folder_path without trailing slash (simulating baseline scenario)
+        mod_node = graph.nodes[ids["module"]]
+        leaf_node = graph.nodes[ids["load_config"]]
+        mod_node.folder_path = ""
+        leaf_node.folder_path = "helpers"  # No trailing slash (bug scenario)
+
+        # FileEncoder should handle this gracefully
+        enc = FileEncoder()
+        enc.encode(graph)
+
+        # Verify file_path was constructed correctly with normalized folder
+        assert leaf_node.file_path is not None
+        assert leaf_node.file_path.startswith("helpers/")
+        assert leaf_node.file_path.endswith(".py")
+        # Should be "helpers/load_config.py" or similar, NOT "helpersload_config.py"
+        assert "/" in leaf_node.file_path
+
+    def test_empty_folder_path_handled_correctly(self) -> None:
+        """Empty folder_path (root level) should work correctly."""
+        graph, ids = _build_module_with_leaves("root", ["main"])
+
+        # Set empty folder_path (root level)
+        mod_node = graph.nodes[ids["module"]]
+        leaf_node = graph.nodes[ids["main"]]
+        mod_node.folder_path = ""
+        leaf_node.folder_path = ""
+
+        enc = FileEncoder()
+        enc.encode(graph)
+
+        # Verify file_path is just the file name (no folder prefix)
+        assert leaf_node.file_path is not None
+        assert leaf_node.file_path.endswith(".py")
+        # Should not have double slash or weird concatenation
+        assert not leaf_node.file_path.startswith("/")
+
+
 class TestFileEncoderInPipeline:
     """Test FileEncoder in a pipeline with FolderEncoder."""
 

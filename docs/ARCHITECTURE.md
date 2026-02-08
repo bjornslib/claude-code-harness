@@ -801,3 +801,120 @@ Each pipeline stage has its own `*Config` Pydantic model:
 - `OrchestratorConfig` (codegen) -- Retry limits, checkpointing
 - `GatewayConfig` -- API keys, timeouts, tier mappings
 - `SandboxConfig` -- Resource limits, Docker image selection
+
+---
+
+## Delta Classification System
+
+When running with a **baseline** (a previously generated RPG graph), ZeroRepo classifies
+every component in the new graph as one of three delta statuses relative to the baseline.
+This enables incremental repository planning -- identifying what already exists, what
+changed, and what is entirely new.
+
+### DeltaClassification Enum (`models/node.py`)
+
+```
+DeltaClassification    Description
+──────────────────     ──────────────────────────────────────────
+EXISTING               Component exists in the baseline, unchanged
+MODIFIED               Component exists in the baseline but has changed
+NEW                    Component does not exist in the baseline
+```
+
+### Component Model Delta Fields
+
+Three fields on `RPGNode` (at the `COMPONENT` level and below) support delta tracking:
+
+| Field                | Type                    | Description                                           |
+|----------------------|-------------------------|-------------------------------------------------------|
+| `delta_status`       | `DeltaClassification?`  | The classified delta status (EXISTING/MODIFIED/NEW)   |
+| `baseline_match_name`| `str?`                  | Name of the matched node in the baseline graph        |
+| `change_summary`     | `str?`                  | Human-readable summary of what changed (for MODIFIED) |
+
+### How Delta Classification Works
+
+The classification pipeline has four stages:
+
+#### 1. Baseline Context Injection (`spec_parser/parser.py`)
+
+The `_build_baseline_context()` method (lines 419-487) extracts all MODULE, COMPONENT,
+and FEATURE nodes from the baseline `RPGGraph` and formats them hierarchically:
+
+```
+Module: auth_module
+  Folder: src/auth/
+  Components:
+    - jwt_handler (src/auth/jwt_handler.py)
+      Docstring: "Handles JWT token creation and validation"
+      Features:
+        - create_token(user_id: str, expiry: int) -> str
+        - validate_token(token: str) -> dict
+```
+
+This context is injected into the LLM prompt so the model can compare new components
+against the existing baseline.
+
+#### 2. Jinja2 Template Conditional Block (`llm/templates/spec_parsing.jinja2`)
+
+When `has_baseline=True`, the template (lines 101-121) adds a "Baseline-Aware Delta
+Classification" instruction block that tells the LLM to:
+
+- Compare each component against the baseline listing
+- Classify as `existing`, `modified`, or `new`
+- Provide the exact `baseline_match_name` for existing/modified components
+- Write a `change_summary` for modified components
+
+#### 3. LLM Response Processing (`graph_construction/converter.py`)
+
+The `_tag_delta_status_from_llm()` method (lines 626-700) processes each component
+with a three-priority classification strategy:
+
+```
+Priority (a): LLM delta_status field
+  └── If the LLM explicitly set delta_status → use it directly
+
+Priority (b): baseline_match_name field
+  └── If the LLM provided baseline_match_name → find the baseline node
+      └── Copy enrichment data (folder_path, signatures, docstrings)
+
+Priority (c): Fallback name matching
+  └── Fuzzy-match component name against baseline node names
+      └── If match found → classify as EXISTING or MODIFIED
+      └── If no match → classify as NEW
+```
+
+This priority ordering ensures the LLM's classification is preferred when available,
+with deterministic fallbacks for robustness.
+
+#### 4. Delta Report Generation (`serena/delta_report.py`)
+
+The `DeltaReportGenerator` produces `05-delta-report.md` with:
+
+- **Summary counts**: Total EXISTING, MODIFIED, and NEW components
+- **Per-level breakdown**: Counts at MODULE, COMPONENT, and FEATURE levels
+- **Implementation order**: Recommended order for implementation
+  (MODULE > COMPONENT > FEATURE; modified before new)
+- **Change details**: Per-component change summaries for MODIFIED items
+
+### The `zerorepo generate` Command
+
+The `zerorepo generate` CLI command runs the full planning pipeline (spec parsing
+through graph construction) with optional baseline support:
+
+```bash
+# Generate without baseline (all components classified as NEW)
+zerorepo generate prd.md --model gpt-4o --output ./output
+
+# Generate with baseline (enables delta classification)
+zerorepo generate prd.md --model gpt-4o --output ./output --baseline baseline-graph.json
+
+# Skip enrichment stage (faster, planning-only)
+zerorepo generate prd.md --model gpt-4o --output ./output --skip-enrichment
+```
+
+When `--baseline` is provided, the pipeline:
+1. Loads the baseline RPG graph from the JSON file
+2. Builds baseline context via `_build_baseline_context()`
+3. Injects context into the LLM prompt via the Jinja2 template
+4. Tags delta status on all generated components
+5. Produces `05-delta-report.md` alongside the standard outputs

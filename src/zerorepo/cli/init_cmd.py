@@ -1,19 +1,26 @@
 """ZeroRepo ``init`` command.
 
 Creates the ``.zerorepo/`` project structure in the target directory and
-writes a default configuration file.
+writes a default configuration file.  Optionally walks a codebase to
+produce a baseline RPGGraph via ``--project-path``.
 """
 
 from __future__ import annotations
 
+import logging
 import subprocess
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import typer
 
 from zerorepo.cli.config import DEFAULT_CONFIG_DIR, DEFAULT_CONFIG_FILE, default_config_toml
 from zerorepo.cli.errors import CLIError
+
+if TYPE_CHECKING:
+    from rich.console import Console
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -110,3 +117,74 @@ def run_init(
     config_path = _write_default_config(project_dir)
 
     return project_dir
+
+
+# ---------------------------------------------------------------------------
+# Baseline generation (called from app.py when --project-path is set)
+# ---------------------------------------------------------------------------
+
+
+def run_baseline_generation(
+    *,
+    project_dir: Path,
+    project_path: Path,
+    output_path: Path | None = None,
+    exclude_patterns: list[str] | None = None,
+    console: "Console | None" = None,
+) -> Path:
+    """Walk a codebase and generate a baseline RPGGraph.
+
+    Parameters
+    ----------
+    project_dir:
+        The initialised project directory (contains ``.zerorepo/``).
+    project_path:
+        Path to the codebase to analyse.
+    output_path:
+        Where to write the baseline JSON.  Defaults to
+        ``project_dir / .zerorepo / baseline.json``.
+    exclude_patterns:
+        Optional list of directory name patterns to skip during walk.
+    console:
+        Optional Rich console for status output.
+
+    Returns
+    -------
+    Path
+        The path to the generated baseline file.
+    """
+    from zerorepo.serena.baseline import BaselineManager
+    from zerorepo.serena.session import FileBasedCodebaseAnalyzer
+    from zerorepo.serena.walker import CodebaseWalker
+
+    project_path = project_path.resolve()
+    if not project_path.exists():
+        raise CLIError(f"Project path does not exist: {project_path}")
+    if not project_path.is_dir():
+        raise CLIError(f"Project path is not a directory: {project_path}")
+
+    if console:
+        console.print(
+            f"[bold]Baseline:[/bold] Analysing codebase at {project_path}..."
+        )
+
+    # Walk the codebase
+    analyzer = FileBasedCodebaseAnalyzer()
+    walker = CodebaseWalker(analyzer=analyzer)
+    graph = walker.walk(project_path, exclude_patterns=exclude_patterns)
+
+    if console:
+        console.print(
+            f"  [dim]Discovered {graph.node_count} nodes, "
+            f"{graph.edge_count} edges[/dim]"
+        )
+
+    # Save baseline
+    manager = BaselineManager()
+    baseline_path = output_path or BaselineManager.default_path(project_dir)
+    saved = manager.save(graph, output_path=baseline_path, project_root=project_path)
+
+    if console:
+        console.print(f"  [green]Saved baseline to {saved}[/green]")
+
+    return saved

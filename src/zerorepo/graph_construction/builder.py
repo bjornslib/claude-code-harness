@@ -497,6 +497,295 @@ class FunctionalityGraphBuilder:
             },
         )
 
+    def build_from_spec(
+        self,
+        spec: Any,
+    ) -> FunctionalityGraph:
+        """Build a functionality graph from a RepositorySpec.
+
+        Creates ModuleSpec objects from the spec's epics (if available),
+        with components becoming features within modules.  Spec data_flows
+        are mapped to DependencyEdge objects at both module and feature level.
+
+        This method is designed to work with the extended RepositorySpec
+        that includes ``epics``, ``components``, ``data_flows``, and
+        ``file_recommendations`` fields.  It degrades gracefully when
+        those fields are absent (e.g. with the base RepositorySpec).
+
+        When FunctionSpec entries are available on the spec (via
+        ``spec.functions``), each function becomes a feature ID within the
+        appropriate module, producing more granular graph nodes.
+
+        Args:
+            spec: A RepositorySpec instance (possibly with extended fields
+                added by the spec-to-graph bridge).
+
+        Returns:
+            A FunctionalityGraph built from the specification.
+
+        Raises:
+            ValueError: If no modules can be derived from the spec.
+        """
+        # Extract epics – each becomes a module
+        epics = getattr(spec, "epics", None) or []
+        components = getattr(spec, "components", None) or []
+        data_flows = getattr(spec, "data_flows", None) or []
+        functions = getattr(spec, "functions", None) or []
+
+        modules: list[ModuleSpec] = []
+
+        if epics:
+            for epic in epics:
+                # Each epic becomes a module.  Components within the
+                # epic become its feature_ids.
+                epic_name = getattr(epic, "name", None) or getattr(epic, "title", str(epic))
+                epic_desc = getattr(epic, "description", "") or ""
+                epic_id = getattr(epic, "id", epic_name)
+
+                feature_ids: list[str] = []
+
+                # --- Strategy 1: Look for inline epic.components ---
+                epic_components = getattr(epic, "components", None) or []
+                for comp in epic_components:
+                    comp_id = getattr(comp, "id", None) or getattr(comp, "name", str(comp))
+                    feature_ids.append(str(comp_id))
+
+                # --- Strategy 2: Match spec-level components to this epic ---
+                if not feature_ids and components:
+                    matched = self._match_components_to_epic(
+                        epic_name=str(epic_name),
+                        epic_desc=str(epic_desc),
+                        components=components,
+                    )
+                    for comp in matched:
+                        comp_name = getattr(comp, "name", None) or str(comp)
+                        feature_ids.append(str(comp_name))
+
+                # --- Strategy 3: Match functions to this epic/module ---
+                if functions:
+                    matched_funcs = self._match_functions_to_module(
+                        module_name=str(epic_name),
+                        module_desc=str(epic_desc),
+                        feature_ids=feature_ids,
+                        functions=functions,
+                    )
+                    for func in matched_funcs:
+                        func_name = getattr(func, "name", None) or str(func)
+                        if str(func_name) not in feature_ids:
+                            feature_ids.append(str(func_name))
+
+                if not feature_ids:
+                    # Last resort: use the epic title as a feature placeholder
+                    feature_ids = [str(epic_name)]
+
+                modules.append(
+                    ModuleSpec(
+                        name=str(epic_name),
+                        description=str(epic_desc),
+                        feature_ids=feature_ids,
+                        public_interface=feature_ids[:1],
+                        rationale=f"Derived from spec epic: {epic_name}",
+                    )
+                )
+        elif components:
+            # Fallback: group all components into a single module
+            feature_ids = []
+            for comp in components:
+                comp_id = getattr(comp, "id", None) or getattr(comp, "name", str(comp))
+                feature_ids.append(str(comp_id))
+
+            if feature_ids:
+                core_func = getattr(spec, "core_functionality", None) or "Main"
+                modules.append(
+                    ModuleSpec(
+                        name=str(core_func)[:200],
+                        description=getattr(spec, "description", "")[:500] or "",
+                        feature_ids=feature_ids,
+                        public_interface=feature_ids[:1],
+                        rationale="Derived from spec components",
+                    )
+                )
+
+        if not modules:
+            raise ValueError(
+                "Cannot build graph from spec: no epics or components found. "
+                "Ensure the RepositorySpec has been extended with epic/component fields."
+            )
+
+        logger.info(
+            "Built %d module(s) from spec with %d total features",
+            len(modules),
+            sum(m.feature_count for m in modules),
+        )
+
+        # Build dependencies from data_flows
+        dep_edges: list[DependencyEdge] = []
+        module_names = {m.name for m in modules}
+
+        # Build a lookup: feature_id → module_name for feature-level edges
+        feature_to_module: dict[str, str] = {}
+        for mod in modules:
+            for fid in mod.feature_ids:
+                feature_to_module[fid] = mod.name
+
+        for flow in data_flows:
+            source_name = str(getattr(flow, "source", None) or "")
+            target_name = str(getattr(flow, "target", None) or "")
+            flow_type = str(getattr(flow, "type", "data_flow") or "data_flow")
+            flow_desc = str(getattr(flow, "description", "") or "")
+
+            # Direct module-level match
+            if source_name in module_names and target_name in module_names:
+                if source_name != target_name:
+                    dep_edges.append(
+                        DependencyEdge(
+                            source=source_name,
+                            target=target_name,
+                            dependency_type=flow_type,
+                            weight=0.8,
+                            confidence=0.9,
+                            rationale=flow_desc,
+                        )
+                    )
+            else:
+                # Feature-level match: resolve feature names to their
+                # parent module and create a module-level edge.
+                src_module = feature_to_module.get(source_name)
+                tgt_module = feature_to_module.get(target_name)
+
+                if src_module and tgt_module and src_module != tgt_module:
+                    # Avoid duplicate module-level edges
+                    edge_key = (src_module, tgt_module, flow_type)
+                    existing = {
+                        (d.source, d.target, d.dependency_type)
+                        for d in dep_edges
+                    }
+                    if edge_key not in existing:
+                        dep_edges.append(
+                            DependencyEdge(
+                                source=src_module,
+                                target=tgt_module,
+                                dependency_type=flow_type,
+                                weight=0.7,
+                                confidence=0.8,
+                                rationale=(
+                                    f"Feature-level flow: {source_name} → "
+                                    f"{target_name}. {flow_desc}"
+                                ),
+                            )
+                        )
+
+        return FunctionalityGraph(
+            modules=modules,
+            dependencies=dep_edges,
+            is_acyclic=True,
+            metadata={
+                "source": "repository_spec",
+                "spec_id": str(getattr(spec, "id", "unknown")),
+                "total_modules": len(modules),
+                "total_dependencies": len(dep_edges),
+                "total_functions": len(functions),
+            },
+        )
+
+    # ------------------------------------------------------------------
+    # Spec-to-graph matching helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _match_components_to_epic(
+        epic_name: str,
+        epic_desc: str,
+        components: list[Any],
+    ) -> list[Any]:
+        """Match spec-level components to an epic by name similarity.
+
+        Checks each component's ``suggested_module`` attribute first,
+        then falls back to fuzzy name matching between the component
+        name and the epic name / description.
+
+        Args:
+            epic_name: Name of the epic (module).
+            epic_desc: Description of the epic.
+            components: All spec-level components.
+
+        Returns:
+            Components that belong to this epic.
+        """
+        matched: list[Any] = []
+        epic_lower = epic_name.lower()
+        epic_desc_lower = epic_desc.lower()
+
+        for comp in components:
+            # Check suggested_module first (set by parser or enrichment)
+            suggested = getattr(comp, "suggested_module", None)
+            if suggested and str(suggested).lower() == epic_lower:
+                matched.append(comp)
+                continue
+
+            # Fuzzy match: component name ↔ epic name/desc
+            comp_name = str(getattr(comp, "name", "") or "").lower()
+            if comp_name and (
+                comp_name in epic_lower
+                or epic_lower in comp_name
+                or comp_name in epic_desc_lower
+            ):
+                matched.append(comp)
+
+        return matched
+
+    @staticmethod
+    def _match_functions_to_module(
+        module_name: str,
+        module_desc: str,
+        feature_ids: list[str],
+        functions: list[Any],
+    ) -> list[Any]:
+        """Match FunctionSpec entries to a module by name similarity.
+
+        Uses the function's ``module`` or ``component`` attribute when
+        available, otherwise falls back to fuzzy name matching.
+
+        Args:
+            module_name: Name of the module/epic.
+            module_desc: Description of the module/epic.
+            feature_ids: Already-assigned feature IDs for context.
+            functions: All FunctionSpec entries from the spec.
+
+        Returns:
+            Functions that belong to this module.
+        """
+        matched: list[Any] = []
+        mod_lower = module_name.lower()
+        mod_desc_lower = module_desc.lower()
+        fids_lower = " ".join(feature_ids).lower()
+
+        for func in functions:
+            # Explicit module/component assignment
+            func_module = getattr(func, "module", None) or getattr(func, "component", None)
+            if func_module and str(func_module).lower() == mod_lower:
+                matched.append(func)
+                continue
+
+            # Check if function belongs to one of the already-matched
+            # components (feature_ids at this point contain component names)
+            func_component = str(getattr(func, "component", "") or "").lower()
+            if func_component and func_component in fids_lower:
+                matched.append(func)
+                continue
+
+            # Fuzzy: function name contains module name or vice versa
+            func_name = str(getattr(func, "name", "") or "").lower()
+            func_desc = str(getattr(func, "description", "") or "").lower()
+            if func_name and (
+                mod_lower in func_name
+                or mod_lower in func_desc
+                or func_name in mod_desc_lower
+            ):
+                matched.append(func)
+
+        return matched
+
     def build_from_modules(
         self,
         modules: list[ModuleSpec],

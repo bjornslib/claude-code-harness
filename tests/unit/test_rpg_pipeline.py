@@ -27,7 +27,7 @@ class MetadataEncoder(RPGEncoder):
         self._key = key
         self._value = value
 
-    def encode(self, graph: RPGGraph) -> RPGGraph:
+    def encode(self, graph: RPGGraph, spec: Any | None = None, baseline: RPGGraph | None = None) -> RPGGraph:
         for node in graph.nodes.values():
             node.metadata[self._key] = self._value
         return graph
@@ -47,7 +47,7 @@ class CountingEncoder(RPGEncoder):
     def __init__(self) -> None:
         self.call_count = 0
 
-    def encode(self, graph: RPGGraph) -> RPGGraph:
+    def encode(self, graph: RPGGraph, spec: Any | None = None, baseline: RPGGraph | None = None) -> RPGGraph:
         self.call_count += 1
         return graph
 
@@ -58,7 +58,7 @@ class CountingEncoder(RPGEncoder):
 class FailingValidationEncoder(RPGEncoder):
     """Encodes fine but always fails validation."""
 
-    def encode(self, graph: RPGGraph) -> RPGGraph:
+    def encode(self, graph: RPGGraph, spec: Any | None = None, baseline: RPGGraph | None = None) -> RPGGraph:
         return graph
 
     def validate(self, graph: RPGGraph) -> ValidationResult:
@@ -72,7 +72,7 @@ class FailingValidationEncoder(RPGEncoder):
 class NodeAddingEncoder(RPGEncoder):
     """Adds a new node during encoding (changes node_count)."""
 
-    def encode(self, graph: RPGGraph) -> RPGGraph:
+    def encode(self, graph: RPGGraph, spec: Any | None = None, baseline: RPGGraph | None = None) -> RPGGraph:
         new_node = RPGNode(
             name="added_by_encoder",
             level=NodeLevel.MODULE,

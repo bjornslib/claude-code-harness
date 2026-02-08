@@ -53,14 +53,14 @@ class TestDefaultTierModels:
 
     def test_cheap_tier_has_openai(self) -> None:
         assert "openai" in DEFAULT_TIER_MODELS[ModelTier.CHEAP]
-        assert DEFAULT_TIER_MODELS[ModelTier.CHEAP]["openai"] == "gpt-4o-mini"
+        assert DEFAULT_TIER_MODELS[ModelTier.CHEAP]["openai"] == "gpt-5.2"
 
     def test_cheap_tier_has_anthropic(self) -> None:
         assert "anthropic" in DEFAULT_TIER_MODELS[ModelTier.CHEAP]
         assert "claude-3-haiku" in DEFAULT_TIER_MODELS[ModelTier.CHEAP]["anthropic"]
 
     def test_medium_tier_has_openai(self) -> None:
-        assert DEFAULT_TIER_MODELS[ModelTier.MEDIUM]["openai"] == "gpt-4o"
+        assert DEFAULT_TIER_MODELS[ModelTier.MEDIUM]["openai"] == "gpt-5.2"
 
     def test_medium_tier_has_anthropic(self) -> None:
         assert "claude-3-5-sonnet" in DEFAULT_TIER_MODELS[ModelTier.MEDIUM]["anthropic"]
@@ -71,6 +71,11 @@ class TestDefaultTierModels:
 
 class TestTokenPricing:
     """Tests for the token pricing table."""
+
+    def test_gpt52_pricing(self) -> None:
+        pricing = TOKEN_PRICING["gpt-5.2"]
+        assert pricing["input"] == 2.00
+        assert pricing["output"] == 8.0
 
     def test_gpt4o_mini_pricing(self) -> None:
         pricing = TOKEN_PRICING["gpt-4o-mini"]

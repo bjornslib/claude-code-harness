@@ -94,7 +94,7 @@ class TestGatewayEndToEnd:
 
         # Step 1: Select model
         model = gw.select_model(ModelTier.CHEAP, provider_preference="openai")
-        assert model == "gpt-4o-mini"
+        assert model == "gpt-5.2"
 
         # Step 2: Complete
         result = gw.complete(
@@ -111,7 +111,7 @@ class TestGatewayEndToEnd:
         # Step 4: Verify logging
         assert len(gw.logs) == 1
         log = gw.logs[0]
-        assert log.model == "gpt-4o-mini"
+        assert log.model == "gpt-5.2"
         assert log.tier == ModelTier.CHEAP
         assert log.tokens_prompt == 50
         assert log.tokens_completion == 20

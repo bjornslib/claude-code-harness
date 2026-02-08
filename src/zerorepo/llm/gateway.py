@@ -11,6 +11,7 @@ This module implements the complete LLM Gateway (Epic 1.3) with:
 from __future__ import annotations
 
 import json
+import os
 import time
 from datetime import datetime, timezone
 from typing import Any, Optional, Type
@@ -92,6 +93,7 @@ def _truncate_messages(
 # ---------------------------------------------------------------------------
 
 SUPPORTED_MODELS: set[str] = {
+    "gpt-5.2",
     "gpt-4o",
     "gpt-4o-mini",
     "claude-3-haiku-20240307",
@@ -124,7 +126,7 @@ class LLMGateway:
         gw = LLMGateway()
         response = gw.complete(
             messages=[{"role": "user", "content": "Hello!"}],
-            model="gpt-4o-mini",
+            model="gpt-5.2",
         )
 
     For structured output::
@@ -134,7 +136,7 @@ class LLMGateway:
 
         result = gw.complete_json(
             messages=[{"role": "user", "content": "What is 2+2?"}],
-            model="gpt-4o-mini",
+            model="gpt-5.2",
             response_schema=Answer,
         )
     """
@@ -182,7 +184,7 @@ class LLMGateway:
                 If unavailable, falls back to the cheapest available provider.
 
         Returns:
-            A model identifier string (e.g. ``"gpt-4o-mini"``).
+            A model identifier string (e.g. ``"gpt-5.2"``).
 
         Raises:
             ConfigurationError: If no model can be found for the given tier.
@@ -211,6 +213,7 @@ class LLMGateway:
         messages: list[dict[str, Any]],
         model: str,
         tier: ModelTier | None = None,
+        timeout: int | None = None,
         **kwargs: Any,
     ) -> str:
         """Send a chat completion request and return the response text.
@@ -220,7 +223,7 @@ class LLMGateway:
 
         Args:
             messages: A list of chat messages (``{"role": …, "content": …}``).
-            model: The model identifier (e.g. ``"gpt-4o-mini"``).
+            model: The model identifier (e.g. ``"gpt-5.2"``).
             tier: Optional tier for logging purposes.
             **kwargs: Additional keyword arguments forwarded to ``litellm.completion()``.
 
@@ -234,6 +237,10 @@ class LLMGateway:
         if model not in SUPPORTED_MODELS:
             raise ConfigurationError(f"Unsupported model: {model!r}")
 
+        # Resolve timeout from parameter or environment (litellm default is 600s)
+        if timeout is None:
+            timeout = int(os.environ.get("LITELLM_REQUEST_TIMEOUT", 600))
+
         request_id = uuid4()
         start = time.monotonic()
         last_error: Exception | None = None
@@ -243,6 +250,7 @@ class LLMGateway:
                 response = litellm_completion(
                     model=model,
                     messages=messages,
+                    timeout=timeout,
                     **kwargs,
                 )
                 elapsed_ms = (time.monotonic() - start) * 1000

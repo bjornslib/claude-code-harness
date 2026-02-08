@@ -182,14 +182,14 @@ class TestSelectModel:
     def test_cheap_tier_default_is_openai(self, mock_litellm: MagicMock) -> None:
         gw = LLMGateway()
         model = gw.select_model(ModelTier.CHEAP)
-        assert model == "gpt-4o-mini"
+        assert model == "gpt-5.2"
 
     @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
     @patch("zerorepo.llm.gateway.litellm")
     def test_medium_tier_default_is_openai(self, mock_litellm: MagicMock) -> None:
         gw = LLMGateway()
         model = gw.select_model(ModelTier.MEDIUM)
-        assert model == "gpt-4o"
+        assert model == "gpt-5.2"
 
     @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
     @patch("zerorepo.llm.gateway.litellm")
@@ -204,7 +204,7 @@ class TestSelectModel:
         gw = LLMGateway()
         model = gw.select_model(ModelTier.CHEAP, provider_preference="nonexistent")
         # Should fall back to provider priority (openai first)
-        assert model == "gpt-4o-mini"
+        assert model == "gpt-5.2"
 
     @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
     @patch("zerorepo.llm.gateway.litellm")
@@ -666,6 +666,9 @@ class TestGetLogs:
 class TestSupportedModels:
     """Tests for the supported model set."""
 
+    def test_contains_gpt52(self) -> None:
+        assert "gpt-5.2" in SUPPORTED_MODELS
+
     def test_contains_gpt4o_mini(self) -> None:
         assert "gpt-4o-mini" in SUPPORTED_MODELS
 
@@ -1002,12 +1005,12 @@ class TestSelectModelAdditional:
 
         gw = LLMGateway()
         expected = {
-            (ModelTier.CHEAP, "openai"): "gpt-4o-mini",
+            (ModelTier.CHEAP, "openai"): "gpt-5.2",
             (ModelTier.CHEAP, "anthropic"): "claude-3-haiku-20240307",
             (ModelTier.CHEAP, "ollama"): "ollama/llama3.2",
-            (ModelTier.MEDIUM, "openai"): "gpt-4o",
+            (ModelTier.MEDIUM, "openai"): "gpt-5.2",
             (ModelTier.MEDIUM, "anthropic"): "claude-3-5-sonnet-20241022",
-            (ModelTier.STRONG, "openai"): "gpt-4o",
+            (ModelTier.STRONG, "openai"): "gpt-5.2",
             (ModelTier.STRONG, "anthropic"): "claude-sonnet-4-20250514",
         }
         for (tier, provider), model in expected.items():

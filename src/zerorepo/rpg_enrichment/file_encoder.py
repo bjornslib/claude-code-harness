@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import re
 from collections import defaultdict
+from typing import Any
 from uuid import UUID
 
 from zerorepo.models.enums import EdgeType, NodeLevel, NodeType
@@ -67,7 +68,7 @@ class FileEncoder(RPGEncoder):
         self._max_loc = max_loc_per_file
         self._loc_ratio = complexity_loc_ratio
 
-    def encode(self, graph: RPGGraph) -> RPGGraph:
+    def encode(self, graph: RPGGraph, spec: Any | None = None, baseline: RPGGraph | None = None) -> RPGGraph:
         """Assign file_path to all leaf nodes."""
         if graph.node_count == 0:
             return graph
@@ -211,7 +212,11 @@ class FileEncoder(RPGEncoder):
                     file_name = f"{file_name[:-3]}_{idx}.py"
                 used_names.add(file_name)
 
-                file_path = f"{folder}{file_name}"
+                # Normalize folder to ensure trailing slash
+                norm_folder = folder
+                if norm_folder and not norm_folder.endswith('/'):
+                    norm_folder = f"{norm_folder}/"
+                file_path = f"{norm_folder}{file_name}"
 
                 for nid in sub_group:
                     node = graph.nodes[nid]

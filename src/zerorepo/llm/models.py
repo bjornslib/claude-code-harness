@@ -29,17 +29,17 @@ class ModelTier(str, Enum):
 
 DEFAULT_TIER_MODELS: dict[ModelTier, dict[str, str]] = {
     ModelTier.CHEAP: {
-        "openai": "gpt-4o-mini",
+        "openai": "gpt-5.2",
         "anthropic": "claude-3-haiku-20240307",
         "ollama": "ollama/llama3.2",
     },
     ModelTier.MEDIUM: {
-        "openai": "gpt-4o",
+        "openai": "gpt-5.2",
         "anthropic": "claude-3-5-sonnet-20241022",
         "ollama": "ollama/llama3.2",
     },
     ModelTier.STRONG: {
-        "openai": "gpt-4o",
+        "openai": "gpt-5.2",
         "anthropic": "claude-sonnet-4-20250514",
         "ollama": "ollama/llama3.2",
     },
@@ -53,6 +53,7 @@ PROVIDER_PRIORITY: list[str] = ["openai", "anthropic", "ollama"]
 # ---------------------------------------------------------------------------
 
 TOKEN_PRICING: dict[str, dict[str, float]] = {
+    "gpt-5.2": {"input": 2.00, "output": 8.0},
     "gpt-4o-mini": {"input": 0.15, "output": 0.60},
     "gpt-4o": {"input": 2.50, "output": 10.0},
     "claude-3-haiku-20240307": {"input": 0.25, "output": 1.25},
