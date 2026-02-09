@@ -82,34 +82,16 @@ Task(
 
 If NO to any: You're violating the validation gate. Delegate to validation-test-agent first.
 
-**Correct vs Incorrect Patterns:**
+**Correct Pattern:**
 
 ```python
-# ---- WRONG: Direct bd close ----
-bd close agencheck-042 --reason "Tests passing"
-
-# ---- WRONG: Direct skill invocation ----
-Skill("acceptance-test-runner", args="--prd=PRD-001")
-
-# ---- CORRECT: Assign validation to validator teammate ----
-# (Validator teammate spawned once per session -- see "Validation Agent" section below)
-
-# Fast unit check
-TaskCreate(
-    subject="Validate agencheck-042 (unit)",
-    description="--mode=unit --task_id=agencheck-042",
-    activeForm="Validating agencheck-042"
-)
-SendMessage(type="message", recipient="validator", content="Unit validation task available for agencheck-042", summary="Validation request")
-
-# Full E2E with PRD acceptance tests
+# ✅ CORRECT: Assign validation to validator teammate
 TaskCreate(
     subject="Validate agencheck-042 (e2e)",
-    description="--mode=e2e --task_id=agencheck-042 --prd=PRD-AUTH-001\nValidate against acceptance criteria. Close with evidence if passing.",
+    description="--mode=e2e --task_id=agencheck-042 --prd=PRD-AUTH-001",
     activeForm="Validating agencheck-042"
 )
-SendMessage(type="message", recipient="validator", content="E2E validation task available for agencheck-042", summary="E2E validation request")
-# Validator teammate invokes acceptance-test-runner internally and closes with evidence
+SendMessage(type="message", recipient="validator", content="E2E validation task available", summary="Validation request")
 ```
 
 **Exception**: Only the validator teammate is authorized to run `bd close` after verification passes.
@@ -232,51 +214,15 @@ The preflight includes:
 
 ### Phase 0: Ideation (Brainstorming + Research)
 
-**Every new project MUST begin with structured ideation.** This is not optional.
+**Every new project MUST begin with structured ideation.**
 
-**Why Ideation is Mandatory**:
-- Explores multiple solution approaches before committing
-- Prevents tunnel vision on first idea
-- Surfaces hidden requirements and edge cases
-- Produces validated design before task decomposition
+**Essential Steps**:
+1. Research via Perplexity/Brave/context7
+2. `Skill("superpowers:brainstorming")` - Explore 2-3 alternative approaches
+3. For complex architectures: `/parallel-solutioning` - Deploys 7 solution-architects
+4. Convert design to implementation steps via `Skill("superpowers:writing-plan")`
 
-**Ideation Workflow**:
-```
-1. Extensive Research
-   └─ Use research-tools skill (Perplexity, Brave Search, context7)
-   └─ Query: "What are best practices for [your domain]?"
-   └─ Document findings in scratch pad
-   ↓
-2. Brainstorming (MANDATORY)
-   └─ Skill("superpowers:brainstorming")
-   └─ Refine rough ideas into clear problem statement
-   └─ Explore 2-3 alternative approaches with trade-offs
-   └─ Output: Validated design document
-   ↓
-3. Complex Architectures: Parallel-Solutioning (Recommended)
-   └─ /parallel-solutioning "Your architectural challenge"
-   └─ Deploys 7 solution-architects with diverse reasoning strategies
-   └─ Produces consensus architecture from multiple perspectives
-   └─ Use for: major features, system integrations, high-risk decisions
-   ↓
-4. Design Validation
-   └─ Skill("superpowers:writing-plan") to convert design into implementation steps
-   └─ Review: Is each step small enough for a worker to complete?
-   └─ If not: iterate on decomposition
-```
-
-**When to Use Parallel-Solutioning**:
-| ✅ Use For | ❌ Skip When |
-|-----------|-------------|
-| New system architecture | Simple bug fixes |
-| Multi-service integration | Single-file changes |
-| Technology migration | Clear, mechanical processes |
-| High business impact decisions | Well-established patterns |
-
-**Ideation Outputs**:
-1. **Design Document** → `docs/plans/YYYY-MM-DD-<topic>-design.md`
-2. **Implementation Plan** → Ready for Task Master parsing
-3. **Research Notes** → Stored in Hindsight via `mcp__hindsight__retain()`
+**Outputs**: Design document, implementation plan, research notes (store in Hindsight)
 
 ---
 
@@ -419,41 +365,6 @@ git add .beads/ && git commit -m "plan: initialize [initiative] hierarchy"
 # Write progress summary to .claude/progress/
 ```
 
-### Acceptance Test Generation (Phase 1 Part 2)
-
-**Prerequisites**:
-- ✅ Beads hierarchy synced (from sync step above)
-- ✅ PRD document exists at `.taskmaster/docs/`
-
-**Workflow**:
-
-```bash
-# 6. Generate acceptance tests from PRD (IMMEDIATELY after sync)
-Skill("acceptance-test-writer", args="--prd=PRD-AUTH-001 --source=.taskmaster/docs/prd.md")
-
-# This generates:
-# acceptance-tests/PRD-AUTH-001/
-# ├── manifest.yaml          # PRD metadata + feature list
-# ├── AC-user-login.yaml     # Acceptance criteria
-# ├── AC-invalid-credentials.yaml
-# └── ...
-
-# 7. Commit acceptance tests
-git add acceptance-tests/ && git commit -m "test(PRD-AUTH-001): add acceptance test suite"
-```
-
-**Why This Timing**:
-- Tests generated from fresh PRD → accurate representation
-- Tests committed BEFORE Phase 2 → workers can reference them
-- Enables early detection of ambiguous acceptance criteria
-- Phase 3 validation has tests ready to execute
-
-**Important**:
-- acceptance-test-writer is a **Skill** (invoked explicitly)
-- Tests are **NOT executed** in Phase 1 (only generated)
-- Tests become part of **version control**
-- Workers reference tests during Phase 2
-- validation-test-agent executes tests during Phase 3 closure
 
 ---
 
@@ -470,64 +381,20 @@ bd create --title="[Hotfix Description]" --type=epic --priority=1
 
 ### Sync Script Reference (Task Master → Beads)
 
-The sync script bridges Task Master's flat task structure with Beads' hierarchical filtering.
-
-**🚨 IMPORTANT**: Run from `zenagent/` root (not `agencheck/`) to use the correct `.beads` database.
+**🚨 Run from project root** (e.g., `zenagent/`) to use the correct `.beads` database.
 
 ```bash
-# From zenagent/ root:
-cd /Users/theb/Documents/Windsurf/zenagent
-node agencheck/.claude/skills/orchestrator-multiagent/scripts/sync-taskmaster-to-beads.js [options]
+node agencheck/.claude/skills/orchestrator-multiagent/scripts/sync-taskmaster-to-beads.js \
+    --uber-epic=<id> --from-id=<start> --to-id=<end> --tasks-path=<path>
 ```
 
-**Options**:
-
-| Flag | Purpose |
-|------|---------|
-| `--uber-epic=<id>` | Link synced tasks to uber-epic via parent-child |
-| `--from-id=<id>` | Only sync tasks with ID >= this value |
-| `--to-id=<id>` | Only sync tasks with ID <= this value |
-| `--tasks-path=<path>` | Path to tasks.json (default: `.taskmaster/tasks/tasks.json`) |
-| `--dry-run` | Show what would be done without making changes |
-
-**Auto-mapped Fields** (always passed):
-- `description` → Brief task summary (1000 char limit)
-- `details` → Implementation details as `design` (5000 char limit)
-- `testStrategy` → Validation criteria as `acceptance` (2000 char limit)
+**Key flags**: `--uber-epic` (links to parent), `--from-id`/`--to-id` (filter range), `--dry-run` (preview)
 
 **After Sync**:
-- ✅ Creates beads with rich field mapping
+- ✅ Creates beads with rich field mapping (description, design, acceptance)
 - ✅ Links all beads to uber-epic via parent-child
-- ✅ Sets up task dependencies in beads
-- ✅ **Closes synced Task Master tasks** (status=done)
-
-**ID Range Filtering** (IMPORTANT):
-When parsing multiple PRDs, use `--from-id` and `--to-id` to sync only tasks from a specific PRD:
-```bash
-# PRD adds tasks 171-210, sync only those to their uber-epic
-node agencheck/.claude/skills/orchestrator-multiagent/scripts/sync-taskmaster-to-beads.js \
-    --uber-epic=agencheck-001 --from-id=171 --to-id=210 \
-    --tasks-path=agencheck/.taskmaster/tasks/tasks.json
-```
-
-**Hierarchical Filtering**:
-
-Once synced with `--uber-epic`, you can filter tasks by initiative:
-
-```bash
-# See all tasks under an initiative
-bd list --parent=agencheck-001
-
-# See ready tasks for specific initiative only
-bd ready --parent=agencheck-001
-
-# Useful for multi-initiative projects where you want to focus on one epic
-```
-
-**Why This Matters**:
-- Task Master maintains flat structure (good for parsing/complexity analysis)
-- Beads provides hierarchical organization (good for orchestration/filtering)
-- The sync script bridges both: parse with Task Master, orchestrate with Beads
+- ✅ Closes synced Task Master tasks (status=done)
+- ✅ Filter by initiative: `bd ready --parent=agencheck-001`
 
 ### Phase 2: Execution (Incremental Implementation)
 
@@ -625,168 +492,13 @@ AT tasks -> AT epic -> Functional epic -> Uber-epic
 
 ---
 
-## Memory-Driven Decision Making (Hindsight Integration)
+## Memory-Driven Decision Making
 
-The orchestrator uses Hindsight as extended memory to learn from experience and avoid repeating mistakes.
+**Core principle**: Before deciding, recall. After learning, retain. When stuck, reflect + validate.
 
-**Architecture Context**: For Hindsight's role in System 3's memory-driven philosophy and dual-bank architecture, see `system3-meta-orchestrator.md` → "Dual-Bank Startup Protocol" section.
+Key integration points: task start (recall), user feedback (retain → reflect → retain), double-rejection (recall → reflect → Perplexity → retain), session closure (reflect → retain).
 
-### Core Principle
-
-**Before deciding, recall. After learning, retain. When stuck, reflect + validate.**
-
-### Integration Points
-
-| Decision Point | Action | Purpose |
-|----------------|--------|---------|
-| **Task start** | `recall` | Check for pertinent memories before beginning |
-| **User feedback received** | `retain` → `reflect` → `retain` | Capture feedback, extract lesson, store pattern |
-| **Rejected 2 times** (feature OR regression) | `recall` → `reflect` → Perplexity → `retain` | Full analysis with external validation |
-| **Regression detected** (first time) | `recall` | Check for similar past situations |
-| **Hollow test detected** | `reflect` → Perplexity → `retain` | Analyze gap, validate fix, store prevention |
-| **AT epic/session closure** | `reflect` → `retain` | Synthesize patterns and store insights |
-
-### Task Start Memory Check
-
-**Before starting ANY task:**
-
-```python
-# Check for pertinent memories about this task type/context
-mcp__hindsight__recall("What should I remember about [task type/domain]?")
-```
-
-This surfaces patterns like:
-- "Always launch Haiku sub-agent to monitor workers"
-- "This component has fragile dependencies on X"
-- "Previous attempts failed because of Y"
-
-### User Feedback Loop
-
-**When the user provides feedback** (corrections, reminders, guidance):
-
-```
-USER FEEDBACK DETECTED
-    │
-    ▼
-1. RETAIN immediately
-   mcp__hindsight__retain(
-       content="User reminded me to [X] when [context]",
-       context="patterns"
-   )
-    │
-    ▼
-2. REFLECT on the lesson
-   mcp__hindsight__reflect(
-       query="Why did I forget this? What pattern should I follow?",
-       budget="mid"
-   )
-    │
-    ▼
-3. RETAIN the extracted pattern
-   mcp__hindsight__retain(
-       content="Lesson: [extracted pattern from reflection]",
-       context="patterns"
-   )
-```
-
-**Example**: User keeps reminding to launch Haiku sub-agent for monitoring:
-- Retain: "User reminded me to launch Haiku sub-agent to monitor worker progress"
-- Reflect: "Why did I miss this? What's the pattern?"
-- Retain: "Lesson: Always use run_in_background=True for parallel workers"
-
-### Rejected 2 Times (Feature or Regression)
-
-**When a feature is rejected twice OR regression occurs twice:**
-
-```python
-# 1. Recall similar situations
-mcp__hindsight__recall("What happened when [similar feature/regression] was rejected?")
-
-# 2. Reflect on patterns
-mcp__hindsight__reflect(
-    query="Why has [feature/regression] failed twice? What pattern is emerging?",
-    budget="high"
-)
-
-# 3. Validate with Perplexity (MANDATORY)
-mcp__perplexity-ask__perplexity_ask(
-    messages=[{
-        "role": "user",
-        "content": "I'm seeing repeated failures with [issue]. My hypothesis is [reflection output]. Is this assessment correct? What approaches should I consider?"
-    }]
-)
-
-# 4. Retain the validated lesson
-mcp__hindsight__retain(
-    content="Double rejection: [feature]. Root cause: [X]. Validated approach: [Y]",
-    context="bugs"
-)
-```
-
-### Regression Detected (First Time)
-
-**On first regression detection:**
-
-```python
-# Recall only - check for similar past situations
-mcp__hindsight__recall("What do I know about regressions in [component/area]?")
-```
-
-If recall surfaces relevant patterns, apply them. If not, proceed with standard fix.
-
-### Hollow Test Analysis
-
-**When tests pass but feature doesn't work:**
-
-```python
-# 1. Reflect on the gap
-mcp__hindsight__reflect(
-    query="Why did tests pass but feature fail? What's the mock/reality gap?",
-    budget="high"
-)
-
-# 2. Validate prevention approach with Perplexity
-mcp__perplexity-ask__perplexity_ask(
-    messages=[{
-        "role": "user",
-        "content": "My tests passed but feature failed because [gap]. How should I improve my testing approach to catch this?"
-    }]
-)
-
-# 3. Retain prevention pattern
-mcp__hindsight__retain(
-    content="Hollow test: [scenario]. Gap: [X]. Prevention: [Y]",
-    context="patterns"
-)
-```
-
-### AT Epic/Session Closure
-
-**When closing an AT epic or ending a session:**
-
-```python
-# 1. Reflect on patterns that emerged
-mcp__hindsight__reflect(
-    query="What patterns emerged from this [epic/session]? What worked well? What should be done differently?",
-    budget="high"
-)
-
-# 2. Retain the insights
-mcp__hindsight__retain(
-    content="[Epic/Session] insights: [key patterns and learnings]",
-    context="patterns"
-)
-```
-
-### The Learning Loop
-
-```
-Experience → Retain → Reflect → Retain Pattern → Recall Next Time → Apply
-     ↑                                                              │
-     └──────────────────────────────────────────────────────────────┘
-```
-
-This creates a continuous improvement cycle where each task benefits from all previous experience.
+**Full workflow**: See [references/hindsight-integration.md](references/hindsight-integration.md)
 
 ---
 
@@ -794,48 +506,20 @@ This creates a continuous improvement cycle where each task benefits from all pr
 
 **Orchestrators use native Agent Teams for all worker delegation.**
 
-### Team Lifecycle
+**Essential pattern**: Create team → Spawn workers → Create tasks → Workers claim and report
 
 ```python
-# 1. Create team (once per session, during PREFLIGHT)
-Teammate(
-    operation="spawnTeam",
-    team_name="{initiative}-workers",
-    description="Workers for {initiative}"
-)
-
-# 2. Spawn specialist workers as persistent teammates
+# Spawn worker teammate (once per session in PREFLIGHT)
 Task(
     subagent_type="backend-solutions-engineer",
     team_name="{initiative}-workers",
     name="worker-backend",
-    prompt="You are worker-backend in team {initiative}-workers. Check TaskList for available work. Claim tasks, implement, report completion via SendMessage to team-lead."
+    prompt="Check TaskList, claim tasks, implement, report via SendMessage"
 )
 
-# 3. Spawn validator teammate (once per session)
-Task(
-    subagent_type="validation-test-agent",
-    team_name="{initiative}-workers",
-    name="validator",
-    prompt="You are the validator in team {initiative}-workers. When tasks are ready for validation, check TaskList for tasks needing review. Run validation (--mode=unit or --mode=e2e --prd=PRD-XXX). Close tasks with evidence via bd close. Report results via SendMessage to team-lead."
-)
-
-# 4. Create work items and notify workers
-TaskCreate(
-    subject="Implement {feature}",
-    description="[task details, requirements, acceptance criteria, file scope]",
-    activeForm="Implementing {feature}"
-)
-SendMessage(type="message", recipient="worker-backend", content="Task available: {feature}", summary="New task assignment")
-
-# 5. Worker results arrive via SendMessage (auto-delivered)
-# 6. Assign validation to validator teammate
-TaskCreate(
-    subject="Validate {feature}",
-    description="--mode=e2e --task_id={bead_id} --prd=PRD-XXX",
-    activeForm="Validating {feature}"
-)
-SendMessage(type="message", recipient="validator", content="Validation task available", summary="Validation request")
+# Assign work
+TaskCreate(subject="Implement X", description="...", activeForm="Implementing X")
+SendMessage(type="message", recipient="worker-backend", content="Task available", summary="New task")
 ```
 
 ### Quick Worker Selection
@@ -849,7 +533,7 @@ SendMessage(type="message", recipient="validator", content="Validation task avai
 | Investigation | `Explore` | `worker-explore` |
 | **Task Closure** | **`validation-test-agent`** | **`validator`** |
 
-**Parallel workers**: Spawn multiple teammates into the same team. Each claims different tasks from the shared TaskList. Workers coordinate peer-to-peer via SendMessage.
+**Full examples**: See [WORKERS.md](WORKERS.md) for detailed patterns
 
 ### Browser Testing Worker Pattern
 
@@ -946,56 +630,23 @@ lsof -i :5001 -i :8000 -i :5184 -i :5185 | grep LISTEN
 
 **Orchestrators delegate task closure to the validator teammate, NOT direct `bd close`.**
 
-The validator is a persistent teammate spawned once per session during PREFLIGHT:
+The validator operates in two modes: `--mode=unit` (fast checks) and `--mode=e2e --prd=PRD-XXX` (full acceptance).
+
+**Pattern**: Assign validation task to validator teammate, validator runs tests and closes with evidence.
 
 ```python
-# Spawn validator teammate (once per session, after team creation)
-Task(
-    subagent_type="validation-test-agent",
-    team_name="{initiative}-workers",
-    name="validator",
-    prompt="You are the validator in team {initiative}-workers. When tasks are ready for validation, check TaskList for tasks needing review. Run validation (--mode=unit or --mode=e2e --prd=PRD-XXX). Close tasks with evidence via bd close. Report results via SendMessage to team-lead."
-)
-```
-
-The validator operates in two modes:
-
-| Mode | Flag | Used By | Purpose |
-|------|------|---------|---------|
-| **Unit** | `--mode=unit` | Orchestrators | Fast technical checks (mocks OK) |
-| **E2E** | `--mode=e2e --prd=PRD-XXX` | Orchestrators & System 3 | Full acceptance validation (real data, PRD criteria) |
-
-**Two-Stage Validation Workflow:**
-
-```python
-# Stage 1: Fast unit check (runs first)
-TaskCreate(
-    subject="Validate agencheck-042 (unit)",
-    description="--mode=unit --task_id=agencheck-042",
-    activeForm="Unit validation agencheck-042"
-)
-SendMessage(type="message", recipient="validator", content="Unit validation task for agencheck-042", summary="Unit validation request")
-# Quick validation with mocks, catches obvious breakage
-
-# Stage 2: Full E2E with PRD acceptance tests (if unit passes)
 TaskCreate(
     subject="Validate agencheck-042 (e2e)",
-    description="--mode=e2e --task_id=agencheck-042 --prd=PRD-AUTH-001\nValidate against acceptance criteria. Close with evidence if passing.",
+    description="--mode=e2e --task_id=agencheck-042 --prd=PRD-AUTH-001",
     activeForm="E2E validation agencheck-042"
 )
-SendMessage(type="message", recipient="validator", content="E2E validation task for agencheck-042", summary="E2E validation request")
-# Validator teammate invokes acceptance-test-runner internally
-# Runs PRD-defined acceptance criteria with real data
-# Closes task with evidence if all criteria pass
+SendMessage(type="message", recipient="validator", content="E2E validation ready", summary="Validation request")
 ```
 
-**Key Rules:**
+**Key Rules**:
 - Orchestrators NEVER run `bd close` directly
-- Validator teammate handles closure AFTER validation passes
-- NEVER invoke acceptance-test-runner or acceptance-test-writer directly
+- Validator closes AFTER validation passes with evidence
 - Always include `--prd=PRD-XXX` for e2e mode
-- System 3 uses `--mode=e2e --prd=X` for business outcome validation
-- Validator is a **persistent teammate** -- spawned once, handles multiple validation tasks
 
 ### Validation Types
 
@@ -1116,122 +767,11 @@ SendMessage(type="message", recipient="validator", content="Post-test validation
 
 ## Message Bus Integration
 
-**Scope**: The message bus handles communication between **System 3 and Orchestrators** only. Worker communication within a team uses native Agent Teams (SendMessage/TaskCreate) -- NOT the message bus.
+**Scope**: Message bus handles System 3 ↔ Orchestrator communication. Worker communication uses native Agent Teams (SendMessage/TaskCreate).
 
-| Communication Path | Mechanism |
-|--------------------|-----------|
-| System 3 <-> Orchestrator | Message Bus (mb-* commands) |
-| Orchestrator <-> Worker | Native Teams (SendMessage, TaskCreate, TaskList) |
-| Worker <-> Worker (peers) | Native Teams (SendMessage) |
+Essential commands: `mb-register`, `mb-recv`, `mb-send`, `mb-unregister`.
 
-**Architecture Reference**: See [MESSAGE_BUS_ARCHITECTURE.md](../../documentation/MESSAGE_BUS_ARCHITECTURE.md) for the complete architecture overview.
-
-### Session Start: Register with Message Bus
-
-At the START of every orchestrator session:
-
-```bash
-# 1. Register with message bus
-.claude/scripts/message-bus/mb-register \
-    "${CLAUDE_SESSION_ID:-orch-$(basename $(pwd))}" \
-    "$(tmux display-message -p '#S' 2>/dev/null || echo 'unknown')" \
-    "[Your initiative description]" \
-    --initiative="[epic-name]" \
-    --worktree="$(pwd)"
-```
-
-### Receiving Messages from System 3
-
-Messages from System 3 are automatically injected via PostToolUse hook.
-
-For manual check:
-```bash
-/check-messages
-```
-
-### Responding to System 3 Guidance
-
-When you receive a `guidance` message:
-1. Acknowledge receipt
-2. Adjust priorities if needed
-3. Continue execution
-
-```bash
-.claude/scripts/message-bus/mb-send "system3" "response" '{
-    "subject": "Guidance acknowledged",
-    "body": "Shifting focus to API endpoints as requested",
-    "context": {"original_type": "guidance"}
-}'
-```
-
-### Sending Completion Reports
-
-When completing a task or epic:
-
-```bash
-.claude/scripts/message-bus/mb-send "system3" "completion" '{
-    "subject": "Epic 4 Complete",
-    "body": "All tasks closed, tests passing",
-    "context": {
-        "initiative": "epic-4",
-        "beads_closed": ["agencheck-041", "agencheck-042"],
-        "test_results": "42 passed, 0 failed"
-    }
-}'
-```
-
-### Session End: Cleanup
-
-Before session ends:
-
-```bash
-# 1. Shutdown team (sends shutdown_request to all teammates)
-# Use SendMessage(type="shutdown_request", recipient="worker-backend") for each teammate
-# Wait for shutdown confirmations, then:
-Teammate(operation="cleanup")
-
-# 2. Unregister from message bus
-.claude/scripts/message-bus/mb-unregister "${CLAUDE_SESSION_ID}"
-```
-
-**Note**: Native team teammates are shut down via `SendMessage(type="shutdown_request")`. Team cleanup via `Teammate(operation="cleanup")` removes team directories.
-
-### Updated Session Handoff Checklist
-
-Add to your session start/end routines:
-
-**Session Start:**
-- [ ] Register with message bus (`mb-register`)
-- [ ] Create worker team (`Teammate(operation="spawnTeam")`)
-- [ ] Spawn specialist workers and validator as teammates
-
-**Session End:**
-- [ ] Send completion report to System 3 (`mb-send`)
-- [ ] Shutdown teammates (`SendMessage(type="shutdown_request")`)
-- [ ] Clean up team (`Teammate(operation="cleanup")`)
-- [ ] Unregister from message bus (`mb-unregister`)
-
-### Message Types You May Receive (from System 3)
-
-| Type | From | Action |
-|------|------|--------|
-| `guidance` | System 3 | Adjust approach, acknowledge |
-| `broadcast` | System 3 | Note policy/announcement |
-| `query` | System 3 | Respond with status |
-| `urgent` | System 3 | Handle immediately |
-
-### CLI Commands Quick Reference
-
-| Command | Purpose |
-|---------|---------|
-| `mb-recv` | Check for pending messages from System 3 |
-| `mb-send` | Send message to System 3 or other orchestrator |
-| `mb-register` | Register this session |
-| `mb-unregister` | Unregister this session |
-| `mb-list` | List active orchestrators |
-| `mb-status` | Queue status overview |
-
-**Full Guide**: See [message-bus skill](../message-bus/SKILL.md)
+**Full protocol**: See [references/message-bus-integration.md](references/message-bus-integration.md)
 
 ---
 
@@ -1257,15 +797,20 @@ Add to your session start/end routines:
 **Session Boundaries:**
 - **[WORKFLOWS.md](WORKFLOWS.md#session-handoffs)** - Handoff checklists, summaries, learning documentation
 
+**Memory & Communication:**
+- **[references/hindsight-integration.md](references/hindsight-integration.md)** - Memory-driven decision making, learning loops, feedback patterns
+- **[references/message-bus-integration.md](references/message-bus-integration.md)** - System 3 ↔ Orchestrator messaging protocol
+
 **Legacy Support:**
 - **[LEGACY_FEATURE_LIST.md](archive/LEGACY_FEATURE_LIST.md)** - Archived feature_list.json documentation for migration
 
 ---
 
-**Skill Version**: 5.2 (ZeroRepo Bead Enrichment + Model Upgrade)
-**Progressive Disclosure**: 6 reference files for detailed information
+**Skill Version**: 5.3 (Progressive Disclosure Streamlining)
+**Progressive Disclosure**: 8 reference files for detailed information
 **Last Updated**: 2026-02-08
 **Latest Enhancements**:
+- v5.3: **Progressive Disclosure Streamlining** - Reduced SKILL.md from 6,473 to ~3,800 words (~41% reduction). Moved Memory-Driven Decision Making (~600 words) and Message Bus Integration (~400 words) to new reference files (references/hindsight-integration.md, references/message-bus-integration.md). Compressed Phase 0 Ideation, Sync Script, Worker Delegation, and Testing & Validation sections. Removed duplicate Acceptance Test Generation subsection (already in Phase 1 workflow). All writing converted to imperative/infinitive form (no second-person). Progressive disclosure now with 8 reference files total.
 - v5.2: **Bead Enrichment from RPG Graph** - Added Phase 1.5 workflow to inject 04-rpg.json context into beads after Task Master sync. New "Enriching Beads with RPG Graph Context" section in ZEROREPO.md documents the enrichment pattern with real examples. Updated model from claude-sonnet-4-20250514 to claude-sonnet-4-5-20250929. Step 2.5 now split into 2.5a (generate delta) and 2.5b (enrich beads). Workers receive implementation-ready specs with file paths, interfaces, and technology stacks extracted from RPG graph.
 - v5.1: **ZeroRepo Integration** - Added codebase-aware orchestration via ZeroRepo delta analysis. New Step 2.5 in Phase 1 planning runs `zerorepo init` + `zerorepo generate` to classify PRD components as EXISTING/MODIFIED/NEW. Delta context enriches worker task assignments with precise file paths and change summaries. New ZEROREPO.md reference guide. Three wrapper scripts (`zerorepo-init.sh`, `zerorepo-generate.sh`, `zerorepo-update.sh`). Codebase-Aware Task Creation workflow added to WORKFLOWS.md.
 - v5.0: **Native Agent Teams** - Replaced Task subagent worker delegation with native Agent Teams (Teammate + TaskCreate + SendMessage). Workers are now persistent teammates that claim tasks from a shared TaskList, communicate peer-to-peer, and maintain session state across multiple assignments. Validator is a team role (not a separate Task subagent). Message bus scoped to System 3 <-> Orchestrator only; worker communication uses native team inboxes. Fallback to Task subagent mode when AGENT_TEAMS is not enabled.
