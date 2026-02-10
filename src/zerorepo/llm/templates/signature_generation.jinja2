@@ -1,0 +1,47 @@
+You are an expert Python developer. Generate a complete function signature for the following function specification.
+
+## Function Name
+{{ function_name }}
+
+{% if description is defined and description %}
+## Description
+{{ description }}
+{% endif %}
+
+{% if parameters is defined and parameters %}
+## Parameters
+{% for param in parameters %}
+- `{{ param.name }}`: {{ param.description }}{% if param.type is defined %} (type: {{ param.type }}){% endif %}
+{% endfor %}
+{% endif %}
+
+{% if return_description is defined and return_description %}
+## Return Value
+{{ return_description }}
+{% endif %}
+
+{% if class_name is defined and class_name %}
+## Class Context
+This is a method of class `{{ class_name }}`.
+{% endif %}
+
+{% if dependencies is defined and dependencies %}
+## Dependencies
+{% for dep in dependencies %}
+- {{ dep }}
+{% endfor %}
+{% endif %}
+
+## Instructions
+
+Generate a complete Python function signature that:
+1. Has precise type annotations for all parameters
+2. Has a return type annotation
+3. Uses appropriate default values where indicated
+4. Follows PEP 8 naming conventions
+5. Uses `self` or `cls` correctly for methods
+
+Return ONLY the function signature line (the `def ...` line with type hints), nothing else. For example:
+```python
+def process_items(self, items: list[str], *, verbose: bool = False) -> dict[str, int]:
+```

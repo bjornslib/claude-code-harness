@@ -8,9 +8,10 @@ For System 3 sessions (system3-*):
   The only valid exit for System 3 is to have exhausted all productive work
   and presented option questions to the user via AskUserQuestion.
 
-For non-System 3 sessions:
-  Pending tasks indicate continuation intent — session is ALLOWED to stop
-  (current behavior preserved).
+For non-System 3 sessions (orchestrators, workers):
+  Always PASS — these sessions can stop freely. Task state is informational
+  context for the judge but never blocks. This prevents orchestrators that
+  completed all their work from getting stuck in stop-hook loops.
 
 Architecture:
 - Step 4 (this checker): Mechanical data gathering + task enforcement
@@ -140,7 +141,7 @@ class WorkExhaustionChecker:
     Mechanical responsibilities:
     1. Gather work state from three sources (promises, beads, task primitives)
     2. For System 3 sessions: BLOCK if unfinished tasks exist (must execute or delete)
-    3. For non-System 3: PASS if unfinished tasks exist (continuation signal)
+    3. For non-System 3: Always PASS (task state is informational, never blocking)
     4. Produce a work_state_summary for Step 5 (Haiku judge) with ALL task states
 
     What this checker does NOT do:
@@ -160,8 +161,8 @@ class WorkExhaustionChecker:
             pending/in_progress tasks → BLOCK (the stop hook fires because
             Claude Code wants to stop — pending tasks are a contradiction)
 
-        For non-System 3 sessions:
-            pending/in_progress tasks → PASS (continuation signal, current behavior)
+        For non-System 3 sessions (orchestrators, workers):
+            Always PASS — task state is context for judge, never blocking
 
         Returns:
             CheckResult with work-state-enriched messages in all cases.
@@ -206,21 +207,18 @@ class WorkExhaustionChecker:
                     blocking=True,
                 )
 
-        # Non-System 3 sessions: original behavior
-        if has_unfinished_tasks:
-            return CheckResult(
-                priority=Priority.P3_TODO_CONTINUATION,
-                passed=True,
-                message=self._format_pass_message(work_state),
-                blocking=True,
-            )
-        else:
-            return CheckResult(
-                priority=Priority.P3_TODO_CONTINUATION,
-                passed=False,
-                message=self._format_non_system3_block(work_state),
-                blocking=True,
-            )
+        # Non-System 3 sessions (orchestrators, workers):
+        # Always PASS — these sessions should be free to stop at any time.
+        # If tasks are pending, that's informational context for the judge.
+        # If all tasks are done, the session completed its work successfully.
+        # The old behavior (blocking when no tasks) caused orchestrators that
+        # finished ALL work to get stuck in infinite stop-hook loops.
+        return CheckResult(
+            priority=Priority.P3_TODO_CONTINUATION,
+            passed=True,
+            message=self._format_pass_message(work_state),
+            blocking=True,
+        )
 
     @property
     def work_state_summary(self) -> str:

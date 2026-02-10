@@ -1,0 +1,123 @@
+You are a software specification analyst and architect. Parse the following natural language repository description and extract structured information with deep architectural analysis.
+
+## Repository Description
+
+{{ description }}
+
+{% if context %}
+## Additional Context
+
+{{ context }}
+{% endif %}
+
+## Instructions
+
+Analyze the description thoroughly and extract the following fields as a JSON object. Think carefully about the architecture and decompose the specification into epics, components, data flows, and file structure.
+
+### Core Fields
+
+1. **core_functionality**: A concise summary of what the repository does (1-3 sentences).
+2. **languages**: A list of programming languages mentioned or implied (e.g., ["Python", "TypeScript"]).
+3. **frameworks**: A list of frameworks or libraries mentioned (e.g., ["React", "FastAPI", "Django"]).
+4. **platforms**: A list of target platforms (e.g., ["Web", "Linux", "Mobile"]).
+5. **deployment_targets**: A list from these options: CLOUD, ON_PREMISES, EDGE, SERVERLESS, HYBRID, OTHER.
+6. **scope**: One of: BACKEND_ONLY, FRONTEND_ONLY, FULL_STACK, LIBRARY, CLI_TOOL, OTHER.
+
+### Quality Attributes
+
+7. **performance**: Performance requirements if mentioned (string or null).
+8. **security**: Security requirements if mentioned (string or null).
+9. **scalability**: Scalability requirements if mentioned (string or null).
+10. **reliability**: Reliability requirements if mentioned (string or null).
+11. **maintainability**: Maintainability requirements if mentioned (string or null).
+
+### Constraints
+
+12. **constraints**: A list of objects with:
+    - "description": What the constraint says
+    - "priority": One of MUST_HAVE, SHOULD_HAVE, NICE_TO_HAVE
+    - "category": Optional grouping (e.g., "security", "performance", "architecture")
+
+### Deep Extraction Fields
+
+13. **epics**: A list of high-level feature groupings, each with:
+    - "title": Short descriptive title (e.g., "User Authentication System")
+    - "description": Detailed scope and goals
+    - "priority": One of MUST_HAVE, SHOULD_HAVE, NICE_TO_HAVE
+    - "estimated_complexity": One of "low", "medium", "high"
+    - "components": List of component names that belong to this epic (from the components list below)
+
+14. **components**: A list of architectural components/modules, each with:
+    - "name": Component name (e.g., "API Gateway", "Auth Service", "Database Layer")
+    - "description": Responsibilities and purpose
+    - "component_type": One of "service", "library", "database", "ui", "middleware", "worker", "other"
+    - "technologies": List of technologies used (e.g., ["FastAPI", "PostgreSQL"])
+    - "suggested_module": A Python package name for this component (e.g., "api_gateway", "auth_service")
+    - "delta_status": (only when baseline provided) One of "existing", "modified", "new"
+    - "baseline_match_name": (only when baseline provided) Exact name from baseline, or null
+    - "change_summary": (only when baseline provided) Description of changes, or null
+
+15. **data_flows**: A list of data flow relationships between components, each with:
+    - "source": Source component name
+    - "target": Target component name
+    - "description": What data flows and how
+    - "protocol": Communication protocol (e.g., "REST", "gRPC", "WebSocket", "message_queue", "direct")
+
+16. **file_recommendations**: A list of recommended files/directories, each with:
+    - "path": Suggested file or directory path (e.g., "src/api/routes.py", "src/models/")
+    - "purpose": What this file/directory should contain
+    - "component": Associated component name (from the components list above)
+
+17. **functions**: Per-component function/method details. A list of objects, each with:
+    - "name": Function name (e.g., "authenticate_user", "process_payment")
+    - "signature": Full typed signature if inferrable (e.g., "def authenticate_user(username: str, password: str) -> AuthResult")
+    - "description": What the function does
+    - "input_types": List of input parameter types (e.g., ["str", "str"])
+    - "output_type": Return type (e.g., "AuthResult")
+    - "belongs_to_component": Component name this function belongs to
+
+18. **data_models**: Data models/schemas mentioned in the specification. A list of objects, each with:
+    - "name": Model name (e.g., "WorkflowConfig", "UserProfile")
+    - "fields": List of objects with "name", "type", "description" keys
+    - "relationships": List of other model names this relates to
+
+19. **api_endpoints**: API endpoints described in the specification. A list of objects, each with:
+    - "method": HTTP method (GET, POST, PUT, DELETE, PATCH)
+    - "path": URL path (e.g., "/api/v1/users")
+    - "request_schema": Description of request body
+    - "response_schema": Description of response body
+    - "belongs_to_component": Component name this endpoint belongs to
+
+## Guidelines
+
+- Be thorough but conservative: only extract information that is explicitly stated or strongly implied by the description.
+- Do not invent requirements that aren't present.
+- If a field has no relevant information, use null for strings or empty lists for arrays.
+- For epics, identify 2-5 major feature groupings when possible.
+- For components, identify the key architectural building blocks.
+- For data flows, focus on the most important inter-component communication paths.
+- For file recommendations, suggest a practical project structure that follows conventions for the identified languages/frameworks.
+
+{% if has_baseline is defined and has_baseline %}
+## Baseline-Aware Delta Classification
+
+The existing codebase structure is provided in the Additional Context section above. For EACH component you extract, you MUST also classify it against the baseline:
+
+- **delta_status**: One of "existing", "modified", or "new"
+  - "existing": Maps directly to an existing baseline module/component with no changes needed
+  - "modified": Maps to an existing baseline module/component but with changes described in the PRD
+  - "new": No existing baseline component matches this functionality
+
+- **baseline_match_name**: The EXACT name of the matching baseline module/component (copy it character-for-character from the baseline structure above). Set to null for "new" components.
+
+- **change_summary**: For "modified" components, briefly describe what changes. For "existing", set to null. For "new", briefly describe the new functionality.
+
+### Classification Rules
+1. Copy baseline node names EXACTLY from the structure above - do not paraphrase or abbreviate
+2. Prefer mapping to existing components over creating new ones
+3. For existing/modified components, use the baseline name as the component name
+4. Only classify as "new" when there is genuinely no existing component that covers this functionality
+5. Each component object must include delta_status, baseline_match_name, and change_summary fields
+{% endif %}
+
+Respond ONLY with valid JSON. Do not include markdown formatting, code blocks, or explanatory text.

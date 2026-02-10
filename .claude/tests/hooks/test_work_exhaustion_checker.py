@@ -325,8 +325,8 @@ class TestNonSystem3Sessions:
                     result = checker.check()
                     assert result.passed is True
 
-    def test_blocks_when_no_tasks(self, config):
-        """Non-System 3: no pending tasks = no continuation intent → BLOCK."""
+    def test_passes_when_no_tasks(self, config):
+        """Non-System 3: no pending tasks = work completed → PASS."""
         with tempfile.TemporaryDirectory() as tmpdir:
             _create_task_dir(tmpdir, "test-empty")
 
@@ -334,11 +334,10 @@ class TestNonSystem3Sessions:
                 with patch.object(Path, "home", return_value=Path(tmpdir)):
                     checker = WorkExhaustionChecker(config)
                     result = checker.check()
-                    assert result.passed is False
-                    assert "NO CONTINUATION TASK" in result.message
+                    assert result.passed is True
 
-    def test_blocks_when_only_completed_tasks(self, config):
-        """Non-System 3: only completed tasks = no continuation → BLOCK."""
+    def test_passes_when_only_completed_tasks(self, config):
+        """Non-System 3: only completed tasks = work done → PASS."""
         with tempfile.TemporaryDirectory() as tmpdir:
             _create_task_dir(tmpdir, "test-completed", tasks=[
                 {"id": "1", "subject": "Done task", "status": "completed"}
@@ -348,7 +347,7 @@ class TestNonSystem3Sessions:
                 with patch.object(Path, "home", return_value=Path(tmpdir)):
                     checker = WorkExhaustionChecker(config)
                     result = checker.check()
-                    assert result.passed is False
+                    assert result.passed is True
 
     def test_in_progress_task_counts_as_continuation(self, config):
         """Non-System 3: in_progress task = continuation signal → PASS."""
@@ -363,8 +362,8 @@ class TestNonSystem3Sessions:
                     result = checker.check()
                     assert result.passed is True
 
-    def test_block_message_work_available(self, config):
-        """Non-System 3: block message when work exists but no tasks."""
+    def test_passes_even_with_work_available(self, config):
+        """Non-System 3: always passes regardless of available work."""
         with tempfile.TemporaryDirectory() as tmpdir:
             _create_task_dir(tmpdir, "test-nowork")
 
@@ -372,17 +371,16 @@ class TestNonSystem3Sessions:
                 with patch.object(Path, "home", return_value=Path(tmpdir)):
                     checker = WorkExhaustionChecker(config)
                     result = checker.check()
-                    assert result.passed is False
-                    assert "NO CONTINUATION TASK" in result.message
+                    assert result.passed is True
 
     def test_fail_open_on_gathering_error(self, config):
-        """Non-System 3: gathering error → fail open → empty state → BLOCK."""
+        """Non-System 3: gathering error → fail open → empty state → PASS."""
         with patch.dict(os.environ, {"CLAUDE_CODE_TASK_LIST_ID": "test-error"}):
             checker = WorkExhaustionChecker(config)
             with patch.object(checker, "_gather_work_state", side_effect=RuntimeError("test error")):
                 result = checker.check()
-                # Fail open: empty WorkState → no unfinished tasks → BLOCK for non-system3
-                assert result.passed is False
+                # Fail open: empty WorkState → no unfinished tasks → PASS for non-system3
+                assert result.passed is True
 
 
 # --- Work State Summary Tests ---

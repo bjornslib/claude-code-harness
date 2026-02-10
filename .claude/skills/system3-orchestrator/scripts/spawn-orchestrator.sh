@@ -116,16 +116,12 @@ tmux send-keys -t "$SESSION_NAME" Enter
 log_info "Waiting for Claude Code to initialize (5 seconds)..."
 sleep 5
 
-# CRITICAL: Select orchestrator output style via interactive menu
+# CRITICAL: Select orchestrator output style via direct command
 # The orchestrator starts in "default" output style. Without the correct
 # output style, the team lead won't follow orchestrator delegation rules.
 # System 3 must physically select it - relying on text instructions is unreliable.
 log_info "Selecting orchestrator output style..."
-tmux send-keys -t "$SESSION_NAME" "/output-style"
-tmux send-keys -t "$SESSION_NAME" Enter
-sleep 2  # Wait for interactive menu to appear
-# Navigate to "orchestrator" (first item alphabetically) and select it
-tmux send-keys -t "$SESSION_NAME" Down
+tmux send-keys -t "$SESSION_NAME" "/output-style orchestrator"
 tmux send-keys -t "$SESSION_NAME" Enter
 log_info "Waiting for output style to load (3 seconds)..."
 sleep 3

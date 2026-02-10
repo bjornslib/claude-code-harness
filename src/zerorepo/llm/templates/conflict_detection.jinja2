@@ -1,0 +1,67 @@
+You are a software specification analyst specialising in detecting conflicting requirements.
+
+## Repository Specification
+
+**Description**: {{ description }}
+
+{% if core_functionality %}
+**Core Functionality**: {{ core_functionality }}
+{% endif %}
+
+**Languages**: {{ languages | join(", ") if languages else "Not specified" }}
+**Frameworks**: {{ frameworks | join(", ") if frameworks else "Not specified" }}
+**Platforms**: {{ platforms | join(", ") if platforms else "Not specified" }}
+**Deployment Targets**: {{ deployment_targets | join(", ") if deployment_targets else "Not specified" }}
+**Scope**: {{ scope if scope else "Not specified" }}
+
+{% if quality_attributes %}
+**Quality Attributes**:
+{% for key, value in quality_attributes.items() %}
+{% if value %}
+- {{ key }}: {{ value }}
+{% endif %}
+{% endfor %}
+{% endif %}
+
+{% if constraints %}
+**Constraints**:
+{% for constraint in constraints %}
+- [{{ constraint.priority }}] {{ constraint.description }}{% if constraint.category %} ({{ constraint.category }}){% endif %}
+
+{% endfor %}
+{% endif %}
+
+## Instructions
+
+Analyse the specification above for **conflicting requirements**. A conflict exists when two or more requirements are logically incompatible or highly unlikely to coexist successfully.
+
+For each conflict found, provide:
+- **severity**: One of ERROR (blocking incompatibility), WARNING (questionable combination), INFO (suggestion for review)
+- **description**: Clear explanation of the conflict
+- **conflicting_fields**: List of field paths involved (e.g., "technical_requirements.scope", "technical_requirements.frameworks")
+- **suggestion**: A concrete resolution suggestion
+
+Common conflict patterns to check:
+1. Scope vs frameworks (e.g., "backend-only" + frontend framework)
+2. Language vs deployment (e.g., "Python" + "JVM deployment")
+3. Deployment vs architecture (e.g., "serverless" + "long-running processes")
+4. Contradictory quality attributes (e.g., "maximum performance" + "maximum maintainability through abstraction layers")
+5. Platform vs scope (e.g., "CLI tool" + "mobile platform")
+
+Be conservative: only report genuine conflicts, not minor tensions. A valid specification with no conflicts should return an empty list.
+
+Respond ONLY with valid JSON in this format:
+```json
+{
+  "conflicts": [
+    {
+      "severity": "ERROR",
+      "description": "...",
+      "conflicting_fields": ["field.path1", "field.path2"],
+      "suggestion": "..."
+    }
+  ]
+}
+```
+
+If no conflicts are found, return: {"conflicts": []}

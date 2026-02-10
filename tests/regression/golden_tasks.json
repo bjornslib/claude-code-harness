@@ -1,0 +1,118 @@
+{
+    "version": "1.0",
+    "description": "Golden tasks for regression testing prompt changes",
+    "tasks": [
+        {
+            "id": "sklearn-linear_model-ridge-001",
+            "project": "scikit-learn",
+            "category": "linear_model.ridge",
+            "subcategory": "ridge",
+            "description": "Test ridge regression with default alpha",
+            "test_code": "def test_ridge_default_alpha():\n    from sklearn.linear_model import Ridge\n    import numpy as np\n    X = np.array([[1, 1], [1, 2], [2, 2], [2, 3]])\n    y = np.dot(X, np.array([1, 2])) + 3\n    reg = Ridge(alpha=1.0)\n    reg.fit(X, y)\n    assert reg.score(X, y) > 0.9",
+            "imports": ["from sklearn.linear_model import Ridge", "import numpy as np"],
+            "loc": 8,
+            "difficulty": "easy"
+        },
+        {
+            "id": "sklearn-preprocessing-scaler-002",
+            "project": "scikit-learn",
+            "category": "preprocessing.scaler",
+            "subcategory": "scaler",
+            "description": "Test standard scaler transform and inverse",
+            "test_code": "def test_standard_scaler_inverse():\n    from sklearn.preprocessing import StandardScaler\n    import numpy as np\n    X = np.array([[1, 2], [3, 4], [5, 6]])\n    scaler = StandardScaler()\n    X_scaled = scaler.fit_transform(X)\n    X_inverse = scaler.inverse_transform(X_scaled)\n    np.testing.assert_array_almost_equal(X, X_inverse)",
+            "imports": ["from sklearn.preprocessing import StandardScaler", "import numpy as np"],
+            "loc": 8,
+            "difficulty": "easy"
+        },
+        {
+            "id": "pandas-dataframe-groupby-003",
+            "project": "pandas",
+            "category": "dataframe.groupby",
+            "subcategory": "groupby",
+            "description": "Test DataFrame groupby aggregation with sum",
+            "test_code": "def test_groupby_sum():\n    import pandas as pd\n    df = pd.DataFrame({'A': ['foo', 'bar', 'foo', 'bar'], 'B': [1, 2, 3, 4]})\n    result = df.groupby('A')['B'].sum()\n    assert result['foo'] == 4\n    assert result['bar'] == 6",
+            "imports": ["import pandas as pd"],
+            "loc": 6,
+            "difficulty": "easy"
+        },
+        {
+            "id": "pandas-dataframe-merge-004",
+            "project": "pandas",
+            "category": "dataframe.merge",
+            "subcategory": "merge",
+            "description": "Test DataFrame inner merge on shared column",
+            "test_code": "def test_inner_merge():\n    import pandas as pd\n    left = pd.DataFrame({'key': ['a', 'b', 'c'], 'val_l': [1, 2, 3]})\n    right = pd.DataFrame({'key': ['b', 'c', 'd'], 'val_r': [4, 5, 6]})\n    merged = pd.merge(left, right, on='key', how='inner')\n    assert len(merged) == 2\n    assert set(merged['key']) == {'b', 'c'}",
+            "imports": ["import pandas as pd"],
+            "loc": 7,
+            "difficulty": "medium"
+        },
+        {
+            "id": "sympy-algebra-solve-005",
+            "project": "sympy",
+            "category": "algebra.solve",
+            "subcategory": "solve",
+            "description": "Test solving a quadratic equation symbolically",
+            "test_code": "def test_solve_quadratic():\n    from sympy import symbols, solve, Eq\n    x = symbols('x')\n    solutions = solve(Eq(x**2 - 5*x + 6, 0), x)\n    assert set(solutions) == {2, 3}",
+            "imports": ["from sympy import symbols, solve, Eq"],
+            "loc": 5,
+            "difficulty": "medium"
+        },
+        {
+            "id": "sympy-calculus-diff-006",
+            "project": "sympy",
+            "category": "calculus.differentiation",
+            "subcategory": "differentiation",
+            "description": "Test symbolic differentiation of polynomial",
+            "test_code": "def test_differentiation():\n    from sympy import symbols, diff\n    x = symbols('x')\n    expr = 3*x**3 + 2*x**2 - x + 7\n    derivative = diff(expr, x)\n    assert derivative == 9*x**2 + 4*x - 1",
+            "imports": ["from sympy import symbols, diff"],
+            "loc": 5,
+            "difficulty": "easy"
+        },
+        {
+            "id": "statsmodels-ols-fit-007",
+            "project": "statsmodels",
+            "category": "regression.ols",
+            "subcategory": "ols",
+            "description": "Test OLS regression fit with R-squared check",
+            "test_code": "def test_ols_fit():\n    import numpy as np\n    import statsmodels.api as sm\n    np.random.seed(42)\n    X = np.random.randn(100, 2)\n    y = X @ np.array([1.5, -2.0]) + np.random.randn(100) * 0.1\n    X_const = sm.add_constant(X)\n    model = sm.OLS(y, X_const).fit()\n    assert model.rsquared > 0.95",
+            "imports": ["import numpy as np", "import statsmodels.api as sm"],
+            "loc": 8,
+            "difficulty": "medium"
+        },
+        {
+            "id": "statsmodels-ttest-008",
+            "project": "statsmodels",
+            "category": "stats.ttest",
+            "subcategory": "ttest",
+            "description": "Test t-test for significant difference between groups",
+            "test_code": "def test_ttest_significant():\n    import numpy as np\n    from scipy import stats\n    np.random.seed(42)\n    group_a = np.random.normal(10, 1, 50)\n    group_b = np.random.normal(12, 1, 50)\n    t_stat, p_value = stats.ttest_ind(group_a, group_b)\n    assert p_value < 0.05\n    assert t_stat < 0",
+            "imports": ["import numpy as np", "from scipy import stats"],
+            "loc": 8,
+            "difficulty": "hard"
+        },
+        {
+            "id": "requests-get-json-009",
+            "project": "requests",
+            "category": "http.get",
+            "subcategory": "get",
+            "description": "Test HTTP GET request parsing JSON response",
+            "test_code": "def test_get_json(mock_session):\n    import json\n    response_data = {'status': 'ok', 'count': 42}\n    mock_session.get.return_value.json.return_value = response_data\n    mock_session.get.return_value.status_code = 200\n    result = mock_session.get('http://api.example.com/data')\n    assert result.status_code == 200\n    assert result.json()['count'] == 42",
+            "imports": ["import json"],
+            "fixtures": ["mock_session"],
+            "loc": 7,
+            "difficulty": "medium"
+        },
+        {
+            "id": "requests-post-auth-010",
+            "project": "requests",
+            "category": "http.post",
+            "subcategory": "post",
+            "description": "Test HTTP POST with authentication headers",
+            "test_code": "def test_post_with_auth(mock_session):\n    headers = {'Authorization': 'Bearer token123'}\n    payload = {'key': 'value'}\n    mock_session.post.return_value.status_code = 201\n    result = mock_session.post('http://api.example.com/create', json=payload, headers=headers)\n    assert result.status_code == 201\n    mock_session.post.assert_called_once()",
+            "imports": [],
+            "fixtures": ["mock_session"],
+            "loc": 7,
+            "difficulty": "hard"
+        }
+    ]
+}
