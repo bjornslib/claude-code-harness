@@ -504,6 +504,93 @@ if "MONITOR_STUCK" in report:
 
 ---
 
+## Oversight Team Management
+
+### Team Structure
+
+System 3 creates an independent oversight team for each initiative:
+
+```
+System 3 (TEAM LEAD of s3-{initiative}-oversight)
+    ├── s3-investigator     (Explore — read-only codebase verification)
+    ├── s3-prd-auditor      (solution-design-architect — PRD coverage gaps)
+    ├── s3-validator        (validation-test-agent — REAL E2E, no mocks)
+    ├── s3-evidence-clerk   (general-purpose/Haiku — evidence collation)
+    │
+    └── [tmux] → Orchestrator (team lead of {initiative}-workers)
+                    ├── worker-frontend
+                    ├── worker-backend
+                    └── worker-tester
+                    (NO validator — removed from this team)
+```
+
+### PREFLIGHT: Create Oversight Team
+
+After creating completion promise and gathering wisdom:
+
+```python
+# Create oversight team (once per initiative)
+TeamCreate(team_name=f"s3-{initiative}-oversight", description=f"S3 independent validation for {initiative}")
+```
+
+Spawn specialist workers -- see [references/oversight-team.md](../skills/system3-orchestrator/references/oversight-team.md) for exact spawn commands.
+
+### Validation Cycle
+
+**Trigger**: Orchestrator signals `impl_complete` (via message bus or beads status change).
+
+```
+1. Detect impl_complete (via mb-recv or bd list --status=impl_complete)
+2. bd update <id> --status=s3_validating
+3. Dispatch to oversight team:
+   a. TaskCreate → s3-investigator: "Verify code changes for <task>"
+   b. TaskCreate → s3-prd-auditor: "Check PRD coverage for <task>"
+   c. TaskCreate → s3-validator: "Run E2E acceptance tests for <task>"
+4. Collect results from all three (via SendMessage)
+5. Dispatch to s3-evidence-clerk: "Collate reports into closure report"
+6. Decision:
+   - ALL pass → bd close <id> (with evidence)
+   - ANY fail → bd update <id> --status=in_progress + send rejection to orchestrator via mb-send
+```
+
+### Feedback to Orchestrator
+
+**On rejection**: Send detailed feedback via message bus:
+```bash
+mb-send orch-{name} s3_rejected '{
+    "task_id": "<id>",
+    "prd_gaps": ["Requirement X not implemented"],
+    "test_failures": ["E2E test Y failed: expected Z"],
+    "code_issues": ["File A missing error handling"],
+    "recommended_fixes": ["Add try/catch in function B"]
+}'
+```
+
+**On approval**: Send confirmation + store evidence:
+```bash
+mb-send orch-{name} s3_validated '{"task_id": "<id>", "evidence_path": ".claude/evidence/<id>/"}'
+```
+
+### Custom Beads Status Lifecycle
+
+```
+open → in_progress → impl_complete → s3_validating → closed
+                         ↑                    │
+                         └────────────────────┘
+                       (s3_rejected → back to in_progress)
+```
+
+| Status | Set By | Meaning |
+|--------|--------|---------|
+| `open` | Planning | Task exists, not started |
+| `in_progress` | Orchestrator | Worker actively implementing |
+| `impl_complete` | Orchestrator | Done -- requesting S3 review |
+| `s3_validating` | System 3 | Oversight team actively checking |
+| `s3_rejected` | System 3 | Failed validation -- returned to orchestrator |
+| `closed` | System 3 (s3-validator) | Validated with evidence |
+
+---
+
 ## Spawning Orchestrators (System 3 Orchestrator Pattern)
 
 ### 🚨🚨🚨 CRITICAL RULE #1: System 3 NEVER Does Implementation Work

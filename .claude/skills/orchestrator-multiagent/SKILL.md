@@ -64,37 +64,40 @@ Task(
 
 ---
 
-## BLOCKED COMMANDS (HARD ENFORCEMENT)
+## Implementation Complete Handoff
 
-**The following commands are BLOCKED for orchestrators:**
+**When orchestrator's workers finish implementation:**
 
-| Command | Why Blocked | Alternative |
-|---------|-------------|-------------|
-| `bd close <id>` | Bypasses validation evidence | Assign to validator teammate via TaskCreate + SendMessage |
-| `bd close <id> --reason "..."` | Same - reason doesn't replace evidence | Validator teammate collects actual evidence |
-| `Skill("acceptance-test-runner")` | Bypasses validation-test-agent routing | Use validation-test-agent --mode=e2e |
-| `Skill("acceptance-test-writer")` | Bypasses validation-test-agent routing | Use validation-test-agent --mode=e2e |
+Orchestrators mark tasks `impl_complete` to signal System 3 for independent validation.
+Orchestrators do NOT close tasks — System 3's oversight team handles validation and closure.
 
-**If you attempt `bd close`**: STOP. Ask yourself:
-1. Did I run validation-test-agent --mode=unit or --mode=e2e?
-2. Did validation-test-agent produce passing evidence?
-3. Did validation-test-agent close the task for me?
+**Handoff Protocol:**
+1. Workers confirm: code committed, unit tests pass, implementation complete
+2. Orchestrator marks bead: `bd update <id> --status=impl_complete`
+3. Orchestrator notifies System 3: `mb-send system3 impl_complete '{"task_id": "<id>", "prd": "PRD-XXX"}'`
+4. Orchestrator continues to next task (does NOT wait for S3 validation)
 
-If NO to any: You're violating the validation gate. Delegate to validation-test-agent first.
-
-**Correct Pattern:**
-
-```python
-# ✅ CORRECT: Assign validation to validator teammate
-TaskCreate(
-    subject="Validate agencheck-042 (e2e)",
-    description="--mode=e2e --task_id=agencheck-042 --prd=PRD-AUTH-001",
-    activeForm="Validating agencheck-042"
-)
-SendMessage(type="message", recipient="validator", content="E2E validation task available", summary="Validation request")
+**Custom Beads Status Lifecycle:**
+```
+open → in_progress → impl_complete → [S3 validates] → closed
+                         ↑                    │
+                         └────────────────────┘
+                       (s3_rejected → back to in_progress)
 ```
 
-**Exception**: Only the validator teammate is authorized to run `bd close` after verification passes.
+| Status | Set By | Meaning |
+|--------|--------|---------|
+| `open` | Planning | Task exists, not started |
+| `in_progress` | Orchestrator | Worker actively implementing |
+| `impl_complete` | Orchestrator | Done — requesting S3 review |
+| `s3_validating` | System 3 | Oversight team actively checking |
+| `s3_rejected` | System 3 | Failed validation — back to orchestrator |
+| `closed` | System 3 (s3-validator) | Validated with evidence |
+
+**What orchestrators SHOULD NOT do:**
+- Do NOT run `bd close` — System 3 handles this after independent validation
+- Do NOT spawn a validator teammate — validation is System 3's responsibility
+- Do NOT wait for validation before starting next task
 
 ---
 
@@ -126,7 +129,6 @@ These types are used as `subagent_type` when spawning teammates via `Task(..., t
 | **Browser Testing** | `tdd-test-engineer` | `worker-tester` | **E2E UI validation, automated browser testing** |
 | Architecture | `solution-design-architect` | `worker-architect` | Design docs, PRDs |
 | General | `Explore` | `worker-explore` | Investigation, code search |
-| **Validator** | `validation-test-agent` | `validator` | **Task closure with evidence** |
 
 **Pattern**: Use `Task(subagent_type="...", team_name="...", name="...")` to spawn teammates. Workers claim tasks from the shared TaskList and report via SendMessage.
 
@@ -152,7 +154,7 @@ bd show <bd-id>                             # Task details
 
 # Update task status (Beads)
 bd update <bd-id> --status in-progress      # Mark as started
-bd close <bd-id> --reason "Validated"       # Mark complete
+bd update <bd-id> --status=impl_complete     # Signal S3 for validation
 
 # Commit (Beads)
 git add .beads/ && git commit -m "feat(<bd-id>): [description]"
@@ -420,57 +422,38 @@ The autonomous mode protocol provides:
    ↓
 5. Worker sends results via SendMessage (auto-delivered to you)
    ↓
-6. DELEGATE VALIDATION TO VALIDATOR TEAMMATE
-   TaskCreate(subject="Validate <bd-id>", description="--mode=e2e --task_id=... --prd=PRD-XXX")
-   SendMessage(type="message", recipient="validator", content="Validation ready", summary="Validate request")
+6. Mark impl_complete + notify S3
+   bd update <bd-id> --status=impl_complete
+   mb-send system3 impl_complete '{"task_id": "<bd-id>", "prd": "PRD-XXX"}'
    ↓
-7. Validator closes task with evidence (via bd close internally)
-   ↓
-8. `git add . && git commit -m "feat(<bd-id>): [description]"`
+7. `git add . && git commit -m "feat(<bd-id>): [description]"`
 ```
 
 **Critical Rules**:
 - One feature at a time. Leave clean state. Commit progress.
 - **Use TaskCreate + SendMessage for all worker delegation** - Workers claim tasks from shared TaskList
-- **NEVER use `bd close` directly** - Route through validator teammate
+- **NEVER use `bd close` directly** - Mark `impl_complete` and let S3 validate/close
 - Orchestrator coordinates; Workers implement
 
 **Legacy feature_list.json**: See [LEGACY_FEATURE_LIST.md](archive/LEGACY_FEATURE_LIST.md) for legacy workflow.
 
-### Phase 3: Validation (AT Epic Closure)
+### Phase 3: Validation (System 3 Independent Oversight)
 
-**When**: All functional epic tasks are complete, AT epic tasks ready for final validation.
+**System 3 handles validation independently** using its oversight team:
+- s3-investigator verifies code changes
+- s3-prd-auditor checks PRD coverage
+- s3-validator runs real E2E tests
+- s3-evidence-clerk produces closure reports
 
-**Validation Workflow**:
-```
-1. Verify ALL tasks in functional epic are closed
-   -- `bd list` - check status
-   |
-2. Assign AT epic tasks to validator teammate (--mode=unit first, then --mode=e2e)
-   -- TaskCreate + SendMessage to validator
-   -- Validator runs fast unit checks, then PRD-based acceptance tests
-   -- Validator closes tasks that pass (via bd close internally)
-   |
-3. Assign AT epic closure to validator teammate
-   -- TaskCreate: "--mode=e2e --task_id=<at-epic-id> --prd=PRD-XXX"
-   -- SendMessage to validator
-   |
-4. Assign functional epic closure to validator teammate (now unblocked)
-   -- TaskCreate: "--mode=e2e --task_id=<epic-id> --prd=PRD-XXX"
-   -- SendMessage to validator
-   |
-5. When all epics closed -> System 3 closes uber-epic
-   -- System 3 uses validation-test-agent --mode=e2e --prd=PRD-XXX for uber-epic
-   |
-6. Final commit and summary
-   -- `git add . && git commit -m "feat: complete [initiative]"`
-   -- Update `.claude/progress/` with final summary
-```
+**Orchestrator's role in Phase 3:**
+1. Ensure all tasks are marked `impl_complete`
+2. Monitor for `s3_rejected` tasks (fix and re-submit)
+3. When all tasks are `closed` by S3 → initiative complete
 
-**Closure Order** (MUST follow):
+**Closure Order** (managed by System 3):
 ```
-AT tasks -> AT epic -> Functional epic -> Uber-epic
-(All closures via validator teammate, NOT direct bd close)
+impl_complete → s3_validating → closed
+                (or s3_rejected → in_progress → impl_complete)
 ```
 
 **Full Validation Protocol**: See [WORKFLOWS.md](WORKFLOWS.md#validation-protocol-3-level)
@@ -531,7 +514,6 @@ SendMessage(type="message", recipient="worker-backend", content="Task available"
 | **E2E Browser Tests** | **`tdd-test-engineer`** | **`worker-tester`** |
 | Architecture | `solution-design-architect` | `worker-architect` |
 | Investigation | `Explore` | `worker-explore` |
-| **Task Closure** | **`validation-test-agent`** | **`validator`** |
 
 **Full examples**: See [WORKERS.md](WORKERS.md) for detailed patterns
 
@@ -586,12 +568,10 @@ result = Task(
 # Result returned directly - no monitoring, no cleanup needed
 ```
 
-In fallback mode, validation also uses Task subagents:
-```python
-Task(
-    subagent_type="validation-test-agent",
-    prompt="--mode=e2e --task_id=agencheck-042 --prd=PRD-AUTH-001"
-)
+In fallback mode, after implementation the orchestrator marks tasks `impl_complete` and notifies S3:
+```bash
+bd update <bd-id> --status=impl_complete
+mb-send system3 impl_complete '{"task_id": "<bd-id>", "prd": "PRD-AUTH-001"}'
 ```
 
 **How to detect**: Check for `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` in environment. If absent, use fallback.
@@ -626,27 +606,15 @@ lsof -i :5001 -i :8000 -i :5184 -i :5185 | grep LISTEN
 
 ## Testing & Validation
 
-### Validation Agent (Teammate -- Task Closure Authority)
+### Testing (Level 1 — Orchestrator Responsibility)
 
-**Orchestrators delegate task closure to the validator teammate, NOT direct `bd close`.**
+Orchestrators ensure basic quality before marking `impl_complete`:
+- Unit tests pass (pytest/jest)
+- Code compiles/builds without errors
+- Basic smoke tests pass
 
-The validator operates in two modes: `--mode=unit` (fast checks) and `--mode=e2e --prd=PRD-XXX` (full acceptance).
-
-**Pattern**: Assign validation task to validator teammate, validator runs tests and closes with evidence.
-
-```python
-TaskCreate(
-    subject="Validate agencheck-042 (e2e)",
-    description="--mode=e2e --task_id=agencheck-042 --prd=PRD-AUTH-001",
-    activeForm="E2E validation agencheck-042"
-)
-SendMessage(type="message", recipient="validator", content="E2E validation ready", summary="Validation request")
-```
-
-**Key Rules**:
-- Orchestrators NEVER run `bd close` directly
-- Validator closes AFTER validation passes with evidence
-- Always include `--prd=PRD-XXX` for e2e mode
+**Level 2+3 validation (E2E, PRD compliance) is performed independently by System 3's oversight team.**
+The orchestrator does NOT need to set up E2E infrastructure or run acceptance tests.
 
 ### Validation Types
 
@@ -655,26 +623,6 @@ SendMessage(type="message", recipient="validator", content="E2E validation ready
 | `browser` | UI features | chrome-devtools automation |
 | `api` | Backend endpoints | curl/HTTP requests |
 | `unit` | Pure logic | pytest/jest |
-
-### MANDATORY: Post-Test Validation
-
-**After ANY test suite passes:**
-
-```python
-# Create exploration task and assign to explorer teammate (or validator)
-TaskCreate(
-    subject="Post-test validation for <bd-id>",
-    description="""Validate <bd-id> works as designed:
-    - Test actual user workflow (not mocked)
-    - Verify API endpoints return real data
-    - Check UI displays expected results
-    - Compare against Beads task acceptance criteria""",
-    activeForm="Post-test validation <bd-id>"
-)
-SendMessage(type="message", recipient="validator", content="Post-test validation needed for <bd-id>", summary="Post-test validation")
-```
-
-**Why**: Unit tests can pass with mocks while feature doesn't work (hollow tests).
 
 **Full Guide**: [VALIDATION.md](VALIDATION.md)
 - 3-Level Validation Protocol
@@ -750,7 +698,7 @@ SendMessage(type="message", recipient="validator", content="Post-test validation
 - Ran regression check first?
 - Worker stayed within scope?
 - Validated feature works (not just tests pass)?
-- **Delegated closure to validator teammate (--mode=unit or --mode=e2e --prd=X)?**
+- **Marked impl_complete and notified S3 via message bus?**
 - Committed with message?
 - Git status clean?
 

@@ -49,6 +49,10 @@ class WorkState:
     open_business_epic_count: int = 0
     beads_summary: str = ""
 
+    # S3 validation pipeline — custom status counts
+    impl_complete_count: int = 0
+    s3_validating_count: int = 0
+
     # Task primitives — unfinished (pending + in_progress)
     pending_task_count: int = 0
     task_subjects: list = field(default_factory=list)
@@ -65,6 +69,8 @@ class WorkState:
             or self.ready_bead_count > 0
             or self.high_priority_bead_count > 0
             or self.open_business_epic_count > 0
+            or self.impl_complete_count > 0  # Awaiting S3 validation
+            or self.s3_validating_count > 0  # Currently being validated
         )
 
     def format_summary_lines(self) -> list:
@@ -105,6 +111,12 @@ class WorkState:
         if self.completed_task_count > 0:
             subjects = "; ".join(f'"{s}"' for s in self.completed_task_subjects[:3])
             lines.append(f"Completed: {self.completed_task_count} tasks done ({subjects})")
+
+        # S3 validation pipeline
+        if self.impl_complete_count > 0:
+            lines.append(f"S3 Pipeline: {self.impl_complete_count} awaiting validation (impl_complete)")
+        if self.s3_validating_count > 0:
+            lines.append(f"S3 Pipeline: {self.s3_validating_count} being validated (s3_validating)")
 
         return lines
 
@@ -198,8 +210,16 @@ class WorkExhaustionChecker:
                     message=self._format_system3_unfinished_block(work_state),
                     blocking=True,
                 )
+            elif work_state.impl_complete_count > 0 or work_state.s3_validating_count > 0:
+                # No unfinished tasks, but impl_complete tasks need S3 validation
+                return CheckResult(
+                    priority=Priority.P3_TODO_CONTINUATION,
+                    passed=False,
+                    message=self._format_system3_validation_pending(work_state),
+                    blocking=True,
+                )
             else:
-                # No unfinished tasks — pass with context for Step 5 (judge)
+                # No unfinished tasks, no validation pending — pass with context for Step 5 (judge)
                 return CheckResult(
                     priority=Priority.P3_TODO_CONTINUATION,
                     passed=True,
@@ -314,6 +334,44 @@ class WorkExhaustionChecker:
                 ]
                 state.open_business_epic_count = len(bo_lines)
 
+            # Check for impl_complete tasks (awaiting S3 validation)
+            try:
+                result_ic = subprocess.run(
+                    ["bd", "list", "--status=impl_complete"],
+                    cwd=self.config.project_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                ic_output = result_ic.stdout.strip()
+                if ic_output and "No" not in ic_output:
+                    ic_lines = [
+                        line for line in ic_output.split("\n")
+                        if line.strip() and re.search(r"(beads-|bd-)", line)
+                    ]
+                    state.impl_complete_count = len(ic_lines)
+            except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+                pass
+
+            # Check for s3_validating tasks
+            try:
+                result_sv = subprocess.run(
+                    ["bd", "list", "--status=s3_validating"],
+                    cwd=self.config.project_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                sv_output = result_sv.stdout.strip()
+                if sv_output and "No" not in sv_output:
+                    sv_lines = [
+                        line for line in sv_output.split("\n")
+                        if line.strip() and re.search(r"(beads-|bd-)", line)
+                    ]
+                    state.s3_validating_count = len(sv_lines)
+            except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+                pass
+
         except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
             pass
 
@@ -394,6 +452,27 @@ REQUIRED ACTIONS (choose one):
 
 Do NOT create placeholder tasks to satisfy this check.
 Tasks represent real commitments — execute them or be honest about deleting them."""
+
+    def _format_system3_validation_pending(self, state: WorkState) -> str:
+        """Block message for System 3 with impl_complete tasks awaiting validation."""
+        lines = state.format_summary_lines()
+        work_summary = "\n".join(f"  {line}" for line in lines)
+
+        return f"""VALIDATION PENDING - SESSION CANNOT STOP
+
+You have tasks awaiting System 3 validation:
+  - {state.impl_complete_count} tasks marked impl_complete (need validation cycle)
+  - {state.s3_validating_count} tasks currently being validated (s3_validating)
+
+Current work state:
+{work_summary}
+
+REQUIRED ACTIONS:
+1. Run validation cycle on impl_complete tasks (dispatch to oversight team)
+2. Wait for s3_validating tasks to complete
+3. Close validated tasks or reject them back to orchestrator
+
+Do NOT stop while tasks await independent validation."""
 
     def _format_non_system3_block(self, state: WorkState) -> str:
         """Block message for non-System 3 sessions with no tasks.

@@ -27,19 +27,12 @@ Testing infrastructure and troubleshooting for orchestrator sessions.
 
 **Every feature must pass all three levels before closure.**
 
-**🚨 CRITICAL: validation-test-agent as Single Entry Point**
+**Orchestrator Validation Scope: Level 1 Only**
 
-All validation and task closure MUST go through validation-test-agent:
+Orchestrators run Level 1 validation (unit tests, basic smoke tests) before marking tasks `impl_complete`.
+Level 2 (API tests) and Level 3 (E2E browser tests) are performed independently by System 3's oversight team.
 
-```python
-# Fast unit check
-Task(subagent_type="validation-test-agent", prompt="--mode=unit --task_id=X")
-
-# Full E2E with PRD acceptance tests
-Task(subagent_type="validation-test-agent", prompt="--mode=e2e --task_id=X --prd=PRD-XXX")
-```
-
-The validation-test-agent orchestrates the three levels below and closes tasks with evidence. Orchestrators NEVER run these validations directly or invoke acceptance-test-runner/writer skills.
+The orchestrator does NOT invoke validation-test-agent, acceptance-test-runner, or acceptance-test-writer.
 
 ### Level 1: Unit Tests
 

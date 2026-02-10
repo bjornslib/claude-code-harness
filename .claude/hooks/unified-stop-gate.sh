@@ -301,6 +301,12 @@ if [ -d "$PROJECT_ROOT/.beads" ] && command -v bd &>/dev/null; then
     READY_WORK=$(bd list --status=open 2>/dev/null | grep -E '\[P[0-9]\]' | sort -t'[' -k2,2n | head -5) || READY_WORK=""
 fi
 
+# Check for impl_complete tasks awaiting S3 validation
+IMPL_COMPLETE_WORK=""
+if [ -d "$PROJECT_ROOT/.beads" ] && command -v bd &>/dev/null; then
+    IMPL_COMPLETE_WORK=$(bd list --status=impl_complete 2>/dev/null | grep -E '(beads-|bd-)' | head -5) || IMPL_COMPLETE_WORK=""
+fi
+
 # Build final message
 MSG_PARTS="✅ ${PROMISE_MESSAGE}"
 
@@ -331,6 +337,19 @@ ${READY_WORK}
 - **Stop** if: Only P3-P4 work, blocked on external factors, user feedback required
 
 If continuing: Add specific todos and proceed autonomously."
+fi
+
+# Add impl_complete work section if present
+if [ -n "$IMPL_COMPLETE_WORK" ]; then
+    MSG_PARTS="${MSG_PARTS}
+
+## Awaiting S3 Validation (impl_complete)
+
+\`\`\`
+${IMPL_COMPLETE_WORK}
+\`\`\`
+
+These tasks have been implemented but not yet validated by System 3's oversight team."
 fi
 
 # Always approve (blocking happens earlier or not at all)

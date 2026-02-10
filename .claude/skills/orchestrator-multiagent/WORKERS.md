@@ -149,17 +149,6 @@ Task(
 )
 ```
 
-### Step 3: Spawn Validator (Once Per Session)
-
-```python
-Task(
-    subagent_type="validation-test-agent",
-    team_name="{initiative}-workers",
-    name="validator",
-    prompt="You are the validator in team {initiative}-workers. Check TaskList for validation tasks. Run validation (--mode=unit or --mode=e2e --prd=PRD-XXX). Close tasks with evidence via bd close. Report results via SendMessage to team-lead."
-)
-```
-
 ---
 
 ## Task Delegation Pattern
@@ -288,7 +277,7 @@ mcp__serena__switch_modes(["editing", "interactive"])
 3. MANDATORY CHECKPOINT: `mcp__serena__think_about_whether_you_are_done()`
 4. TaskUpdate(taskId=..., status="completed")
 5. SendMessage(type="message", recipient="team-lead", content="Task bd-xxxx COMPLETE: [summary of changes]")
-6. Do NOT run `bd close` - validator handles status updates
+6. Do NOT run `bd close` - orchestrator marks `impl_complete`, S3 handles closure
 7. Check TaskList for more available work
 
 **CRITICAL Constraints**:
@@ -478,12 +467,6 @@ SendMessage(
     content="All tasks complete. Please shut down."
 )
 
-SendMessage(
-    type="shutdown_request",
-    recipient="validator",
-    content="All tasks complete. Please shut down."
-)
-
 # After all workers have shut down, clean up the team
 Teammate(operation="cleanup")
 ```
@@ -593,7 +576,7 @@ Workers report results via SendMessage. Look for these signals:
 
 | Signal in Message | Meaning | Action |
 |-------------------|---------|--------|
-| "COMPLETE" | Worker finished successfully | Create validation task for validator |
+| "COMPLETE" | Worker finished successfully | Mark task impl_complete and notify S3 via message bus |
 | "BLOCKED" | Worker needs help | Read blocker, provide guidance via SendMessage |
 | "FAIL" after test run | Tests failed | Review failure, send fix instructions or re-assign |
 | "PASS" after test run | Tests passed | Proceed to validation |

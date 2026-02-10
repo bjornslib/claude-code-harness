@@ -133,7 +133,15 @@ bd show <bo-id>
 
 **Detailed workflow**: See [references/okr-tracking.md](references/okr-tracking.md)
 
-### [ ] 5. Define Validation Expectations
+### [ ] 5. Create Oversight Team
+
+```python
+TeamCreate(team_name=f"s3-{initiative}-oversight", description=f"S3 independent validation for {initiative}")
+```
+
+Spawn specialist workers into the team. See [references/oversight-team.md](references/oversight-team.md) for exact spawn commands and prompts.
+
+### [ ] 6. Define Validation Expectations
 
 Determine which validation levels apply:
 - [ ] Unit tests required?
@@ -343,6 +351,13 @@ elif "MONITOR_HEALTHY" in result:
 
 **Key Insight**: Monitors COMPLETE to wake System3. The cyclic pattern (launch → check → complete → re-launch) provides continuous monitoring.
 
+### Also Start Oversight Team
+
+After orchestrator is running:
+1. Create oversight team: `TeamCreate(team_name=f"s3-{initiative}-oversight")`
+2. Spawn 4 oversight workers (see [references/oversight-team.md](references/oversight-team.md))
+3. Oversight team runs independently -- validates `impl_complete` tasks
+
 ---
 
 ## MONITORING CHECKLIST
@@ -532,6 +547,15 @@ MONITOR_TIMEOUT: No monitors completed in 2 hours
 
 When an orchestrator completes:
 
+### [ ] 0. Run Final Validation on impl_complete Tasks
+
+Check for any remaining `impl_complete` tasks:
+```bash
+bd list --status=impl_complete
+```
+
+If any exist, run validation cycle on each before declaring initiative complete.
+
 ### [ ] 1. Collect Outcomes
 
 ```python
@@ -677,12 +701,20 @@ Maintain active orchestrators in `.claude/state/active-orchestrators.json`:
 | [tmux-commands.md](references/tmux-commands.md) | tmux command reference |
 | [post-orchestration.md](references/post-orchestration.md) | Post-completion workflow |
 | [troubleshooting.md](references/troubleshooting.md) | Common issues and solutions |
+| [oversight-team.md](references/oversight-team.md) | S3 oversight team spawn commands and patterns |
 
 ---
 
-**Version**: 3.2.0
+**Version**: 3.3.0
 **Dependencies**: worktree-manager-skill, orchestrator-multiagent, tmux, Hindsight MCP
 **Theory**: Sophia (arXiv:2512.18202), Hindsight (arXiv:2512.12818)
+
+**v3.3.0 Changes**:
+- Added PREFLIGHT step 5: Create Oversight Team (renumbered step 5 -> 6)
+- Added "Also Start Oversight Team" to spawn workflow
+- Added POST-COMPLETION step 0: Run Final Validation on impl_complete tasks
+- New reference: oversight-team.md (4 specialist worker spawn commands)
+- Custom beads status lifecycle: open -> in_progress -> impl_complete -> s3_validating -> closed
 
 **v3.2.0 Changes**:
 - Added `CLAUDE_CODE_TASK_LIST_ID` inline in spawn sequence (step 4)
