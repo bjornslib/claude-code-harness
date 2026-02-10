@@ -789,6 +789,8 @@ tmux send-keys -t "orch-[name]" Enter
 2. Wait for initialization (`sleep 5`)
 3. **System 3 selects output style via direct command** (orchestrator starts in "default" — it won't reliably follow text instructions to change its own style):
    ```bash
+   # CRITICAL: Text and Enter MUST be separate send-keys calls (Pattern 1)
+   # Do NOT include a linebreak in the text — send the command text first, then Enter separately
    tmux send-keys -t "orch-[name]" "/output-style orchestrator"
    tmux send-keys -t "orch-[name]" Enter
    sleep 3  # Wait for style to load

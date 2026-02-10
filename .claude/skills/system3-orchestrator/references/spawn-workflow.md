@@ -123,6 +123,8 @@ tmux send-keys -t "orch-[name]" Enter
 
 ```bash
 # After ccorch launches and initializes (sleep 5):
+# CRITICAL: Text and Enter MUST be separate send-keys calls (Pattern 1)
+# Do NOT include a linebreak in the text — send the command text first, then Enter separately
 tmux send-keys -t "orch-[name]" "/output-style orchestrator"
 tmux send-keys -t "orch-[name]" Enter
 sleep 3  # Wait for style to load

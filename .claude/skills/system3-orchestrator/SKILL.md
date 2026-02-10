@@ -211,6 +211,10 @@ sleep 5
 #    The orchestrator starts in "default" output style - it won't reliably
 #    follow output-style instructions embedded in text. System 3 must
 #    physically select it via the /output-style slash command.
+#
+#    IMPORTANT: Text and Enter MUST be separate send-keys calls (Pattern 1).
+#    Do NOT include a linebreak in the text — send the command text first,
+#    then Enter separately.
 tmux send-keys -t "orch-[name]" "/output-style orchestrator"
 tmux send-keys -t "orch-[name]" Enter
 sleep 3  # Wait for output style to load

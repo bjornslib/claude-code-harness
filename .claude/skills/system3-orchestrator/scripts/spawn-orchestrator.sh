@@ -120,6 +120,9 @@ sleep 5
 # The orchestrator starts in "default" output style. Without the correct
 # output style, the team lead won't follow orchestrator delegation rules.
 # System 3 must physically select it - relying on text instructions is unreliable.
+#
+# IMPORTANT: Text and Enter MUST be separate send-keys calls (Pattern 1).
+# Do NOT include a linebreak in the text — send the command text first, then Enter separately.
 log_info "Selecting orchestrator output style..."
 tmux send-keys -t "$SESSION_NAME" "/output-style orchestrator"
 tmux send-keys -t "$SESSION_NAME" Enter
