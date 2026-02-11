@@ -1114,6 +1114,48 @@ echo "Remaining orchestrator sessions: $remaining"
 | Orchestrator BLOCKED (abandoned) | Kill `orch-*` tmux session |
 | System 3 session end | Kill ALL remaining `orch-*` sessions |
 
+### Post-Completion: Independent Validation via Oversight Agent Team
+
+**CRITICAL**: The monitoring patterns above cover DURING execution. When an orchestrator COMPLETES, a different protocol applies.
+
+**tmux capture-pane is NOT validation.** It reads the orchestrator's self-assessment. A Haiku watcher relaying orchestrator output is still self-grading.
+
+**When ANY orchestrator signals completion:**
+
+```python
+# 1. Create oversight AGENT TEAM (not standalone subagents)
+TeamCreate(team_name=f"s3-{initiative}-oversight", description=f"S3 independent validation")
+
+# 2. Spawn workers INTO the team for cross-validation
+Task(subagent_type="tdd-test-engineer", team_name=f"s3-{initiative}-oversight",
+     name="s3-test-runner", model="sonnet",
+     prompt="Run tests independently. Do NOT trust orchestrator reports. Report via SendMessage.")
+
+Task(subagent_type="Explore", team_name=f"s3-{initiative}-oversight",
+     name="s3-investigator", model="sonnet",
+     prompt="Verify code changes match claims. Check git diff. Report via SendMessage.")
+
+# 3. Wait for BOTH workers to report via SendMessage
+# DO NOT proceed to learnings/cleanup until team results are in
+
+# 4. Shutdown team after validation
+SendMessage(type="shutdown_request", recipient="s3-test-runner", content="Done")
+SendMessage(type="shutdown_request", recipient="s3-investigator", content="Done")
+TeamDelete()
+```
+
+**Why Agent Teams, not standalone subagents?**
+- Team workers can cross-validate each other's findings via peer SendMessage
+- Shared TaskList enables coordinated reporting
+- Proper shutdown protocol prevents orphaned agents
+- Team lead (System 3) receives structured results
+
+**Why NOT standalone Task(subagent_type="validation-test-agent")?**
+- Isolated — cannot coordinate with other validators
+- No peer messaging capability
+- Fire-and-forget — harder to collect and correlate results
+- Bypasses the team coordination that makes validation robust
+
 ### Enforcing 3-Level Validation
 
 You MUST ensure orchestrators complete all three validation levels before marking work complete.
@@ -1759,6 +1801,36 @@ System 3 collates context (read PRD, identify scope). validation-test-agent does
 
 **Detailed workflow**: See `references/validation-workflow.md` → "PRD Validation Gate" section.
 
+### 🚨 THE IRON LAW #4: Orchestrator Completion = Independent Validation via Agent Team
+
+**When an orchestrator reports COMPLETE, System 3 MUST create an oversight Agent Team and verify independently.**
+
+Reading tmux output is NOT validation. It is reading the implementer's self-assessment. A Haiku watcher reporting what the orchestrator said is NOT independent verification — it's relaying self-grading.
+
+**Mandatory steps when ANY orchestrator signals completion:**
+
+1. Create oversight team: `TeamCreate(team_name="s3-{initiative}-oversight")`
+2. Spawn workers INTO the team (NOT standalone subagents):
+   ```python
+   # ✅ CORRECT: Workers in a team can cross-validate and coordinate
+   Task(subagent_type="tdd-test-engineer", team_name="s3-{initiative}-oversight",
+        name="s3-test-runner", prompt="Run tests independently against real services...")
+   Task(subagent_type="Explore", team_name="s3-{initiative}-oversight",
+        name="s3-investigator", prompt="Verify code changes match claims...")
+
+   # ❌ WRONG: Standalone subagent — isolated, cannot coordinate with other validators
+   Task(subagent_type="validation-test-agent", prompt="Validate...")
+   ```
+3. Wait for team results via SendMessage before storing learnings or killing tmux
+4. Only proceed to cleanup AFTER team validation passes
+
+**This is NON-NEGOTIABLE. There are NO exceptions based on:**
+- Orchestrator's self-reported test results ("all tests pass")
+- tmux capture-pane showing success messages
+- Haiku watcher confirming orchestrator output
+- Session fatigue ("it's been a long session, let's wrap up")
+- Perceived simplicity ("it was just a small change")
+
 ### When to Spawn an Orchestrator (MANDATORY)
 - **ANY implementation work** - bug fixes, features, refactoring, deprecation fixes
 - **ANY code changes** - even single-line fixes
@@ -1881,7 +1953,7 @@ mcp__hindsight__retain(
 | E2E passes | Spawn documentation orchestrators | Documentation follows verification |
 | User provides goal | Execute full workflow | "Do X" means complete X, not propose options |
 | Clear next step exists | Do it | Don't ask permission for obvious continuations |
-| Orchestrator completes | Process results, spawn next | Keep momentum |
+| Orchestrator completes | **Create oversight team, validate independently** (Iron Law #4) | Momentum does NOT bypass independent validation |
 
 ### Ambiguity Fallback Protocol
 
@@ -1929,13 +2001,14 @@ When user says things like:
 
 After ANY implementation work completes:
 ```
-1. Run E2E verification against acceptance criteria (automatic)
-2. Store completion to Hindsight (automatic)
-3. Spawn documentation orchestrators if applicable (automatic)
-4. Report results to user (automatic)
+1. **Create oversight Agent Team** and run independent validation (Iron Law #4) — NOT standalone subagents
+2. Wait for oversight team results via SendMessage
+3. Store completion to Hindsight (automatic)
+4. Spawn documentation orchestrators if applicable (automatic)
+5. Report results to user (automatic)
 ```
 
-Don't propose this sequence - execute it.
+Don't propose this sequence — execute it. But DO NOT skip step 1. The Autonomy Principle applies to forward work. Post-completion validation is the one place where System 3 must slow down and independently verify before declaring success.
 
 ### Self-Correction Pattern
 

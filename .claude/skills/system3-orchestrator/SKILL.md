@@ -551,14 +551,58 @@ MONITOR_TIMEOUT: No monitors completed in 2 hours
 
 When an orchestrator completes:
 
-### [ ] 0. Run Final Validation on impl_complete Tasks
+### [ ] 0. 🚨 MANDATORY: Independent Validation via Oversight Agent Team
 
-Check for any remaining `impl_complete` tasks:
-```bash
-bd list --status=impl_complete
+**This step is NON-NEGOTIABLE. Do NOT skip to step 1.**
+
+Reading tmux output or orchestrator self-reports is NOT validation. System 3 must verify independently using an Agent Team (NOT standalone subagents).
+
+```python
+# Step 0a: Check for impl_complete tasks
+# bd list --status=impl_complete
+
+# Step 0b: Create oversight team (Agent Team, NOT standalone subagents)
+TeamCreate(team_name=f"s3-{initiative}-oversight", description=f"S3 final validation for {initiative}")
+
+# Step 0c: Spawn workers INTO the team
+Task(
+    subagent_type="tdd-test-engineer",
+    team_name=f"s3-{initiative}-oversight",
+    name="s3-test-runner",
+    model="sonnet",
+    prompt=f"""You are s3-test-runner in the System 3 oversight team.
+    Run tests INDEPENDENTLY against real services. Do NOT trust orchestrator reports.
+
+    1. Find and run the test suite for {initiative}
+    2. Verify services are actually running (check ports)
+    3. Report pass/fail with evidence via SendMessage to team-lead
+    """
+)
+
+Task(
+    subagent_type="Explore",
+    team_name=f"s3-{initiative}-oversight",
+    name="s3-investigator",
+    model="sonnet",
+    prompt=f"""You are s3-investigator in the System 3 oversight team.
+    Verify that code changes match what the orchestrator claimed.
+
+    1. Check git diff for actual file changes
+    2. Verify test files exist for implementations
+    3. Report findings via SendMessage to team-lead
+    """
+)
+
+# Step 0d: Wait for team results (DO NOT proceed until both report back)
+# Results arrive via SendMessage — do not proceed to step 1 until received
+
+# Step 0e: Shutdown oversight team after validation
+SendMessage(type="shutdown_request", recipient="s3-test-runner", content="Validation complete")
+SendMessage(type="shutdown_request", recipient="s3-investigator", content="Validation complete")
 ```
 
-If any exist, run validation cycle on each before declaring initiative complete.
+**If validation fails**: Do NOT proceed to cleanup. Send rejection to orchestrator and restart the cycle.
+**If validation passes**: Continue to step 1.
 
 ### [ ] 1. Collect Outcomes
 
