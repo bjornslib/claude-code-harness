@@ -235,13 +235,13 @@ if [ "$WORK_EXHAUSTION_PASSED" = false ]; then
     exit 0
 fi
 
-# --- Step 5: Continuation Judge (all sessions with SESSION_ID) ---
-# Uses Haiku 4.5 API call to evaluate if session should continue
-# Strictness varies: System 3 = strict, Orchestrators = light, Others = light
+# --- Step 5: Continuation Judge (System 3 sessions only) ---
+# Uses Haiku 4.5 API call to evaluate if System 3 session should continue
+# Non-System 3 sessions skip this step entirely (Step 4 already passes them)
 
 S3_MSG=""
 
-if [ -n "$SESSION_ID" ]; then
+if [[ "$SESSION_ID" == system3-* ]]; then
     TIMEOUT_CMD="timeout"
     if command -v gtimeout &> /dev/null; then
         TIMEOUT_CMD="gtimeout"

@@ -1,9 +1,9 @@
-"""Tiered continuation judge checker using Haiku API for session evaluation.
+"""System 3 continuation judge checker using Haiku API for session evaluation.
 
-Supports three strictness levels:
-- System 3 (system3-*): Full strict evaluation (promises, reflection, validation, cleanup)
-- Orchestrators (orch-*): Light evaluation (work completion, team cleanup)
-- Other sessions: Light evaluation (just check for obviously incomplete work)
+Only runs for System 3 (system3-*) sessions. Non-System 3 sessions (orchestrators,
+workers) skip the judge entirely — they are free to stop at any time after Step 4 passes.
+
+Strictness: Full evaluation with promises, reflection, validation, cleanup checks.
 """
 
 from dataclasses import dataclass
