@@ -2,16 +2,22 @@
 # cs-verify - Verify completion promises and check session readiness
 #
 # Usage:
-#   cs-verify --promise <id> --proof "Evidence of completion"
-#   cs-verify --promise <id> --type test --proof "All tests pass"
-#   cs-verify --check                      # Check if session can end (for StopHook)
-#   cs-verify --check --verbose            # Detailed check output
+#   cs-verify --promise <id>                           # Verify (requires all ACs met)
+#   cs-verify --promise <id> --proof "Summary note"    # Verify with optional summary
+#   cs-verify --promise <id> --type test               # Verify with verification type
+#   cs-verify --check                                  # Check if session can end (for StopHook)
+#   cs-verify --check --verbose                        # Detailed check output with per-AC detail
 #
 # Verification types:
 #   test     - Verified via automated tests
 #   browser  - Verified via browser/E2E testing
 #   api      - Verified via API testing
 #   manual   - Verified manually by user
+#
+# Acceptance Criteria Enforcement:
+#   If a promise has acceptance_criteria, ALL must have status "met" before
+#   verification succeeds. Use cs-promise --meet to submit evidence per criterion.
+#   Legacy promises (no acceptance_criteria) require --proof for verification.
 #
 # After verification, the promise is moved to history.
 #
@@ -76,18 +82,24 @@ while [[ $# -gt 0 ]]; do
             echo "cs-verify - Verify completion promises"
             echo ""
             echo "Usage:"
-            echo "  cs-verify --promise <id> --proof \"Evidence\""
-            echo "  cs-verify --promise <id> --type test --proof \"All tests pass\""
-            echo "  cs-verify --check             Check if session can end"
-            echo "  cs-verify --check --verbose   Detailed check output"
+            echo "  cs-verify --promise <id>                      Verify (all ACs must be met)"
+            echo "  cs-verify --promise <id> --proof \"Summary\"    Verify with optional summary note"
+            echo "  cs-verify --promise <id> --type test          Verify with verification type"
+            echo "  cs-verify --check                             Check if session can end"
+            echo "  cs-verify --check --verbose                   Detailed check with per-AC detail"
             echo ""
             echo "Options:"
             echo "  --promise <id>   Promise ID to verify"
-            echo "  --proof <text>   Evidence of completion"
+            echo "  --proof <text>   Optional summary note (required for legacy promises without ACs)"
             echo "  --type <type>    Verification type: test, browser, api, manual (default: manual)"
             echo "  --task-id <id>   Also add comment to beads task (atomic update)"
             echo "  --check          Evaluate if session can end (for StopHook)"
             echo "  --verbose        Show detailed output"
+            echo ""
+            echo "Acceptance Criteria:"
+            echo "  If a promise has acceptance_criteria, ALL must have status \"met\"."
+            echo "  Submit evidence per criterion: cs-promise --meet <id> --ac-id AC-X --evidence \"...\""
+            echo "  Legacy promises (no acceptance_criteria) require --proof for verification."
             echo ""
             echo "Exit codes for --check:"
             echo "  0  Session can end (all owned promises verified)"
@@ -195,12 +207,40 @@ if [ "$CHECK_MODE" = true ]; then
     echo "Session: $CLAUDE_SESSION_ID"
     echo ""
 
+    # Track first unmet criterion for NEXT ACTION hint
+    FIRST_UNMET_PROMISE=""
+    FIRST_UNMET_AC_ID=""
+
     if [ $IN_PROGRESS_COUNT -gt 0 ]; then
         echo "IN_PROGRESS PROMISES ($IN_PROGRESS_COUNT):"
         for entry in "${MY_PROMISES[@]}"; do
             IFS=':' read -r ID STATUS SUMMARY <<< "$entry"
             if [ "$STATUS" = "in_progress" ]; then
+                PFILE="$PROMISES_DIR/$ID.json"
                 echo "  $ID: \"$SUMMARY...\""
+
+                # Show per-criterion detail if acceptance_criteria exist
+                if [ -f "$PFILE" ]; then
+                    P_HAS_AC=$(jq 'has("acceptance_criteria") and (.acceptance_criteria | length > 0)' "$PFILE")
+                    if [ "$P_HAS_AC" = "true" ]; then
+                        P_TOTAL=$(jq '.acceptance_criteria | length' "$PFILE")
+                        P_MET=$(jq '[.acceptance_criteria[] | select(.status == "met")] | length' "$PFILE")
+                        # Show each criterion with status
+                        while IFS=$'\t' read -r AC_STATUS AC_ID AC_DESC; do
+                            if [ "$AC_STATUS" = "met" ]; then
+                                echo "    [MET]     $AC_ID: $AC_DESC"
+                            else
+                                echo "    [PENDING] $AC_ID: $AC_DESC"
+                                # Track first unmet for NEXT ACTION
+                                if [ -z "$FIRST_UNMET_PROMISE" ]; then
+                                    FIRST_UNMET_PROMISE="$ID"
+                                    FIRST_UNMET_AC_ID="$AC_ID"
+                                fi
+                            fi
+                        done < <(jq -r '.acceptance_criteria[] | [.status, .id, .description] | @tsv' "$PFILE")
+                        echo "    Progress: $P_MET/$P_TOTAL criteria met"
+                    fi
+                fi
             fi
         done
         echo ""
@@ -218,17 +258,22 @@ if [ "$CHECK_MODE" = true ]; then
     fi
 
     echo "NEXT ACTION:"
-    # Find first in_progress or pending promise
-    for entry in "${MY_PROMISES[@]}"; do
-        IFS=':' read -r ID STATUS SUMMARY <<< "$entry"
-        if [ "$STATUS" = "in_progress" ]; then
-            echo "  Complete and verify: cs-verify --promise $ID --proof \"...\""
-            break
-        elif [ "$STATUS" = "pending" ]; then
-            echo "  Start work: cs-promise --start $ID"
-            break
-        fi
-    done
+    if [ -n "$FIRST_UNMET_PROMISE" ]; then
+        # Has unmet acceptance criteria — point to cs-promise --meet
+        echo "  Submit evidence: cs-promise --meet $FIRST_UNMET_PROMISE --ac-id $FIRST_UNMET_AC_ID --evidence \"...\" --type test"
+    else
+        # No AC detail available — fall back to original hint
+        for entry in "${MY_PROMISES[@]}"; do
+            IFS=':' read -r ID STATUS SUMMARY <<< "$entry"
+            if [ "$STATUS" = "in_progress" ]; then
+                echo "  Complete and verify: cs-verify --promise $ID --proof \"...\""
+                break
+            elif [ "$STATUS" = "pending" ]; then
+                echo "  Start work: cs-promise --start $ID"
+                break
+            fi
+        done
+    fi
 
     if [ $ORPHAN_COUNT -gt 0 ]; then
         echo ""
@@ -250,11 +295,6 @@ require_session_id
 
 if [ -z "$PROMISE_ID" ]; then
     echo "Error: --promise requires an ID" >&2
-    exit 1
-fi
-
-if [ -z "$PROOF" ]; then
-    echo "Error: --proof is required for verification" >&2
     exit 1
 fi
 
@@ -298,20 +338,61 @@ if [ "$CURRENT_STATUS" = "pending" ]; then
     echo "Note: Promise was pending. Setting to in_progress before verifying." >&2
 fi
 
+# Check if promise has acceptance_criteria
+HAS_AC=$(jq 'has("acceptance_criteria") and (.acceptance_criteria | length > 0)' "$PROMISE_FILE")
+
+if [ "$HAS_AC" = "true" ]; then
+    # Promise has acceptance criteria - check all are met
+    TOTAL_AC=$(jq '.acceptance_criteria | length' "$PROMISE_FILE")
+    MET_AC=$(jq '[.acceptance_criteria[] | select(.status == "met")] | length' "$PROMISE_FILE")
+    PENDING_AC=$((TOTAL_AC - MET_AC))
+
+    if [ $PENDING_AC -gt 0 ]; then
+        echo "Error: Cannot verify $PROMISE_ID — $PENDING_AC of $TOTAL_AC criteria still pending:" >&2
+        echo "" >&2
+        # List unmet criteria
+        jq -r '.acceptance_criteria[] | select(.status != "met") | "  [PENDING] \(.id): \(.description)"' "$PROMISE_FILE" >&2
+        echo "" >&2
+        # Show hint for first unmet criterion
+        FIRST_UNMET_ID=$(jq -r '[.acceptance_criteria[] | select(.status != "met")][0].id' "$PROMISE_FILE")
+        echo "Submit evidence for each criterion first:" >&2
+        echo "  cs-promise --meet $PROMISE_ID --ac-id $FIRST_UNMET_ID --evidence \"...\" --type test" >&2
+        exit 1
+    fi
+    # All ACs met — --proof is optional (stored as summary note if provided)
+else
+    # Legacy promise (no acceptance_criteria) — --proof is required
+    if [ -z "$PROOF" ]; then
+        echo "Error: --proof is required for legacy promises without acceptance criteria" >&2
+        exit 1
+    fi
+fi
+
 TIMESTAMP=$(get_timestamp)
 SUMMARY=$(jq -r '.summary' "$PROMISE_FILE")
 
 # Update promise with verification
-jq --arg ts "$TIMESTAMP" \
-   --arg session "$CLAUDE_SESSION_ID" \
-   --arg type "$VERIFY_TYPE" \
-   --arg proof "$PROOF" '
-    .status = "verified" |
-    .verification.verified_at = $ts |
-    .verification.verified_by = $session |
-    .verification.type = $type |
-    .verification.proof = $proof
-' "$PROMISE_FILE" > "$PROMISE_FILE.tmp" && mv "$PROMISE_FILE.tmp" "$PROMISE_FILE"
+if [ -n "$PROOF" ]; then
+    jq --arg ts "$TIMESTAMP" \
+       --arg session "$CLAUDE_SESSION_ID" \
+       --arg type "$VERIFY_TYPE" \
+       --arg proof "$PROOF" '
+        .status = "verified" |
+        .verification.verified_at = $ts |
+        .verification.verified_by = $session |
+        .verification.type = $type |
+        .verification.proof = $proof
+    ' "$PROMISE_FILE" > "$PROMISE_FILE.tmp" && mv "$PROMISE_FILE.tmp" "$PROMISE_FILE"
+else
+    jq --arg ts "$TIMESTAMP" \
+       --arg session "$CLAUDE_SESSION_ID" \
+       --arg type "$VERIFY_TYPE" '
+        .status = "verified" |
+        .verification.verified_at = $ts |
+        .verification.verified_by = $session |
+        .verification.type = $type
+    ' "$PROMISE_FILE" > "$PROMISE_FILE.tmp" && mv "$PROMISE_FILE.tmp" "$PROMISE_FILE"
+fi
 
 # Move to history
 mv "$PROMISE_FILE" "$HISTORY_DIR/"
@@ -320,7 +401,12 @@ echo "VERIFIED: $PROMISE_ID"
 echo ""
 echo "Summary: $SUMMARY"
 echo "Type: $VERIFY_TYPE"
-echo "Proof: $PROOF"
+if [ -n "$PROOF" ]; then
+    echo "Proof: $PROOF"
+fi
+if [ "$HAS_AC" = "true" ]; then
+    echo "Acceptance Criteria: $TOTAL_AC/$TOTAL_AC met"
+fi
 echo "Verified by: $CLAUDE_SESSION_ID"
 echo "Verified at: $TIMESTAMP"
 echo ""
@@ -328,7 +414,13 @@ echo "Promise moved to history."
 
 # Add comment to beads task if --task-id was provided
 if [ -n "$TASK_ID" ]; then
-    COMMENT="[cs-verify] Type: $VERIFY_TYPE | Proof: $PROOF | Session: $CLAUDE_SESSION_ID | Time: $TIMESTAMP"
+    COMMENT="[cs-verify] Type: $VERIFY_TYPE | Session: $CLAUDE_SESSION_ID | Time: $TIMESTAMP"
+    if [ -n "$PROOF" ]; then
+        COMMENT="$COMMENT | Proof: $PROOF"
+    fi
+    if [ "$HAS_AC" = "true" ]; then
+        COMMENT="$COMMENT | ACs: $TOTAL_AC/$TOTAL_AC met"
+    fi
     add_beads_comment "$TASK_ID" "$COMMENT"
     echo ""
     echo "Added verification comment to beads task: $TASK_ID"

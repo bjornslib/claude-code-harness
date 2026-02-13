@@ -2,10 +2,12 @@
 # cs-promise - Manage completion promises (UUID-based, multi-session aware)
 #
 # Usage:
-#   cs-promise --create "Promise summary"     # Create new promise (owned by current session)
+#   cs-promise --create "Title" --ac "Criterion 1" --ac "Criterion 2"
+#   cs-promise --add-ac <id> "Additional criterion"
+#   cs-promise --meet <id> --ac-id AC-1 --evidence "proof text" [--type test|manual|...]
 #   cs-promise --list                         # List all promises
 #   cs-promise --mine                         # List promises owned by current session
-#   cs-promise --show <id>                    # Show promise details
+#   cs-promise --show <id>                    # Show promise details with AC status
 #   cs-promise --start <id>                   # Set promise status to in_progress
 #   cs-promise --adopt <id>                   # Adopt an orphaned promise
 #   cs-promise --release <id>                 # Release ownership (orphan the promise)
@@ -44,12 +46,48 @@ get_timestamp() {
 MODE=""
 PROMISE_ID=""
 SUMMARY=""
+AC_ITEMS=()
+AC_ID=""
+EVIDENCE=""
+EVIDENCE_TYPE="manual"
+ADD_AC_TEXT=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
         --create)
             MODE="create"
             SUMMARY="$2"
+            shift 2
+            ;;
+        --ac)
+            AC_ITEMS+=("$2")
+            shift 2
+            ;;
+        --add-ac)
+            MODE="add-ac"
+            PROMISE_ID="$2"
+            shift 2
+            # Next positional arg is the criterion text
+            if [[ $# -gt 0 && ! "$1" =~ ^-- ]]; then
+                ADD_AC_TEXT="$1"
+                shift
+            fi
+            ;;
+        --meet)
+            MODE="meet"
+            PROMISE_ID="$2"
+            shift 2
+            ;;
+        --ac-id)
+            AC_ID="$2"
+            shift 2
+            ;;
+        --evidence)
+            EVIDENCE="$2"
+            shift 2
+            ;;
+        --type)
+            EVIDENCE_TYPE="$2"
             shift 2
             ;;
         --list)
@@ -86,19 +124,31 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --help)
-            echo "cs-promise - Manage completion promises"
+            echo "cs-promise - Manage completion promises with structured acceptance criteria"
             echo ""
             echo "Usage:"
-            echo "  cs-promise --create \"Promise summary\"  Create new promise"
-            echo "  cs-promise --list                      List all promises"
-            echo "  cs-promise --mine                      List promises owned by current session"
-            echo "  cs-promise --show <id>                 Show promise details"
-            echo "  cs-promise --start <id>                Set status to in_progress"
-            echo "  cs-promise --adopt <id>                Adopt an orphaned promise"
-            echo "  cs-promise --release <id>              Release ownership"
-            echo "  cs-promise --cancel <id>               Cancel a promise"
+            echo "  cs-promise --create \"Title\" --ac \"Criterion 1\" --ac \"Criterion 2\""
+            echo "                                       Create promise with acceptance criteria"
+            echo "  cs-promise --add-ac <id> \"Text\"      Add acceptance criterion to existing promise"
+            echo "  cs-promise --meet <id> --ac-id AC-1 --evidence \"proof\" [--type test]"
+            echo "                                       Mark criterion as met with evidence"
+            echo "  cs-promise --list                    List all promises with AC progress"
+            echo "  cs-promise --mine                    List promises owned by current session"
+            echo "  cs-promise --show <id>               Show promise details with AC status"
+            echo "  cs-promise --start <id>              Set status to in_progress"
+            echo "  cs-promise --adopt <id>              Adopt an orphaned promise"
+            echo "  cs-promise --release <id>            Release ownership"
+            echo "  cs-promise --cancel <id>             Cancel a promise"
             echo ""
-            echo "Status lifecycle: pending → in_progress → verified | cancelled"
+            echo "Acceptance Criteria Workflow:"
+            echo "  1. cs-promise --create \"Title\" --ac \"First\" --ac \"Second\""
+            echo "  2. cs-promise --start <id>"
+            echo "  3. cs-promise --meet <id> --ac-id AC-1 --evidence \"pytest passed\" --type test"
+            echo "  4. cs-promise --show <id>   (check progress)"
+            echo ""
+            echo "Evidence types: test, manual, api, browser, log, review (default: manual)"
+            echo ""
+            echo "Status lifecycle: pending -> in_progress -> verified | cancelled"
             echo ""
             echo "Environment:"
             echo "  CLAUDE_SESSION_ID  Current session (set via: eval \"\$(cs-init)\")"
@@ -121,12 +171,32 @@ fi
 mkdir -p "$PROMISES_DIR"
 mkdir -p "$HISTORY_DIR"
 
+# Helper: format AC progress for list/mine display
+format_ac_progress() {
+    local file="$1"
+    local has_ac
+    has_ac=$(jq -r 'if .acceptance_criteria then (.acceptance_criteria | length) else 0 end' "$file")
+    if [ "$has_ac" -gt 0 ]; then
+        local met
+        met=$(jq -r '[.acceptance_criteria[] | select(.status == "met")] | length' "$file")
+        echo "[${met}/${has_ac} AC met]"
+    else
+        echo ""
+    fi
+}
+
 case $MODE in
     create)
         require_session_id
 
         if [ -z "$SUMMARY" ]; then
-            echo "Error: --create requires a summary" >&2
+            echo "Error: --create requires a title" >&2
+            exit 1
+        fi
+
+        if [ ${#AC_ITEMS[@]} -eq 0 ]; then
+            echo "Error: --create requires at least one --ac (acceptance criterion)" >&2
+            echo "Usage: cs-promise --create \"Title\" --ac \"First criterion\" --ac \"Second criterion\"" >&2
             exit 1
         fi
 
@@ -134,36 +204,203 @@ case $MODE in
         TIMESTAMP=$(get_timestamp)
         PROMISE_FILE="$PROMISES_DIR/$PROMISE_ID.json"
 
-        cat > "$PROMISE_FILE" << EOF
+        # Build acceptance_criteria JSON array
+        AC_JSON="["
+        for i in "${!AC_ITEMS[@]}"; do
+            AC_NUM=$((i + 1))
+            AC_DESC=$(printf '%s' "${AC_ITEMS[$i]}" | jq -Rs .)
+            if [ $i -gt 0 ]; then
+                AC_JSON+=","
+            fi
+            AC_JSON+=$(cat <<ACEOF
 {
-    "id": "$PROMISE_ID",
-    "summary": $(echo "$SUMMARY" | jq -Rs .),
-    "ownership": {
-        "created_by": "$CLAUDE_SESSION_ID",
-        "created_at": "$TIMESTAMP",
-        "owned_by": "$CLAUDE_SESSION_ID",
-        "owned_since": "$TIMESTAMP"
-    },
-    "status": "pending",
-    "verification": {
-        "verified_at": null,
-        "verified_by": null,
-        "type": null,
-        "proof": null
-    },
-    "structure": {
-        "epics": [],
-        "goals": []
-    }
-}
-EOF
+            "id": "AC-${AC_NUM}",
+            "description": ${AC_DESC},
+            "status": "pending",
+            "evidence": null,
+            "evidence_type": null,
+            "met_at": null,
+            "met_by": null
+        }
+ACEOF
+)
+        done
+        AC_JSON+="]"
+
+        # Build the full promise JSON using jq for safety
+        TITLE_JSON=$(echo "$SUMMARY" | jq -Rs .)
+        echo "{}" | jq \
+            --arg id "$PROMISE_ID" \
+            --arg title "$SUMMARY" \
+            --arg created_by "$CLAUDE_SESSION_ID" \
+            --arg timestamp "$TIMESTAMP" \
+            --argjson ac "$AC_JSON" \
+            '{
+                id: $id,
+                title: $title,
+                summary: $title,
+                acceptance_criteria: $ac,
+                ownership: {
+                    created_by: $created_by,
+                    created_at: $timestamp,
+                    owned_by: $created_by,
+                    owned_since: $timestamp
+                },
+                status: "pending",
+                verification: {
+                    verified_at: null,
+                    verified_by: null
+                },
+                structure: {
+                    epics: [],
+                    goals: []
+                }
+            }' > "$PROMISE_FILE"
 
         echo "Created promise: $PROMISE_ID"
-        echo "  Summary: $SUMMARY"
+        echo "  Title: $SUMMARY"
         echo "  Owner: $CLAUDE_SESSION_ID"
         echo "  Status: pending"
+        echo "  Acceptance Criteria: ${#AC_ITEMS[@]}"
+        for i in "${!AC_ITEMS[@]}"; do
+            echo "    AC-$((i + 1)): ${AC_ITEMS[$i]}"
+        done
         echo ""
         echo "Next: cs-promise --start $PROMISE_ID"
+        ;;
+
+    add-ac)
+        require_session_id
+
+        if [ -z "$PROMISE_ID" ]; then
+            echo "Error: --add-ac requires a promise ID" >&2
+            exit 1
+        fi
+
+        if [ -z "$ADD_AC_TEXT" ]; then
+            echo "Error: --add-ac requires criterion text" >&2
+            echo "Usage: cs-promise --add-ac <promise-id> \"Criterion description\"" >&2
+            exit 1
+        fi
+
+        PROMISE_FILE="$PROMISES_DIR/$PROMISE_ID.json"
+        if [ ! -f "$PROMISE_FILE" ]; then
+            echo "Error: Promise not found: $PROMISE_ID" >&2
+            exit 1
+        fi
+
+        # Check ownership
+        OWNER=$(jq -r '.ownership.owned_by // "null"' "$PROMISE_FILE")
+        if [ "$OWNER" != "$CLAUDE_SESSION_ID" ]; then
+            echo "Error: You don't own this promise. Current owner: $OWNER" >&2
+            exit 1
+        fi
+
+        # Find next AC number (max existing + 1)
+        NEXT_AC_NUM=$(jq -r '
+            if .acceptance_criteria then
+                [.acceptance_criteria[].id | capture("AC-(?<n>[0-9]+)") | .n | tonumber] | max + 1
+            else
+                1
+            end
+        ' "$PROMISE_FILE")
+
+        TIMESTAMP=$(get_timestamp)
+
+        # Add the new AC
+        jq --arg desc "$ADD_AC_TEXT" --arg ac_id "AC-${NEXT_AC_NUM}" '
+            .acceptance_criteria += [{
+                id: $ac_id,
+                description: $desc,
+                status: "pending",
+                evidence: null,
+                evidence_type: null,
+                met_at: null,
+                met_by: null
+            }]
+        ' "$PROMISE_FILE" > "$PROMISE_FILE.tmp" && mv "$PROMISE_FILE.tmp" "$PROMISE_FILE"
+
+        echo "Added criterion to promise: $PROMISE_ID"
+        echo "  AC-${NEXT_AC_NUM}: $ADD_AC_TEXT"
+        ;;
+
+    meet)
+        require_session_id
+
+        if [ -z "$PROMISE_ID" ]; then
+            echo "Error: --meet requires a promise ID" >&2
+            exit 1
+        fi
+
+        if [ -z "$AC_ID" ]; then
+            echo "Error: --meet requires --ac-id" >&2
+            echo "Usage: cs-promise --meet <promise-id> --ac-id AC-1 --evidence \"proof\" --type test" >&2
+            exit 1
+        fi
+
+        if [ -z "$EVIDENCE" ]; then
+            echo "Error: --meet requires --evidence with non-empty text" >&2
+            exit 1
+        fi
+
+        PROMISE_FILE="$PROMISES_DIR/$PROMISE_ID.json"
+        if [ ! -f "$PROMISE_FILE" ]; then
+            echo "Error: Promise not found: $PROMISE_ID" >&2
+            exit 1
+        fi
+
+        # Check ownership
+        OWNER=$(jq -r '.ownership.owned_by // "null"' "$PROMISE_FILE")
+        if [ "$OWNER" != "$CLAUDE_SESSION_ID" ]; then
+            echo "Error: You don't own this promise. Current owner: $OWNER" >&2
+            exit 1
+        fi
+
+        # Check AC ID exists
+        AC_EXISTS=$(jq --arg ac_id "$AC_ID" '[.acceptance_criteria[] | select(.id == $ac_id)] | length' "$PROMISE_FILE")
+        if [ "$AC_EXISTS" -eq 0 ]; then
+            echo "Error: Acceptance criterion not found: $AC_ID" >&2
+            echo "Available criteria:" >&2
+            jq -r '.acceptance_criteria[] | "  \(.id): \(.description)"' "$PROMISE_FILE" >&2
+            exit 1
+        fi
+
+        # Check if already met (warn but don't error)
+        AC_STATUS=$(jq -r --arg ac_id "$AC_ID" '.acceptance_criteria[] | select(.id == $ac_id) | .status' "$PROMISE_FILE")
+        if [ "$AC_STATUS" = "met" ]; then
+            echo "Warning: $AC_ID is already met. Updating evidence." >&2
+        fi
+
+        TIMESTAMP=$(get_timestamp)
+
+        # Update the specific AC
+        jq --arg ac_id "$AC_ID" \
+           --arg evidence "$EVIDENCE" \
+           --arg etype "$EVIDENCE_TYPE" \
+           --arg ts "$TIMESTAMP" \
+           --arg session "$CLAUDE_SESSION_ID" '
+            .acceptance_criteria = [
+                .acceptance_criteria[] |
+                if .id == $ac_id then
+                    .status = "met" |
+                    .evidence = $evidence |
+                    .evidence_type = $etype |
+                    .met_at = $ts |
+                    .met_by = $session
+                else
+                    .
+                end
+            ]
+        ' "$PROMISE_FILE" > "$PROMISE_FILE.tmp" && mv "$PROMISE_FILE.tmp" "$PROMISE_FILE"
+
+        echo "Met criterion: $AC_ID"
+        echo "  Evidence: $EVIDENCE"
+        echo "  Type: $EVIDENCE_TYPE"
+
+        # Show progress
+        TOTAL=$(jq '.acceptance_criteria | length' "$PROMISE_FILE")
+        MET=$(jq '[.acceptance_criteria[] | select(.status == "met")] | length' "$PROMISE_FILE")
+        echo "  Progress: ${MET}/${TOTAL} criteria met"
         ;;
 
     list)
@@ -179,7 +416,7 @@ EOF
             ID=$(jq -r '.id' "$f")
             STATUS=$(jq -r '.status' "$f")
             OWNER=$(jq -r '.ownership.owned_by // "null"' "$f")
-            SUMMARY=$(jq -r '.summary' "$f" | head -c 60)
+            TITLE=$(jq -r '.title // .summary' "$f" | head -c 60)
 
             # Format status with color-like indicators
             case $STATUS in
@@ -197,8 +434,15 @@ EOF
                 OWNER_FMT="(owner: $OWNER)"
             fi
 
+            # Format AC progress
+            AC_PROGRESS=$(format_ac_progress "$f")
+
             echo "  $STATUS_FMT $ID $OWNER_FMT"
-            echo "    \"$SUMMARY\""
+            if [ -n "$AC_PROGRESS" ]; then
+                echo "    \"$TITLE\" $AC_PROGRESS"
+            else
+                echo "    \"$TITLE\""
+            fi
             echo ""
         done
         ;;
@@ -220,7 +464,7 @@ EOF
             if [ "$OWNER" = "$CLAUDE_SESSION_ID" ]; then
                 ID=$(jq -r '.id' "$f")
                 STATUS=$(jq -r '.status' "$f")
-                SUMMARY=$(jq -r '.summary' "$f" | head -c 60)
+                TITLE=$(jq -r '.title // .summary' "$f" | head -c 60)
 
                 case $STATUS in
                     pending)     STATUS_FMT="[PENDING]" ;;
@@ -230,8 +474,15 @@ EOF
                     *)           STATUS_FMT="[$STATUS]" ;;
                 esac
 
+                # Format AC progress
+                AC_PROGRESS=$(format_ac_progress "$f")
+
                 echo "  $STATUS_FMT $ID"
-                echo "    \"$SUMMARY\""
+                if [ -n "$AC_PROGRESS" ]; then
+                    echo "    \"$TITLE\" $AC_PROGRESS"
+                else
+                    echo "    \"$TITLE\""
+                fi
                 echo ""
                 FOUND=$((FOUND + 1))
             fi
@@ -255,9 +506,9 @@ EOF
         fi
 
         echo "PROMISE: $PROMISE_ID"
-        echo ""
+
         jq -r '
-            "Summary: \(.summary)",
+            "Title: \(.title // .summary)",
             "",
             "Ownership:",
             "  Created by: \(.ownership.created_by)",
@@ -265,13 +516,37 @@ EOF
             "  Owned by: \(.ownership.owned_by // "null (orphaned)")",
             "  Owned since: \(.ownership.owned_since // "n/a")",
             "",
-            "Status: \(.status)",
-            "",
-            "Verification:",
+            "Status: \(.status)"
+        ' "$PROMISE_FILE"
+
+        # Show acceptance criteria if present
+        HAS_AC=$(jq 'if .acceptance_criteria then (.acceptance_criteria | length) else 0 end' "$PROMISE_FILE")
+        if [ "$HAS_AC" -gt 0 ]; then
+            echo ""
+            echo "Acceptance Criteria:"
+            jq -r '
+                .acceptance_criteria[] |
+                if .status == "met" then
+                    "  [MET]     \(.id): \(.description)",
+                    "            Evidence: \(.evidence) (\(.evidence_type))"
+                else
+                    "  [PENDING] \(.id): \(.description)"
+                end
+            ' "$PROMISE_FILE"
+
+            # Show progress
+            MET=$(jq '[.acceptance_criteria[] | select(.status == "met")] | length' "$PROMISE_FILE")
+            TOTAL=$(jq '.acceptance_criteria | length' "$PROMISE_FILE")
+            PCT=$((MET * 100 / TOTAL))
+            echo ""
+            echo "Progress: ${MET}/${TOTAL} criteria met (${PCT}%)"
+        fi
+
+        echo ""
+        echo "Verification:"
+        jq -r '
             "  Verified at: \(.verification.verified_at // "not verified")",
-            "  Verified by: \(.verification.verified_by // "n/a")",
-            "  Type: \(.verification.type // "n/a")",
-            "  Proof: \(.verification.proof // "n/a")"
+            "  Verified by: \(.verification.verified_by // "n/a")"
         ' "$PROMISE_FILE"
         ;;
 
@@ -310,7 +585,7 @@ EOF
         echo "Started promise: $PROMISE_ID"
         echo "  Status: in_progress"
         echo ""
-        echo "When complete, run: cs-verify --promise $PROMISE_ID --proof \"...\""
+        echo "Next: cs-promise --meet $PROMISE_ID --ac-id AC-1 --evidence \"...\" --type test"
         ;;
 
     adopt)

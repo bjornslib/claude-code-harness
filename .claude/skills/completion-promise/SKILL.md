@@ -20,6 +20,9 @@ User Prompt → Extract Goals → Track Progress → Verify Completion → Allow
 | Command | Purpose |
 |---------|---------|
 | `cs-init` | Initialize session state (with `--reset` to clear) |
+| `cs-promise --create "Title" --ac "Criterion"` | Create promise with structured acceptance criteria |
+| `cs-promise --add-ac <id> "Criterion"` | Add criterion to existing promise |
+| `cs-promise --meet <id> --ac-id AC-1 --evidence "..." --type test` | Submit evidence for a criterion |
 | `cs-promise` | Set epics and features (`--epic`, `--feature`, `--summary`) |
 | `cs-status` | Show completion state + extract context (`--goal`, `--prompt`, `--prd`) |
 | `cs-verify` | Verify, update status, check readiness (`--check` for stop hook) |
@@ -79,16 +82,37 @@ The session state is stored in `.claude/completion-state/${CLAUDE_SESSION_DIR:-d
 
 ```json
 {
-    "version": "1.0",
+    "version": "2.0",
     "session_id": "session-abc123",
     "started_at": "2026-01-06T10:00:00Z",
     "iteration": 1,
     "max_iterations": 25,
 
     "completion_promise": {
+        "title": "Initiative or session title",
         "raw_prompt": "Original user prompt verbatim...",
         "summary": "One-line summary of what user wants",
-        "extracted_at": "2026-01-06T10:00:00Z"
+        "extracted_at": "2026-01-06T10:00:00Z",
+        "acceptance_criteria": [
+            {
+                "id": "AC-1",
+                "description": "First measurable criterion",
+                "status": "pending|met|failed",
+                "evidence": null,
+                "evidence_type": null,
+                "met_at": null,
+                "met_by": null
+            },
+            {
+                "id": "AC-2",
+                "description": "Second measurable criterion",
+                "status": "pending|met|failed",
+                "evidence": "Test suite passed: 42/42 green",
+                "evidence_type": "test|api|e2e|manual|log",
+                "met_at": "2026-01-06T11:00:00Z",
+                "met_by": "worker-backend"
+            }
+        ]
     },
 
     "goals": [
@@ -164,10 +188,21 @@ The session state is stored in `.claude/completion-state/${CLAUDE_SESSION_DIR:-d
 # 3. If PRD exists, link it
 .claude/scripts/completion-state/cs-status --prd ".taskmaster/docs/epic-name-prd.md"
 
-# 4. Add epics and features from PRD
+# 4. Create completion promise with structured acceptance criteria
+.claude/scripts/completion-state/cs-promise --create "Initiative title" \
+    --ac "All unit tests pass" \
+    --ac "API endpoints return correct responses" \
+    --ac "E2E workflow validated"
+
+# 5. Add additional criteria to existing promise (if needed)
+.claude/scripts/completion-state/cs-promise --add-ac <promise-id> "New criterion discovered during work"
+
+# 6. Add epics and features from PRD
 .claude/scripts/completion-state/cs-promise --epic "Epic title"
 .claude/scripts/completion-state/cs-promise --feature "Feature title" --epic E1 --criteria "Criterion 1"
 ```
+
+> **Breaking Change (v2.0)**: `cs-promise --create` now **requires** at least one `--ac` flag. Promises without structured acceptance criteria are no longer accepted.
 
 ### Extraction Prompt for System 3
 
@@ -321,9 +356,16 @@ Bash(f"cs-status --prompt '{user_prompt}'")
 # If PRD referenced, link it
 if prd_path:
     Bash(f"cs-status --prd '{prd_path}'")
-    # Add epics/features
-    Bash(f"cs-promise --epic 'Epic title'")
-    Bash(f"cs-promise --feature 'Feature' --epic E1 --criteria 'Criterion'")
+
+# Create promise with structured acceptance criteria
+Bash('cs-promise --create "Initiative title" '
+     '--ac "All unit tests pass" '
+     '--ac "API endpoints return correct responses" '
+     '--ac "E2E workflow validated"')
+
+# Add epics/features from PRD
+Bash(f"cs-promise --epic 'Epic title'")
+Bash(f"cs-promise --feature 'Feature' --epic E1 --criteria 'Criterion'")
 
 # Store to Hindsight for meta-awareness
 mcp__hindsight__retain(
@@ -338,7 +380,11 @@ mcp__hindsight__retain(
 # Before starting a feature
 Bash(f"cs-verify --feature {feature_id} --status in_progress")
 
-# After completing a feature
+# After completing a feature - meet specific acceptance criteria with evidence
+Bash(f'cs-promise --meet <promise-id> --ac-id AC-1 --evidence "42/42 tests passed" --type test')
+Bash(f'cs-promise --meet <promise-id> --ac-id AC-2 --evidence "GET /api/v1/users returns 200" --type api')
+
+# Also update feature-level verification
 Bash(f"cs-verify --feature {feature_id} --type test --proof '{proof}'")
 
 # Log progress
@@ -349,8 +395,20 @@ Bash(f"cs-verify --log --action '{action}' --outcome '{outcome}'")
 
 The stop hook automatically runs `cs-verify --check`. If blocked:
 - Read the returned reason
-- Continue working on incomplete criteria
-- Update state as you progress
+- Check which acceptance criteria are still unmet
+- Meet remaining criteria with evidence via `cs-promise --meet`
+- Only when ALL criteria show `status: "met"` will verification pass
+
+```python
+# Check which criteria remain unmet
+Bash("cs-verify --check --verbose")
+
+# Meet remaining criteria
+Bash('cs-promise --meet <id> --ac-id AC-3 --evidence "E2E scenario passed" --type e2e')
+
+# Verify (only succeeds when all criteria are met)
+Bash('cs-verify --promise <id>')
+```
 
 ### 4. Orchestrator Awareness
 
@@ -365,6 +423,7 @@ wisdom = f"""
 {completion_context}
 
 Your work contributes to these goals. Report completion with verification proof.
+Use cs-promise --meet to submit per-criterion evidence.
 """
 ```
 
@@ -442,6 +501,9 @@ When `CLAUDE_SESSION_DIR` is set, completion state is isolated per-session. This
 | Stopping before all goals pass | Incomplete work | Let stop hook block until complete |
 | Not extracting goals from prompt | No completion criteria | Always run `cs-status --goal` at session start |
 | Manual status claims | No file-based tracking | Use `cs-verify --status` for all status changes |
+| Creating promise without `--ac` | No measurable criteria | Always include at least one `--ac` flag with `--create` |
+| Using `--proof` without per-AC evidence | Bypasses structured accountability | Use `cs-promise --meet` for each criterion individually |
+| Verifying with unmet criteria | Incomplete work, hollow closure | Meet ALL acceptance criteria first, then run `cs-verify` |
 
 ---
 
@@ -461,7 +523,8 @@ They complement each other:
 
 ---
 
-**Version**: 1.0.0
+**Version**: 2.0.0
 **Dependencies**: jq, bash
 **Integration**: system3-meta-orchestrator, stop-gate.py
 **Inspired By**: Ralph Wiggum plugin (completion promise pattern)
+**Breaking Changes (v2.0)**: `cs-promise --create` now requires at least one `--ac` flag. Per-criterion evidence via `cs-promise --meet` replaces bulk `--proof` for structured accountability.
