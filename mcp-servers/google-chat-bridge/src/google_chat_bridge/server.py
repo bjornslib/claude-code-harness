@@ -29,10 +29,19 @@ Tools (Inbound Routing - F2.2):
     get_thread_messages    - Get messages grouped by thread
     get_queue_stats        - Get message queue and rate limiter statistics
     purge_consumed         - Remove old consumed messages from queue
+
+Tools (Command Reception - F2.5):
+    process_commands       - Poll inbound messages and parse as commands
+    get_pending_commands   - Get unconsumed commands from the command queue
+
+Tools (Proactive Notifications - F2.4):
+    dispatch_notification  - Send proactive notifications with dedup and quiet hours
+    get_notification_history - Get recent notification log entries
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from datetime import datetime, timezone
@@ -41,6 +50,7 @@ from typing import Any
 from fastmcp import FastMCP
 
 from google_chat_bridge.chat_client import ChatClient
+from google_chat_bridge.commands import CommandParser, CommandQueueManager
 from google_chat_bridge.formatter import (
     CardBuilder,
     build_briefing_card,
@@ -55,6 +65,10 @@ from google_chat_bridge.formatter import (
     markdown_to_gchat,
 )
 from google_chat_bridge.message_queue import MessageQueueManager
+from google_chat_bridge.notifications import (
+    NotificationDispatcher,
+    map_event_to_formatter,
+)
 from google_chat_bridge.router import MessageRouter, RateLimiter
 from google_chat_bridge.state import ReadStateManager
 
@@ -80,6 +94,8 @@ _client: ChatClient | None = None
 _state_manager: ReadStateManager | None = None
 _queue_manager: MessageQueueManager | None = None
 _router: MessageRouter | None = None
+_command_queue_manager: CommandQueueManager | None = None
+_notification_dispatcher: NotificationDispatcher | None = None
 
 
 def _get_client() -> ChatClient:
@@ -125,6 +141,22 @@ def _get_router() -> MessageRouter:
             queue_manager=_get_queue_manager(),
         )
     return _router
+
+
+def _get_command_queue_manager() -> CommandQueueManager:
+    """Get or create the command queue manager."""
+    global _command_queue_manager
+    if _command_queue_manager is None:
+        _command_queue_manager = CommandQueueManager()
+    return _command_queue_manager
+
+
+def _get_notification_dispatcher() -> NotificationDispatcher:
+    """Get or create the notification dispatcher."""
+    global _notification_dispatcher
+    if _notification_dispatcher is None:
+        _notification_dispatcher = NotificationDispatcher()
+    return _notification_dispatcher
 
 
 # ---------------------------------------------------------------------------
@@ -1016,4 +1048,299 @@ def purge_consumed(
         "purged": purged,
         "remaining_queue_size": stats["queue_size"],
         "unconsumed": stats["unconsumed"],
+    }
+
+
+# ---------------------------------------------------------------------------
+# F2.5: Command Reception Tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def process_commands(
+    space_id: str = "",
+) -> dict[str, Any]:
+    """Poll inbound messages and parse them as structured commands.
+
+    Fetches new messages from the inbound queue via the router, parses each
+    message as a command using keyword/fuzzy matching, and adds parsed commands
+    to the command queue for consumption by System 3.
+
+    Recognized command types:
+    - status: "status", "what's the status?", "any updates?"
+    - ready: "bd ready", "what's ready?", "what needs work?"
+    - start: "start [initiative]", "begin [task]"
+    - approve: "approve", "yes", "ok", "lgtm"
+    - reject: "reject", "no", "nope"
+    - help: "help", "commands", "?"
+    - unknown: Anything else (stored for future processing)
+
+    Args:
+        space_id: Target space ID to poll. If empty, uses the default space.
+
+    Returns:
+        Dict with polling results and list of parsed commands.
+    """
+    router = _get_router()
+    cmd_queue = _get_command_queue_manager()
+
+    # Poll inbound messages
+    poll_result = router.poll_and_route(space_id=space_id or None)
+
+    # Get unconsumed messages from the queue
+    msg_queue = _get_queue_manager()
+    messages = msg_queue.get_unconsumed(limit=100)
+
+    # Parse each message as a command
+    parsed_commands = []
+    for msg in messages:
+        cmd = CommandParser.parse(
+            text=msg.text,
+            sender=msg.sender,
+            sender_id=msg.sender_id,
+            thread_id=msg.thread_id,
+            timestamp=msg.timestamp,
+            message_id=msg.message_id,
+        )
+        parsed_commands.append(cmd)
+
+        # Enqueue the parsed command
+        cmd_queue.enqueue(cmd)
+
+    # Mark messages as consumed (they've been parsed into commands)
+    if messages:
+        msg_queue.consume([m.message_id for m in messages])
+
+    return {
+        "poll_result": poll_result,
+        "messages_parsed": len(parsed_commands),
+        "commands": [
+            {
+                "type": c.type,
+                "args": c.args,
+                "sender": c.sender,
+                "raw_text": c.raw_text[:100] + ("..." if len(c.raw_text) > 100 else ""),
+                "timestamp": c.timestamp,
+            }
+            for c in parsed_commands
+        ],
+    }
+
+
+@mcp.tool()
+def get_pending_commands(
+    command_type: str = "",
+    limit: int = 25,
+) -> dict[str, Any]:
+    """Get unconsumed commands from the command queue.
+
+    Returns parsed commands that have been queued but not yet consumed
+    by System 3. Commands are returned in FIFO order.
+
+    Args:
+        command_type: Optional filter by command type. Empty string = all types.
+                      Valid types: status, ready, start, approve, reject, help, unknown.
+        limit: Maximum number of commands to return (1-100, default 25).
+
+    Returns:
+        Dict with list of unconsumed commands and queue stats.
+    """
+    cmd_queue = _get_command_queue_manager()
+    commands = cmd_queue.get_unconsumed(
+        command_type=command_type,
+        limit=min(limit, 100),
+    )
+
+    return {
+        "command_count": len(commands),
+        "commands": [
+            {
+                "type": c.type,
+                "args": c.args,
+                "sender": c.sender,
+                "sender_id": c.sender_id,
+                "thread_id": c.thread_id,
+                "raw_text": c.raw_text,
+                "timestamp": c.timestamp,
+                "parsed_at": c.parsed_at,
+            }
+            for c in commands
+        ],
+        "stats": cmd_queue.get_stats(),
+    }
+
+
+# ---------------------------------------------------------------------------
+# F2.4: Proactive Notification Tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def dispatch_notification(
+    event_type: str,
+    event_data_json: str,
+    space_id: str = "",
+) -> dict[str, Any]:
+    """Send a proactive notification to Google Chat with dedup and quiet hours.
+
+    Dispatches event-based notifications using the appropriate formatter template,
+    with automatic deduplication (5-minute window) and quiet hours enforcement
+    (default: 22:00-07:00 local time).
+
+    Supported event types:
+    - heartbeat_finding: System 3 heartbeat findings
+    - task_completion: Task status updates
+    - blocked_alert: Blocked work requiring user input
+    - morning_briefing: Morning daily briefing
+    - eod_summary: End-of-day summary
+    - orchestrator_status: Orchestrator progress updates
+
+    Args:
+        event_type: Type of event to dispatch (see supported types above).
+        event_data_json: JSON string of event data. Required fields vary by event_type.
+                         See documentation for field requirements per event type.
+        space_id: Target space ID. If empty, uses the default space.
+
+    Returns:
+        Dict with dispatch status, message details, and dedup/quiet hours info.
+    """
+    # Parse event data
+    try:
+        event_data = json.loads(event_data_json) if event_data_json else {}
+    except json.JSONDecodeError as exc:
+        return {
+            "status": "error",
+            "error": f"Invalid event_data_json: {exc}",
+        }
+
+    dispatcher = _get_notification_dispatcher()
+
+    # Compute deduplication key
+    dedup_key = NotificationDispatcher.compute_dedup_key(event_type, event_data)
+
+    # Check if notification should be sent
+    should_send, reason = dispatcher.should_send(dedup_key)
+
+    if not should_send:
+        dispatcher.log_notification(
+            event_type=event_type,
+            dedup_key=dedup_key,
+            space_id=space_id,
+            status=reason,
+        )
+        return {
+            "status": reason,
+            "event_type": event_type,
+            "dedup_key": dedup_key,
+            "message": f"Notification skipped: {reason}",
+        }
+
+    # Map event to formatter
+    try:
+        formatter_name, formatter_kwargs = map_event_to_formatter(event_type, event_data)
+    except ValueError as exc:
+        dispatcher.log_notification(
+            event_type=event_type,
+            dedup_key=dedup_key,
+            space_id=space_id,
+            status="error",
+            error=str(exc),
+        )
+        return {
+            "status": "error",
+            "error": str(exc),
+        }
+
+    # Add space_id to formatter kwargs
+    formatter_kwargs["space_id"] = space_id
+
+    # Call the appropriate formatter tool
+    client = _get_client()
+    try:
+        # Map formatter name to the actual sending logic
+        if formatter_name == "send_heartbeat_finding":
+            result = send_heartbeat_finding(**formatter_kwargs)
+        elif formatter_name == "send_task_completion":
+            result = send_task_completion(**formatter_kwargs)
+        elif formatter_name == "send_blocked_alert":
+            result = send_blocked_alert(**formatter_kwargs)
+        elif formatter_name == "send_daily_briefing":
+            result = send_daily_briefing(**formatter_kwargs)
+        elif formatter_name == "send_progress_update":
+            result = send_progress_update(**formatter_kwargs)
+        else:
+            raise ValueError(f"Unknown formatter: {formatter_name}")
+
+        # Log successful dispatch
+        dispatcher.log_notification(
+            event_type=event_type,
+            dedup_key=dedup_key,
+            space_id=space_id,
+            thread_key=formatter_kwargs.get("thread_key", ""),
+            message_name=result.get("message_name", ""),
+            status="sent",
+        )
+
+        return {
+            "status": "sent",
+            "event_type": event_type,
+            "dedup_key": dedup_key,
+            "formatter_used": formatter_name,
+            "message_name": result.get("message_name", ""),
+            "create_time": result.get("create_time", ""),
+        }
+
+    except Exception as exc:
+        # Log error
+        error_msg = str(exc)
+        dispatcher.log_notification(
+            event_type=event_type,
+            dedup_key=dedup_key,
+            space_id=space_id,
+            status="error",
+            error=error_msg,
+        )
+        return {
+            "status": "error",
+            "event_type": event_type,
+            "error": error_msg,
+        }
+
+
+@mcp.tool()
+def get_notification_history(
+    space_id: str = "",
+    limit: int = 20,
+) -> dict[str, Any]:
+    """Get recent notification log entries.
+
+    Returns historical notification dispatch records including sent, skipped
+    (dedup/quiet hours), and errored notifications.
+
+    Args:
+        space_id: Optional filter by space ID. Empty string = all spaces.
+        limit: Maximum number of entries to return (default: 20, most recent first).
+
+    Returns:
+        Dict with notification log entries and dispatcher stats.
+    """
+    dispatcher = _get_notification_dispatcher()
+    history = dispatcher.get_history(space_id=space_id, limit=limit)
+
+    return {
+        "entry_count": len(history),
+        "entries": [
+            {
+                "timestamp": e.timestamp,
+                "event_type": e.event_type,
+                "status": e.status,
+                "dedup_key": e.dedup_key,
+                "space_id": e.space_id,
+                "thread_key": e.thread_key,
+                "message_name": e.message_name,
+                "error": e.error,
+            }
+            for e in history
+        ],
+        "stats": dispatcher.get_stats(),
     }
