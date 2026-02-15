@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """
-SessionStart Hook: Load USER.md Operator Profile
+SessionStart Hook: Load USER.md Operator Profile + IDENTITY.md
 
-Reads .claude/USER.md and outputs its content wrapped in <system-reminder> tags
-so Claude Code receives operator preferences at session start.
+Reads .claude/USER.md and .claude/IDENTITY.md, outputs their content wrapped
+in <system-reminder> tags so Claude Code receives operator preferences and
+system identity at session start.
 
-Gracefully handles USER.md not existing (silent no-op).
+Gracefully handles either file not existing (silent skip for that file).
 
 Input (stdin): JSON with session info (session_id, source, cwd, etc.)
-Output (stdout): USER.md content wrapped in system-reminder tags
+Output (stdout): File contents wrapped in system-reminder tags
 """
 
 import json
@@ -17,31 +18,31 @@ import sys
 from pathlib import Path
 
 
-def find_user_profile(cwd: str) -> Path | None:
+def find_claude_file(cwd: str, filename: str) -> Path | None:
     """
-    Locate USER.md relative to the project's .claude/ directory.
+    Locate a file relative to the project's .claude/ directory.
 
     Search order:
-    1. $CLAUDE_PROJECT_DIR/.claude/USER.md (if env var set)
-    2. <cwd>/.claude/USER.md
-    3. Walk up from cwd looking for .claude/USER.md
+    1. $CLAUDE_PROJECT_DIR/.claude/<filename> (if env var set)
+    2. <cwd>/.claude/<filename>
+    3. Walk up from cwd looking for .claude/<filename>
     """
     # Try CLAUDE_PROJECT_DIR first
     project_dir = os.environ.get("CLAUDE_PROJECT_DIR")
     if project_dir:
-        candidate = Path(project_dir) / ".claude" / "USER.md"
+        candidate = Path(project_dir) / ".claude" / filename
         if candidate.is_file():
             return candidate
 
     # Try cwd
-    candidate = Path(cwd) / ".claude" / "USER.md"
+    candidate = Path(cwd) / ".claude" / filename
     if candidate.is_file():
         return candidate
 
     # Walk up from cwd
     current = Path(cwd).resolve()
     for parent in [current] + list(current.parents):
-        candidate = parent / ".claude" / "USER.md"
+        candidate = parent / ".claude" / filename
         if candidate.is_file():
             return candidate
         # Stop at filesystem root
@@ -51,9 +52,27 @@ def find_user_profile(cwd: str) -> Path | None:
     return None
 
 
+def find_user_profile(cwd: str) -> Path | None:
+    """Locate USER.md (backward-compatible wrapper)."""
+    return find_claude_file(cwd, "USER.md")
+
+
+def _load_and_emit(cwd: str, filename: str) -> None:
+    """Find a .claude/ file and emit its content as a system-reminder block."""
+    file_path = find_claude_file(cwd, filename)
+    if file_path is None:
+        return
+
+    content = file_path.read_text(encoding="utf-8").strip()
+    if not content:
+        return
+
+    print(f"<system-reminder>\n# {filename}\n\n{content}\n</system-reminder>")
+
+
 def main():
     """
-    Read hook input from stdin, find USER.md, and output as system-reminder.
+    Read hook input from stdin, find USER.md and IDENTITY.md, output as system-reminders.
     """
     try:
         raw_input = sys.stdin.read()
@@ -64,20 +83,11 @@ def main():
         input_data = json.loads(raw_input)
         cwd = input_data.get("cwd", os.getcwd())
 
-        profile_path = find_user_profile(cwd)
+        # Load operator profile
+        _load_and_emit(cwd, "USER.md")
 
-        if profile_path is None:
-            # No USER.md found — silent no-op
-            sys.exit(0)
-
-        content = profile_path.read_text(encoding="utf-8").strip()
-
-        if not content:
-            # Empty file — silent no-op
-            sys.exit(0)
-
-        # Output wrapped in system-reminder tags for Claude Code ingestion
-        print(f"<system-reminder>\n{content}\n</system-reminder>")
+        # Load system identity and disposition
+        _load_and_emit(cwd, "IDENTITY.md")
 
     except json.JSONDecodeError:
         # Malformed input — fail silently

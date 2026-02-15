@@ -47,6 +47,22 @@
       ],
       "output": "Retain patterns to Hindsight + SendMessage to team-lead",
       "max_tokens": 30000
+    },
+    {
+      "id": "daily-distillation",
+      "name": "Daily Session Distillation",
+      "schedule": "0 6 * * *",
+      "description": "Distill recent session narratives into consolidated patterns via Hindsight reflect",
+      "type": "isolated",
+      "enabled": true,
+      "command": "python .claude/scripts/hindsight-daily-distillation.py",
+      "actions": [
+        "Recall session narratives from last 24h",
+        "Reflect with budget=high to synthesize cross-session patterns",
+        "Retain consolidated distillation to shared + private banks"
+      ],
+      "output": "Retain distillation summary to Hindsight (both banks)",
+      "max_tokens": 30000
     }
   ],
   "job_tracking": {
