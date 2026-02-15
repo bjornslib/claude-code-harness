@@ -1,0 +1,37 @@
+{
+  "version": "1.0",
+  "description": "Token cost tracking for S3 Communicator heartbeat cycles",
+  "budget": {
+    "non_actionable_max": 5000,
+    "actionable_simple_max": 10000,
+    "actionable_complex_max": 20000,
+    "outside_hours_max": 1000,
+    "daily_budget": 50000,
+    "alert_threshold_pct": 80
+  },
+  "cycles": [],
+  "daily_summaries": [],
+  "schema": {
+    "cycle": {
+      "cycle_id": "auto-incremented integer",
+      "timestamp": "ISO-8601 datetime",
+      "type": "non_actionable | actionable | outside_hours",
+      "checks_run": "array of check names (beads, tmux, git, hindsight, google_chat)",
+      "actionable_found": "boolean",
+      "wake_category": "string or null (P0_WORK_READY, ORCH_FAILURE, etc.)",
+      "estimated_tokens": "integer",
+      "model": "haiku",
+      "duration_ms": "integer"
+    },
+    "daily_summary": {
+      "date": "YYYY-MM-DD",
+      "total_cycles": "integer",
+      "actionable_cycles": "integer",
+      "total_tokens": "integer",
+      "wake_ups_sent": "integer",
+      "avg_tokens_per_cycle": "float",
+      "peak_cycle_tokens": "integer",
+      "estimated_cost_usd": "float"
+    }
+  }
+}

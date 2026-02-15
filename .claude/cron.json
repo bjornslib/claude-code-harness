@@ -1,0 +1,65 @@
+{
+  "version": "1.0",
+  "description": "Scheduled tasks for S3 Communicator heartbeat daemon",
+  "timezone": "Australia/Sydney",
+  "jobs": [
+    {
+      "id": "morning-briefing",
+      "name": "Morning Briefing",
+      "schedule": "0 7 * * *",
+      "description": "Summarize overnight beads changes, PR status, pending work",
+      "type": "isolated",
+      "enabled": true,
+      "actions": [
+        "bd list --since=yesterday",
+        "git log --since=yesterday --oneline",
+        "recall active-goals from Hindsight"
+      ],
+      "output": "SendMessage to team-lead with morning briefing summary",
+      "max_tokens": 15000
+    },
+    {
+      "id": "eod-summary",
+      "name": "End-of-Day Summary",
+      "schedule": "0 18 * * *",
+      "description": "Log day accomplishments and set next-day priorities",
+      "type": "main",
+      "enabled": true,
+      "actions": [
+        "bd list --status=closed --since=today",
+        "git log --since=today --oneline",
+        "retain daily-summary to Hindsight"
+      ],
+      "output": "Retain to Hindsight + SendMessage to team-lead",
+      "max_tokens": 15000
+    },
+    {
+      "id": "weekly-reflection",
+      "name": "Weekly Reflection",
+      "schedule": "0 8 * * 1",
+      "description": "Deep reflection on patterns, consolidate weekly learning",
+      "type": "isolated",
+      "enabled": true,
+      "actions": [
+        "reflect budget=high on private bank",
+        "bd stats for weekly summary",
+        "Review closed beads for patterns"
+      ],
+      "output": "Retain patterns to Hindsight + SendMessage to team-lead",
+      "max_tokens": 30000
+    }
+  ],
+  "job_tracking": {
+    "last_run_file": ".claude/cron_last_run.json",
+    "description": "Tracks last execution time per job to prevent duplicates",
+    "format": {
+      "job_id": "ISO-8601 timestamp of last successful run"
+    }
+  },
+  "active_hours": {
+    "description": "Cron jobs only fire during active hours unless marked critical",
+    "start": 7,
+    "end": 22,
+    "timezone": "Australia/Sydney"
+  }
+}
