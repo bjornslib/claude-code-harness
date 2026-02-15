@@ -361,6 +361,195 @@ SendMessage(
 
 ---
 
+## CHECK MODULE: Beads Status
+
+Detailed implementation of the beads health check.
+
+### Execution Steps
+
+1. **Run bd ready**:
+   ```bash
+   bd ready 2>/dev/null
+   ```
+   Parse output for task count and priority levels. Look for lines matching `[● P0]` or `[● P1]`.
+
+2. **Run bd list for in-progress tasks**:
+   ```bash
+   bd list --status=in_progress 2>/dev/null
+   ```
+   Count in-progress tasks. For each, check if there's been activity (commits, bead updates) in the last 2 hours.
+
+3. **Detect stale tasks**:
+   - In-progress for > 2 hours with no git commits → flag as potentially stalled
+   - Compare current ready count with previous cycle's count (store in memory)
+
+4. **Evaluate actionability**:
+   - P0 or P1 task in `bd ready` → ACTIONABLE (category: `P0_WORK_READY` or `P1_WORK_READY`)
+   - P2+ tasks in `bd ready` and Operator appears idle → ACTIONABLE (category: `WORK_READY`)
+   - Stalled in-progress task → ACTIONABLE (category: `STALLED_WORK`)
+   - No new tasks, no stalls → OK
+
+5. **Format report**:
+   ```
+   BEADS_STATUS: {ready_count} ready ({p0_count} P0, {p1_count} P1), {in_progress_count} in progress
+   STALLED: {stalled_task_ids or "none"}
+   ACTIONABLE: [yes/no] — [reason]
+   ```
+
+---
+
+## CHECK MODULE: Orchestrator Health
+
+Detailed implementation of the tmux/orchestrator health check.
+
+### Execution Steps
+
+1. **List tmux sessions**:
+   ```bash
+   tmux list-sessions 2>/dev/null | grep "^orch-"
+   ```
+   Parse for orchestrator session names (format: `orch-{name}`).
+
+2. **Cross-reference with beads**:
+   ```bash
+   bd list --status=in_progress 2>/dev/null
+   ```
+   For each in-progress bead that maps to an orchestrator: verify the tmux session exists.
+   If bead is in_progress but orchestrator session is MISSING → crashed orchestrator.
+
+3. **Check for idle orchestrators**:
+   ```bash
+   tmux capture-pane -t {session_name} -p | tail -5
+   ```
+   If last output timestamp is > 30 minutes ago, flag as potentially idle.
+   Note: This is an approximation — tmux capture-pane shows recent output but not timestamps.
+
+4. **Check message bus** (if available):
+   ```bash
+   mb-status 2>/dev/null
+   ```
+   Look for undelivered messages to orchestrators.
+
+5. **Evaluate actionability**:
+   - Orchestrator session missing but bead in_progress → ACTIONABLE (category: `ORCH_FAILURE`)
+   - All orchestrators healthy → OK
+   - Idle orchestrator (advisory) → logged but not wake-worthy unless also P1 work ready
+
+6. **Format report**:
+   ```
+   ORCHESTRATOR_HEALTH: {session_count} sessions active
+   CRASHED: {crashed_sessions or "none"}
+   IDLE: {idle_sessions or "none"}
+   ACTIONABLE: [yes/no] — [reason]
+   ```
+
+---
+
+## CHECK MODULE: Git Status
+
+Detailed implementation of the git status check across worktrees.
+
+### Execution Steps
+
+1. **List worktrees**:
+   ```bash
+   git worktree list 2>/dev/null
+   ```
+   Parse output for worktree paths and branch names.
+
+2. **Check each worktree**:
+   ```bash
+   git -C {worktree_path} status --porcelain 2>/dev/null
+   ```
+   If output is non-empty → worktree has uncommitted changes.
+
+3. **Check change age**:
+   ```bash
+   git -C {worktree_path} log -1 --format="%ci" 2>/dev/null
+   ```
+   Compare last commit time with current time. If > 1 hour and dirty → flag as stale.
+
+4. **Check for unmerged branches**:
+   For each worktree on a non-main branch with closed beads → potential candidate for merge/cleanup.
+
+5. **Evaluate actionability**:
+   - Dirty worktree with changes > 1 hour old → ACTIONABLE (category: `GIT_STALE`)
+   - All worktrees clean → OK
+   - Dirty but recent (< 1 hour) → OK (developer is likely actively working)
+
+6. **Format report**:
+   ```
+   GIT_STATUS: {clean_count}/{total_count} worktrees clean
+   DIRTY: {dirty_worktree_paths or "none"}
+   STALE (>1h): {stale_worktree_paths or "none"}
+   ACTIONABLE: [yes/no] — [reason]
+   ```
+
+---
+
+## CRON JOB: Morning Briefing
+
+Executed when the `morning-briefing` cron job triggers (per `.claude/cron.json`).
+
+### Trigger
+- Scheduled: 7:00 AM local time (Australia/Sydney)
+- Check `.claude/cron_last_run.json` — skip if already ran today
+
+### Execution Steps
+
+1. **Gather overnight changes**:
+   ```bash
+   bd list --since=yesterday 2>/dev/null
+   git log --since=yesterday --oneline 2>/dev/null
+   ```
+
+2. **Check current state**:
+   ```bash
+   bd ready 2>/dev/null
+   bd stats 2>/dev/null
+   ```
+
+3. **Recall from Hindsight**:
+   - Active goals and priorities
+   - Yesterday's unfinished work
+
+4. **Format briefing**:
+   ```
+   MORNING_BRIEFING: {date}
+
+   ## Overnight Activity
+   - Beads changed: {count}
+   - Git commits: {count}
+
+   ## Current State
+   - Ready tasks: {ready_count} (highest: {highest_priority})
+   - In progress: {in_progress_count}
+   - Orchestrators: {active_count} running
+
+   ## Today's Priorities
+   1. {priority_1}
+   2. {priority_2}
+   3. {priority_3}
+
+   ## Unfinished from Yesterday
+   - {items}
+   ```
+
+5. **Deliver**:
+   ```python
+   SendMessage(
+       type="message",
+       recipient="team-lead",
+       content=briefing_text,
+       summary="Morning briefing — {date}"
+   )
+   ```
+
+6. **Update tracking**:
+   Write current timestamp to `.claude/cron_last_run.json` for `morning-briefing` job.
+
+---
+
 ## WHAT YOU DO NOT DO
 
 As the Communicator, you are explicitly prohibited from:
