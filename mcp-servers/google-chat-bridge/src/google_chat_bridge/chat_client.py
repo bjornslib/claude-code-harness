@@ -122,6 +122,7 @@ class ChatClient:
         text: str,
         space_id: str | None = None,
         thread_key: str | None = None,
+        cards_v2: list[dict[str, Any]] | None = None,
     ) -> ChatMessage:
         """Send a text message to a Google Chat space.
 
@@ -129,6 +130,8 @@ class ChatClient:
             text: Message text (will be chunked if > 4096 chars).
             space_id: Target space. Uses default if not specified.
             thread_key: Optional thread key for threaded replies.
+            cards_v2: Optional Google Chat Cards v2 payload. If provided,
+                      sends as a card message with fallback text.
 
         Returns:
             ChatMessage with the sent message details.
@@ -136,7 +139,13 @@ class ChatClient:
         service = self._get_service()
         space = self._resolve_space(space_id)
 
-        # Chunk long messages
+        # If sending a card, send as a single message (no chunking)
+        if cards_v2:
+            return self._send_card_message(
+                service, space, text, cards_v2, thread_key
+            )
+
+        # Chunk long text messages
         chunks = self._chunk_message(text)
         last_message = None
 
@@ -158,6 +167,45 @@ class ChatClient:
 
         assert last_message is not None
         return last_message
+
+    def _send_card_message(
+        self,
+        service: Any,
+        space: str,
+        fallback_text: str,
+        cards_v2: list[dict[str, Any]],
+        thread_key: str | None = None,
+    ) -> ChatMessage:
+        """Send a card message with fallback text.
+
+        Args:
+            service: Google Chat API service instance.
+            space: Resolved space resource name.
+            fallback_text: Text shown in notifications and non-card-capable clients.
+            cards_v2: Google Chat Cards v2 payload list.
+            thread_key: Optional thread key for threaded replies.
+
+        Returns:
+            ChatMessage with the sent message details.
+        """
+        body: dict[str, Any] = {
+            "text": fallback_text[:MAX_MESSAGE_LENGTH],
+            "cardsV2": cards_v2,
+        }
+        if thread_key:
+            body["thread"] = {"threadKey": thread_key}
+
+        request = service.spaces().messages().create(
+            parent=space,
+            body=body,
+            messageReplyOption="REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD"
+            if thread_key
+            else None,
+        )
+        response = request.execute()
+        msg = self._parse_message(response)
+        logger.info("Sent card message to %s: %s", space, msg.name)
+        return msg
 
     def list_messages(
         self,
