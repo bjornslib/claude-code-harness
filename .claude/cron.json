@@ -61,5 +61,25 @@
     "start": 7,
     "end": 22,
     "timezone": "Australia/Sydney"
+  },
+  "queue_lanes": {
+    "description": "Priority lanes for command processing. Lower number = higher priority.",
+    "lanes": {
+      "interactive": {
+        "priority": 1,
+        "interruptible": false,
+        "description": "Messages from team-lead (ASK_USER, shutdown, instructions)"
+      },
+      "heartbeat": {
+        "priority": 2,
+        "interruptible": true,
+        "description": "Regular 600s cycle checks (beads, tmux, git)"
+      },
+      "cron": {
+        "priority": 3,
+        "interruptible": true,
+        "description": "Scheduled jobs (morning briefing, EOD summary)"
+      }
+    }
   }
 }

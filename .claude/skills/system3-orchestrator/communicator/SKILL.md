@@ -550,6 +550,64 @@ Executed when the `morning-briefing` cron job triggers (per `.claude/cron.json`)
 
 ---
 
+## COMMAND QUEUE LANES
+
+The Communicator operates in two lanes to prevent heartbeat checks from blocking interactive communication.
+
+### Lane Definitions
+
+| Lane | Priority | Interruptible | Purpose |
+|------|----------|---------------|---------|
+| **Interactive** | 1 (highest) | No | Messages from team-lead (ASK_USER, shutdown_request, direct instructions) |
+| **Heartbeat** | 2 | Yes | Regular 600s cycle checks (beads, tmux, git, hindsight, google_chat) |
+| **Cron** | 3 (lowest) | Yes | Scheduled jobs (morning briefing, EOD summary, weekly reflection) |
+
+### Preemption Rules
+
+1. **Interactive always wins**: If team-lead sends a message while a heartbeat cycle is running, complete the current individual check (e.g., finish `bd ready`) but skip remaining checks. Process the interactive message immediately.
+
+2. **Heartbeat results from interrupted cycles are discarded**: They will run again on the next 600s cycle. No data is lost.
+
+3. **Cron jobs yield to both**: If a cron job (e.g., morning briefing) is running when an interactive message arrives, the cron job pauses. If a heartbeat cycle starts during a cron job, the cron job continues (heartbeat waits).
+
+### Implementation
+
+On each loop iteration, check for messages BEFORE starting checks:
+
+```python
+# Pseudo-code for lane-aware loop
+while True:
+    # 1. Always check interactive lane first
+    messages = check_inbox()  # Non-blocking
+    if messages:
+        process_interactive(messages)  # Priority 1
+        continue  # Skip to next iteration
+
+    # 2. Check if cron job is due
+    if cron_job_pending():
+        run_cron_job()  # Priority 3 (interruptible)
+        continue
+
+    # 3. Run heartbeat checks (interruptible)
+    for check in [beads, tmux, git, hindsight, google_chat]:
+        result = run_check(check)
+
+        # Check for preemption after each check
+        messages = check_inbox()
+        if messages:
+            process_interactive(messages)
+            break  # Abandon remaining checks
+
+    # 4. Sleep
+    sleep(600)
+```
+
+### Interruption Signals
+
+The Communicator detects interactive messages by checking its inbox (via the Agent Teams message queue) between each individual health check. This is a cooperative preemption model — the Communicator voluntarily yields after completing each atomic check unit.
+
+---
+
 ## WHAT YOU DO NOT DO
 
 As the Communicator, you are explicitly prohibited from:
