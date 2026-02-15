@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "google-chat-bridge"
+version = "0.1.0"
+description = "MCP server providing Google Chat integration for System 3 proactive communication"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=1.20",
+    "fastmcp>=2.0",
+    "google-api-python-client>=2.100",
+    "google-auth>=2.20",
+    "pydantic>=2.0,<3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-mock>=3.12",
+]
+
+[project.scripts]
+google-chat-bridge = "google_chat_bridge.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/google_chat_bridge"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
