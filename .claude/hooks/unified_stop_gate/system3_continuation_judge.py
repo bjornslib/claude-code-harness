@@ -1,7 +1,10 @@
 """System 3 continuation judge checker using Haiku API for session evaluation.
 
 Only runs for System 3 (system3-*) sessions. Non-System 3 sessions (orchestrators,
-workers) skip the judge entirely — they are free to stop at any time after Step 4 passes.
+workers) skip the judge entirely at the top of check() — they always pass immediately.
+
+CRITICAL: Workers MUST NOT be told to use AskUserQuestion. In native Agent Team
+teammates under tmux, AskUserQuestion blocks permanently (permission dialog).
 
 Strictness: Full evaluation with promises, reflection, validation, cleanup checks.
 """
@@ -86,6 +89,18 @@ Before stopping, System 3 MUST have completed:
 3. **Validation Evidence**: Business outcomes validated via validation-test-agent (not direct bd close)
 4. **Cleanup**: Orchestrator tmux sessions killed, message bus unregistered
 
+### Layer 1.5: Validation Integrity (HARD REQUIREMENT)
+If the WORK STATE shows ANY of these indicators, ALWAYS BLOCK:
+1. **Unvalidated closures**: "closed WITHOUT evidence" → S3 closed tasks without running oversight team
+2. **No oversight team**: "NO oversight team found" → S3 never spawned s3-*-oversight validators
+3. **Missing closure reports**: Tasks lack .claude/evidence/{id}/closure-report.md
+
+This is CRITICAL RULE #3: System 3 must NEVER close impl_complete tasks without independent validation.
+Closing tasks by changing status alone (impl_complete → s3_validating → closed) without spawning
+the oversight team is the #1 protocol violation. The evidence directory is the proof of work.
+
+If you see these indicators, respond with should_continue=true and explain the violation.
+
 ### Layer 2: Work Availability
 Check the WORK STATE for remaining actionable work:
 - Unmet promises → System 3 MUST continue
@@ -127,6 +142,8 @@ Default to BLOCK (should_continue=true) when:
 - Completion promises exist but weren't verified
 - No post-session reflection was performed
 - Work was started but not validated
+- Tasks were closed without evidence (closure-report.md missing)
+- No s3-*-oversight team was found despite impl_complete/closed tasks
 - Work state shows available high-priority work but System 3 is stopping
 - Unfinished tasks exist (remind to continue productive work independently)
 - No AskUserQuestion was presented despite work being exhausted"""
@@ -195,6 +212,21 @@ class System3ContinuationJudgeChecker:
         """
         # Determine strictness tier
         self._is_strict = self.config.is_system3  # system3-* = strict, everything else = light
+
+        # CRITICAL FIX (2026-02-15): Non-System 3 sessions MUST skip the judge entirely.
+        # The light judge was intended as a lenient safety net, but Haiku ignores the
+        # "No AskUserQuestion needed" instruction and returns strict-style responses that
+        # tell workers/orchestrators to use AskUserQuestion. In native Agent Team teammates
+        # running under tmux-based orchestrators, AskUserQuestion sends a permission
+        # request to the team lead that CANNOT be approved via tmux, permanently blocking
+        # the session. Skip the judge for ALL non-System 3 sessions to prevent this.
+        if not self._is_strict:
+            return CheckResult(
+                priority=Priority.P3_5_SYSTEM3_JUDGE,
+                passed=True,
+                message="Non-System 3 session — judge skipped (workers/orchestrators stop freely)",
+                blocking=True,
+            )
 
         # Guard: Check if transcript exists, with fallback to session_id search
         transcript_path = self.session.transcript_path

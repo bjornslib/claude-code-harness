@@ -53,6 +53,11 @@ class WorkState:
     impl_complete_count: int = 0
     s3_validating_count: int = 0
 
+    # Evidence-based closure tracking
+    unvalidated_closure_count: int = 0
+    closed_without_evidence: list = field(default_factory=list)
+    oversight_team_found: bool = False
+
     # Task primitives — unfinished (pending + in_progress)
     pending_task_count: int = 0
     task_subjects: list = field(default_factory=list)
@@ -118,6 +123,13 @@ class WorkState:
         if self.s3_validating_count > 0:
             lines.append(f"S3 Pipeline: {self.s3_validating_count} being validated (s3_validating)")
 
+        # Evidence-based closure integrity
+        if self.unvalidated_closure_count > 0:
+            task_ids = ", ".join(self.closed_without_evidence[:3])
+            lines.append(f"S3 Evidence: {self.unvalidated_closure_count} task(s) closed WITHOUT evidence ({task_ids})")
+        if not self.oversight_team_found and (self.impl_complete_count > 0 or self.s3_validating_count > 0 or self.unvalidated_closure_count > 0):
+            lines.append("S3 Oversight: NO oversight team found (expected s3-*-oversight)")
+
         return lines
 
     def format_for_judge(self) -> str:
@@ -143,6 +155,14 @@ class WorkState:
 
         if self.beads_summary:
             lines.append(f"  Beads detail: {self.beads_summary[:300]}")
+
+        # Evidence integrity for judge
+        if self.unvalidated_closure_count > 0:
+            lines.append(f"  ⚠️ CLOSURE INTEGRITY: {self.unvalidated_closure_count} task(s) closed without evidence")
+            for tid in self.closed_without_evidence[:5]:
+                lines.append(f"    - {tid}: NO closure-report.md found")
+        if not self.oversight_team_found and (self.impl_complete_count > 0 or self.s3_validating_count > 0 or self.unvalidated_closure_count > 0):
+            lines.append("  ⚠️ OVERSIGHT INTEGRITY: No s3-*-oversight team directory found")
 
         return "\n".join(lines)
 
@@ -216,6 +236,14 @@ class WorkExhaustionChecker:
                     priority=Priority.P3_TODO_CONTINUATION,
                     passed=False,
                     message=self._format_system3_validation_pending(work_state),
+                    blocking=True,
+                )
+            elif work_state.unvalidated_closure_count > 0:
+                # Tasks were closed without evidence — S3 skipped the oversight team
+                return CheckResult(
+                    priority=Priority.P3_TODO_CONTINUATION,
+                    passed=False,
+                    message=self._format_system3_evidence_missing(work_state),
                     blocking=True,
                 )
             else:
@@ -372,6 +400,39 @@ class WorkExhaustionChecker:
             except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
                 pass
 
+            # Check for oversight team existence
+            try:
+                teams_dir = Path.home() / ".claude" / "teams"
+                if teams_dir.exists():
+                    oversight_teams = list(teams_dir.glob("s3-*-oversight"))
+                    state.oversight_team_found = len(oversight_teams) > 0
+            except OSError:
+                pass
+
+            # Check for tasks closed without evidence (evidence directory check)
+            try:
+                result_closed = subprocess.run(
+                    ["bd", "list", "--status=closed"],
+                    cwd=self.config.project_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                closed_output = result_closed.stdout.strip()
+                if closed_output and "No" not in closed_output:
+                    evidence_dir = Path(self.config.project_dir) / ".claude" / "evidence"
+                    for line in closed_output.split("\n"):
+                        # Extract bead ID from the line
+                        match = re.search(r"(beads-[a-z0-9]+|bd-[a-z0-9]+)", line)
+                        if match:
+                            task_id = match.group(1)
+                            closure_report = evidence_dir / task_id / "closure-report.md"
+                            if not closure_report.exists():
+                                state.unvalidated_closure_count += 1
+                                state.closed_without_evidence.append(task_id)
+            except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+                pass
+
         except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
             pass
 
@@ -473,6 +534,42 @@ REQUIRED ACTIONS:
 3. Close validated tasks or reject them back to orchestrator
 
 Do NOT stop while tasks await independent validation."""
+
+    def _format_system3_evidence_missing(self, state: WorkState) -> str:
+        """Block message for System 3 with tasks closed without validation evidence.
+
+        This catches the case where S3 launders impl_complete → s3_validating → closed
+        without actually spawning the oversight team or running E2E validation.
+        """
+        task_list = "\n".join(f'  - {tid}' for tid in state.closed_without_evidence[:5])
+        lines = state.format_summary_lines()
+        work_summary = "\n".join(f"  {line}" for line in lines)
+
+        oversight_msg = ""
+        if not state.oversight_team_found:
+            oversight_msg = """
+No s3-*-oversight team was found. This strongly indicates the oversight
+team was never spawned — validation was skipped entirely.
+"""
+
+        return f"""EVIDENCE MISSING - TASKS CLOSED WITHOUT VALIDATION
+
+{state.unvalidated_closure_count} task(s) were closed without evidence (no closure-report.md):
+{task_list}
+{oversight_msg}
+Current work state:
+{work_summary}
+
+CRITICAL RULE #3 VIOLATION: System 3 must NEVER close tasks without independent validation.
+
+REQUIRED ACTIONS:
+1. Reopen the tasks: bd reopen <id>
+2. Create oversight team: TeamCreate(team_name="s3-<initiative>-oversight", ...)
+3. Spawn validators: s3-investigator, s3-prd-auditor, s3-validator, s3-evidence-clerk
+4. Run the full validation cycle
+5. Only close tasks AFTER closure-report.md is produced
+
+See references/oversight-team.md for spawn commands."""
 
     def _format_non_system3_block(self, state: WorkState) -> str:
         """Block message for non-System 3 sessions with no tasks.

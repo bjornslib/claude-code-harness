@@ -659,6 +659,43 @@ System 3 → tdd-test-engineer / frontend-dev-expert / backend-solutions-enginee
 - `Skill("orchestrator-multiagent")` → SKILL.md "Core Rule" and "Worker Delegation" sections
 - [WORKERS.md](.claude/skills/orchestrator-multiagent/WORKERS.md) → Native team delegation patterns
 
+### 🚨 CRITICAL RULE #3: Never Close Without Independent Validation
+
+**System 3 must spawn the oversight team before closing ANY `impl_complete` task.**
+
+The oversight team is NOT optional. Closing tasks without evidence is the #1 protocol violation.
+
+```
+❌ WRONG - Status laundering (skipping validators):
+bd update <id> --status=s3_validating
+bd close <id>                              ← No oversight team! No validators ran!
+
+❌ WRONG - Trusting orchestrator self-reports:
+"The orchestrator says it's done, so I'll close it"
+bd close <id>                              ← No independent verification!
+
+✅ CORRECT - Full validation cycle:
+1. TeamCreate(team_name=f"s3-{initiative}-oversight", ...)
+2. Spawn all 4 validators (s3-investigator, s3-prd-auditor, s3-validator, s3-evidence-clerk)
+3. Create validation tasks and dispatch to oversight workers
+4. Collect evidence from all three validators
+5. s3-evidence-clerk produces closure-report.md
+6. ONLY THEN: bd close <id> --reason="S3 validated: evidence at .claude/evidence/{id}/"
+```
+
+**Evidence is the proof of work.** Each closed task MUST have:
+```
+.claude/evidence/{task-id}/closure-report.md
+```
+
+Without this file, the stop gate will BLOCK your session from ending.
+
+**Common rationalizations to REJECT:**
+- "The tests pass, I can see them" → YOU didn't run them independently
+- "The orchestrator already validated" → Orchestrators grade their OWN work
+- "It's a small change, validation is overkill" → Size is irrelevant, pattern is mandatory
+- "I'll just check the code myself" → You're System 3, not a code reviewer
+
 ---
 
 When work requires an orchestrator, use the **System 3 orchestrator skill**:

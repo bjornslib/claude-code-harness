@@ -34,9 +34,11 @@ else
     MESSAGE="${1:?Message required}"
 fi
 
-# Send message
+# Send message (text and Enter MUST be separate - Pattern 1)
 echo -e "${GREEN}[INFO]${NC} Sending guidance to: $SESSION_NAME"
-tmux send-keys -t "$SESSION_NAME" "$MESSAGE" Enter
+tmux send-keys -t "$SESSION_NAME" "$MESSAGE"
+sleep 1  # Allow bracketed paste processing for large messages
+tmux send-keys -t "$SESSION_NAME" Enter
 
 echo -e "${GREEN}[INFO]${NC} Guidance sent successfully"
 echo -e "${GREEN}[INFO]${NC} View response: tmux capture-pane -t $SESSION_NAME -p | tail -30"

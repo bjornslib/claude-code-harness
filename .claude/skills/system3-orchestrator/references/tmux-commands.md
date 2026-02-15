@@ -67,9 +67,17 @@ tmux detach -s "orch-[name]"
 
 ### Send Keys
 
+**⚠️ CRITICAL (Pattern 1)**: Text and Enter MUST be separate `send-keys` calls.
+Combining them (e.g., `"text" Enter`) causes Enter to be silently lost, especially
+for slash commands like `/output-style` and large pastes.
+
 ```bash
-# Send text and Enter
-tmux send-keys -t "orch-[name]" "command here" Enter
+# ✅ CORRECT: Text and Enter as separate commands
+tmux send-keys -t "orch-[name]" "command here"
+tmux send-keys -t "orch-[name]" Enter
+
+# ❌ WRONG: Combined text and Enter (Enter may be silently lost)
+# tmux send-keys -t "orch-[name]" "command here" Enter
 
 # Send text without Enter (for partial input)
 tmux send-keys -t "orch-[name]" "partial text"
@@ -146,7 +154,8 @@ tmux capture-pane -t "orch-[name]" -p -S -50 -E -1
 
 ```bash
 # Send /exit command (for Claude Code)
-tmux send-keys -t "orch-[name]" "/exit" Enter
+tmux send-keys -t "orch-[name]" "/exit"
+tmux send-keys -t "orch-[name]" Enter
 
 # Wait and verify
 sleep 10
@@ -203,9 +212,11 @@ tmux split-window -h -t "orch-[name]"
 # Vertical split
 tmux split-window -v -t "orch-[name]"
 
-# Target specific pane
-tmux send-keys -t "orch-[name].0" "command" Enter  # First pane
-tmux send-keys -t "orch-[name].1" "command" Enter  # Second pane
+# Target specific pane (text and Enter separated!)
+tmux send-keys -t "orch-[name].0" "command"
+tmux send-keys -t "orch-[name].0" Enter  # First pane
+tmux send-keys -t "orch-[name].1" "command"
+tmux send-keys -t "orch-[name].1" Enter  # Second pane
 ```
 
 ---
@@ -261,9 +272,10 @@ orch-peek() {
     tmux capture-pane -t "orch-$1" -p | tail -${2:-20}
 }
 
-# Quick guidance function
+# Quick guidance function (text and Enter separated!)
 orch-say() {
-    tmux send-keys -t "orch-$1" "$2" Enter
+    tmux send-keys -t "orch-$1" "$2"
+    tmux send-keys -t "orch-$1" Enter
 }
 ```
 
@@ -271,12 +283,21 @@ orch-say() {
 
 ## Common Patterns
 
-### Spawn and Inject
+### Spawn, Set Output Style, and Inject
 
 ```bash
+# 1. Create session and launch Claude Code
 tmux new-session -d -s "orch-[name]"
-tmux send-keys -t "orch-[name]" "cd trees/[name]/agencheck && launchcc" Enter
-sleep 5
+tmux send-keys -t "orch-[name]" "cd trees/[name]/agencheck && ccorch"
+tmux send-keys -t "orch-[name]" Enter
+sleep 5  # Wait for Claude Code to initialize
+
+# 2. CRITICAL: Set output style FIRST (separate text and Enter!)
+tmux send-keys -t "orch-[name]" "/output-style orchestrator"
+tmux send-keys -t "orch-[name]" Enter
+sleep 3  # Wait for style to load
+
+# 3. THEN inject wisdom (separate text and Enter!)
 tmux send-keys -t "orch-[name]" "$(cat wisdom.md)"
 sleep 2  # Wait for bracketed paste to process
 tmux send-keys -t "orch-[name]" Enter
@@ -300,5 +321,6 @@ done
 # If stuck, interrupt and restart
 tmux send-keys -t "orch-[name]" C-c
 sleep 2
-tmux send-keys -t "orch-[name]" "Continue from where you left off" Enter
+tmux send-keys -t "orch-[name]" "Continue from where you left off"
+tmux send-keys -t "orch-[name]" Enter
 ```
