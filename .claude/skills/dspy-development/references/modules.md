@@ -1,4 +1,4 @@
-# DSPy Modules
+# DSPy Modules (DSPy 2.6+)
 
 Complete guide to DSPy's built-in modules for language model programming.
 
@@ -18,11 +18,9 @@ import dspy
 class CustomModule(dspy.Module):
     def __init__(self):
         super().__init__()
-        # Initialize sub-modules
         self.predictor = dspy.Predict("input -> output")
 
     def forward(self, input):
-        # Module logic
         result = self.predictor(input=input)
         return result
 ```
@@ -34,6 +32,12 @@ class CustomModule(dspy.Module):
 **Basic prediction module** - Makes LM calls without reasoning steps.
 
 ```python
+import dspy
+
+# Configure LM (DSPy 2.6 unified API)
+lm = dspy.LM("openai/gpt-4o-mini")
+dspy.configure(lm=lm)
+
 # Inline signature
 qa = dspy.Predict("question -> answer")
 result = qa(question="What is 2+2?")
@@ -47,6 +51,9 @@ class QA(dspy.Signature):
 qa = dspy.Predict(QA)
 result = qa(question="What is the capital of France?")
 print(result.answer)  # "Paris"
+
+# Per-call config override
+result = qa(question="Explain gravity", config={"temperature": 0.7})
 ```
 
 **When to use:**
@@ -61,7 +68,6 @@ print(result.answer)  # "Paris"
 **Parameters:**
 - `signature`: Task signature
 - `rationale_field`: Custom reasoning field (optional)
-- `rationale_field_type`: Type for rationale (default: `str`)
 
 ```python
 # Basic usage
@@ -98,7 +104,6 @@ pot = dspy.ProgramOfThought("question -> answer")
 
 result = pot(question="What is 15% of 240?")
 # Internally generates: answer = 240 * 0.15
-# Executes code and returns result
 print(result.answer)  # 36.0
 
 result = pot(question="If a train travels 60 mph for 2.5 hours, how far does it go?")
@@ -112,27 +117,19 @@ print(result.answer)  # 150.0
 - Data transformations
 - Deterministic computations
 
-**Benefits:**
-- More reliable than text-based math
-- Handles complex calculations
-- Transparent (shows generated code)
-
 ### dspy.ReAct
 
 **Reasoning + Acting** - Agent that uses tools iteratively.
 
 ```python
-from dspy.predict import ReAct
-
 # Define tools
 def search_wikipedia(query: str) -> str:
     """Search Wikipedia for information."""
-    # Your search implementation
     return search_results
 
 def calculate(expression: str) -> float:
     """Evaluate a mathematical expression."""
-    return eval(expression)
+    return eval(expression, {"__builtins__": {}}, {})
 
 # Create ReAct agent
 class ResearchQA(dspy.Signature):
@@ -140,16 +137,14 @@ class ResearchQA(dspy.Signature):
     question = dspy.InputField()
     answer = dspy.OutputField()
 
-react = ReAct(ResearchQA, tools=[search_wikipedia, calculate])
+react = dspy.ReAct(ResearchQA, tools=[search_wikipedia, calculate])
 
 # Agent decides which tools to use
 result = react(question="How old was Einstein when he published special relativity?")
-# Internally:
 # 1. Thinks: "Need birth year and publication year"
 # 2. Acts: search_wikipedia("Albert Einstein")
-# 3. Acts: search_wikipedia("Special relativity 1905")
-# 4. Acts: calculate("1905 - 1879")
-# 5. Returns: "26 years old"
+# 3. Acts: calculate("1905 - 1879")
+# 4. Returns: "26 years old"
 ```
 
 **When to use:**
@@ -171,10 +166,8 @@ result = react(question="How old was Einstein when he published special relativi
 mcc = dspy.MultiChainComparison("question -> answer", M=5)
 
 result = mcc(question="What is the capital of France?")
-# Generates 5 candidate answers
-# Compares and selects most consistent
+# Generates 5 candidate answers, compares and selects most consistent
 print(result.answer)  # "Paris"
-print(result.candidates)  # All 5 generated answers
 ```
 
 **Parameters:**
@@ -186,32 +179,134 @@ print(result.candidates)  # All 5 generated answers
 - Ambiguous questions
 - When single answer may be unreliable
 
-**Tradeoff:**
-- M times slower (M parallel calls)
-- Higher accuracy on ambiguous tasks
+## DSPy 2.6+ Modules
 
-### dspy.majority
+### dspy.Refine
 
-**Majority voting over multiple predictions.**
+**Iterative self-refinement** - Generates an initial output, then iteratively improves it. Replaces the old `dspy.Assert` / `dspy.Suggest` pattern for quality enforcement.
 
 ```python
-from dspy.primitives import majority
+import dspy
 
-# Generate multiple predictions
-predictor = dspy.Predict("question -> answer")
-predictions = [predictor(question="What is 2+2?") for _ in range(5)]
+lm = dspy.LM("anthropic/claude-sonnet-4-5-20250929")
+dspy.configure(lm=lm)
 
-# Take majority vote
-answer = majority([p.answer for p in predictions])
-print(answer)  # "4"
+class WriteEmail(dspy.Signature):
+    """Write a professional email."""
+    topic = dspy.InputField()
+    email = dspy.OutputField(desc="professional, concise email")
+
+# Refine generates, then iteratively improves
+refine = dspy.Refine(WriteEmail, N=3)  # Up to 3 refinement rounds
+
+result = refine(topic="Request for project status update")
+print(result.email)
+# Output is iteratively refined for quality
+```
+
+**Parameters:**
+- `signature`: Task signature
+- `N`: Maximum refinement iterations (default: 3)
+
+**When to use:**
+- Quality-critical outputs (emails, reports, code)
+- Tasks where first-pass output needs polishing
+- When you want self-improvement without manual assertions
+
+**Replaces:**
+- `dspy.Assert` + `backtrack_handler` (deprecated in 2.6)
+- Manual retry loops with quality checks
+
+### dspy.BestofN
+
+**N-sample selection** - Generates N candidates and selects the best one using a reward model or metric.
+
+```python
+import dspy
+
+class SolveTask(dspy.Signature):
+    """Solve a complex reasoning task."""
+    problem = dspy.InputField()
+    solution = dspy.OutputField(desc="detailed solution")
+
+# Generate 5 candidates, select best
+bon = dspy.BestofN(SolveTask, N=5, reward_fn=my_quality_metric)
+
+result = bon(problem="Design an algorithm for...")
+print(result.solution)
+# Best of 5 generated solutions
+```
+
+**Parameters:**
+- `signature`: Task signature
+- `N`: Number of candidates to generate
+- `reward_fn`: Function to score candidates (optional)
+
+**When to use:**
+- High-stakes decisions requiring best output
+- Tasks with measurable quality (metrics available)
+- When single-attempt success rate is low
+
+### dspy.asyncify
+
+**Async wrapping** - Convert any synchronous DSPy module to async.
+
+```python
+import dspy
+import asyncio
+
+lm = dspy.LM("openai/gpt-4o-mini")
+dspy.configure(lm=lm)
+
+cot = dspy.ChainOfThought("question -> answer")
+
+# Wrap for async usage
+async_cot = dspy.asyncify(cot)
+
+# Use in async context
+async def main():
+    result = await async_cot(question="What is DSPy?")
+    print(result.answer)
+
+asyncio.run(main())
+
+# Parallel async calls
+async def parallel_queries():
+    questions = ["What is Python?", "What is Rust?", "What is Go?"]
+    tasks = [async_cot(question=q) for q in questions]
+    results = await asyncio.gather(*tasks)
+    return results
 ```
 
 **When to use:**
-- Combining multiple model outputs
-- Reducing variance in predictions
-- Ensemble approaches
+- Web frameworks (FastAPI, aiohttp)
+- Parallel processing of multiple queries
+- Non-blocking I/O requirements
+- Event-driven architectures
 
-## Advanced Modules
+### dspy.streamify
+
+**Streaming outputs** - Stream module outputs token-by-token.
+
+```python
+import dspy
+
+lm = dspy.LM("openai/gpt-4o-mini")
+dspy.configure(lm=lm)
+
+# Wrap module for streaming
+cot = dspy.ChainOfThought("question -> answer")
+stream_cot = dspy.streamify(cot)
+
+# Stream tokens
+for chunk in stream_cot(question="Explain quantum computing"):
+    print(chunk, end="")
+```
+
+**When to use:**
+- Chat interfaces (real-time token display)
+- Long-form generation (show progress)
+- Latency-sensitive applications
 
 ### dspy.TypedPredictor
 
@@ -239,67 +334,24 @@ print(result.person.occupation) # "software engineer"
 ```
 
 **Benefits:**
-- Type safety
-- Automatic validation
+- Type safety and automatic validation
 - JSON schema generation
 - IDE autocomplete
+- Nested Pydantic models supported
 
-### dspy.Retry
+### dspy.majority
 
-**Automatic retry with validation.**
-
-```python
-from dspy.primitives import Retry
-
-def validate_number(example, pred, trace=None):
-    """Validate output is a number."""
-    try:
-        float(pred.answer)
-        return True
-    except ValueError:
-        return False
-
-# Retry up to 3 times if validation fails
-qa = Retry(
-    dspy.ChainOfThought("question -> answer"),
-    validate=validate_number,
-    max_retries=3
-)
-
-result = qa(question="What is 15% of 80?")
-# If first attempt returns non-numeric, retries automatically
-```
-
-### dspy.Assert
-
-**Assertion-driven optimization.**
+**Majority voting over multiple predictions.**
 
 ```python
-import dspy
-from dspy.primitives.assertions import assert_transform_module, backtrack_handler
+from dspy.primitives import majority
 
-class ValidatedQA(dspy.Module):
-    def __init__(self):
-        super().__init__()
-        self.qa = dspy.ChainOfThought("question -> answer: float")
+predictor = dspy.Predict("question -> answer")
+predictions = [predictor(question="What is 2+2?") for _ in range(5)]
 
-    def forward(self, question):
-        answer = self.qa(question=question).answer
-
-        # Assert answer is numeric
-        dspy.Assert(
-            isinstance(float(answer), float),
-            "Answer must be a number",
-            backtrack=backtrack_handler
-        )
-
-        return dspy.Prediction(answer=answer)
+answer = majority([p.answer for p in predictions])
+print(answer)  # "4"
 ```
-
-**Benefits:**
-- Catches errors during optimization
-- Guides LM toward valid outputs
-- Better than post-hoc filtering
 
 ## Module Composition
 
@@ -330,14 +382,13 @@ class ConditionalModule(dspy.Module):
 
     def forward(self, question):
         category = self.router(question=question).category
-
         if category == "simple":
             return self.simple_qa(question=question)
         else:
             return self.complex_qa(question=question)
 ```
 
-### Parallel Execution
+### Parallel with Consensus
 
 ```python
 class ParallelModule(dspy.Module):
@@ -347,41 +398,40 @@ class ParallelModule(dspy.Module):
         self.approach2 = dspy.ProgramOfThought("question -> answer")
 
     def forward(self, question):
-        # Run both approaches
         answer1 = self.approach1(question=question).answer
         answer2 = self.approach2(question=question).answer
 
-        # Compare or combine results
         if answer1 == answer2:
             return dspy.Prediction(answer=answer1, confidence="high")
         else:
             return dspy.Prediction(answer=answer1, confidence="low")
 ```
 
-## Batch Processing
-
-All modules support batch processing for efficiency:
+### Per-Module LM Selection
 
 ```python
-cot = dspy.ChainOfThought("question -> answer")
+class MultiModelPipeline(dspy.Module):
+    """Use different LMs for different stages."""
+    def __init__(self):
+        super().__init__()
+        self.cheap_lm = dspy.LM("openai/gpt-4o-mini")
+        self.strong_lm = dspy.LM("anthropic/claude-sonnet-4-5-20250929")
+        self.classify = dspy.Predict("text -> category")
+        self.analyze = dspy.ChainOfThought("text, category -> analysis")
 
-questions = [
-    "What is 2+2?",
-    "What is 3+3?",
-    "What is 4+4?"
-]
-
-# Process all at once
-results = cot.batch([{"question": q} for q in questions])
-
-for result in results:
-    print(result.answer)
+    def forward(self, text):
+        # Cheap model for classification
+        with dspy.context(lm=self.cheap_lm):
+            category = self.classify(text=text).category
+        # Strong model for analysis
+        with dspy.context(lm=self.strong_lm):
+            return self.analyze(text=text, category=category)
 ```
 
 ## Saving and Loading
 
 ```python
-# Save module
+# Save module (includes few-shot examples and instructions)
 qa = dspy.ChainOfThought("question -> answer")
 qa.save("models/qa_v1.json")
 
@@ -390,14 +440,8 @@ loaded_qa = dspy.ChainOfThought("question -> answer")
 loaded_qa.load("models/qa_v1.json")
 ```
 
-**What gets saved:**
-- Few-shot examples
-- Prompt instructions
-- Module configuration
-
-**What doesn't get saved:**
-- Model weights (DSPy doesn't fine-tune by default)
-- LM provider configuration
+**What gets saved:** Few-shot examples, prompt instructions, module configuration.
+**What doesn't get saved:** Model weights, LM provider configuration.
 
 ## Module Selection Guide
 
@@ -407,69 +451,19 @@ loaded_qa.load("models/qa_v1.json")
 | Math word problems | ProgramOfThought | Reliable calculations |
 | Logical reasoning | ChainOfThought | Better with steps |
 | Multi-step research | ReAct | Tool usage |
-| High-stakes decisions | MultiChainComparison | Self-consistency |
+| High-stakes decisions | BestofN | Best of N samples |
+| Quality-critical output | Refine | Iterative improvement |
 | Structured extraction | TypedPredictor | Type safety |
 | Ambiguous questions | MultiChainComparison | Multiple perspectives |
+| Web/API serving | asyncify(module) | Non-blocking I/O |
+| Chat UI / streaming | streamify(module) | Token-by-token output |
 
 ## Performance Tips
 
 1. **Start with Predict**, add reasoning only if needed
-2. **Use batch processing** for multiple inputs
-3. **Cache predictions** for repeated queries
-4. **Profile token usage** with `track_usage=True`
-5. **Optimize after prototyping** with teleprompters
-
-## Common Patterns
-
-### Pattern: Retrieval + Generation
-
-```python
-class RAG(dspy.Module):
-    def __init__(self, k=3):
-        super().__init__()
-        self.retrieve = dspy.Retrieve(k=k)
-        self.generate = dspy.ChainOfThought("context, question -> answer")
-
-    def forward(self, question):
-        context = self.retrieve(question).passages
-        return self.generate(context=context, question=question)
-```
-
-### Pattern: Verification Loop
-
-```python
-class VerifiedQA(dspy.Module):
-    def __init__(self):
-        super().__init__()
-        self.answer = dspy.ChainOfThought("question -> answer")
-        self.verify = dspy.Predict("question, answer -> is_correct: bool")
-
-    def forward(self, question, max_attempts=3):
-        for _ in range(max_attempts):
-            answer = self.answer(question=question).answer
-            is_correct = self.verify(question=question, answer=answer).is_correct
-
-            if is_correct:
-                return dspy.Prediction(answer=answer)
-
-        return dspy.Prediction(answer="Unable to verify answer")
-```
-
-### Pattern: Multi-Turn Dialog
-
-```python
-class DialogAgent(dspy.Module):
-    def __init__(self):
-        super().__init__()
-        self.respond = dspy.Predict("history, user_message -> assistant_message")
-        self.history = []
-
-    def forward(self, user_message):
-        history_str = "\n".join(self.history)
-        response = self.respond(history=history_str, user_message=user_message)
-
-        self.history.append(f"User: {user_message}")
-        self.history.append(f"Assistant: {response.assistant_message}")
-
-        return response
-```
+2. **Use `dspy.context(lm=...)`** to mix cheap/expensive LMs per stage
+3. **Cache predictions** — enabled by default on `dspy.LM()` (disable with `cache=False`)
+4. **Profile token usage** with `dspy.configure(track_usage=True)` + `result.get_lm_usage()`
+5. **Inspect call history** with `lm.history` for debugging
+6. **Use asyncify** for parallel execution in async contexts
+7. **Optimize after prototyping** with teleprompters (MIPROv2 recommended)
