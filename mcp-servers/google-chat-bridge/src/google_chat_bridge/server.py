@@ -21,6 +21,14 @@ Tools (Outbound Formatting - F2.3):
     send_daily_briefing    - Send morning/EOD briefing
     send_blocked_alert     - Send blocked work alert with options
     send_heartbeat_finding - Send heartbeat finding notification
+
+Tools (Inbound Routing - F2.2):
+    poll_inbound_messages  - Fetch, normalize, rate-limit, and queue new messages
+    get_queued_messages    - Get unconsumed messages from the local queue
+    consume_messages       - Mark queued messages as consumed
+    get_thread_messages    - Get messages grouped by thread
+    get_queue_stats        - Get message queue and rate limiter statistics
+    purge_consumed         - Remove old consumed messages from queue
 """
 
 from __future__ import annotations
@@ -46,6 +54,8 @@ from google_chat_bridge.formatter import (
     format_progress_update,
     markdown_to_gchat,
 )
+from google_chat_bridge.message_queue import MessageQueueManager
+from google_chat_bridge.router import MessageRouter, RateLimiter
 from google_chat_bridge.state import ReadStateManager
 
 logger = logging.getLogger(__name__)
@@ -68,6 +78,8 @@ mcp = FastMCP(
 # Lazy-initialized singletons
 _client: ChatClient | None = None
 _state_manager: ReadStateManager | None = None
+_queue_manager: MessageQueueManager | None = None
+_router: MessageRouter | None = None
 
 
 def _get_client() -> ChatClient:
@@ -94,6 +106,25 @@ def _get_state_manager() -> ReadStateManager:
     if _state_manager is None:
         _state_manager = ReadStateManager()
     return _state_manager
+
+
+def _get_queue_manager() -> MessageQueueManager:
+    """Get or create the message queue manager."""
+    global _queue_manager
+    if _queue_manager is None:
+        _queue_manager = MessageQueueManager()
+    return _queue_manager
+
+
+def _get_router() -> MessageRouter:
+    """Get or create the message router."""
+    global _router
+    if _router is None:
+        _router = MessageRouter(
+            client=_get_client(),
+            queue_manager=_get_queue_manager(),
+        )
+    return _router
 
 
 # ---------------------------------------------------------------------------
@@ -758,4 +789,231 @@ def send_heartbeat_finding(
         "create_time": msg.create_time,
         "finding_type": finding_type,
         "action_needed": action_needed,
+    }
+
+
+# ---------------------------------------------------------------------------
+# F2.2: Inbound Message Routing Tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def poll_inbound_messages(
+    space_id: str = "",
+    max_messages: int = 50,
+) -> dict[str, Any]:
+    """Fetch new messages from Google Chat, normalize, and queue them locally.
+
+    This is the primary inbound message processing tool. It:
+    1. Fetches recent messages from the Google Chat API
+    2. Normalizes them into a standard format (sender, text, timestamp, thread_id)
+    3. Applies per-sender rate limiting
+    4. Queues new messages (with deduplication)
+
+    Call this periodically (e.g., during heartbeat checks) to pull in
+    user messages for processing.
+
+    Args:
+        space_id: Google Chat space to poll. If empty, uses the default space.
+        max_messages: Maximum messages to fetch per poll (1-100, default 50).
+
+    Returns:
+        Dict with polling results: fetched, queued, rate_limited, duplicates.
+    """
+    router = _get_router()
+    result = router.poll_and_route(
+        space_id=space_id or None,
+        max_messages=min(max_messages, 100),
+    )
+    return result
+
+
+@mcp.tool()
+def get_queued_messages(
+    limit: int = 25,
+    thread_grouped: bool = False,
+) -> dict[str, Any]:
+    """Get unconsumed messages from the local queue.
+
+    Returns messages that have been fetched and queued but not yet
+    consumed (processed) by System 3. Messages are returned in FIFO order.
+
+    Args:
+        limit: Maximum number of messages to return (1-100, default 25).
+        thread_grouped: If true, return messages grouped by thread instead of flat list.
+
+    Returns:
+        Dict with messages (flat list or thread groups) and queue stats.
+    """
+    queue_mgr = _get_queue_manager()
+
+    if thread_grouped:
+        groups = queue_mgr.get_thread_groups(unconsumed_only=True)
+        return {
+            "thread_count": len(groups),
+            "total_messages": sum(g.message_count for g in groups),
+            "threads": [
+                {
+                    "thread_id": g.thread_id,
+                    "message_count": g.message_count,
+                    "latest_timestamp": g.latest_timestamp,
+                    "messages": [
+                        {
+                            "message_id": m.message_id,
+                            "sender": m.sender,
+                            "text": m.text,
+                            "timestamp": m.timestamp,
+                        }
+                        for m in g.messages
+                    ],
+                }
+                for g in groups
+            ],
+        }
+    else:
+        messages = queue_mgr.get_unconsumed(limit=min(limit, 100))
+        return {
+            "message_count": len(messages),
+            "messages": [
+                {
+                    "message_id": m.message_id,
+                    "sender": m.sender,
+                    "text": m.text,
+                    "timestamp": m.timestamp,
+                    "thread_id": m.thread_id,
+                    "space_id": m.space_id,
+                    "queued_at": m.queued_at,
+                }
+                for m in messages
+            ],
+        }
+
+
+@mcp.tool()
+def consume_messages(
+    message_ids: str = "[]",
+    consume_all: bool = False,
+) -> dict[str, Any]:
+    """Mark queued messages as consumed (processed).
+
+    After System 3 or the Communicator has processed messages from the queue,
+    call this to mark them as consumed so they won't appear in future
+    get_queued_messages calls.
+
+    Args:
+        message_ids: JSON string of message ID list to consume.
+                     Example: '["spaces/X/messages/1", "spaces/X/messages/2"]'
+        consume_all: If true, consume ALL unconsumed messages (ignores message_ids).
+
+    Returns:
+        Dict with number of messages consumed.
+    """
+    import json
+
+    queue_mgr = _get_queue_manager()
+
+    if consume_all:
+        unconsumed = queue_mgr.get_unconsumed(limit=1000)
+        ids = [m.message_id for m in unconsumed]
+    else:
+        try:
+            ids = json.loads(message_ids) if message_ids else []
+        except json.JSONDecodeError:
+            return {"status": "error", "error": f"Invalid message_ids JSON: {message_ids[:100]}"}
+
+    if not ids:
+        return {"status": "ok", "consumed": 0, "note": "No messages to consume"}
+
+    consumed = queue_mgr.consume(ids)
+    return {
+        "status": "ok",
+        "consumed": consumed,
+        "requested": len(ids),
+    }
+
+
+@mcp.tool()
+def get_thread_messages(
+    thread_id: str,
+    include_consumed: bool = False,
+) -> dict[str, Any]:
+    """Get all messages in a specific thread.
+
+    Returns messages from the local queue that belong to the specified
+    thread, enabling conversation-aware processing.
+
+    Args:
+        thread_id: Thread resource name (e.g., "spaces/X/threads/Y").
+        include_consumed: If true, include already-consumed messages.
+
+    Returns:
+        Dict with thread messages ordered by timestamp.
+    """
+    queue_mgr = _get_queue_manager()
+    messages = queue_mgr.get_thread_messages(
+        thread_id=thread_id,
+        include_consumed=include_consumed,
+    )
+
+    return {
+        "thread_id": thread_id,
+        "message_count": len(messages),
+        "messages": [
+            {
+                "message_id": m.message_id,
+                "sender": m.sender,
+                "text": m.text,
+                "timestamp": m.timestamp,
+                "consumed": m.consumed,
+            }
+            for m in messages
+        ],
+    }
+
+
+@mcp.tool()
+def get_queue_stats() -> dict[str, Any]:
+    """Get message queue and rate limiter statistics.
+
+    Returns comprehensive statistics about the inbound message queue
+    including queue size, consumption rates, active threads, and
+    rate limiter state.
+
+    Returns:
+        Dict with queue stats and rate limiter stats.
+    """
+    queue_mgr = _get_queue_manager()
+    router = _get_router()
+
+    return {
+        "queue": queue_mgr.get_stats(),
+        "rate_limiter": router.rate_limiter.get_stats(),
+    }
+
+
+@mcp.tool()
+def purge_consumed(
+    keep_recent: int = 50,
+) -> dict[str, Any]:
+    """Remove old consumed messages from the queue to free space.
+
+    Cleans up the message queue by removing consumed messages that are
+    no longer needed. Keeps a configurable number of recent consumed
+    messages for reference.
+
+    Args:
+        keep_recent: Number of most recent consumed messages to keep (default: 50).
+
+    Returns:
+        Dict with number of messages purged and remaining queue size.
+    """
+    queue_mgr = _get_queue_manager()
+    purged = queue_mgr.purge_consumed(keep_recent=keep_recent)
+
+    stats = queue_mgr.get_stats()
+    return {
+        "status": "ok",
+        "purged": purged,
+        "remaining_queue_size": stats["queue_size"],
+        "unconsumed": stats["unconsumed"],
     }
