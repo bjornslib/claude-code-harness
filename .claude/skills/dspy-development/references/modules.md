@@ -1,4 +1,4 @@
-# DSPy Modules (DSPy 2.6+)
+# DSPy Modules (DSPy 3.1+)
 
 Complete guide to DSPy's built-in modules for language model programming.
 
@@ -34,7 +34,6 @@ class CustomModule(dspy.Module):
 ```python
 import dspy
 
-# Configure LM (DSPy 2.6 unified API)
 lm = dspy.LM("openai/gpt-4o-mini")
 dspy.configure(lm=lm)
 
@@ -91,13 +90,11 @@ cot = dspy.ChainOfThought(
 - Logical deduction
 - Quality > speed
 
-**Performance:**
-- ~2x slower than Predict
-- Significantly better accuracy on reasoning tasks
-
 ### dspy.ProgramOfThought
 
-**Code-based reasoning** - Generates and executes Python code.
+**Code-based reasoning** - Generates and executes Python code in a sandboxed environment.
+
+**Requires**: Deno runtime (`curl -fsSL https://deno.land/install.sh | sh`)
 
 ```python
 pot = dspy.ProgramOfThought("question -> answer")
@@ -106,9 +103,9 @@ result = pot(question="What is 15% of 240?")
 # Internally generates: answer = 240 * 0.15
 print(result.answer)  # 36.0
 
-result = pot(question="If a train travels 60 mph for 2.5 hours, how far does it go?")
-# Generates: distance = 60 * 2.5
-print(result.answer)  # 150.0
+# Can also use LocalSandbox for simpler execution
+sandbox = dspy.LocalSandbox()
+answer = sandbox.execute("value = 2*5 + 4\nvalue")
 ```
 
 **When to use:**
@@ -179,11 +176,102 @@ print(result.answer)  # "Paris"
 - Ambiguous questions
 - When single answer may be unreliable
 
-## DSPy 2.6+ Modules
+## DSPy 3.x Modules
+
+### dspy.RLM (Recursive Language Model)
+
+**NEW in 3.1** — Process documents far beyond the context window by treating them as external environments explored through sandboxed Python code.
+
+Instead of feeding massive documents into the prompt, RLM loads the context as a Python variable. The LM writes code to peek, grep, partition, and transform the data, making recursive sub-calls via `llm_query()` to process chunks. Results are aggregated and returned via `SUBMIT()`.
+
+**Requires**: Deno runtime for WASM sandbox.
+
+**Parameters:**
+- `max_iterations` (int, default=20): Max code generation cycles
+- `max_llm_calls` (int, default=50): Max recursive LM sub-calls
+- `max_output_chars` (int, default=10000): Max output length
+- `sub_lm` (dspy.LM, optional): Cheaper model for sub-queries
+- `tools` (list, optional): Additional tools available in sandbox
+- `verbose` (bool, default=False): Print execution traces
+
+```python
+import dspy
+
+lm = dspy.LM("openai/gpt-4o")
+dspy.configure(lm=lm)
+
+# Basic: Process a massive document
+rlm = dspy.RLM("context, query -> answer", max_iterations=20)
+result = rlm(
+    context=massive_document,  # 100k+ tokens
+    query="What was Q3 revenue and how did it compare to Q2?"
+)
+
+# Cost-efficient: Use cheaper model for recursive sub-queries
+rlm = dspy.RLM(
+    "context, query -> answer",
+    sub_lm=dspy.LM("openai/gpt-4o-mini"),
+    max_iterations=10,
+    max_llm_calls=30
+)
+
+# Multi-document analysis
+rlm = dspy.RLM(
+    "documents, question -> analysis",
+    max_iterations=15,
+    verbose=True  # See code execution traces
+)
+```
+
+**Built-in REPL tools (available in sandbox):**
+- `llm_query(prompt)` — Make recursive LM call on a sub-problem
+- `llm_query_batched(prompts)` — Batch multiple sub-queries
+- `SUBMIT(output)` — Return final answer from the sandbox
+
+**Performance:**
+- RLM(GPT-4o-mini) outperforms base GPT-4o by 34 points on OOLONG benchmark (132k tokens)
+- Handles inputs up to 2 orders of magnitude beyond model context windows
+- Paper: "Recursive Language Models" (arXiv:2512.24601, Zhang/Kraska/Khattab, MIT CSAIL)
+
+**When to use:**
+- Documents exceeding context window (100k+ tokens)
+- Codebase analysis and exploration
+- Log file analysis
+- Multi-document comparison
+- Any task where "just read the whole thing" isn't feasible
+
+**When NOT to use:**
+- Short documents that fit in context window (use ChainOfThought instead)
+- Real-time/low-latency requirements (recursive calls add latency)
+- Tasks not requiring deep context exploration
+
+### dspy.CodeAct
+
+**NEW in 3.0** — Combines code generation with tool execution. Extends the ReAct pattern with the ability to generate and execute arbitrary code, enabling self-learning and dynamic tool composition.
+
+```python
+import dspy
+
+lm = dspy.LM("openai/gpt-4o")
+dspy.configure(lm=lm)
+
+class DataAnalysis(dspy.Signature):
+    """Analyze data by writing and executing code."""
+    data_description = dspy.InputField()
+    analysis = dspy.OutputField()
+
+codeact = dspy.CodeAct(DataAnalysis, tools=[code_interpreter])
+result = codeact(data_description="CSV with columns: date, revenue, region")
+```
+
+**When to use:**
+- Dynamic data analysis requiring code execution
+- Tasks where tools need to be composed programmatically
+- Self-learning systems that improve through code feedback
 
 ### dspy.Refine
 
-**Iterative self-refinement** - Generates an initial output, then iteratively improves it. Replaces the old `dspy.Assert` / `dspy.Suggest` pattern for quality enforcement.
+**Iterative self-refinement** - Generates an initial output, then iteratively improves it.
 
 ```python
 import dspy
@@ -201,25 +289,21 @@ refine = dspy.Refine(WriteEmail, N=3)  # Up to 3 refinement rounds
 
 result = refine(topic="Request for project status update")
 print(result.email)
-# Output is iteratively refined for quality
 ```
 
 **Parameters:**
 - `signature`: Task signature
 - `N`: Maximum refinement iterations (default: 3)
+- `reward_fn`: Optional function to score quality
 
 **When to use:**
 - Quality-critical outputs (emails, reports, code)
 - Tasks where first-pass output needs polishing
 - When you want self-improvement without manual assertions
 
-**Replaces:**
-- `dspy.Assert` + `backtrack_handler` (deprecated in 2.6)
-- Manual retry loops with quality checks
-
 ### dspy.BestofN
 
-**N-sample selection** - Generates N candidates and selects the best one using a reward model or metric.
+**N-sample selection** - Generates N candidates and selects the best one.
 
 ```python
 import dspy
@@ -234,13 +318,7 @@ bon = dspy.BestofN(SolveTask, N=5, reward_fn=my_quality_metric)
 
 result = bon(problem="Design an algorithm for...")
 print(result.solution)
-# Best of 5 generated solutions
 ```
-
-**Parameters:**
-- `signature`: Task signature
-- `N`: Number of candidates to generate
-- `reward_fn`: Function to score candidates (optional)
 
 **When to use:**
 - High-stakes decisions requiring best output
@@ -259,11 +337,8 @@ lm = dspy.LM("openai/gpt-4o-mini")
 dspy.configure(lm=lm)
 
 cot = dspy.ChainOfThought("question -> answer")
-
-# Wrap for async usage
 async_cot = dspy.asyncify(cot)
 
-# Use in async context
 async def main():
     result = await async_cot(question="What is DSPy?")
     print(result.answer)
@@ -282,7 +357,6 @@ async def parallel_queries():
 - Web frameworks (FastAPI, aiohttp)
 - Parallel processing of multiple queries
 - Non-blocking I/O requirements
-- Event-driven architectures
 
 ### dspy.streamify
 
@@ -294,11 +368,9 @@ import dspy
 lm = dspy.LM("openai/gpt-4o-mini")
 dspy.configure(lm=lm)
 
-# Wrap module for streaming
 cot = dspy.ChainOfThought("question -> answer")
 stream_cot = dspy.streamify(cot)
 
-# Stream tokens
 for chunk in stream_cot(question="Explain quantum computing"):
     print(chunk, end="")
 ```
@@ -333,12 +405,6 @@ print(result.person.age)        # 35
 print(result.person.occupation) # "software engineer"
 ```
 
-**Benefits:**
-- Type safety and automatic validation
-- JSON schema generation
-- IDE autocomplete
-- Nested Pydantic models supported
-
 ### dspy.majority
 
 **Majority voting over multiple predictions.**
@@ -351,6 +417,125 @@ predictions = [predictor(question="What is 2+2?") for _ in range(5)]
 
 answer = majority([p.answer for p in predictions])
 print(answer)  # "4"
+```
+
+## Types System (3.0+)
+
+DSPy 3.0 introduced a rich type system for multi-modal and structured I/O:
+
+### Multi-Modal Types
+
+```python
+import dspy
+
+# Image input
+class ImageQA(dspy.Signature):
+    """Answer questions about images."""
+    image: dspy.Image = dspy.InputField()
+    question = dspy.InputField()
+    answer = dspy.OutputField()
+
+# Audio input
+class TranscribeAudio(dspy.Signature):
+    """Transcribe audio to text."""
+    audio: dspy.Audio = dspy.InputField()
+    transcript = dspy.OutputField()
+```
+
+### Special Types
+
+| Type | Purpose | Added |
+|------|---------|-------|
+| `dspy.Image` | Image input for vision models | 3.0 |
+| `dspy.Audio` | Audio input for speech models | 3.0 |
+| `dspy.History` | Conversation history management | 3.0 |
+| `dspy.ToolCalls` | Structured tool invocation format | 3.0 |
+| `dspy.Reasoning` | Structured reasoning output | 3.1 |
+| `dspy.Code` | Code type with language spec | 3.1.1 |
+| `dspy.File` | File handling | 3.1 |
+
+### dspy.Reasoning (3.1+)
+
+For models with native reasoning capabilities (e.g., o1, o3):
+
+```python
+class ReasonedQA(dspy.Signature):
+    """Answer with structured reasoning."""
+    question = dspy.InputField()
+    reasoning: dspy.Reasoning = dspy.OutputField()
+    answer = dspy.OutputField()
+
+module = dspy.ChainOfThought(ReasonedQA)
+result = module(question="Complex multi-step problem...")
+print(result.reasoning)  # Structured reasoning trace
+print(result.answer)
+```
+
+## Adapters (3.0+)
+
+Adapters control how DSPy formats prompts for the LM:
+
+| Adapter | Description | Use Case |
+|---------|-------------|----------|
+| `dspy.ChatAdapter` | Field-based with `[[ ## markers ]]` (default) | General purpose |
+| `dspy.JSONAdapter` | Native JSON generation | Structured output, APIs |
+| `dspy.XMLAdapter` | XML-based formatting | XML-focused workflows |
+| `dspy.BAMLAdapter` | BAML integration | BAML users |
+
+```python
+import dspy
+
+# Explicit adapter configuration
+dspy.configure(
+    lm=dspy.LM("openai/gpt-4o-mini"),
+    adapter=dspy.ChatAdapter()  # This is the default
+)
+
+# JSONAdapter for structured output
+dspy.configure(
+    lm=dspy.LM("openai/gpt-4o-mini"),
+    adapter=dspy.JSONAdapter()
+)
+
+# ChatAdapter with native function calling
+adapter = dspy.ChatAdapter(use_native_function_calling=True)
+dspy.configure(lm=dspy.LM("openai/gpt-4o"), adapter=adapter)
+
+# Inspect formatted messages
+adapter = dspy.ChatAdapter()
+messages = adapter.format(
+    signature=dspy.Signature("question -> answer"),
+    demos=[{"question": "What is 1+1?", "answer": "2"}],
+    inputs={"question": "What is 2+2?"}
+)
+print(messages)
+```
+
+All adapters support:
+- Token and status streaming
+- Async paths
+- Intelligent fallback to native LLM structured outputs
+
+## Batch Processing (3.0+)
+
+Thread-safe batch processing for high-throughput scenarios:
+
+```python
+import dspy
+
+lm = dspy.LM("openai/gpt-4o-mini")
+dspy.configure(lm=lm)
+
+module = dspy.ChainOfThought("question -> answer")
+
+# Process many inputs concurrently
+inputs = [{"question": f"What is {i}+{i}?"} for i in range(100)]
+results = module.batch(
+    inputs,
+    num_threads=8,
+    return_failed_examples=True,
+    max_errors=5
+)
 ```
 
 ## Module Composition
@@ -388,25 +573,6 @@ class ConditionalModule(dspy.Module):
             return self.complex_qa(question=question)
 ```
 
-### Parallel with Consensus
-
-```python
-class ParallelModule(dspy.Module):
-    def __init__(self):
-        super().__init__()
-        self.approach1 = dspy.ChainOfThought("question -> answer")
-        self.approach2 = dspy.ProgramOfThought("question -> answer")
-
-    def forward(self, question):
-        answer1 = self.approach1(question=question).answer
-        answer2 = self.approach2(question=question).answer
-
-        if answer1 == answer2:
-            return dspy.Prediction(answer=answer1, confidence="high")
-        else:
-            return dspy.Prediction(answer=answer1, confidence="low")
-```
-
 ### Per-Module LM Selection
 
 ```python
@@ -420,10 +586,8 @@ class MultiModelPipeline(dspy.Module):
         self.analyze = dspy.ChainOfThought("text, category -> analysis")
 
     def forward(self, text):
-        # Cheap model for classification
         with dspy.context(lm=self.cheap_lm):
             category = self.classify(text=text).category
-        # Strong model for analysis
         with dspy.context(lm=self.strong_lm):
             return self.analyze(text=text, category=category)
 ```
@@ -431,9 +595,12 @@ class MultiModelPipeline(dspy.Module):
 ## Saving and Loading
 
 ```python
-# Save module (includes few-shot examples and instructions)
+# Save module state (JSON format)
 qa = dspy.ChainOfThought("question -> answer")
 qa.save("models/qa_v1.json")
+
+# Save entire program with metadata (3.0+ — guaranteed 3.x compatibility)
+qa.save("models/qa_v1", save_program=True)
 
 # Load module
 loaded_qa = dspy.ChainOfThought("question -> answer")
@@ -442,6 +609,7 @@ loaded_qa.load("models/qa_v1.json")
 
 **What gets saved:** Few-shot examples, prompt instructions, module configuration.
 **What doesn't get saved:** Model weights, LM provider configuration.
+**Compatibility:** Programs saved in dspy>=3.0.0 have guaranteed compatibility across 3.x versions.
 
 ## Module Selection Guide
 
@@ -451,12 +619,15 @@ loaded_qa.load("models/qa_v1.json")
 | Math word problems | ProgramOfThought | Reliable calculations |
 | Logical reasoning | ChainOfThought | Better with steps |
 | Multi-step research | ReAct | Tool usage |
+| Long document analysis | RLM | Recursive exploration beyond context window |
+| Dynamic code execution | CodeAct | Code + tool composition |
 | High-stakes decisions | BestofN | Best of N samples |
 | Quality-critical output | Refine | Iterative improvement |
 | Structured extraction | TypedPredictor | Type safety |
 | Ambiguous questions | MultiChainComparison | Multiple perspectives |
 | Web/API serving | asyncify(module) | Non-blocking I/O |
 | Chat UI / streaming | streamify(module) | Token-by-token output |
+| High throughput | module.batch() | Thread-safe concurrency |
 
 ## Performance Tips
 
@@ -464,6 +635,8 @@ loaded_qa.load("models/qa_v1.json")
 2. **Use `dspy.context(lm=...)`** to mix cheap/expensive LMs per stage
 3. **Cache predictions** — enabled by default on `dspy.LM()` (disable with `cache=False`)
 4. **Profile token usage** with `dspy.configure(track_usage=True)` + `result.get_lm_usage()`
-5. **Inspect call history** with `lm.history` for debugging
+5. **Inspect call history** with `lm.history` or `dspy.inspect_history()` for debugging
 6. **Use asyncify** for parallel execution in async contexts
-7. **Optimize after prototyping** with teleprompters (MIPROv2 recommended)
+7. **Use Module.batch** for high-throughput batch processing (3.0+)
+8. **Use RLM with sub_lm** for cost-efficient long-context processing
+9. **Optimize after prototyping** with optimizers (MIPROv2 or GEPA recommended)

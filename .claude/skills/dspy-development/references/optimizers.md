@@ -1,12 +1,14 @@
-# DSPy Optimizers (DSPy 2.6+)
+# DSPy Optimizers (DSPy 3.1+)
 
-Complete guide to DSPy's optimization algorithms for improving prompts and model weights.
+Complete guide to DSPy's optimization algorithms for improving prompts, evolving instructions, and training model weights.
 
 ## What Are Optimizers?
 
 DSPy optimizers (historically called "teleprompters") automatically improve modules by:
 - **Synthesizing few-shot examples** from training data
 - **Proposing better instructions** through search
+- **Evolving prompts reflectively** with feedback loops (3.0+)
+- **Training model weights via RL** (3.0+)
 - **Fine-tuning model weights** (optional)
 
 **Key idea**: Instead of manually tuning prompts, define a metric and let DSPy optimize.
@@ -18,6 +20,9 @@ DSPy optimizers (historically called "teleprompters") automatically improve modu
 | `BootstrapFewShot` | Quick first try | Fast | Good | 10-50 examples |
 | `BootstrapFewShotWithRandomSearch` | Better few-shot | Medium | Better | 10-50 examples |
 | `dspy.MIPROv2` | **State-of-the-art (recommended)** | Medium | Excellent | 50-200 examples |
+| `dspy.GEPA` | **Reflective prompt evolution (3.0+)** | Medium | Excellent | 20-100 examples |
+| `dspy.SIMBA` | Self-reflection with feedback (3.0+) | Medium | Excellent | 20-100 examples |
+| `ArborGRPO` | RL-based weight training (3.0+) | Slow | Excellent | 100+ examples |
 | `BootstrapFinetune` | Model fine-tuning | Slow | Excellent | 100+ examples |
 | `COPRO` | Prompt search | Medium | Good | 20-100 examples |
 | `Ensemble` | Combine programs | Fast | Good | N/A |
@@ -41,7 +46,7 @@ DSPy optimizers (historically called "teleprompters") automatically improve modu
 import dspy
 from dspy.teleprompt import BootstrapFewShot
 
-# Configure LM (DSPy 2.6 API)
+# Configure LM
 lm = dspy.LM("openai/gpt-4o-mini")
 dspy.configure(lm=lm)
 
@@ -93,10 +98,6 @@ optimizer = BootstrapFewShotWithRandomSearch(
 )
 optimized_qa = optimizer.compile(qa, trainset=trainset)
 ```
-
-**Parameters (additional):**
-- `num_candidate_programs`: Number of random configs to try (default: 16)
-- `num_threads`: Parallel evaluation threads
 
 **When to use:** When BootstrapFewShot isn't enough but you don't have enough data for MIPROv2.
 
@@ -164,21 +165,168 @@ optimized = tp.compile(qa, trainset=trainset)
 # Student now performs near teacher level via optimized prompts
 ```
 
-**Parameters:**
-- `metric`: Evaluation metric (required)
-- `auto`: Auto mode — `"light"`, `"medium"`, `"heavy"` (recommended)
-- `num_candidates`: Instructions to try per predictor
-- `teacher_settings`: LM config for generating demonstrations
-- `prompt_model`: LM for proposing instructions
-- `max_errors`: Max errors before stopping
-- `num_threads`: Parallel threads
-- `verbose`: Show progress
-
 **When to use:**
 - Default choice for most optimization tasks
 - Start with `auto="light"`, upgrade to `"medium"` if needed
 - Have 20+ training examples (50+ for best results)
 - Want joint instruction + few-shot optimization
+
+## New Optimizers (3.0+)
+
+### dspy.GEPA — Reflective Prompt Evolution
+
+**Genetic-Evolutionary Prompt Architect** — Uses evolutionary algorithms with reflective feedback to optimize prompts. Maintains a Pareto frontier of strategies and evolves them.
+
+**How it works:**
+1. Generates initial prompt candidates
+2. Evaluates each on training data with full trace access
+3. Uses a reflection LM to analyze successes and failures
+4. Mutates and evolves prompts based on reflective feedback
+5. Maintains Pareto frontier of best strategies
+
+```python
+import dspy
+
+lm = dspy.LM("openai/gpt-4o-mini")
+dspy.configure(lm=lm)
+
+# GEPA with auto mode (recommended starting point)
+optimizer = dspy.GEPA(
+    metric=validate_answer,
+    auto="light",
+    num_threads=32
+)
+optimized = optimizer.compile(my_module, trainset=trainset, valset=valset)
+```
+
+**Full control with reflection LM:**
+
+```python
+# Use a strong model for reflection (analyzing why prompts succeed/fail)
+reflection_lm = dspy.LM("openai/gpt-4o", temperature=1.0, max_tokens=32000)
+
+optimizer = dspy.GEPA(
+    metric=metric_with_feedback,
+    auto="medium",
+    num_threads=32,
+    reflection_lm=reflection_lm,              # LM that reasons about prompt quality
+    reflection_minibatch_size=25,              # Examples per reflection batch
+)
+optimized = optimizer.compile(
+    program,
+    trainset=trainset,
+    valset=valset  # GEPA benefits from explicit validation set
+)
+```
+
+**GEPA with custom feedback metric:**
+
+```python
+def metric_with_feedback(example, pred, trace=None):
+    """Return score AND feedback for GEPA reflection."""
+    score = 0.0
+    feedback = []
+
+    if example.answer.lower() in pred.answer.lower():
+        score += 0.5
+        feedback.append("Correct answer found")
+    else:
+        feedback.append(f"Expected '{example.answer}', got '{pred.answer}'")
+
+    if len(pred.answer.split()) <= 20:
+        score += 0.25
+        feedback.append("Concise response")
+    else:
+        feedback.append("Response too verbose")
+
+    # Return (score, feedback_string) for GEPA reflection
+    return score, "; ".join(feedback)
+
+optimizer = dspy.GEPA(
+    metric=metric_with_feedback,
+    auto="light",
+    num_threads=32
+)
+```
+
+**Parameters:**
+- `metric`: Evaluation metric — can return (score, feedback) tuple for reflection
+- `auto`: `"light"`, `"medium"`, `"heavy"` — controls evolution generations
+- `num_threads`: Parallel evaluation threads
+- `reflection_lm`: LM for analyzing prompt performance (default: uses configured LM)
+- `reflection_minibatch_size`: Examples per reflection batch
+
+**When to use:**
+- Agentic tasks where feedback is rich
+- Complex pipelines where you can provide qualitative feedback
+- When MIPROv2 plateaus — GEPA's reflective evolution finds different optima
+- 20-100 training examples
+
+**Performance**: GEPA achieves 35x fewer rollouts than GRPO while matching quality on many benchmarks.
+
+### dspy.SIMBA — Self-Reflection with Feedback
+
+**Self-Improving Model-Based Architect** — Focuses on intelligent instruction exploration with self-reflection.
+
+```python
+import dspy
+
+lm = dspy.LM("openai/gpt-4o-mini")
+dspy.configure(lm=lm)
+
+optimizer = dspy.SIMBA(
+    metric=validate_answer,
+    auto="light",
+    num_threads=16
+)
+optimized = optimizer.compile(my_module, trainset=trainset)
+```
+
+**How it differs from GEPA:**
+- GEPA: Evolutionary + Pareto frontier + reflective feedback
+- SIMBA: Focuses on self-reflection cycles with instruction mutation
+- SIMBA is often faster for simpler tasks
+- GEPA tends to find better optima for complex multi-step programs
+
+**When to use:**
+- Simpler optimization needs where GEPA is overkill
+- When you want self-reflection benefits without full evolutionary search
+- 20-100 training examples
+
+### ArborGRPO — RL-Based Weight Training
+
+**Arbor Group Relative Policy Optimization** — Uses reinforcement learning to train model weights, not just prompts. First multi-module GRPO implementation.
+
+**Requires**: The `arbor` library and an Arbor server.
+
+```python
+import dspy
+from arbor import ArborProvider
+
+# Initialize Arbor RL training server
+provider = ArborProvider()
+arbor_lm = provider.get_lm()  # RL-trainable LM
+
+dspy.configure(lm=arbor_lm)
+
+# ArborGRPO trains actual model weights
+optimizer = ArborGRPO(
+    metric=validate_answer,
+    num_threads=8
+)
+optimized = optimizer.compile(my_module, trainset=trainset)
+```
+
+**How it differs from other optimizers:**
+- MIPROv2/GEPA/SIMBA: Optimize **prompts** (instructions, few-shot examples)
+- ArborGRPO: Optimizes **model weights** via reinforcement learning
+- ArborGRPO: First optimizer to support multi-module GRPO (trains weights across a full pipeline)
+
+**When to use:**
+- 100+ training examples
+- You have infrastructure for RL training (Arbor server)
+- Want to train model weights, not just optimize prompts
+- Building production systems where inference cost matters
 
 ### BootstrapFinetune
 
@@ -297,6 +445,36 @@ def comprehensive_metric(example, pred, trace=None):
     return score
 ```
 
+### Metrics with Feedback (for GEPA/SIMBA)
+
+```python
+def feedback_metric(example, pred, trace=None):
+    """Return (score, feedback) for reflective optimizers."""
+    score = 0.0
+    feedback_parts = []
+
+    # Check correctness
+    if example.answer.lower() in pred.answer.lower():
+        score += 0.6
+        feedback_parts.append("Answer correct")
+    else:
+        feedback_parts.append(f"Wrong: expected '{example.answer}', got '{pred.answer}'")
+
+    # Check reasoning quality (if available)
+    if hasattr(pred, 'rationale') and len(pred.rationale) > 50:
+        score += 0.2
+        feedback_parts.append("Good reasoning depth")
+    else:
+        feedback_parts.append("Reasoning too shallow")
+
+    # Check conciseness
+    if len(pred.answer.split()) <= 15:
+        score += 0.2
+        feedback_parts.append("Concise")
+
+    return score, "; ".join(feedback_parts)
+```
+
 ### LM-as-Judge Metric
 
 ```python
@@ -344,7 +522,7 @@ for opt_name, optimizer in [
     ("baseline", None),
     ("fewshot", BootstrapFewShot(metric=validate_answer)),
     ("mipro_light", dspy.MIPROv2(metric=validate_answer, auto="light")),
-    ("mipro_medium", dspy.MIPROv2(metric=validate_answer, auto="medium")),
+    ("gepa_light", dspy.GEPA(metric=validate_answer, auto="light")),
 ]:
     if optimizer is None:
         module_opt = qa
@@ -354,7 +532,7 @@ for opt_name, optimizer in [
     results[opt_name] = score
 
 print(results)
-# {'baseline': 0.65, 'fewshot': 0.78, 'mipro_light': 0.82, 'mipro_medium': 0.87}
+# {'baseline': 0.65, 'fewshot': 0.78, 'mipro_light': 0.82, 'gepa_light': 0.85}
 ```
 
 ### Token Usage Tracking
@@ -399,14 +577,14 @@ tp = dspy.MIPROv2(
 optimized_student = tp.compile(qa, trainset=trainset)
 
 # 3. Deploy cheap student with teacher-quality results
-optimized_student.save("models/distilled_qa.json")
+optimized_student.save("models/distilled_qa", save_program=True)
 ```
 
 ### Save and Load Optimized Programs
 
 ```python
-# Save best model
-optimized_qa.save("models/best_model.json")
+# Save best model (stable format, guaranteed 3.x compatibility)
+optimized_qa.save("models/best_model", save_program=True)
 
 # Load later
 loaded_qa = dspy.ChainOfThought("question -> answer")
@@ -435,7 +613,16 @@ light_score = evaluator(optimized)
 print(f"MIPROv2 light: {light_score:.2%} (+{light_score - baseline_score:.2%})")
 ```
 
-### 3. If Needed, Upgrade to Medium
+### 3. Try GEPA if MIPROv2 Plateaus (3.0+)
+
+```python
+gepa = dspy.GEPA(metric=feedback_metric, auto="light", num_threads=32)
+optimized_gepa = gepa.compile(baseline, trainset=trainset, valset=valset)
+gepa_score = evaluator(optimized_gepa)
+print(f"GEPA light: {gepa_score:.2%}")
+```
+
+### 4. If Needed, Upgrade to Medium
 
 ```python
 tp = dspy.MIPROv2(metric=validate_answer, auto="medium")
@@ -444,10 +631,10 @@ medium_score = evaluator(optimized)
 print(f"MIPROv2 medium: {medium_score:.2%}")
 ```
 
-### 4. Save Best Model
+### 5. Save Best Model
 
 ```python
-optimized.save("models/best_model.json")
+optimized.save("models/best_model", save_program=True)
 ```
 
 ## Common Pitfalls
@@ -481,7 +668,7 @@ def good_metric(example, pred, trace=None):
 from dspy.teleprompt import MIPRO  # Old version
 dspy.settings.configure(lm=lm)    # Old config
 
-# Good: DSPy 2.6 API
+# Good: DSPy 3.x API
 tp = dspy.MIPROv2(metric=metric, auto="light")  # New version
 dspy.configure(lm=lm)                            # New config
 ```
@@ -497,8 +684,23 @@ optimizer.compile(module, trainset=trainset)
 evaluator(optimized, devset=testset)
 ```
 
+### 5. Not Using Feedback Metrics with GEPA
+
+```python
+# Bad: Binary metric wastes GEPA's reflection capability
+def binary(example, pred, trace=None):
+    return example.answer == pred.answer
+
+# Good: Return feedback for GEPA reflection
+def with_feedback(example, pred, trace=None):
+    correct = example.answer.lower() in pred.answer.lower()
+    feedback = "Correct" if correct else f"Expected {example.answer}"
+    return float(correct), feedback
+```
+
 ## Resources
 
 - **Paper**: "DSPy: Compiling Declarative Language Model Calls into Self-Improving Pipelines"
+- **GEPA Paper**: Described in DSPy 3.0 release notes
 - **GitHub**: https://github.com/stanfordnlp/dspy
 - **Discord**: https://discord.gg/XCGy2WDCQB
