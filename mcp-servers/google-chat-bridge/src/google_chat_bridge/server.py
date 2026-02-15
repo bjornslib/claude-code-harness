@@ -1,10 +1,16 @@
-"""Google Chat Bridge MCP Server.
+"""Google Chat Bridge MCP Server with dual authentication support.
 
 FastMCP server providing Google Chat integration tools for System 3.
 Runs as stdio transport for use as an MCP server in Claude Code.
 
+Authentication Modes:
+    - Webhook (outbound only): Set GOOGLE_CHAT_WEBHOOK_URL for sending messages
+    - API (full access): Set GOOGLE_CHAT_CREDENTIALS_FILE or use ADC for read+write
+    - Webhook outbound works without any API credentials
+
 Environment Variables:
-    GOOGLE_CHAT_CREDENTIALS_FILE: Path to service account JSON key file (required).
+    GOOGLE_CHAT_WEBHOOK_URL: Webhook URL for outbound messaging (preferred for sends).
+    GOOGLE_CHAT_CREDENTIALS_FILE: Path to service account JSON key file (optional).
     GOOGLE_CHAT_SPACE_ID: Default Google Chat space ID (optional, can be passed per-call).
 
 Tools (Core):
@@ -49,7 +55,7 @@ from typing import Any
 
 from fastmcp import FastMCP
 
-from google_chat_bridge.chat_client import ChatClient
+from google_chat_bridge.chat_client import ChatClient, ChatMessage
 from google_chat_bridge.commands import CommandParser, CommandQueueManager
 from google_chat_bridge.formatter import (
     CardBuilder,
@@ -71,6 +77,7 @@ from google_chat_bridge.notifications import (
 )
 from google_chat_bridge.router import MessageRouter, RateLimiter
 from google_chat_bridge.state import ReadStateManager
+from google_chat_bridge.webhook_client import WebhookClient
 
 logger = logging.getLogger(__name__)
 
@@ -82,15 +89,15 @@ mcp = FastMCP(
     name="google-chat-bridge",
     instructions=(
         "Google Chat Bridge provides tools for sending and receiving messages "
-        "in Google Chat spaces. Use send_chat_message for outbound messages, "
-        "get_new_messages to check for user responses, and mark_messages_read "
-        "to advance the read watermark. Service account credentials must be "
-        "configured via GOOGLE_CHAT_CREDENTIALS_FILE environment variable."
+        "in Google Chat spaces. Supports dual auth: webhook (outbound via "
+        "GOOGLE_CHAT_WEBHOOK_URL) and API (inbound via service account or ADC). "
+        "Outbound works with just a webhook URL. Inbound requires API credentials."
     ),
 )
 
 # Lazy-initialized singletons
 _client: ChatClient | None = None
+_webhook_client: WebhookClient | None = None
 _state_manager: ReadStateManager | None = None
 _queue_manager: MessageQueueManager | None = None
 _router: MessageRouter | None = None
@@ -98,22 +105,79 @@ _command_queue_manager: CommandQueueManager | None = None
 _notification_dispatcher: NotificationDispatcher | None = None
 
 
+def _get_webhook_client() -> WebhookClient | None:
+    """Get or create the webhook client (if webhook URL is configured)."""
+    global _webhook_client
+    if _webhook_client is None:
+        webhook_url = os.environ.get("GOOGLE_CHAT_WEBHOOK_URL", "")
+        if webhook_url:
+            _webhook_client = WebhookClient(webhook_url)
+    return _webhook_client
+
+
 def _get_client() -> ChatClient:
-    """Get or create the Google Chat API client."""
+    """Get or create the Google Chat API client (for inbound/API operations)."""
     global _client
     if _client is None:
         creds_file = os.environ.get("GOOGLE_CHAT_CREDENTIALS_FILE", "")
-        if not creds_file:
-            raise RuntimeError(
-                "GOOGLE_CHAT_CREDENTIALS_FILE environment variable is not set. "
-                "Set it to the path of your Google service account JSON key file."
-            )
         default_space = os.environ.get("GOOGLE_CHAT_SPACE_ID", "")
         _client = ChatClient(
             credentials_file=creds_file,
             default_space_id=default_space,
         )
     return _client
+
+
+def _send_outbound(
+    text: str,
+    space_id: str | None = None,
+    thread_key: str | None = None,
+    cards_v2: list[dict[str, Any]] | None = None,
+) -> ChatMessage | dict[str, Any]:
+    """Send a message using webhook (preferred) or API client.
+
+    Returns ChatMessage from API client, or dict from webhook.
+    """
+    webhook = _get_webhook_client()
+    if webhook:
+        return webhook.send_message(
+            text=text, thread_key=thread_key, cards_v2=cards_v2
+        )
+
+    # Fall back to API client
+    client = _get_client()
+    return client.send_message(
+        text=text, space_id=space_id, thread_key=thread_key, cards_v2=cards_v2,
+    )
+
+
+def _require_api_client(tool_name: str) -> ChatClient:
+    """Get API client or raise a helpful error for inbound-only tools."""
+    webhook_url = os.environ.get("GOOGLE_CHAT_WEBHOOK_URL", "")
+    creds_file = os.environ.get("GOOGLE_CHAT_CREDENTIALS_FILE", "")
+
+    client = _get_client()
+    # Try to verify API access is possible
+    if not creds_file and not _has_adc():
+        msg = (
+            f"{tool_name} requires API credentials (service account or ADC) to read messages. "
+            "Webhook-only mode supports outbound messaging only. "
+            "Set GOOGLE_CHAT_CREDENTIALS_FILE or configure Application Default Credentials."
+        )
+        if webhook_url:
+            msg += " Outbound tools (send_chat_message, etc.) are available via webhook."
+        raise RuntimeError(msg)
+    return client
+
+
+def _has_adc() -> bool:
+    """Check if Application Default Credentials are available."""
+    try:
+        import google.auth
+        google.auth.default()
+        return True
+    except Exception:
+        return False
 
 
 def _get_state_manager() -> ReadStateManager:
@@ -133,11 +197,11 @@ def _get_queue_manager() -> MessageQueueManager:
 
 
 def _get_router() -> MessageRouter:
-    """Get or create the message router."""
+    """Get or create the message router (requires API credentials)."""
     global _router
     if _router is None:
         _router = MessageRouter(
-            client=_get_client(),
+            client=_require_api_client("poll_inbound_messages"),
             queue_manager=_get_queue_manager(),
         )
     return _router
@@ -185,19 +249,30 @@ def send_chat_message(
     Returns:
         Dict with message details including name, create_time, and thread info.
     """
-    client = _get_client()
-    msg = client.send_message(
+    result = _send_outbound(
         text=text,
         space_id=space_id or None,
         thread_key=thread_key or None,
     )
+    if isinstance(result, ChatMessage):
+        return {
+            "status": "sent",
+            "message_name": result.name,
+            "create_time": result.create_time,
+            "thread_name": result.thread_name,
+            "text_length": len(text),
+            "chunks_sent": max(1, (len(text) - 1) // 4096 + 1),
+            "mode": "api",
+        }
+    # Webhook response (dict)
     return {
         "status": "sent",
-        "message_name": msg.name,
-        "create_time": msg.create_time,
-        "thread_name": msg.thread_name,
+        "message_name": result.get("name", ""),
+        "create_time": result.get("createTime", ""),
+        "thread_name": result.get("thread", {}).get("name", ""),
         "text_length": len(text),
-        "chunks_sent": max(1, (len(text) - 1) // 4096 + 1),
+        "chunks_sent": 1,
+        "mode": "webhook",
     }
 
 
@@ -218,7 +293,7 @@ def get_new_messages(
     Returns:
         Dict with list of new messages, count, and the space ID checked.
     """
-    client = _get_client()
+    client = _require_api_client("get_new_messages")
     state_mgr = _get_state_manager()
 
     resolved_space = client._resolve_space(space_id or None)
@@ -282,7 +357,7 @@ def mark_messages_read(
             "error": "Must provide either up_to_message_name or up_to_time",
         }
 
-    client = _get_client()
+    client = _require_api_client("mark_messages_read")
     state_mgr = _get_state_manager()
 
     resolved_space = client._resolve_space(space_id or None)
@@ -350,17 +425,18 @@ def send_task_completion(
 
     text = "\n".join(parts)
 
-    client = _get_client()
-    msg = client.send_message(
+    result = _send_outbound(
         text=text,
         space_id=space_id or None,
         thread_key=thread_key,
     )
+    msg_name = result.name if isinstance(result, ChatMessage) else result.get("name", "")
+    create_time = result.create_time if isinstance(result, ChatMessage) else result.get("createTime", "")
 
     return {
         "status": "sent",
-        "message_name": msg.name,
-        "create_time": msg.create_time,
+        "message_name": msg_name,
+        "create_time": create_time,
         "task_status": status,
         "task_title": task_title,
     }
@@ -387,13 +463,17 @@ def get_message_stats(
 
     # Add configuration info
     creds_file = os.environ.get("GOOGLE_CHAT_CREDENTIALS_FILE", "")
+    webhook_url = os.environ.get("GOOGLE_CHAT_WEBHOOK_URL", "")
     default_space = os.environ.get("GOOGLE_CHAT_SPACE_ID", "")
 
     result: dict[str, Any] = {
         "configuration": {
             "credentials_file": creds_file or "(not set)",
+            "webhook_url": "(set)" if webhook_url else "(not set)",
             "default_space_id": default_space or "(not set)",
             "state_file": str(state_mgr.path),
+            "outbound_mode": "webhook" if webhook_url else "api",
+            "inbound_mode": "api" if (creds_file or _has_adc()) else "unavailable",
         },
         "read_state": stats,
     }
@@ -424,16 +504,50 @@ def test_webhook_connection(
     Returns:
         Dict with connection test results including status, space info, and errors.
     """
-    client = _get_client()
-    result = client.test_connection(space_id=space_id or None)
+    webhook_url = os.environ.get("GOOGLE_CHAT_WEBHOOK_URL", "")
+    creds_file = os.environ.get("GOOGLE_CHAT_CREDENTIALS_FILE", "")
+    has_adc = _has_adc()
 
-    # Add environment info
-    result["environment"] = {
-        "GOOGLE_CHAT_CREDENTIALS_FILE": os.environ.get(
-            "GOOGLE_CHAT_CREDENTIALS_FILE", "(not set)"
-        ),
-        "GOOGLE_CHAT_SPACE_ID": os.environ.get("GOOGLE_CHAT_SPACE_ID", "(not set)"),
+    result: dict[str, Any] = {
+        "status": "unknown",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "modes": {
+            "webhook_outbound": bool(webhook_url),
+            "api_inbound": bool(creds_file) or has_adc,
+            "auth_method": "service_account" if creds_file else ("adc" if has_adc else "none"),
+        },
+        "environment": {
+            "GOOGLE_CHAT_WEBHOOK_URL": "(set)" if webhook_url else "(not set)",
+            "GOOGLE_CHAT_CREDENTIALS_FILE": creds_file or "(not set)",
+            "GOOGLE_CHAT_SPACE_ID": os.environ.get("GOOGLE_CHAT_SPACE_ID", "(not set)"),
+            "ADC_AVAILABLE": has_adc,
+        },
     }
+
+    # Test webhook if available
+    if webhook_url:
+        result["webhook_status"] = "configured"
+
+    # Test API if credentials available
+    if creds_file or has_adc:
+        try:
+            client = _get_client()
+            api_result = client.test_connection(space_id=space_id or None)
+            result["api_status"] = api_result.get("status", "unknown")
+            result["status"] = "connected"
+            if api_result.get("space_display_name"):
+                result["space_display_name"] = api_result["space_display_name"]
+        except Exception as exc:
+            result["api_status"] = f"error: {exc}"
+            result["status"] = "webhook_only" if webhook_url else "error"
+    elif webhook_url:
+        result["status"] = "webhook_only"
+    else:
+        result["status"] = "no_credentials"
+        result["error"] = (
+            "No credentials configured. Set GOOGLE_CHAT_WEBHOOK_URL for outbound "
+            "or GOOGLE_CHAT_CREDENTIALS_FILE / ADC for full API access."
+        )
 
     return result
 
@@ -485,17 +599,18 @@ def send_progress_update(
         details=details,
     )
 
-    client = _get_client()
-    msg = client.send_message(
+    result = _send_outbound(
         text=text,
         space_id=space_id or None,
         thread_key=thread_key,
     )
+    msg_name = result.name if isinstance(result, ChatMessage) else result.get("name", "")
+    create_time = result.create_time if isinstance(result, ChatMessage) else result.get("createTime", "")
 
     return {
         "status": "sent",
-        "message_name": msg.name,
-        "create_time": msg.create_time,
+        "message_name": msg_name,
+        "create_time": create_time,
         "orchestrator": orchestrator_name,
         "progress": f"{tasks_completed}/{tasks_total}" if tasks_total else "N/A",
     }
@@ -568,18 +683,19 @@ def send_card_message(
     card_payload = builder.build()
     fallback = fallback_text or title
 
-    client = _get_client()
-    msg = client.send_message(
+    result = _send_outbound(
         text=fallback,
         space_id=space_id or None,
         thread_key=thread_key or None,
         cards_v2=card_payload.get("cardsV2", []),
     )
+    msg_name = result.name if isinstance(result, ChatMessage) else result.get("name", "")
+    create_time = result.create_time if isinstance(result, ChatMessage) else result.get("createTime", "")
 
     return {
         "status": "sent",
-        "message_name": msg.name,
-        "create_time": msg.create_time,
+        "message_name": msg_name,
+        "create_time": create_time,
         "card_title": title,
         "sections_count": len(section_list),
     }
@@ -668,8 +784,7 @@ def send_daily_briefing(
             blockers=blockers_list,
         )
 
-        client = _get_client()
-        msg = client.send_message(
+        result = _send_outbound(
             text=fallback_text[:4096],
             space_id=space_id or None,
             thread_key=thread_key,
@@ -690,21 +805,23 @@ def send_daily_briefing(
         # Use continuation-marker chunking for plain text
         chunks = chunk_with_continuation(text)
 
-        client = _get_client()
-        msg = None
+        result = None
         for chunk in chunks:
-            msg = client.send_message(
+            result = _send_outbound(
                 text=chunk,
                 space_id=space_id or None,
                 thread_key=thread_key,
             )
 
-        assert msg is not None
+        assert result is not None
+
+    msg_name = result.name if isinstance(result, ChatMessage) else result.get("name", "")
+    create_time = result.create_time if isinstance(result, ChatMessage) else result.get("createTime", "")
 
     return {
         "status": "sent",
-        "message_name": msg.name,
-        "create_time": msg.create_time,
+        "message_name": msg_name,
+        "create_time": create_time,
         "briefing_type": briefing_type,
         "format": "card" if use_card else "text",
     }
@@ -753,17 +870,18 @@ def send_blocked_alert(
         urgency=urgency,
     )
 
-    client = _get_client()
-    msg = client.send_message(
+    result = _send_outbound(
         text=text,
         space_id=space_id or None,
         thread_key=thread_key,
     )
+    msg_name = result.name if isinstance(result, ChatMessage) else result.get("name", "")
+    create_time = result.create_time if isinstance(result, ChatMessage) else result.get("createTime", "")
 
     return {
         "status": "sent",
-        "message_name": msg.name,
-        "create_time": msg.create_time,
+        "message_name": msg_name,
+        "create_time": create_time,
         "urgency": urgency,
         "task_title": task_title,
         "options_count": len(options_list),
@@ -808,17 +926,18 @@ def send_heartbeat_finding(
         action_needed=action_needed,
     )
 
-    client = _get_client()
-    msg = client.send_message(
+    result = _send_outbound(
         text=text,
         space_id=space_id or None,
         thread_key=thread_key,
     )
+    msg_name = result.name if isinstance(result, ChatMessage) else result.get("name", "")
+    create_time = result.create_time if isinstance(result, ChatMessage) else result.get("createTime", "")
 
     return {
         "status": "sent",
-        "message_name": msg.name,
-        "create_time": msg.create_time,
+        "message_name": msg_name,
+        "create_time": create_time,
         "finding_type": finding_type,
         "action_needed": action_needed,
     }
@@ -1255,7 +1374,6 @@ def dispatch_notification(
     formatter_kwargs["space_id"] = space_id
 
     # Call the appropriate formatter tool
-    client = _get_client()
     try:
         # Map formatter name to the actual sending logic
         if formatter_name == "send_heartbeat_finding":

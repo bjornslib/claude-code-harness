@@ -1,19 +1,16 @@
-"""Google Chat API client using service account authentication.
+"""Google Chat API client with dual authentication support.
 
 Wraps the Google Chat API (google-api-python-client) with a clean
 interface for sending/receiving messages in Google Chat spaces.
 
-Authentication:
-    Uses a service account JSON key file specified by the
-    GOOGLE_CHAT_CREDENTIALS_FILE environment variable.
-
-    The service account must have the Chat API enabled and be added
-    to the target Google Chat space.
+Authentication (tried in order):
+    1. Service account JSON key file (GOOGLE_CHAT_CREDENTIALS_FILE)
+    2. Application Default Credentials (ADC) via google.auth.default()
 
 Scopes:
-    - https://www.googleapis.com/auth/chat.bot
+    - https://www.googleapis.com/auth/chat.spaces
     - https://www.googleapis.com/auth/chat.messages
-    - https://www.googleapis.com/auth/chat.messages.readonly
+    - https://www.googleapis.com/auth/chat.messages.create
 """
 
 from __future__ import annotations
@@ -27,11 +24,11 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
-# Google Chat API scopes for service account
+# Google Chat API scopes (user-compatible, works with both SA and ADC)
 CHAT_SCOPES = [
-    "https://www.googleapis.com/auth/chat.bot",
+    "https://www.googleapis.com/auth/chat.spaces",
     "https://www.googleapis.com/auth/chat.messages",
-    "https://www.googleapis.com/auth/chat.messages.readonly",
+    "https://www.googleapis.com/auth/chat.messages.create",
 ]
 
 # Google Chat message character limit
@@ -57,14 +54,15 @@ class ChatClient:
     for server-to-server authentication (no user OAuth flow needed).
     """
 
-    def __init__(self, credentials_file: str, default_space_id: str = "") -> None:
+    def __init__(self, credentials_file: str = "", default_space_id: str = "") -> None:
         """Initialize the Chat client.
 
         Args:
-            credentials_file: Path to service account JSON key file.
+            credentials_file: Path to service account JSON key file (optional).
+                If empty or file doesn't exist, falls back to ADC.
             default_space_id: Default Google Chat space ID (e.g., "spaces/AAAA...").
         """
-        self._credentials_file = Path(credentials_file)
+        self._credentials_file = credentials_file
         self._default_space_id = default_space_id
         self._service: Any = None
         self._credentials: Any = None
@@ -78,28 +76,40 @@ class ChatClient:
         return space_id
 
     def _get_service(self) -> Any:
-        """Lazily initialize and return the Google Chat API service."""
+        """Lazily initialize and return the Google Chat API service.
+
+        Tries service account credentials first (if file provided and exists),
+        then falls back to Application Default Credentials (ADC).
+        """
         if self._service is not None:
             return self._service
 
-        try:
-            from google.oauth2 import service_account
-            from googleapiclient.discovery import build
-        except ImportError as exc:
-            raise RuntimeError(
-                "google-api-python-client and google-auth are required. "
-                "Install with: pip install google-api-python-client google-auth"
-            ) from exc
+        from googleapiclient.discovery import build
 
-        if not self._credentials_file.exists():
-            raise FileNotFoundError(
-                f"Service account credentials file not found: {self._credentials_file}"
-            )
+        creds_path = Path(self._credentials_file) if self._credentials_file else None
 
-        self._credentials = service_account.Credentials.from_service_account_file(
-            str(self._credentials_file),
-            scopes=CHAT_SCOPES,
-        )
+        if creds_path and creds_path.exists():
+            # Try service account first
+            try:
+                from google.oauth2 import service_account
+
+                self._credentials = service_account.Credentials.from_service_account_file(
+                    str(creds_path), scopes=CHAT_SCOPES
+                )
+                logger.info("Using service account credentials from %s", creds_path)
+            except Exception:
+                # If service account fails, fall through to ADC
+                import google.auth
+
+                self._credentials, _ = google.auth.default(scopes=CHAT_SCOPES)
+                logger.info("Service account failed, using ADC")
+        else:
+            # No credentials file - use ADC
+            import google.auth
+
+            self._credentials, _ = google.auth.default(scopes=CHAT_SCOPES)
+            logger.info("No credentials file, using ADC")
+
         self._service = build("chat", "v1", credentials=self._credentials)
         logger.info("Google Chat API service initialized successfully")
         return self._service
@@ -273,11 +283,13 @@ class ChatClient:
         Returns:
             Dict with connection status, space details, and any errors.
         """
+        creds_path = Path(self._credentials_file) if self._credentials_file else None
         result: dict[str, Any] = {
             "status": "unknown",
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "credentials_file": str(self._credentials_file),
-            "credentials_exists": self._credentials_file.exists(),
+            "credentials_file": str(self._credentials_file) if self._credentials_file else "(not set)",
+            "credentials_exists": creds_path.exists() if creds_path else False,
+            "auth_mode": "service_account" if (creds_path and creds_path.exists()) else "adc",
         }
 
         try:
