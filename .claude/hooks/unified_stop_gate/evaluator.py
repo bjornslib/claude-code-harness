@@ -12,6 +12,7 @@ from .checkers import (
     SessionInfo,
     TodoContinuationChecker,
 )
+from .communicator_checker import CommunicatorActiveChecker
 from .config import CheckResult, EnvironmentConfig, PathResolver, Priority
 
 
@@ -105,6 +106,15 @@ class PriorityEvaluator:
                     blocking_checks.append(p1_result)
                 else:
                     warnings.append(p1_result)
+
+        # P1.5: Communicator Active (System 3 only)
+        p1_5_result = CommunicatorActiveChecker(self.config).check()
+        results.append(p1_5_result)
+        if not p1_5_result.passed:
+            if p1_5_result.blocking:
+                blocking_checks.append(p1_5_result)
+            else:
+                warnings.append(p1_5_result)
 
         # P2: Beads Sync
         p2_result = BeadsSyncChecker(self.config).check()

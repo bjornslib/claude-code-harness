@@ -83,6 +83,7 @@ class Priority(IntEnum):
 
     P0_CIRCUIT_BREAKER = 0      # max_iterations - force ALLOW
     P1_COMPLETION_PROMISE = 1   # user goals - BLOCK if unmet
+    P1_5_COMMUNICATOR_ACTIVE = 15  # active S3 communicator - BLOCK if running
     P2_BEADS_SYNC = 2           # data integrity - BLOCK if dirty
     P2_5_ORCHESTRATOR_GUIDANCE = 25  # orchestrator blocker escalation - BLOCK
     P3_TODO_CONTINUATION = 3    # momentum - BLOCK if missing
