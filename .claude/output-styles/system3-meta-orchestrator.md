@@ -133,7 +133,7 @@ Task(
     run_in_background=True,
     team_name="s3-live",
     name="s3-communicator",
-    prompt=open(".claude/skills/system3-orchestrator/communicator/SKILL.md").read()
+    prompt=open(".claude/skills/s3-communicator/SKILL.md").read()
 )
 ```
 
