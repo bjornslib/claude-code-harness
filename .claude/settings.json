@@ -78,17 +78,7 @@
         ]
       }
     ],
-    "Notification": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/Users/theb/Documents/Windsurf/zenagent2/zenagent/agencheck/utils/claude_notification_webhook.sh"
-          }
-        ]
-      }
-    ],
+    "Notification": [],
     "Stop": [
       {
         "hooks": [

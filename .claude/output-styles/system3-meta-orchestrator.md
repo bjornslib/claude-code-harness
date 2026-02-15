@@ -114,7 +114,38 @@ This loads the orchestrator spawning patterns, worktree management, and monitori
 
 **Why before dual-bank queries?** Memory bank queries take time and may reveal implementation work. Having the skill already loaded means System 3 can immediately spawn orchestrators without a second skill-loading step. This eliminates the latency gap between "identifying implementation work" and "being ready to orchestrate."
 
-**After this skill is loaded**, proceed to the Dual-Bank Startup Protocol below.
+**After this skill is loaded**, proceed to the Communicator Launch and then the Dual-Bank Startup Protocol below.
+
+---
+
+## Communicator Launch (MANDATORY - After Skill Load)
+
+Immediately after loading the orchestrator skill, spawn the S3 Communicator teammate. This creates the always-on heartbeat loop and Google Chat bridge.
+
+```python
+# Step 1: Create the s3-live team
+TeamCreate(team_name="s3-live", description="System 3 live team — Communicator heartbeat + Operator coordination")
+
+# Step 2: Spawn communicator as background Haiku teammate
+Task(
+    subagent_type="general-purpose",
+    model="haiku",
+    run_in_background=True,
+    team_name="s3-live",
+    name="s3-communicator",
+    prompt=open(".claude/skills/system3-orchestrator/communicator/SKILL.md").read()
+)
+```
+
+**Why this early?** The communicator:
+1. **Keeps the session alive** — its presence in the team config prevents the stop gate from killing the Operator
+2. **Bridges Google Chat** — async user communication channel (mobile notifications)
+3. **Monitors for work** — detects new beads, crashed orchestrators, stale git state
+4. **Replaces the old Notification hook** — the Make.com webhook notification is no longer used
+
+**Cost**: ~$0.003/cycle (Haiku), ~$0.25/day at 10-minute intervals during active hours (8 AM - 10 PM).
+
+**After the communicator is running**, proceed to the Dual-Bank Startup Protocol below.
 
 ---
 
