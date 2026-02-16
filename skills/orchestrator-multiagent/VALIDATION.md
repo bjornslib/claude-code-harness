@@ -15,7 +15,11 @@ Testing infrastructure and troubleshooting for orchestrator sessions.
 
 ## Table of Contents
 
-1. [3-Level Validation Protocol](#3-level-validation-protocol)
+1. [3+1 Level Validation Protocol](#31-level-validation-protocol)
+   - [Level 1: Unit Tests](#level-1-unit-tests)
+   - [Level 2: API Tests](#level-2-api-tests)
+   - [Level 3: E2E Browser Tests](#level-3-e2e-browser-tests)
+   - [Level 4: Deploy Health (Logfire Observability)](#level-4-deploy-health-logfire-observability)
 2. [Service Management](#service-management)
 3. [Testing Infrastructure](#testing-infrastructure)
 4. [Troubleshooting](#troubleshooting)
@@ -23,9 +27,9 @@ Testing infrastructure and troubleshooting for orchestrator sessions.
 
 ---
 
-## 3-Level Validation Protocol
+## 3+1 Level Validation Protocol
 
-**Every feature must pass all three levels before closure.**
+**Every feature must pass all three levels (four when deploying) before closure.**
 
 **🚨 CRITICAL: validation-test-agent as Single Entry Point**
 
@@ -166,6 +170,52 @@ await take_snapshot();
 - Error messages are visible and clear
 - Session list updates in real-time
 - No white-on-white text issues
+
+### Level 4: Deploy Health (Logfire Observability)
+
+**When**: After deployment to staging/production, before closing epic.
+**Who**: Orchestrator queries directly using Logfire MCP skill.
+
+Post-deployment health check using Logfire observability:
+
+#### Step 1: Check for New Exceptions
+```bash
+python .claude/skills/mcp-skills/executor.py --skill logfire --call '{
+  "tool": "arbitrary_query",
+  "arguments": {
+    "query": "SELECT exception_type, exception_message, service_name, COUNT(*) as count FROM records WHERE exception_type IS NOT NULL GROUP BY exception_type, exception_message, service_name ORDER BY count DESC LIMIT 10",
+    "age": 30
+  }
+}'
+```
+
+#### Step 2: Check Latency Regressions
+```bash
+python .claude/skills/mcp-skills/executor.py --skill logfire --call '{
+  "tool": "arbitrary_query",
+  "arguments": {
+    "query": "SELECT span_name, AVG(duration) as avg_ms, MAX(duration) as max_ms, COUNT(*) as calls FROM records WHERE kind = '"'"'SPAN'"'"' GROUP BY span_name HAVING AVG(duration) > 1000 ORDER BY avg_ms DESC LIMIT 10",
+    "age": 30
+  }
+}'
+```
+
+#### Step 3: Check Error Rate Changes
+```bash
+python .claude/skills/mcp-skills/executor.py --skill logfire --call '{
+  "tool": "arbitrary_query",
+  "arguments": {
+    "query": "SELECT service_name, COUNT(CASE WHEN exception_type IS NOT NULL THEN 1 END) as errors, COUNT(*) as total, ROUND(100.0 * COUNT(CASE WHEN exception_type IS NOT NULL THEN 1 END) / COUNT(*), 2) as error_rate_pct FROM records GROUP BY service_name ORDER BY error_rate_pct DESC",
+    "age": 60
+  }
+}'
+```
+
+#### Anomaly Response
+If any anomalies detected (new exception types, latency >2x baseline, error rate >5%):
+1. Create follow-up task: `bd create --title="Fix: [anomaly description]" --type=bug --priority=1`
+2. Link to current epic: `bd dep add <new-task> <epic-id> --type=parent-child`
+3. Do NOT close the epic until follow-up is resolved
 
 ---
 

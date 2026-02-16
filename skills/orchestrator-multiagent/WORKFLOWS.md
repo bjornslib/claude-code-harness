@@ -176,9 +176,9 @@ LOOP:
      ELSE: → CONTINUE LOOP
 ```
 
-### Validation Protocol (3-Level)
+### Validation Protocol (3+1 Level)
 
-**All three levels are MANDATORY before closing any feature.**
+**All three levels are MANDATORY before closing any feature. Level 4 applies post-deployment.**
 
 #### Level 1: Unit Tests
 
@@ -223,6 +223,11 @@ Use Markdown-based test specifications:
 4. **Orchestrator Review** → Sense-check results, re-execute if anomalies
 
 **Pass Criteria**: UI renders correctly, workflows complete, no JS console errors, 100% pass rate.
+
+#### Level 4: Deploy Health (Post-Deployment)
+
+Query Logfire for exceptions, latency regressions, and error rate changes after deployment.
+See [VALIDATION.md](VALIDATION.md#level-4-deploy-health-logfire-observability) for full protocol.
 
 ---
 

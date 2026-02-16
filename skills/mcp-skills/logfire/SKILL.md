@@ -8,6 +8,17 @@ version: 1.0.0
 
 Pydantic Logfire observability and tracing. Query application logs, find exceptions, analyze spans with SQL, and generate trace links.
 
+## Setup
+
+Requires `LOGFIRE_READ_TOKEN` environment variable. Generate a read-only token from the Logfire dashboard at https://logfire.pydantic.dev.
+
+Set the token via:
+```bash
+export LOGFIRE_READ_TOKEN=pylf_v1_...
+```
+
+The MCP server runs via `uvx logfire-mcp@latest`.
+
 ## Context Efficiency
 
 Traditional MCP approach:
@@ -59,6 +70,34 @@ You may need to cast the result of these operators e.g. `(attributes->'cost')::f
 You should apply as much filtering as reasonable to reduce the amount of data queried.
 Filters on `start_timestamp`, `service_name`, `span_name`, `metric_name`, `trace_id` are efficient.
 
+## Common Agent Queries
+
+### Find exceptions in last hour
+```sql
+SELECT exception_type, exception_message, start_timestamp
+FROM records
+WHERE exception_type IS NOT NULL
+  AND start_timestamp > now() - interval '1 hour'
+ORDER BY start_timestamp DESC LIMIT 10
+```
+
+### Check error rate by service
+```sql
+SELECT service_name, COUNT(*) as error_count
+FROM records
+WHERE exception_type IS NOT NULL
+  AND start_timestamp > now() - interval '1 hour'
+GROUP BY service_name
+```
+
+### Get latency for spans
+```sql
+SELECT span_name, AVG(duration) as avg_duration_ms
+FROM records
+WHERE start_timestamp > now() - interval '1 hour'
+GROUP BY span_name
+ORDER BY avg_duration_ms DESC LIMIT 10
+```
 
 ## Usage Pattern
 
