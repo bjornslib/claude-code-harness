@@ -53,6 +53,14 @@
         "BRAVE_API_KEY": "your-brave-api-key-here"
       }
     },
+    "logfire-mcp": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["logfire-mcp@latest"],
+      "env": {
+        "LOGFIRE_READ_TOKEN": "your-logfire-read-token-here"
+      }
+    },
     "serena": {
       "type": "stdio",
       "command": "uvx",

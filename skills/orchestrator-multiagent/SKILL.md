@@ -333,7 +333,7 @@ bd dep add agencheck-004 agencheck-002 --type=parent-child             # Task un
 - **Closure Order**: AT tasks → AT epic → Functional epic → Uber-epic
 - **Concurrent Development**: `parent-child` allows ALL epics to progress simultaneously
 
-**Validation**: Each AT task must pass 3-level validation (Unit + API + E2E). See [WORKFLOWS.md](WORKFLOWS.md#validation-protocol-3-level).
+**Validation**: Each AT task must pass 3-level validation (Unit + API + E2E). See [WORKFLOWS.md](WORKFLOWS.md#validation-protocol-31-level).
 
 **Quick Reference**: [REFERENCE.md](REFERENCE.md#epic-hierarchy)
 
@@ -582,7 +582,7 @@ AT tasks -> AT epic -> Functional epic -> Uber-epic
 (All closures via validator teammate, NOT direct bd close)
 ```
 
-**Full Validation Protocol**: See [WORKFLOWS.md](WORKFLOWS.md#validation-protocol-3-level)
+**Full Validation Protocol**: See [WORKFLOWS.md](WORKFLOWS.md#validation-protocol-31-level)
 
 ---
 
@@ -1001,8 +1001,10 @@ SendMessage(type="message", recipient="validator", content="Post-test validation
 
 **Why**: Unit tests can pass with mocks while feature doesn't work (hollow tests).
 
+**Level 4 (Deploy Health)**: After deployment, orchestrators query Logfire for new exceptions, latency regressions, and error rate changes. See [VALIDATION.md](VALIDATION.md#level-4-deploy-health-logfire-observability).
+
 **Full Guide**: [VALIDATION.md](VALIDATION.md)
-- 3-Level Validation Protocol
+- 3+1 Level Validation Protocol
 - Testing Infrastructure
 - Hollow Test Problem explanation
 
@@ -1019,7 +1021,7 @@ SendMessage(type="message", recipient="validator", content="Post-test validation
 
 **Why It Matters**: Hidden regressions multiply across features. Session F089-F090 evidence shows regression checks prevented 3+ hour blockages.
 
-**Full Validation Protocol**: See [WORKFLOWS.md](WORKFLOWS.md#validation-protocol-3-level)
+**Full Validation Protocol**: See [WORKFLOWS.md](WORKFLOWS.md#validation-protocol-31-level)
 
 **Failure Recovery**: [VALIDATION.md](VALIDATION.md#recovery-patterns)
 
