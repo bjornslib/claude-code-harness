@@ -1,0 +1,117 @@
+# Example hybrid-type acceptance test (browser + API validation)
+
+id: AC-form-submission
+feature: F2
+title: "Password reset form triggers email API"
+description: |
+  When a user submits the password reset form, the system should
+  call the backend API to send a reset email. We verify both the
+  UI behavior and the API call.
+
+prd_reference: "PRD-AUTH-001, Section 5.1, Requirement R8"
+
+validation_type: hybrid
+priority: high
+
+preconditions:
+  - description: "User account exists"
+    details: "Email: test@example.com"
+  - description: "Application and API server running"
+    details: "Frontend: localhost:3000, API: localhost:8000"
+  - description: "Email service configured"
+    details: "Can be mock service for testing"
+
+steps:
+  # Browser: Navigate and fill form
+  - id: step-1
+    action: navigate
+    target: "/forgot-password"
+    description: "Navigate to forgot password page"
+
+  - id: step-2
+    action: assert_visible
+    selector: "[data-testid='forgot-password-form']"
+    description: "Forgot password form is displayed"
+    screenshot: true
+
+  - id: step-3
+    action: fill
+    selector: "[data-testid='email-input']"
+    value: "test@example.com"
+    description: "Enter email address"
+
+  - id: step-4
+    action: click
+    selector: "[data-testid='submit-button']"
+    description: "Submit password reset request"
+
+  # Hybrid: Verify API was called
+  - id: step-5
+    action: wait_for_api
+    url_pattern: "/api/auth/forgot-password"
+    method: POST
+    timeout_ms: 5000
+    description: "Wait for forgot-password API call"
+
+  - id: step-6
+    action: assert_api_called
+    url_pattern: "/api/auth/forgot-password"
+    method: POST
+    expected_body:
+      email: "test@example.com"
+    description: "Verify API received correct email"
+
+  # Browser: Verify success UI
+  - id: step-7
+    action: wait_for_element
+    selector: "[data-testid='success-message']"
+    timeout_ms: 5000
+    description: "Wait for success message to appear"
+
+  - id: step-8
+    action: assert_visible
+    selector: "[data-testid='success-message']"
+    contains: "Check your email"
+    description: "Success message displayed"
+    screenshot: true
+
+  - id: step-9
+    action: assert_not_visible
+    selector: "[data-testid='error-message']"
+    description: "No error message displayed"
+
+expected_outcome: |
+  1. Form submission triggers POST to /api/auth/forgot-password
+  2. API receives correct email in request body
+  3. UI displays success message "Check your email"
+  4. No error states displayed
+
+failure_indicators:
+  - "API not called after form submission"
+  - "API called with wrong email"
+  - "Error message displayed in UI"
+  - "Success message not shown"
+  - "API returns error status"
+
+evidence:
+  - type: screenshot
+    when: on_step
+    step_id: step-2
+    filename: "forgot-password-form.png"
+    description: "Initial form state"
+
+  - type: api_response
+    when: always
+    filename: "forgot-password-api-call.json"
+    description: "API request and response captured"
+    capture: full
+
+  - type: screenshot
+    when: on_success
+    filename: "forgot-password-success.png"
+    description: "Success message after form submission"
+
+  - type: screenshot
+    when: on_failure
+    filename: "forgot-password-failure.png"
+    description: "UI state when test failed"

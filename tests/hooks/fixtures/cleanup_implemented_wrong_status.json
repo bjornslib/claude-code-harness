@@ -1,0 +1,25 @@
+{
+  "description": "Document in implemented folder with WRONG status header for AC-22 validation",
+  "document": {
+    "path": "documentation/solution_designs/implemented/wrongly-marked-feature.md",
+    "content": "# Wrongly Marked Feature Solution Design\n\n## Document Status\n\n**Current Status**: in-progress\n**Last Updated**: 2025-12-15\n**Completion**: 80%\n\n## Overview\n\nThis document is in the implemented folder but has the wrong status header.\n\n## Acceptance Criteria\n\n- [x] AC-1: First criterion done\n- [x] AC-2: Second criterion done\n- [ ] AC-3: Third criterion NOT done\n",
+    "location": "documentation/solution_designs/implemented/",
+    "has_status_header": true,
+    "status_header": {
+      "current_status": "in-progress",
+      "last_updated": "2025-12-15",
+      "completion": "80%"
+    }
+  },
+  "expected_validation": {
+    "is_valid": false,
+    "status_matches_location": false,
+    "completion_is_100_percent": false,
+    "issues": [
+      "Status mismatch: header says 'in-progress' but document is in implemented/ folder",
+      "Incomplete: only 80% of acceptance criteria checked",
+      "Document should be moved back to in-progress/ folder OR criteria should be completed"
+    ],
+    "recommended_action": "Either complete remaining criteria and update status to 'implemented', or move to in-progress/ folder"
+  }
+}

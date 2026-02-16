@@ -1,0 +1,12 @@
+{
+  "session_id": "test-session-022",
+  "transcript_path": "/Users/test/.claude/projects/-Users-test-project/session.jsonl",
+  "cwd": "/Users/test/project",
+  "permission_mode": "full",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git push origin main"
+  },
+  "tool_result": "To github.com:user/repo.git\n ! [rejected]        main -> main (fetch first)\nerror: failed to push some refs to 'github.com:user/repo.git'\nhint: Updates were rejected because the remote contains work that you do not\nhint: have locally. This is usually caused by another repository pushing to\nhint: the same ref. If you want to integrate the remote changes, use\nhint: 'git pull' before pushing again.\nhint: See the 'Note about fast-forwards' in 'git push --help' for details."
+}

@@ -1,0 +1,8 @@
+{
+  "name": "skill-playwright",
+  "version": "1.0.0",
+  "description": "Claude Skill wrapper for playwright MCP server",
+  "scripts": {
+    "setup": "pip install mcp"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "scenario": "normal_push",
+  "description": "Normal push with existing push history - single commit since last push",
+  "last_push_commit": "111aaa",
+  "current_head": "abc1234",
+  "expected_commits": ["abc1234"],
+  "total_commits_in_repo": 25,
+  "reflog_output": "abc1234 HEAD@{0}: commit: feat: add new feature\n111aaa HEAD@{1}: push origin main\n222bbb HEAD@{2}: commit: docs: update readme",
+  "detection_method": "reflog",
+  "notes": "Standard case: reflog shows push history, single commit since last push"
+}

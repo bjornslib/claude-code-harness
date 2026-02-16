@@ -1,0 +1,56 @@
+{
+  "description": "Report with multiple file movements documented (AC-17 File Movements section)",
+  "scenario": "report_with_file_movements",
+  "push_context": {
+    "branch": "main",
+    "remote": "origin/main",
+    "commits_start": "mov1111",
+    "commits_end": "mov9999",
+    "commit_count": 8,
+    "timestamp": "2025-12-21T18:30:00Z"
+  },
+  "skill_results": {
+    "security": {"status": "pass", "issues_count": 0, "findings": []},
+    "code_quality": {"status": "pass", "issues_count": 0, "findings": []},
+    "documentation": {
+      "status": "pass",
+      "issues_count": 0,
+      "updates": [
+        {"path": "documentation/solution_designs/feature-a.md", "from_status": "in-progress", "to_status": "implemented"},
+        {"path": "documentation/solution_designs/feature-b.md", "from_status": "approved", "to_status": "in-progress"},
+        {"path": ".taskmaster/docs/prd-c.md", "from_status": "in-progress", "to_status": "implemented"}
+      ]
+    }
+  },
+  "document_movements": [
+    {
+      "document": "feature-a.md",
+      "from_path": "documentation/solution_designs/in-progress/",
+      "to_path": "documentation/solution_designs/implemented/",
+      "reason": "All ACs checked (100%)"
+    },
+    {
+      "document": "feature-b.md",
+      "from_path": "documentation/solution_designs/approved/",
+      "to_path": "documentation/solution_designs/in-progress/",
+      "reason": "Related code changes detected"
+    },
+    {
+      "document": "prd-c.md",
+      "from_path": ".taskmaster/docs/in-progress/",
+      "to_path": ".taskmaster/docs/implemented/",
+      "reason": "All ACs checked (100%)"
+    }
+  ],
+  "expected_report": {
+    "file_movements_section": {
+      "has_content": true,
+      "movement_count": 3,
+      "table_headers": ["Document", "From", "To", "Reason"]
+    }
+  },
+  "expected_behavior": {
+    "all_movements_documented": true,
+    "movement_reasons_included": true
+  }
+}

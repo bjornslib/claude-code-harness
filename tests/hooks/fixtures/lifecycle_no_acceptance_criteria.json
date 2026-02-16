@@ -1,0 +1,18 @@
+{
+  "description": "Document with no acceptance criteria section for edge case testing (AC-9)",
+  "document": {
+    "path": "documentation/solution_designs/readme-doc.md",
+    "content": "# Simple Documentation\n\n## Document Status\n\n**Current Status**: draft\n**Last Updated**: 2025-12-21\n**Completion**: N/A\n\n## Overview\n\nThis is a simple documentation file without acceptance criteria.\nIt should be treated as 100% complete (no ACs to check).\n\n## Details\n\nSome implementation details here.\n",
+    "status_header": {
+      "current_status": "draft",
+      "last_updated": "2025-12-21",
+      "completion": "N/A"
+    }
+  },
+  "expected_completion": {
+    "percentage": 100,
+    "total_criteria": 0,
+    "checked_criteria": 0,
+    "reason": "Documents with no ACs are considered 100% complete"
+  }
+}

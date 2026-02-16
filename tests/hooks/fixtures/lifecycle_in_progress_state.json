@@ -1,0 +1,20 @@
+{
+  "description": "Document in in-progress state for lifecycle detection testing",
+  "document": {
+    "path": "documentation/solution_designs/in-progress/feature-z.md",
+    "content": "# Feature Z Solution Design\n\n## Document Status\n\n**Current Status**: in-progress\n**Last Updated**: 2025-12-21\n**Completion**: 50%\n\n## Overview\n\nThis solution design is currently being implemented.\n\n## Acceptance Criteria\n\n- [x] AC-1: First acceptance criterion (done)\n- [x] AC-2: Second acceptance criterion (done)\n- [ ] AC-3: Third acceptance criterion (pending)\n- [ ] AC-4: Fourth acceptance criterion (pending)\n",
+    "status_header": {
+      "current_status": "in-progress",
+      "last_updated": "2025-12-21",
+      "completion": "50%"
+    }
+  },
+  "expected_detection": {
+    "state": "in-progress",
+    "completion_percentage": 50,
+    "total_criteria": 4,
+    "checked_criteria": 2,
+    "expected_directory": "documentation/solution_designs/in-progress/",
+    "should_move": false
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "scenario": "code_quality_skill_pass",
+  "description": "Code quality skill runs after security passes and completes with warnings",
+  "skill": "codebase-quality:code-quality",
+  "prerequisites": ["codebase-quality:security"],
+  "input": {
+    "changed_files": [
+      "agencheck-support-agent/main.py",
+      "agencheck-support-agent/utils/helpers.py"
+    ]
+  },
+  "result": {
+    "status": "pass_with_warnings",
+    "errors": 0,
+    "warnings": 3,
+    "info": 2,
+    "checks_performed": {
+      "linting": {"status": "pass", "findings": 0},
+      "type_safety": {"status": "warn", "findings": 2},
+      "style_consistency": {"status": "warn", "findings": 1},
+      "complexity_analysis": {"status": "pass", "findings": 0}
+    },
+    "should_continue": true,
+    "next_skill": "codebase-quality:documentation"
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "description": "Complete post-push report with all required sections (AC-16, AC-17)",
+  "scenario": "report_generation_complete",
+  "push_context": {
+    "branch": "main",
+    "remote": "origin/main",
+    "commits_start": "abc1234",
+    "commits_end": "def5678",
+    "commit_count": 5,
+    "timestamp": "2025-12-21T14:30:00Z"
+  },
+  "skill_results": {
+    "security": {
+      "status": "pass",
+      "issues_count": 0,
+      "findings": []
+    },
+    "code_quality": {
+      "status": "warnings",
+      "issues_count": 3,
+      "findings": [
+        {"severity": "warning", "file": "src/utils.ts", "message": "Missing type annotation"},
+        {"severity": "warning", "file": "src/api.py", "message": "Function too complex"},
+        {"severity": "info", "file": "src/config.ts", "message": "Consider refactoring"}
+      ]
+    },
+    "documentation": {
+      "status": "pass",
+      "issues_count": 0,
+      "updates": [
+        {"path": "documentation/solution_designs/feature-x.md", "from_status": "in-progress", "to_status": "implemented"}
+      ]
+    }
+  },
+  "document_movements": [
+    {
+      "document": "feature-x.md",
+      "from_path": "documentation/solution_designs/in-progress/",
+      "to_path": "documentation/solution_designs/implemented/",
+      "reason": "All ACs checked (100%)"
+    }
+  ],
+  "expected_report": {
+    "location_pattern": ".claude/reports/post-push/YYYY-MM-DD-HH-MM-SS.md",
+    "required_sections": [
+      "Summary",
+      "Security Scan",
+      "Code Quality",
+      "Documentation Status",
+      "File Movements",
+      "Recommendations"
+    ],
+    "section_count": 6
+  },
+  "expected_behavior": {
+    "report_generated": true,
+    "report_directory": ".claude/reports/post-push/",
+    "filename_format": "YYYY-MM-DD-HH-MM-SS.md"
+  }
+}

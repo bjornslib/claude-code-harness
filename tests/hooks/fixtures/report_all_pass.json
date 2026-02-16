@@ -1,0 +1,50 @@
+{
+  "description": "Post-push report with all checks passing (AC-17)",
+  "scenario": "report_all_pass",
+  "push_context": {
+    "branch": "feature/clean-code",
+    "remote": "origin/feature/clean-code",
+    "commits_start": "111aaa",
+    "commits_end": "222bbb",
+    "commit_count": 2,
+    "timestamp": "2025-12-21T10:15:00Z"
+  },
+  "skill_results": {
+    "security": {
+      "status": "pass",
+      "issues_count": 0,
+      "findings": []
+    },
+    "code_quality": {
+      "status": "pass",
+      "issues_count": 0,
+      "findings": []
+    },
+    "documentation": {
+      "status": "pass",
+      "issues_count": 0,
+      "updates": []
+    }
+  },
+  "document_movements": [],
+  "expected_report": {
+    "required_sections": [
+      "Summary",
+      "Security Scan",
+      "Code Quality",
+      "Documentation Status",
+      "File Movements",
+      "Recommendations"
+    ],
+    "summary_table": {
+      "security": "pass",
+      "code_quality": "pass",
+      "documentation": "pass"
+    }
+  },
+  "expected_behavior": {
+    "report_generated": true,
+    "all_sections_present": true,
+    "empty_sections_handled": true
+  }
+}

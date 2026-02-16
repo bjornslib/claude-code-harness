@@ -1,0 +1,54 @@
+{
+  "description": "Post-push report with security findings but still advisory (AC-18)",
+  "scenario": "report_security_warnings_advisory",
+  "push_context": {
+    "branch": "main",
+    "remote": "origin/main",
+    "commits_start": "sec1234",
+    "commits_end": "sec5678",
+    "commit_count": 3,
+    "timestamp": "2025-12-21T16:45:00Z"
+  },
+  "skill_results": {
+    "security": {
+      "status": "warnings",
+      "issues_count": 2,
+      "findings": [
+        {"severity": "high", "type": "dependency_vulnerability", "package": "lodash@4.17.15", "cve": "CVE-2021-23337"},
+        {"severity": "moderate", "type": "potential_exposure", "file": "config.example.js", "message": "API key pattern detected in example file"}
+      ]
+    },
+    "code_quality": {
+      "status": "pass",
+      "issues_count": 0,
+      "findings": []
+    },
+    "documentation": {
+      "status": "pass",
+      "issues_count": 0,
+      "updates": []
+    }
+  },
+  "expected_report": {
+    "required_sections": [
+      "Summary",
+      "Security Scan",
+      "Code Quality",
+      "Documentation Status",
+      "File Movements",
+      "Recommendations"
+    ],
+    "security_section": {
+      "has_findings": true,
+      "finding_count": 2,
+      "severity_levels": ["high", "moderate"]
+    }
+  },
+  "expected_behavior": {
+    "report_generated": true,
+    "is_advisory": true,
+    "blocks_user": false,
+    "user_can_continue": true,
+    "recommendations_included": true
+  }
+}

@@ -1,0 +1,13 @@
+WORKER ASSIGNMENT: J13 Tool Routing Decision E2E Tests
+
+Beads Task: agencheck-6g4j
+Output: agencheck-support-frontend/__tests__/e2e/specs/J13-tool-routing-decisions.md
+
+Test scenarios to cover:
+1. Query routes to eddy_validate MCP (port 5184)
+2. Query routes to user_chat MCP (port 5185)
+3. Dual tool invocation (both tools called)
+4. Tool timeout handling (30s limit)
+5. Fallback behavior when tool unavailable
+
+Follow J10/J11 format. Reference Serena memory e2e-testing-aura-orchestrator-investigation-2025-12-23. Review enhanced_aura_orchestrator.py for tool routing logic.

@@ -1,0 +1,26 @@
+{
+  "scenario": "security_skill_pass",
+  "description": "Security skill runs and passes with no critical issues",
+  "skill": "codebase-quality:security",
+  "input": {
+    "changed_files": [
+      "agencheck-support-agent/main.py",
+      "agencheck-support-agent/utils/helpers.py"
+    ]
+  },
+  "result": {
+    "status": "pass",
+    "critical_issues": 0,
+    "high_issues": 0,
+    "moderate_issues": 1,
+    "low_issues": 2,
+    "checks_performed": {
+      "secrets_detection": {"status": "pass", "findings": 0},
+      "dependency_vulnerabilities": {"status": "pass", "findings": 0},
+      "injection_risks": {"status": "pass", "findings": 0},
+      "auth_checks": {"status": "pass", "findings": 0}
+    },
+    "should_continue": true,
+    "next_skill": "codebase-quality:code-quality"
+  }
+}

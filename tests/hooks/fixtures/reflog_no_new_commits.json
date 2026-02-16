@@ -1,0 +1,11 @@
+{
+  "scenario": "no_new_commits",
+  "description": "Push when HEAD equals last push (no new commits)",
+  "last_push_commit": "abc1234",
+  "current_head": "abc1234",
+  "expected_commits": [],
+  "total_commits_in_repo": 20,
+  "reflog_output": "abc1234 HEAD@{0}: push origin main\nabc1234 HEAD@{1}: commit: last commit",
+  "detection_method": "reflog",
+  "notes": "HEAD is same as last push, nothing new to review"
+}

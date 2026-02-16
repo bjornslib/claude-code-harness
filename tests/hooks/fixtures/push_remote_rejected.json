@@ -1,0 +1,12 @@
+{
+  "session_id": "test-session-024",
+  "transcript_path": "/Users/test/.claude/projects/-Users-test-project/session.jsonl",
+  "cwd": "/Users/test/project",
+  "permission_mode": "full",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git push origin main"
+  },
+  "tool_result": "Enumerating objects: 3, done.\nCounting objects: 100% (3/3), done.\nDelta compression using up to 10 threads\nCompressing objects: 100% (2/2), done.\nWriting objects: 100% (2/2), 256 bytes | 256.00 KiB/s, done.\nTotal 2 (delta 1), reused 0 (delta 0), pack-reused 0\nremote: error: GH006: Protected branch update failed for refs/heads/main.\nremote: error: Required status check \"build\" is expected.\nremote: rejected main -> main (protected branch hook declined)\nTo github.com:user/repo.git\n ! [remote rejected] main -> main (protected branch hook declined)\nerror: failed to push some refs to 'github.com:user/repo.git'"
+}

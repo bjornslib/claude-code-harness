@@ -1,0 +1,12 @@
+{
+  "session_id": "test-session-003",
+  "transcript_path": "/Users/test/.claude/projects/-Users-test-project/session.jsonl",
+  "cwd": "/Users/test/project",
+  "permission_mode": "full",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git push origin main"
+  },
+  "tool_result": "Enumerating objects: 7, done.\nCounting objects: 100% (7/7), done.\nDelta compression using up to 8 threads\nCompressing objects: 100% (4/4), done.\nWriting objects: 100% (4/4), 892 bytes | 892.00 KiB/s, done.\nTotal 4 (delta 3), reused 0 (delta 0), pack-reused 0\nTo gitlab.com:team/project.git\n   1234abc..5678def  main -> main"
+}

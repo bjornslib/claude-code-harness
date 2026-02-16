@@ -1,0 +1,20 @@
+{
+  "description": "Document in implemented folder with proper status header for AC-22 validation",
+  "document": {
+    "path": "documentation/solution_designs/implemented/properly-marked-feature.md",
+    "content": "# Properly Marked Feature Solution Design\n\n## Document Status\n\n**Current Status**: implemented\n**Last Updated**: 2025-12-21\n**Completion**: 100%\n\n## Overview\n\nThis document is in the implemented folder and has the correct status header.\n\n## Acceptance Criteria\n\n- [x] AC-1: First criterion done\n- [x] AC-2: Second criterion done\n- [x] AC-3: Third criterion done\n",
+    "location": "documentation/solution_designs/implemented/",
+    "has_status_header": true,
+    "status_header": {
+      "current_status": "implemented",
+      "last_updated": "2025-12-21",
+      "completion": "100%"
+    }
+  },
+  "expected_validation": {
+    "is_valid": true,
+    "status_matches_location": true,
+    "completion_is_100_percent": true,
+    "issues": []
+  }
+}

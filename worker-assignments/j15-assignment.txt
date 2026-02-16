@@ -1,0 +1,14 @@
+WORKER ASSIGNMENT: J15 Multi-Turn Conversation & History E2E Tests
+
+Beads Task: agencheck-4n48
+Output: agencheck-support-frontend/__tests__/e2e/specs/J15-conversation-history.md
+
+Test scenarios to cover:
+1. Multi-turn conversation (3+ messages)
+2. History passed to Aura for context
+3. Citations preserved across conversation turns
+4. Message ordering validation (chronological)
+5. Context limit enforcement (max 10 messages)
+6. Metadata preservation in history
+
+Follow J10/J11 format. Reference utils/history_manager/history_manager.py for history loading logic.

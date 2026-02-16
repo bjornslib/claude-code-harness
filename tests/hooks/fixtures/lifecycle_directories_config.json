@@ -1,0 +1,64 @@
+{
+  "description": "Configuration for directory scanning and exclusions (AC-13, AC-14, AC-15)",
+  "managed_directories": {
+    "description": "Directories that should be scanned for document lifecycle management",
+    "primary": [
+      {
+        "path": "documentation/prds/",
+        "subfolders": ["approved", "in-progress", "implemented", "staged"]
+      },
+      {
+        "path": "documentation/solution_designs/",
+        "subfolders": ["approved", "in-progress", "implemented", "staged"]
+      },
+      {
+        "path": ".taskmaster/docs/",
+        "subfolders": ["approved", "in-progress", "implemented", "staged"]
+      }
+    ],
+    "service_specific": [
+      {
+        "path": "agencheck-support-agent/documentation/",
+        "subfolders": ["approved", "in-progress", "implemented", "staged"]
+      },
+      {
+        "path": "agencheck-support-frontend/documentation/",
+        "subfolders": ["approved", "in-progress", "implemented", "staged"]
+      },
+      {
+        "path": "agencheck-communication-agent/documentation/",
+        "subfolders": ["approved", "in-progress", "implemented", "staged"]
+      }
+    ]
+  },
+  "ephemeral_directories": {
+    "description": "Directories excluded from lifecycle management (AC-15)",
+    "excluded": [
+      "documentation/scratch-pads/",
+      "documentation/handoffs/"
+    ],
+    "reason": "These contain ephemeral coordination documents that don't follow lifecycle"
+  },
+  "subfolder_creation": {
+    "description": "AC-13: Subfolders should be auto-created when needed",
+    "expected_subfolders": ["approved", "in-progress", "implemented", "staged"],
+    "gitkeep_file": ".gitkeep"
+  },
+  "test_cases": {
+    "ac_13_subfolder_creation": {
+      "scenario": "First document needs to move to a state with missing subfolder",
+      "action": "Create subfolder with .gitkeep before moving document",
+      "expected": "Subfolder exists after operation completes"
+    },
+    "ac_14_multi_directory_scan": {
+      "scenario": "Post-push runs document lifecycle checks",
+      "action": "Scan all configured directories for status updates",
+      "expected": "All primary and service-specific directories are scanned"
+    },
+    "ac_15_ephemeral_exclusion": {
+      "scenario": "Documents exist in scratch-pads/ or handoffs/",
+      "action": "Skip these during lifecycle scanning",
+      "expected": "No lifecycle operations applied to ephemeral docs"
+    }
+  }
+}

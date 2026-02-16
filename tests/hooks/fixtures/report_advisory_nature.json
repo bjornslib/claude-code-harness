@@ -1,0 +1,52 @@
+{
+  "description": "Verify advisory nature of reports - even critical findings don't block (AC-18)",
+  "scenario": "report_advisory_critical_no_block",
+  "push_context": {
+    "branch": "hotfix/urgent",
+    "remote": "origin/hotfix/urgent",
+    "commits_start": "crit001",
+    "commits_end": "crit999",
+    "commit_count": 1,
+    "timestamp": "2025-12-21T23:59:00Z"
+  },
+  "skill_results": {
+    "security": {
+      "status": "critical",
+      "issues_count": 1,
+      "findings": [
+        {"severity": "critical", "type": "exposed_secret", "file": "src/config.ts", "message": "Potential API key detected"}
+      ]
+    },
+    "code_quality": {
+      "status": "errors",
+      "issues_count": 5,
+      "findings": [
+        {"severity": "error", "type": "type_error", "file": "src/api.ts", "message": "Type mismatch"},
+        {"severity": "error", "type": "lint_error", "file": "src/utils.py", "message": "Undefined variable"},
+        {"severity": "error", "type": "lint_error", "file": "src/main.py", "message": "Import error"},
+        {"severity": "warning", "type": "complexity", "file": "src/service.py", "message": "Function too complex"},
+        {"severity": "info", "type": "style", "file": "src/config.py", "message": "Line too long"}
+      ]
+    },
+    "documentation": {
+      "status": "warnings",
+      "issues_count": 1,
+      "updates": []
+    }
+  },
+  "expected_behavior": {
+    "blocks_workflow": false,
+    "is_advisory": true,
+    "user_can_continue_working": true,
+    "report_severity_indicated": true,
+    "recommendations_actionable": true
+  },
+  "advisory_assertion": {
+    "description": "Even with critical security findings and multiple errors, the report is advisory only",
+    "hook_output": {
+      "continue": true,
+      "suppressOutput": false
+    },
+    "no_blocking_occurs": true
+  }
+}

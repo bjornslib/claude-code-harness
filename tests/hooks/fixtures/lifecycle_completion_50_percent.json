@@ -1,0 +1,18 @@
+{
+  "description": "Document with 50% completion for completion detection testing (AC-9)",
+  "document": {
+    "path": "documentation/prds/prd-beta.md",
+    "content": "# PRD Beta\n\n## Document Status\n\n**Current Status**: in-progress\n**Last Updated**: 2025-12-21\n**Completion**: 50%\n\n## Overview\n\nA PRD with half of acceptance criteria completed.\n\n## Acceptance Criteria\n\n- [x] AC-1: Create the user interface\n- [x] AC-2: Implement the backend API\n- [ ] AC-3: Add authentication\n- [ ] AC-4: Write tests\n",
+    "status_header": {
+      "current_status": "in-progress",
+      "last_updated": "2025-12-21",
+      "completion": "50%"
+    }
+  },
+  "expected_completion": {
+    "percentage": 50,
+    "total_criteria": 4,
+    "checked_criteria": 2,
+    "unchecked_criteria": 2
+  }
+}

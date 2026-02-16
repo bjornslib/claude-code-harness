@@ -1,0 +1,33 @@
+{
+  "scenario": "full_audit_invocation",
+  "description": "Full quality audit invokes all three sub-skills in sequence",
+  "trigger": "/codebase-quality audit",
+  "expected_skill_sequence": [
+    "codebase-quality:security",
+    "codebase-quality:code-quality",
+    "codebase-quality:documentation"
+  ],
+  "expected_phases": [
+    {
+      "phase": 1,
+      "skill": "codebase-quality:security",
+      "blocking": true,
+      "checks": ["secrets_detection", "dependency_vulnerabilities", "injection_risks"],
+      "critical_stop_condition": true
+    },
+    {
+      "phase": 2,
+      "skill": "codebase-quality:code-quality",
+      "blocking": false,
+      "checks": ["linting_errors", "type_safety", "style_violations"],
+      "critical_stop_condition": false
+    },
+    {
+      "phase": 3,
+      "skill": "codebase-quality:documentation",
+      "blocking": false,
+      "checks": ["claude_md_freshness", "status_metadata", "index_md_refs"],
+      "critical_stop_condition": false
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "description": "Document with 100% completion for completion detection testing (AC-9)",
+  "document": {
+    "path": "documentation/prds/prd-gamma.md",
+    "content": "# PRD Gamma\n\n## Document Status\n\n**Current Status**: in-progress\n**Last Updated**: 2025-12-21\n**Completion**: 100%\n\n## Overview\n\nA PRD with all acceptance criteria completed.\n\n## Acceptance Criteria\n\n- [x] AC-1: Create the user interface\n- [x] AC-2: Implement the backend API\n- [x] AC-3: Add authentication\n- [x] AC-4: Write tests\n- [x] AC-5: Deploy to staging\n- [x] AC-6: User acceptance testing\n",
+    "status_header": {
+      "current_status": "in-progress",
+      "last_updated": "2025-12-21",
+      "completion": "100%"
+    }
+  },
+  "expected_completion": {
+    "percentage": 100,
+    "total_criteria": 6,
+    "checked_criteria": 6,
+    "unchecked_criteria": 0
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "scenario": "exactly_10_commits",
+  "description": "Repository with exactly 10 commits (boundary case)",
+  "last_push_commit": null,
+  "current_head": "commit10",
+  "expected_commits": ["commit01", "commit02", "commit03", "commit04", "commit05", "commit06", "commit07", "commit08", "commit09", "commit10"],
+  "total_commits_in_repo": 10,
+  "detection_method": "fallback_10",
+  "notes": "Exactly 10 commits - boundary case for fallback"
+}

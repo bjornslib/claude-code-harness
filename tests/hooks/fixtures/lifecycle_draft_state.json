@@ -1,0 +1,20 @@
+{
+  "description": "Document in draft state for lifecycle detection testing",
+  "document": {
+    "path": "documentation/solution_designs/feature-x.md",
+    "content": "# Feature X Solution Design\n\n## Document Status\n\n**Current Status**: draft\n**Last Updated**: 2025-12-21\n**Completion**: 0%\n\n## Overview\n\nThis is a draft solution design.\n\n## Acceptance Criteria\n\n- [ ] AC-1: First acceptance criterion\n- [ ] AC-2: Second acceptance criterion\n- [ ] AC-3: Third acceptance criterion\n",
+    "status_header": {
+      "current_status": "draft",
+      "last_updated": "2025-12-21",
+      "completion": "0%"
+    }
+  },
+  "expected_detection": {
+    "state": "draft",
+    "completion_percentage": 0,
+    "total_criteria": 3,
+    "checked_criteria": 0,
+    "expected_directory": "documentation/solution_designs/",
+    "should_move": false
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "description": "User notification after report generation (AC-19)",
+  "scenario": "report_notification_generated",
+  "push_context": {
+    "branch": "main",
+    "remote": "origin/main",
+    "commits_start": "not1234",
+    "commits_end": "not5678",
+    "commit_count": 4,
+    "timestamp": "2025-12-21T12:00:00Z"
+  },
+  "skill_results": {
+    "security": {"status": "pass", "issues_count": 0},
+    "code_quality": {"status": "warnings", "issues_count": 2},
+    "documentation": {"status": "pass", "issues_count": 0}
+  },
+  "report_generated": {
+    "path": ".claude/reports/post-push/2025-12-21-12-00-00.md",
+    "filename": "2025-12-21-12-00-00.md"
+  },
+  "expected_notification": {
+    "delivered_via": "systemMessage",
+    "contains_summary": true,
+    "contains_report_location": true,
+    "summary_format": {
+      "security_status": "pass",
+      "code_quality_status": "warnings",
+      "documentation_status": "pass",
+      "issues_found": 2
+    }
+  },
+  "expected_system_message": {
+    "includes": [
+      "Post-push review complete",
+      "Report saved",
+      ".claude/reports/post-push/",
+      "Security: Pass",
+      "Code Quality: 2 warnings",
+      "Documentation: Pass"
+    ],
+    "format_type": "concise_summary"
+  }
+}

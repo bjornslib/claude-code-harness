@@ -1,0 +1,23 @@
+{
+  "description": "Mock reflog for first push of a new branch in an existing repository",
+  "scenario": "AC-5: First push to a NEW branch in an existing repo (branch has no prior push)",
+  "current_branch": "feature/new-component",
+  "branch_created_from": "main",
+  "reflog_output": "abc1234 HEAD@{0}: commit: feat: implement component\ndef5678 HEAD@{1}: commit: feat: add component skeleton\n111aaa HEAD@{2}: checkout: moving from main to feature/new-component\n222bbb HEAD@{3}: push: origin/main",
+  "reflog_push_for_current_branch": "",
+  "reflog_push_for_main": "222bbb",
+  "expected_behavior": {
+    "strategy": "First push for this branch - use branch point or HEAD~10",
+    "fallback": "HEAD~10",
+    "commits_to_review": ["abc1234", "def5678"],
+    "note": "No prior push exists for feature/new-component, but main has push history"
+  },
+  "branch_point_detection": {
+    "command": "git merge-base main HEAD",
+    "alternative": "Use HEAD~10 if branch point detection fails"
+  },
+  "git_commands": {
+    "current_branch": "git branch --show-current",
+    "branch_push_check": "git reflog show --grep-reflog='push.*feature/new-component' -1 --format='%h'"
+  }
+}

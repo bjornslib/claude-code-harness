@@ -1,0 +1,14 @@
+WORKER ASSIGNMENT: J16 Error Handling & Fallback E2E Tests
+
+Beads Task: agencheck-vmq3
+Output: agencheck-support-frontend/__tests__/e2e/specs/J16-error-handling-fallbacks.md
+
+Test scenarios to cover:
+1. MCP service timeout (30s)
+2. Partial tool failure (one tool works, one fails)
+3. Database connection loss during query
+4. Redis stream failure (SSE disruption)
+5. Citation parsing failure (malformed JSON)
+6. Graceful error recovery and user feedback
+
+Follow J10/J11 format. Reference enhanced_aura_orchestrator.py error handling patterns.

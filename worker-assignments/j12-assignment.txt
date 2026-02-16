@@ -1,0 +1,46 @@
+WORKER ASSIGNMENT: J12 Thread Creation E2E Tests
+
+Beads Task: agencheck-y1mm
+Priority: P2
+Type: E2E Test Spec Creation
+
+GOALS:
+Create comprehensive E2E test specification for thread creation and lifecycle workflows following the pattern established in J10 and J11.
+
+ACCEPTANCE_CRITERIA:
+Functional Requirements:
+- Given: User opens chat interface, When: First interaction occurs, Then: Thread created with lazy initialization
+- Given: Thread UUID generated client-side, When: First message sent, Then: Thread persisted to database
+- Given: Multiple threads created, When: Thread list retrieved, Then: All threads visible with correct metadata
+- Given: Concurrent thread creation, When: Multiple tabs create threads, Then: No race conditions or duplicate IDs
+
+Technical Requirements:
+- Follow J10/J11 MD spec format exactly
+- Use chrome-devtools MCP tool instructions (navigate_page, take_snapshot, click, fill, wait_for)
+- Include validation criteria for each test scenario
+- Document expected vs actual behavior
+- Provide evidence directory structure
+
+Testing Requirements:
+- Minimum 5 test scenarios covering happy path and edge cases
+- Each test must be executable via chrome-devtools MCP
+- Include timeout recommendations
+- Document common failure patterns
+
+ADDITIONAL_CONTEXT:
+- Reference Specs: agencheck-support-frontend/__tests__/e2e/specs/J10-ag-ui-contact-operations.md, J11-aura-orchestrator-flows.md
+- Investigation Source: Serena memory e2e-testing-aura-orchestrator-investigation-2025-12-23
+- Output Location: agencheck-support-frontend/__tests__/e2e/specs/J12-thread-creation-lifecycle.md
+- Key Files to Review:
+  - components/ThreadInitializer.tsx (frontend thread creation)
+  - app/api/threads/route.ts (thread API proxy)
+  - database/thread_storage.py (backend persistence)
+
+Test Gaps to Address (from investigation):
+1. Thread lazy creation (UUID generation)
+2. First message triggers database persistence
+3. Thread metadata accuracy (timestamps, message_count)
+4. Thread list retrieval after creation
+5. Concurrent thread creation (race conditions)
+
+Create the J12 spec following the exact format of J10 and J11. When complete, update beads task status to in_progress, then create the spec file, then close the task.

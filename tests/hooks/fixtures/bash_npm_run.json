@@ -1,0 +1,12 @@
+{
+  "session_id": "test-session-013",
+  "transcript_path": "/Users/test/.claude/projects/-Users-test-project/session.jsonl",
+  "cwd": "/Users/test/project",
+  "permission_mode": "full",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm run build"
+  },
+  "tool_result": "> project@1.0.0 build\n> next build\n\n   Creating an optimized production build ...\n   Compiled successfully\n   Collecting page data ...\n   Generating static pages (0/5) ...\n   Generating static pages (5/5)\n\n   Route (app)                              Size     First Load JS\n   / (static)                               5.2 kB          92 kB\n   /_not-found                              882 B          86.8 kB\n\n   Build completed in 12.5s"
+}

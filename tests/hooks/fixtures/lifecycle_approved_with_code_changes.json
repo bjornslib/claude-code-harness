@@ -1,0 +1,26 @@
+{
+  "description": "Document approved with related code changes detected for in-progress transition (AC-11)",
+  "document": {
+    "path": "documentation/solution_designs/approved/feature-transition.md",
+    "content": "# Feature Transition Solution Design\n\n## Document Status\n\n**Current Status**: approved\n**Last Updated**: 2025-12-20\n**Completion**: 0%\n\n## Overview\n\nThis solution design should transition to in-progress when code changes are detected.\n\n## Related Files\n\n- src/components/FeatureTransition.tsx\n- src/api/featureTransition.ts\n\n## Acceptance Criteria\n\n- [ ] AC-1: Implement the component\n- [ ] AC-2: Create the API endpoint\n- [ ] AC-3: Add tests\n",
+    "status_header": {
+      "current_status": "approved",
+      "last_updated": "2025-12-20",
+      "completion": "0%"
+    }
+  },
+  "code_changes_detected": {
+    "changed_files": [
+      "src/components/FeatureTransition.tsx",
+      "src/api/featureTransition.ts"
+    ],
+    "related_to_document": true
+  },
+  "expected_transition": {
+    "from_status": "approved",
+    "to_status": "in-progress",
+    "from_directory": "documentation/solution_designs/approved/",
+    "to_directory": "documentation/solution_designs/in-progress/",
+    "reason": "Code changes detected in related files"
+  }
+}

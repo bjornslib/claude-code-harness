@@ -1,0 +1,12 @@
+{
+  "scenario": "force_push",
+  "description": "Force push where history was rewritten",
+  "last_push_commit": "111aaa",
+  "current_head": "abc1234",
+  "expected_commits": ["def5678", "abc1234"],
+  "total_commits_in_repo": 30,
+  "force_push_detected": true,
+  "reflog_output": "abc1234 HEAD@{0}: commit (amend): feat: add feature (amended)\ndef5678 HEAD@{1}: reset: moving to HEAD~2\n111aaa HEAD@{2}: push origin main (forced)\n222bbb HEAD@{3}: commit: old commit that was rewritten",
+  "detection_method": "reflog",
+  "notes": "Force push scenario - commits still identified from last push reference"
+}

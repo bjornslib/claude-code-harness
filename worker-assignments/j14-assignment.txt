@@ -1,0 +1,14 @@
+WORKER ASSIGNMENT: J14 Citation Extraction & Persistence E2E Tests
+
+Beads Task: agencheck-7e8z
+Output: agencheck-support-frontend/__tests__/e2e/specs/J14-citation-extraction-flow.md
+
+Test scenarios to cover:
+1. Citations extracted from eddy_validate MCP tool
+2. Citations extracted from user_chat MCP tool
+3. Citation format validation (url + title required)
+4. Citations persisted to database with message
+5. Citations retrieved correctly in history load
+6. Multiple citations in single response
+
+Follow J10/J11 format. Reference utils/history_manager/tool_ui.py build_content_array() function for citation transformation logic.

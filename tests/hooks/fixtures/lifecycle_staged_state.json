@@ -1,0 +1,21 @@
+{
+  "description": "Document in staged state for lifecycle detection testing",
+  "document": {
+    "path": "documentation/solution_designs/staged/feature-v.md",
+    "content": "# Feature V Solution Design\n\n## Document Status\n\n**Current Status**: staged\n**Last Updated**: 2025-12-21\n**Completion**: 100%\n**Deployed At**: 2025-12-21\n\n## Overview\n\nThis solution design has been deployed to production.\n\n## Acceptance Criteria\n\n- [x] AC-1: First acceptance criterion (done)\n- [x] AC-2: Second acceptance criterion (done)\n- [x] AC-3: Third acceptance criterion (done)\n- [x] AC-4: Fourth acceptance criterion (done)\n- [x] AC-5: Fifth acceptance criterion (done)\n",
+    "status_header": {
+      "current_status": "staged",
+      "last_updated": "2025-12-21",
+      "completion": "100%",
+      "deployed_at": "2025-12-21"
+    }
+  },
+  "expected_detection": {
+    "state": "staged",
+    "completion_percentage": 100,
+    "total_criteria": 5,
+    "checked_criteria": 5,
+    "expected_directory": "documentation/solution_designs/staged/",
+    "should_move": false
+  }
+}

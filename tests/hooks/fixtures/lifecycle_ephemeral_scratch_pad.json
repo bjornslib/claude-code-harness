@@ -1,0 +1,14 @@
+{
+  "description": "Ephemeral document in scratch-pads directory for exclusion testing (AC-15)",
+  "document": {
+    "path": "documentation/scratch-pads/central-feature-xyz.md",
+    "content": "# Central Scratch Pad: Feature XYZ\n\n## Current Status\n\n**Status**: Active\n**Last Updated**: 2025-12-21\n\n## Agent Coordination\n\n<FRONTEND_DEV_EXPERT>\nWorking on the UI components.\n</FRONTEND_DEV_EXPERT>\n\n<BACKEND_SOLUTIONS_ENGINEER>\nImplementing the API endpoints.\n</BACKEND_SOLUTIONS_ENGINEER>\n\n## Notes\n\nThis is an ephemeral coordination document.\n",
+    "status_header": null
+  },
+  "expected_behavior": {
+    "should_be_excluded": true,
+    "reason": "scratch-pads/ directory is ephemeral and excluded from lifecycle management",
+    "should_move": false,
+    "should_update_status": false
+  }
+}

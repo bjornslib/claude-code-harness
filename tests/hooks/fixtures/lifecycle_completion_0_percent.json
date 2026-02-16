@@ -1,0 +1,18 @@
+{
+  "description": "Document with 0% completion for completion detection testing (AC-9)",
+  "document": {
+    "path": "documentation/prds/prd-alpha.md",
+    "content": "# PRD Alpha\n\n## Document Status\n\n**Current Status**: in-progress\n**Last Updated**: 2025-12-21\n**Completion**: 0%\n\n## Overview\n\nA PRD with zero completed acceptance criteria.\n\n## Acceptance Criteria\n\n- [ ] AC-1: Create the user interface\n- [ ] AC-2: Implement the backend API\n- [ ] AC-3: Add authentication\n- [ ] AC-4: Write tests\n- [ ] AC-5: Deploy to staging\n",
+    "status_header": {
+      "current_status": "in-progress",
+      "last_updated": "2025-12-21",
+      "completion": "0%"
+    }
+  },
+  "expected_completion": {
+    "percentage": 0,
+    "total_criteria": 5,
+    "checked_criteria": 0,
+    "unchecked_criteria": 5
+  }
+}

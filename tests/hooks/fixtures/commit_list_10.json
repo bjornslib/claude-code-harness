@@ -1,0 +1,19 @@
+{
+  "description": "List of 10 commits for testing commit range scenarios",
+  "scenario": "AC-5: Standard case with exactly 10 commits for fallback",
+  "commit_list": [
+    {"hash": "commit01", "message": "feat: add feature 1", "timestamp": "2025-12-21T10:00:00Z"},
+    {"hash": "commit02", "message": "fix: bug fix 1", "timestamp": "2025-12-21T10:05:00Z"},
+    {"hash": "commit03", "message": "docs: update docs", "timestamp": "2025-12-21T10:10:00Z"},
+    {"hash": "commit04", "message": "feat: add feature 2", "timestamp": "2025-12-21T10:15:00Z"},
+    {"hash": "commit05", "message": "refactor: cleanup code", "timestamp": "2025-12-21T10:20:00Z"},
+    {"hash": "commit06", "message": "fix: bug fix 2", "timestamp": "2025-12-21T10:25:00Z"},
+    {"hash": "commit07", "message": "test: add unit tests", "timestamp": "2025-12-21T10:30:00Z"},
+    {"hash": "commit08", "message": "feat: add feature 3", "timestamp": "2025-12-21T10:35:00Z"},
+    {"hash": "commit09", "message": "style: format code", "timestamp": "2025-12-21T10:40:00Z"},
+    {"hash": "commit10", "message": "chore: update deps", "timestamp": "2025-12-21T10:45:00Z"}
+  ],
+  "git_command": "git rev-list --reverse HEAD~10..HEAD",
+  "expected_count": 10,
+  "notes": "When using HEAD~10 fallback, exactly 10 commits should be reviewed"
+}

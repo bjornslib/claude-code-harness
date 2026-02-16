@@ -1,0 +1,20 @@
+{
+  "description": "Document in approved state for lifecycle detection testing",
+  "document": {
+    "path": "documentation/solution_designs/approved/feature-y.md",
+    "content": "# Feature Y Solution Design\n\n## Document Status\n\n**Current Status**: approved\n**Last Updated**: 2025-12-20\n**Completion**: 0%\n\n## Overview\n\nThis is an approved solution design ready for implementation.\n\n## Acceptance Criteria\n\n- [ ] AC-1: First acceptance criterion\n- [ ] AC-2: Second acceptance criterion\n- [ ] AC-3: Third acceptance criterion\n- [ ] AC-4: Fourth acceptance criterion\n",
+    "status_header": {
+      "current_status": "approved",
+      "last_updated": "2025-12-20",
+      "completion": "0%"
+    }
+  },
+  "expected_detection": {
+    "state": "approved",
+    "completion_percentage": 0,
+    "total_criteria": 4,
+    "checked_criteria": 0,
+    "expected_directory": "documentation/solution_designs/approved/",
+    "should_move": false
+  }
+}

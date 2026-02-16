@@ -1,0 +1,108 @@
+# Validation Agent Naming Issue: LLM Agent Selection Bias
+
+**Date**: 2026-02-06
+**Author**: System 3 Meta-Orchestrator
+**Priority**: P1 (affects correct agent routing in every session)
+**Status**: Ready for Implementation
+
+---
+
+## Current State
+
+The `validation-agent` is the single authority for PRD acceptance validation, task/epic closure, and implementation verification. It operates in two modes:
+
+- `--mode=unit`: Fast technical checks (mocks OK)
+- `--mode=e2e --prd=PRD-XXX`: Full acceptance validation against PRD criteria
+
+The `tdd-test-engineer` is a development-time worker that writes unit tests as part of TDD (RED/GREEN/REFACTOR) cycles. It lives inside orchestrator worker teams.
+
+## Problem
+
+System 3 repeatedly selects `tdd-test-engineer` for validation work that should go to `validation-agent`. This has been documented as an anti-pattern in Hindsight on:
+- 2025-12-30 (direct spawning of tdd-test-engineer for voicemail detection tests)
+- 2026-01-31 (manual PRD validation instead of delegating to validation-agent)
+- 2026-02-06 (proposed tdd-test-engineer for employer data model acceptance validation)
+
+## Root Causes (Three Layers)
+
+### Layer 1: Lexical Trigger (Name)
+
+The word **"test"** in `tdd-test-engineer` is a strong token-level attractor. When reasoning involves testing concepts — "run tests", "validate with tests", "check if tests pass" — the token `test` activates `tdd-test-engineer` far more strongly than `validation-agent`, which contains no "test" token.
+
+Evidence from Hindsight reflection: *"Because the trigger word 'test' was in the request, I instinctively reached for the agent I knew could write and run tests."*
+
+### Layer 2: Semantic Proximity (Description)
+
+`tdd-test-engineer`'s description uses action-oriented testing language: "execute test suites", "analyze test results". These phrases sound like what you'd want when checking an implementation.
+
+`validation-agent`'s description leads with abstract routing language: "Routes to appropriate testing mode." The word "testing" is buried in a routing explanation, not positioned as the primary capability.
+
+### Layer 3: Frequency Reinforcement (Skill Registry)
+
+In the skills list loaded every session, `tdd-test-engineer` appears with concrete triggers: "Write failing test first, watch it fail." `validation-agent` appears with: "Routes to appropriate testing mode: --mode=unit for fast technical checks, --mode=e2e for PRD acceptance criteria validation."
+
+Over many sessions, the more concrete, action-oriented framing wins the association race.
+
+## Proposed Fixes
+
+### Fix 1: Rename (Addresses Layer 1)
+
+Rename `validation-agent` → `validation-test-agent`
+
+**Pros**: Immediately competes for the "test" lexical slot. "validation" still leads, preserving purpose clarity.
+**Cons**: Minor risk of confusion with TDD work. Mitigated by description.
+
+**Files to update**:
+- `.claude/agents/validation-agent.md` → `.claude/agents/validation-test-agent.md`
+- All references in `.claude/output-styles/system3-meta-orchestrator.md`
+- All references in `.claude/output-styles/orchestrator.md`
+- All references in `.claude/skills/orchestrator-multiagent/VALIDATION.md`
+- All references in `.claude/skills/system3-orchestrator/references/validation-workflow.md`
+- Skill registry entry description
+
+### Fix 2: Description Lead Sentence (Addresses Layer 2)
+
+Change the validation-agent's description from:
+> "Routes to appropriate testing mode: --mode=unit for fast technical checks, --mode=e2e for PRD acceptance criteria validation."
+
+To:
+> "Run tests against PRD acceptance criteria and validate implementations. Use --mode=unit for fast technical checks, --mode=e2e for full PRD validation. This is the ONLY agent for verifying whether code meets acceptance criteria."
+
+### Fix 3: Trigger Keywords (Addresses Layer 3)
+
+Add to the skill registry entry for validation-agent:
+```
+Trigger keywords: test, testing, run tests, check tests, acceptance criteria,
+validate, verify PRD, check implementation, does it work, is it correct
+```
+
+### Fix 4: Anti-Pattern Guard in Output Style (Defensive)
+
+Add to system3-meta-orchestrator.md in the Decision Framework section:
+
+```markdown
+### Agent Selection Guard
+
+When your reasoning includes "test" or "testing":
+- STOP and ask: "Am I writing NEW tests (TDD) or CHECKING existing work?"
+- Writing new tests → tdd-test-engineer (via orchestrator worker)
+- Checking existing work → validation-agent
+```
+
+## Recommended Implementation Order
+
+1. **Fix 2** (description update) — highest impact, lowest risk
+2. **Fix 3** (trigger keywords) — reinforces Fix 2
+3. **Fix 4** (output style guard) — defensive layer
+4. **Fix 1** (rename) — strongest single intervention but most files to update
+
+## Validation
+
+After implementation, test by:
+1. Starting a fresh System 3 session
+2. Asking: "Validate whether the employer data model implementation matches the PRD"
+3. Confirming System 3 routes to validation-agent, not tdd-test-engineer
+
+---
+
+*Generated by System 3 Meta-Orchestrator. Stored in Hindsight banks: system3-orchestrator (anti-patterns), claude-code-agencheck (patterns).*

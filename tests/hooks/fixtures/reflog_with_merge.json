@@ -1,0 +1,12 @@
+{
+  "scenario": "with_merge_commit",
+  "description": "Commit range includes a merge commit",
+  "last_push_commit": "base123",
+  "current_head": "head789",
+  "merge_commit": "merge56",
+  "expected_commits": ["feat123", "feat456", "merge56", "head789"],
+  "total_commits_in_repo": 40,
+  "reflog_output": "head789 HEAD@{0}: commit: post-merge work\nmerge56 HEAD@{1}: merge feature/x: Merge branch 'feature/x'\nfeat456 HEAD@{2}: commit: feature work\nfeat123 HEAD@{3}: commit: start feature\nbase123 HEAD@{4}: push origin main",
+  "detection_method": "reflog",
+  "notes": "Merge commits should be included in review"
+}
