@@ -89,6 +89,20 @@ curl -X POST http://localhost:8000/agencheck \
 
 **Primary approach**: Structured Markdown specifications executed via chrome-devtools MCP tools.
 
+#### Chrome Health Check (MANDATORY before Level 3)
+
+Before executing any browser tests, verify Chrome connectivity:
+
+```bash
+# Quick check: can Claude in Chrome tools respond?
+# Use mcp__claude-in-chrome__tabs_context_mcp to verify extension connection
+```
+
+**Decision tree:**
+- Chrome connected --> Proceed with Level 3
+- Chrome disconnected --> Skip Level 3, flag tests as INCOMPLETE in report
+- Chrome disconnects mid-session --> Fail gracefully, mark remaining tests as INCOMPLETE
+
 #### Complete Workflow
 
 ```
@@ -136,6 +150,54 @@ curl -X POST http://localhost:8000/agencheck \
 | `__tests__/e2e/results/J{N}/J{N}_EXECUTION_REPORT.md` | Filled-out execution report per journey |
 | `__tests__/e2e/results/J{N}/*.png` | Screenshot evidence |
 
+#### Test Spec Execution Workflow
+
+1. **Discover specs**: Read `docs/tests/specs/*.md` for available test specifications
+2. **Filter by service**: Match specs to the feature being validated (frontmatter `service` field)
+3. **Delegate execution**: Pass spec markdown to validation agent with Claude in Chrome access
+4. **Agent follows steps literally**: Each numbered step is executed using Chrome DevTools MCP tools
+5. **Capture evidence**: Screenshots and page content captured per the spec's Evidence section
+6. **Write report**: Results written to `docs/tests/reports/{date}-{spec-id}.md`
+
+See `docs/tests/TEST_SPEC_FORMAT.md` for the canonical test specification format.
+
+#### Test Reports
+
+Reports are written to `docs/tests/reports/` with naming convention:
+`{YYYY-MM-DD}-{spec-id}.md`
+
+**Report Template:**
+```markdown
+---
+title: "Test Report: {spec title}"
+spec: "{spec-id}"
+date: "{YYYY-MM-DD}"
+status: pass|fail|incomplete
+agent: "{agent-id}"
+---
+
+## Results
+
+| Step | Action | Expected | Actual | Status |
+|------|--------|----------|--------|--------|
+| 1 | Navigate to ... | Page loads | Page loaded in 2.3s | PASS |
+| 2 | Fill input with ... | Text appears | Text entered | PASS |
+
+## Evidence
+
+| Screenshot | Step | Description |
+|-----------|------|-------------|
+| `screenshots/01-*.png` | 1 | Initial page state |
+
+## Summary
+
+- Total steps: X
+- Passed: Y
+- Failed: Z
+- Incomplete: W
+- Overall: PASS/FAIL/INCOMPLETE
+```
+
 #### Browser Testing Commands
 
 ```javascript
@@ -159,6 +221,10 @@ await take_snapshot();
 - Error messages are visible and clear
 - Session list updates in real-time
 - No white-on-white text issues
+
+#### Epic Closure Gate
+
+**Epic Closure Gate**: At least one browser test spec must PASS for epic closure. If all browser tests are INCOMPLETE (Chrome unavailable), epic closure is permitted but flagged.
 
 ---
 
@@ -541,6 +607,10 @@ git diff <old-commit>..HEAD
 
 ---
 
-**Document Version**: 1.0
-**Last Updated**: 2026-01-07
+**Document Version**: 1.1
+**Last Updated**: 2026-02-17
 **Consolidated From**: TESTING_INFRASTRUCTURE.md, TROUBLESHOOTING.md, SERVICE_MANAGEMENT.md
+
+**Changelog**:
+- **1.1** (2026-02-17): Enhanced Level 3 E2E Browser Tests section for F3.2 (Browser Validation Integration). Added Chrome Health Check gate, Test Spec Execution Workflow referencing `docs/tests/TEST_SPEC_FORMAT.md`, Test Reports output format with `docs/tests/reports/` convention, and Epic Closure Gate rule.
+- **1.0** (2026-01-07): Initial consolidated document.

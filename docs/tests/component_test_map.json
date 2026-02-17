@@ -1,0 +1,94 @@
+{
+  "$schema": "docs/tests/component_test_map.schema.json",
+  "version": "1.0.0",
+  "last_updated": "2026-02-17",
+  "components": {
+    "frontend/chat-interface": {
+      "description": "Main chat UI component (React/Next.js)",
+      "service": "frontend",
+      "port": 5001,
+      "test_specs": {
+        "e2e-browser": ["chat-send-message", "chat-session-management"],
+        "visual": ["visual-chat-interface"],
+        "unit": []
+      }
+    },
+    "backend/orchestrator": {
+      "description": "Main FastAPI backend orchestrator",
+      "service": "backend",
+      "port": 8000,
+      "test_specs": {
+        "api": ["api-health-check", "api-credential-verification"],
+        "e2e-browser": [],
+        "unit": []
+      }
+    },
+    "backend/eddy-validate": {
+      "description": "Education verification MCP service",
+      "service": "eddy-validate",
+      "port": 5184,
+      "test_specs": {
+        "api": ["api-health-check"],
+        "e2e-browser": [],
+        "unit": []
+      }
+    },
+    "backend/user-chat": {
+      "description": "Knowledge base MCP service",
+      "service": "user-chat",
+      "port": 5185,
+      "test_specs": {
+        "api": ["api-health-check"],
+        "e2e-browser": [],
+        "unit": []
+      }
+    },
+    "backend/deep-research": {
+      "description": "Deep research agent service",
+      "service": "deep-research",
+      "port": 8001,
+      "test_specs": {
+        "api": [],
+        "e2e-browser": [],
+        "unit": []
+      }
+    },
+    "backend/university-contact-manager": {
+      "description": "University contact management service",
+      "service": "university-contact-manager",
+      "port": 5186,
+      "test_specs": {
+        "api": [],
+        "e2e-browser": [],
+        "unit": []
+      }
+    }
+  },
+  "spec_index": {
+    "chat-send-message": {
+      "path": "docs/tests/specs/chat-send-message.md",
+      "type": "e2e-browser",
+      "components": ["frontend/chat-interface"]
+    },
+    "chat-session-management": {
+      "path": "docs/tests/specs/chat-session-management.md",
+      "type": "e2e-browser",
+      "components": ["frontend/chat-interface"]
+    },
+    "api-health-check": {
+      "path": "docs/tests/specs/api-health-check.md",
+      "type": "api",
+      "components": ["backend/orchestrator", "backend/eddy-validate", "backend/user-chat"]
+    },
+    "api-credential-verification": {
+      "path": "docs/tests/specs/api-credential-verification.md",
+      "type": "api",
+      "components": ["backend/orchestrator"]
+    },
+    "visual-chat-interface": {
+      "path": "docs/tests/specs/visual-chat-interface.md",
+      "type": "visual",
+      "components": ["frontend/chat-interface"]
+    }
+  }
+}
