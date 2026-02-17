@@ -20,14 +20,89 @@ import sys
 import os
 
 
-def build_evaluation_prompt(summary, criteria, proof):
-    """Build the user message for the LLM evaluator."""
-    criteria_text = "\n".join(
-        f"- {c.get('id', 'N/A')}: {c.get('description', 'N/A')}\n"
-        f"  Status: {c.get('status', 'unknown')}\n"
-        f"  Evidence: {c.get('evidence', 'None provided')}"
-        for c in criteria
+def load_validator_evidence(promise_id):
+    """Load validation responses from Gate 2 validators.
+
+    Reads validation response files from
+    .claude/completion-state/validations/{promise-id}/ directory.
+
+    Returns:
+        dict: Mapping of AC-ID -> validator evidence string
+    """
+    if not promise_id:
+        return {}
+
+    project_dir = os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())
+    validations_dir = os.path.join(
+        project_dir, ".claude", "completion-state", "validations", promise_id
     )
+
+    if not os.path.isdir(validations_dir):
+        return {}
+
+    evidence = {}
+    for filename in os.listdir(validations_dir):
+        if not filename.endswith("-validation.json"):
+            continue
+
+        filepath = os.path.join(validations_dir, filename)
+        try:
+            with open(filepath) as f:
+                response = json.load(f)
+
+            ac_id = response.get("_metadata", {}).get("ac_id", "")
+            if not ac_id:
+                # Derive from filename: {ac-id}-validation.json
+                ac_id = filename.replace("-validation.json", "")
+
+            verdict = response.get("verdict", "UNKNOWN")
+            reasoning = response.get("reasoning", "")
+            confidence = response.get("confidence", "N/A")
+
+            # Build per-criterion evidence summary
+            criteria_details = []
+            for cr in response.get("criteria_results", []):
+                cr_id = cr.get("criterion_id", "?")
+                cr_status = cr.get("status", "?")
+                cr_evidence = cr.get("evidence", cr.get("reason", "No details"))
+                criteria_details.append(f"  [{cr_status}] {cr_id}: {cr_evidence}")
+
+            evidence_text = (
+                f"Verdict: {verdict} (confidence: {confidence})\n"
+                f"Reasoning: {reasoning}"
+            )
+            if criteria_details:
+                evidence_text += "\nCriteria:\n" + "\n".join(criteria_details)
+
+            evidence[ac_id] = evidence_text
+
+        except (json.JSONDecodeError, OSError):
+            continue
+
+    return evidence
+
+
+def build_evaluation_prompt(summary, criteria, proof, validator_evidence=None):
+    """Build the user message for the LLM evaluator."""
+    validator_evidence = validator_evidence or {}
+
+    criteria_parts = []
+    for c in criteria:
+        ac_id = c.get('id', 'N/A')
+        part = (
+            f"- {ac_id}: {c.get('description', 'N/A')}\n"
+            f"  Status: {c.get('status', 'unknown')}\n"
+            f"  Evidence: {c.get('evidence', 'None provided')}"
+        )
+
+        # Include Gate 2 validator assessment if available
+        val_ev = validator_evidence.get(ac_id)
+        if val_ev:
+            part += f"\n  Validator Assessment (Gate 2):\n    {val_ev.replace(chr(10), chr(10) + '    ')}"
+
+        criteria_parts.append(part)
+
+    criteria_text = "\n".join(criteria_parts)
 
     return f"""## Completion Verification Request
 
@@ -41,6 +116,7 @@ def build_evaluation_prompt(summary, criteria, proof):
 {proof if proof else "None provided"}
 
 Evaluate whether the evidence genuinely satisfies ALL acceptance criteria.
+Consider both the session's self-reported evidence AND the independent validator assessments.
 Respond with JSON only."""
 
 
@@ -73,6 +149,7 @@ def main():
     parser.add_argument("--summary", required=True, help="Promise summary text")
     parser.add_argument("--criteria", required=True, help="JSON array of acceptance criteria")
     parser.add_argument("--proof", default="", help="Optional proof summary")
+    parser.add_argument("--promise-id", default="", help="Promise ID for loading Gate 2 validator evidence")
     args = parser.parse_args()
 
     # Parse criteria JSON
@@ -95,8 +172,13 @@ def main():
         warn_result("ANTHROPIC_API_KEY environment variable not set")
         return
 
+    # Load Gate 2 validator evidence if promise-id provided
+    # argparse converts --promise-id to args.promise_id (hyphens → underscores)
+    promise_id = getattr(args, 'promise_id', '') or ''
+    validator_evidence = load_validator_evidence(promise_id)
+
     # Build prompt
-    user_message = build_evaluation_prompt(args.summary, criteria, args.proof)
+    user_message = build_evaluation_prompt(args.summary, criteria, args.proof, validator_evidence)
 
     # Call Anthropic API
     try:

@@ -1,0 +1,217 @@
+#!/bin/bash
+# cs-store-validation - Store validation responses from s3-validator teammates
+#
+# Usage:
+#   cs-store-validation --promise <id> --ac-id <AC-X> --response '<json>'
+#   cs-store-validation --promise <id> --ac-id <AC-X> --response-file /path/to/response.json
+#
+# Stores a validation response linked to a specific promise + acceptance criterion.
+# Used by System 3 after receiving validation results from s3-validator teammates.
+#
+# Storage: .claude/completion-state/validations/{promise-id}/{ac-id}-validation.json
+#
+# Required response fields:
+#   task_id, verdict, criteria_results, timestamp
+#
+# Valid verdicts: PASS, FAIL, PARTIAL, BLOCKED
+#
+# Environment:
+#   CLAUDE_PROJECT_DIR - Project root (defaults to pwd)
+
+set -e
+
+STATE_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/completion-state"
+VALIDATIONS_DIR="$STATE_DIR/validations"
+
+# Parse arguments
+PROMISE_ID=""
+AC_ID=""
+RESPONSE_JSON=""
+RESPONSE_FILE=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --promise)
+            PROMISE_ID="$2"
+            shift 2
+            ;;
+        --ac-id)
+            AC_ID="$2"
+            shift 2
+            ;;
+        --response)
+            RESPONSE_JSON="$2"
+            shift 2
+            ;;
+        --response-file)
+            RESPONSE_FILE="$2"
+            shift 2
+            ;;
+        --help)
+            echo "cs-store-validation - Store validation responses from s3-validator teammates"
+            echo ""
+            echo "Usage:"
+            echo "  cs-store-validation --promise <id> --ac-id <AC-X> --response '<json>'"
+            echo "  cs-store-validation --promise <id> --ac-id <AC-X> --response-file /path/to/response.json"
+            echo ""
+            echo "Options:"
+            echo "  --promise <id>          Promise ID to link validation to"
+            echo "  --ac-id <AC-X>          Acceptance criterion ID (e.g., AC-1, F4.1-1)"
+            echo "  --response <json>       Validation response as JSON string"
+            echo "  --response-file <path>  Path to JSON file containing validation response"
+            echo ""
+            echo "Required response fields:"
+            echo "  task_id               Beads task ID that was validated"
+            echo "  verdict               PASS, FAIL, PARTIAL, or BLOCKED"
+            echo "  criteria_results      Array of per-criterion results"
+            echo "  timestamp             ISO 8601 timestamp"
+            echo ""
+            echo "Storage location:"
+            echo "  .claude/completion-state/validations/{promise-id}/{ac-id}-validation.json"
+            echo ""
+            echo "Example:"
+            echo "  cs-store-validation --promise promise-abc123 --ac-id AC-1 \\"
+            echo "    --response '{\"task_id\":\"beads-xyz\",\"verdict\":\"PASS\",\"criteria_results\":[],\"timestamp\":\"2026-02-17T00:00:00Z\"}'"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            echo "Run 'cs-store-validation --help' for usage." >&2
+            exit 1
+            ;;
+    esac
+done
+
+# Validate required arguments
+if [ -z "$PROMISE_ID" ]; then
+    echo "Error: --promise is required" >&2
+    exit 1
+fi
+
+if [ -z "$AC_ID" ]; then
+    echo "Error: --ac-id is required" >&2
+    exit 1
+fi
+
+if [ -z "$RESPONSE_JSON" ] && [ -z "$RESPONSE_FILE" ]; then
+    echo "Error: --response or --response-file is required" >&2
+    exit 1
+fi
+
+# Load response from file if specified
+if [ -n "$RESPONSE_FILE" ]; then
+    if [ ! -f "$RESPONSE_FILE" ]; then
+        echo "Error: Response file not found: $RESPONSE_FILE" >&2
+        exit 1
+    fi
+    RESPONSE_JSON=$(cat "$RESPONSE_FILE")
+fi
+
+# Validate JSON is parseable
+if ! echo "$RESPONSE_JSON" | jq . > /dev/null 2>&1; then
+    echo "Error: Invalid JSON in response" >&2
+    exit 1
+fi
+
+# Validate required fields
+MISSING_FIELDS=""
+
+if [ "$(echo "$RESPONSE_JSON" | jq 'has("task_id")')" != "true" ]; then
+    MISSING_FIELDS="${MISSING_FIELDS} task_id"
+fi
+
+if [ "$(echo "$RESPONSE_JSON" | jq 'has("verdict")')" != "true" ]; then
+    MISSING_FIELDS="${MISSING_FIELDS} verdict"
+fi
+
+if [ "$(echo "$RESPONSE_JSON" | jq 'has("criteria_results")')" != "true" ]; then
+    MISSING_FIELDS="${MISSING_FIELDS} criteria_results"
+fi
+
+if [ "$(echo "$RESPONSE_JSON" | jq 'has("timestamp")')" != "true" ]; then
+    MISSING_FIELDS="${MISSING_FIELDS} timestamp"
+fi
+
+if [ -n "$MISSING_FIELDS" ]; then
+    echo "Error: Response JSON missing required fields:${MISSING_FIELDS}" >&2
+    echo "" >&2
+    echo "Required fields: task_id, verdict, criteria_results, timestamp" >&2
+    exit 1
+fi
+
+# Validate verdict value
+VERDICT=$(echo "$RESPONSE_JSON" | jq -r '.verdict')
+case "$VERDICT" in
+    PASS|FAIL|PARTIAL|BLOCKED) ;;
+    *)
+        echo "Error: Invalid verdict: $VERDICT" >&2
+        echo "Valid verdicts: PASS, FAIL, PARTIAL, BLOCKED" >&2
+        exit 1
+        ;;
+esac
+
+# Verify promise exists
+PROMISE_FILE="$STATE_DIR/promises/$PROMISE_ID.json"
+if [ ! -f "$PROMISE_FILE" ]; then
+    # Also check history (promise may already be verified)
+    HISTORY_FILE="$STATE_DIR/history/$PROMISE_ID.json"
+    if [ ! -f "$HISTORY_FILE" ]; then
+        echo "Error: Promise not found: $PROMISE_ID" >&2
+        echo "Check with: cs-promise --list" >&2
+        exit 1
+    fi
+    echo "Warning: Promise $PROMISE_ID is already in history (verified/cancelled)." >&2
+    echo "Storing validation response anyway for audit trail." >&2
+fi
+
+# Create validations directory for this promise
+PROMISE_VALIDATIONS_DIR="$VALIDATIONS_DIR/$PROMISE_ID"
+mkdir -p "$PROMISE_VALIDATIONS_DIR"
+
+# Write response atomically (tmp file + mv)
+TARGET_FILE="$PROMISE_VALIDATIONS_DIR/${AC_ID}-validation.json"
+TMP_FILE="${TARGET_FILE}.tmp.$$"
+
+# Add metadata wrapper
+echo "$RESPONSE_JSON" | jq \
+    --arg promise_id "$PROMISE_ID" \
+    --arg ac_id "$AC_ID" \
+    --arg stored_at "$(python3 -c 'import datetime; print(datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"))')" \
+    '. + {
+        "_metadata": {
+            "promise_id": $promise_id,
+            "ac_id": $ac_id,
+            "stored_at": $stored_at
+        }
+    }' > "$TMP_FILE"
+
+mv "$TMP_FILE" "$TARGET_FILE"
+
+# Print confirmation
+TASK_ID=$(echo "$RESPONSE_JSON" | jq -r '.task_id')
+CONFIDENCE=$(echo "$RESPONSE_JSON" | jq -r '.confidence // "N/A"')
+CRITERIA_COUNT=$(echo "$RESPONSE_JSON" | jq '.criteria_results | length')
+PASS_COUNT=$(echo "$RESPONSE_JSON" | jq '[.criteria_results[] | select(.status == "PASS")] | length')
+
+echo "STORED: Validation response for $PROMISE_ID / $AC_ID"
+echo ""
+echo "  Promise:    $PROMISE_ID"
+echo "  AC:         $AC_ID"
+echo "  Task:       $TASK_ID"
+echo "  Verdict:    $VERDICT"
+echo "  Criteria:   $PASS_COUNT/$CRITERIA_COUNT passed"
+echo "  Confidence: $CONFIDENCE"
+echo "  Stored at:  $TARGET_FILE"
+
+if [ "$VERDICT" = "FAIL" ]; then
+    echo ""
+    echo "FAILURES:"
+    echo "$RESPONSE_JSON" | jq -r '.criteria_results[] | select(.status == "FAIL") | "  [\(.criterion_id)]: \(.evidence // .reason // "No details")"'
+fi
+
+if [ "$VERDICT" = "BLOCKED" ]; then
+    echo ""
+    echo "BLOCKED:"
+    REASONING=$(echo "$RESPONSE_JSON" | jq -r '.reasoning // "No reasoning provided"')
+    echo "  $REASONING"
+fi

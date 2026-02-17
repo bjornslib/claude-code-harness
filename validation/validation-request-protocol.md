@@ -233,7 +233,83 @@ Gate 3: cs-verify programmatic judge (F4.2 — Anthropic SDK)
 | `schemas/validation-response.schema.json` | Validator→S3 response format | **NEW** — this protocol |
 | `validation/evidence-templates.md` | Evidence capture templates | **Referenced** — validators follow these templates |
 
+## Storage and Enforcement (Gate 2 Trigger)
+
+After receiving a validation response from an s3-validator teammate, System 3 must store the response and then proceed through the triple-gate chain:
+
+### Step 1: Store Validation Response
+
+```bash
+# Store the validator's response linked to a specific promise + AC
+cs-store-validation --promise <promise-id> --ac-id <AC-X> --response '<validation-response-json>'
+
+# Or from a file
+cs-store-validation --promise <promise-id> --ac-id <AC-X> --response-file /path/to/response.json
+```
+
+**Storage location**: `.claude/completion-state/validations/{promise-id}/{ac-id}-validation.json`
+
+### Step 2: Mark AC as Met (if validator PASSED)
+
+```bash
+# Only after validator confirms PASS for this criterion
+cs-promise --meet <promise-id> --ac-id <AC-X> --evidence "Validator PASS: <summary>" --type api
+```
+
+### Step 3: Verify Promise (Triggers Gate 2 + Gate 3)
+
+```bash
+# Gate 1: All ACs marked as "met" (checked first)
+# Gate 2: All ACs have PASS/PARTIAL validation responses (enforced by cs-verify)
+# Gate 3: LLM programmatic judge evaluates evidence + validator findings (optional)
+cs-verify --promise <promise-id> --llm-verify
+```
+
+### Gate 2 Enforcement Behavior
+
+| Scenario | cs-verify Behavior |
+|----------|--------------------|
+| All ACs have PASS validation responses | Gate 2 passes, proceeds to Gate 3 |
+| Any AC missing a validation response | **BLOCKS** with actionable error |
+| Any AC has FAIL validation response | **BLOCKS** with remediation details |
+| Any AC has BLOCKED validation response | **BLOCKS** with reasoning |
+| PARTIAL verdict | Treated as PASS (System 3 decides acceptability) |
+| Legacy promise (no ACs) | Gate 2 skipped entirely |
+| `--skip-validation-check` flag | Gate 2 bypassed with WARNING |
+
+### Override: Skip Validation Check
+
+For edge cases where validation enforcement should be bypassed:
+
+```bash
+# WARNING: This skips Gate 2 — use only when justified
+cs-verify --promise <promise-id> --skip-validation-check --proof "Reason for skipping validation"
+```
+
+A warning is logged to stderr when this flag is used.
+
+### Complete Workflow Example
+
+```python
+# 1. Orchestrator signals impl_complete
+# 2. System 3 dispatches s3-validator
+validator_response = await_validator_result()
+
+# 3. Store the response
+Bash(f"cs-store-validation --promise {promise_id} --ac-id {ac_id} --response '{json.dumps(validator_response)}'")
+
+# 4. Mark AC as met (if PASS)
+if validator_response["verdict"] == "PASS":
+    Bash(f"cs-promise --meet {promise_id} --ac-id {ac_id} --evidence 'Validator PASS' --type api")
+
+# 5. When all ACs met + all validations stored:
+Bash(f"cs-verify --promise {promise_id} --llm-verify")
+# Gate 1: checks all ACs are "met"
+# Gate 2: checks all validation responses are PASS/PARTIAL
+# Gate 3: LLM judge cross-validates evidence + validator findings
+```
+
 ---
 
-**Version**: 1.0.0
+**Version**: 1.1.0
 **Source**: PRD-S3-AUTONOMY-001 Epic 4, Feature 4.3

@@ -51,6 +51,7 @@ VERIFY_TYPE="manual"
 CHECK_MODE=false
 VERBOSE=false
 LLM_VERIFY=false
+SKIP_VALIDATION_CHECK=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -83,6 +84,10 @@ while [[ $# -gt 0 ]]; do
             LLM_VERIFY=true
             shift
             ;;
+        --skip-validation-check)
+            SKIP_VALIDATION_CHECK=true
+            shift
+            ;;
         --help)
             echo "cs-verify - Verify completion promises"
             echo ""
@@ -101,6 +106,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --check          Evaluate if session can end (for StopHook)"
             echo "  --verbose        Show detailed output"
             echo "  --llm-verify     Run LLM programmatic verification (Gate 3)"
+            echo "  --skip-validation-check  Skip Gate 2 validation response enforcement"
             echo ""
             echo "Acceptance Criteria:"
             echo "  If a promise has acceptance_criteria, ALL must have status \"met\"."
@@ -291,6 +297,88 @@ if [ "$CHECK_MODE" = true ]; then
     exit 2
 fi
 
+# Gate 2: Check that validation responses exist and passed for all ACs
+check_validation_responses() {
+    local promise_id="$1"
+    local promise_file="$2"
+
+    local validations_dir="$STATE_DIR/validations/$promise_id"
+
+    # Skip for legacy promises (no ACs)
+    local has_ac
+    has_ac=$(jq 'has("acceptance_criteria") and (.acceptance_criteria | length > 0)' "$promise_file")
+    if [ "$has_ac" != "true" ]; then
+        echo "Gate 2: Skipped (legacy promise without acceptance criteria)"
+        return 0
+    fi
+
+    # Check each AC for a validation response
+    local all_passed=true
+    local missing_count=0
+    local fail_count=0
+
+    while IFS=$'\t' read -r ac_id ac_desc; do
+        local validation_file="$validations_dir/${ac_id}-validation.json"
+
+        if [ ! -f "$validation_file" ]; then
+            echo "Gate 2 BLOCKED: Missing validation for $ac_id" >&2
+            echo "  Criterion: $ac_desc" >&2
+            echo "  Expected:  $validation_file" >&2
+            echo "" >&2
+            missing_count=$((missing_count + 1))
+            all_passed=false
+            continue
+        fi
+
+        local verdict
+        verdict=$(jq -r '.verdict' "$validation_file")
+
+        case "$verdict" in
+            PASS|PARTIAL)
+                # PASS and PARTIAL are acceptable for Gate 2
+                ;;
+            FAIL)
+                echo "Gate 2 BLOCKED: Validation FAILED for $ac_id" >&2
+                echo "  Criterion: $ac_desc" >&2
+                local reasoning
+                reasoning=$(jq -r '.reasoning // "No reasoning provided"' "$validation_file")
+                echo "  Reasoning: $reasoning" >&2
+                # Show failed criteria details
+                jq -r '.criteria_results[]? | select(.status == "FAIL") | "  - [\(.criterion_id // "?")] \(.evidence // .reason // "No details")"' "$validation_file" >&2
+                echo "" >&2
+                fail_count=$((fail_count + 1))
+                all_passed=false
+                ;;
+            BLOCKED)
+                echo "Gate 2 BLOCKED: Validation BLOCKED for $ac_id" >&2
+                echo "  Criterion: $ac_desc" >&2
+                local block_reason
+                block_reason=$(jq -r '.reasoning // "No reasoning provided"' "$validation_file")
+                echo "  Reason: $block_reason" >&2
+                echo "" >&2
+                all_passed=false
+                ;;
+            *)
+                echo "Gate 2 BLOCKED: Unknown verdict '$verdict' for $ac_id" >&2
+                all_passed=false
+                ;;
+        esac
+    done < <(jq -r '.acceptance_criteria[] | [.id, .description] | @tsv' "$promise_file")
+
+    if [ "$all_passed" != "true" ]; then
+        if [ $missing_count -gt 0 ]; then
+            echo "ACTION: Dispatch s3-validator teammates to validate before running cs-verify." >&2
+            echo "  Store results with: cs-store-validation --promise $promise_id --ac-id <AC-X> --response '<json>'" >&2
+        fi
+        if [ $fail_count -gt 0 ]; then
+            echo "ACTION: Address validation failures and re-run validators before verifying." >&2
+        fi
+        return 1
+    fi
+
+    return 0
+}
+
 # Handle verification mode
 if [ "$MODE" != "verify" ]; then
     echo "Error: Must specify --promise or --check" >&2
@@ -366,6 +454,16 @@ if [ "$HAS_AC" = "true" ]; then
         exit 1
     fi
     # All ACs met — --proof is optional (stored as summary note if provided)
+
+    # Gate 2: Validation response enforcement
+    if [ "$SKIP_VALIDATION_CHECK" != "true" ]; then
+        if ! check_validation_responses "$PROMISE_ID" "$PROMISE_FILE"; then
+            exit 1
+        fi
+        echo "Gate 2: All validation responses verified (PASS)"
+    else
+        echo "WARNING: Skipping Gate 2 validation check (--skip-validation-check)" >&2
+    fi
 else
     # Legacy promise (no acceptance_criteria) — --proof is required
     if [ -z "$PROOF" ]; then
@@ -392,6 +490,7 @@ if [ "$LLM_VERIFY" = true ]; then
         LLM_RESULT=$("$LLM_SCRIPT" \
             --summary "$SUMMARY" \
             --criteria "$CRITERIA_JSON" \
+            --promise-id "$PROMISE_ID" \
             ${PROOF:+--proof "$PROOF"} 2>/dev/null) || true
 
         if [ -n "$LLM_RESULT" ]; then

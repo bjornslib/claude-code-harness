@@ -9,9 +9,11 @@ completion-state/promises/
 completion-state/sessions/
 completion-state/default/
 completion-state/history/
+completion-state/validations/*/
 
 # Keep directory structure
 !completion-state/.gitkeep
 !completion-state/promises/.gitkeep
 !completion-state/sessions/.gitkeep
 !completion-state/history/.gitkeep
+!completion-state/validations/.gitkeep
