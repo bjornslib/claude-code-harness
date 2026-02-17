@@ -111,7 +111,7 @@ Use `environment` skill to configure the service instance:
 
 Then use `environment` skill to apply and deploy.
 
-For variable references, see [reference/variables.md](references/variables.md).
+For variable references, see [reference/variables.md](../railway-common/references/variables.md).
 
 ## Check Service Status
 

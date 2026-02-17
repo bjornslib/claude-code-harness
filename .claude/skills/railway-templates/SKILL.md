@@ -158,7 +158,7 @@ SCRIPT
 
 After deploying a template, connect other services using reference variables.
 
-For complete variable syntax and wiring patterns, see [variables.md](references/variables.md).
+For complete variable syntax and wiring patterns, see [variables.md](../railway-common/references/variables.md).
 
 ### Pattern
 
