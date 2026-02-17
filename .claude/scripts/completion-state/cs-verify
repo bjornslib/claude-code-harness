@@ -50,6 +50,7 @@ PROOF=""
 VERIFY_TYPE="manual"
 CHECK_MODE=false
 VERBOSE=false
+LLM_VERIFY=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -78,6 +79,10 @@ while [[ $# -gt 0 ]]; do
             TASK_ID="$2"
             shift 2
             ;;
+        --llm-verify)
+            LLM_VERIFY=true
+            shift
+            ;;
         --help)
             echo "cs-verify - Verify completion promises"
             echo ""
@@ -95,6 +100,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --task-id <id>   Also add comment to beads task (atomic update)"
             echo "  --check          Evaluate if session can end (for StopHook)"
             echo "  --verbose        Show detailed output"
+            echo "  --llm-verify     Run LLM programmatic verification (Gate 3)"
             echo ""
             echo "Acceptance Criteria:"
             echo "  If a promise has acceptance_criteria, ALL must have status \"met\"."
@@ -365,6 +371,54 @@ else
     if [ -z "$PROOF" ]; then
         echo "Error: --proof is required for legacy promises without acceptance criteria" >&2
         exit 1
+    fi
+fi
+
+# LLM verification gate (Gate 3 in triple-gate validation)
+if [ "$LLM_VERIFY" = true ]; then
+    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+    LLM_SCRIPT="$SCRIPT_DIR/cs-verify-llm.py"
+
+    if [ ! -f "$LLM_SCRIPT" ]; then
+        echo "WARNING: LLM verification script not found at $LLM_SCRIPT" >&2
+        echo "Proceeding without LLM verification." >&2
+    else
+        echo "Running LLM verification gate..."
+
+        # Extract criteria JSON from promise file
+        CRITERIA_JSON=$(jq -c '.acceptance_criteria' "$PROMISE_FILE")
+
+        # Call LLM verification
+        LLM_RESULT=$("$LLM_SCRIPT" \
+            --summary "$SUMMARY" \
+            --criteria "$CRITERIA_JSON" \
+            ${PROOF:+--proof "$PROOF"} 2>/dev/null) || true
+
+        if [ -n "$LLM_RESULT" ]; then
+            LLM_VERDICT=$(echo "$LLM_RESULT" | jq -r '.verdict // "WARN"')
+            LLM_REASONING=$(echo "$LLM_RESULT" | jq -r '.reasoning // "No response"')
+            LLM_CONFIDENCE=$(echo "$LLM_RESULT" | jq -r '.confidence // "N/A"')
+            LLM_COST=$(echo "$LLM_RESULT" | jq -r '.cost_estimate_usd // "N/A"')
+
+            if [ "$LLM_VERDICT" = "FAIL" ]; then
+                echo "" >&2
+                echo "LLM VERIFICATION FAILED" >&2
+                echo "Reasoning: $LLM_REASONING" >&2
+                echo "Confidence: $LLM_CONFIDENCE" >&2
+                echo "" >&2
+                echo "The programmatic judge rejected this verification." >&2
+                echo "Address the issues above and try again." >&2
+                exit 1
+            elif [ "$LLM_VERDICT" = "WARN" ]; then
+                echo "WARNING: LLM verification unavailable. $LLM_REASONING" >&2
+                echo "Proceeding with manual verification only." >&2
+            else
+                echo "LLM verification: PASS (confidence: $LLM_CONFIDENCE, cost: \$$LLM_COST)"
+            fi
+        else
+            echo "WARNING: LLM verification returned empty result." >&2
+            echo "Proceeding with manual verification only." >&2
+        fi
     fi
 fi
 

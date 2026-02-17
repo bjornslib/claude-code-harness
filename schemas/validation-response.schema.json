@@ -1,0 +1,122 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ValidationResponse",
+  "description": "Standard response format from s3-validator → System 3 (PRD-S3-AUTONOMY-001 F4.3)",
+  "type": "object",
+  "required": ["task_id", "verdict", "criteria_results", "timestamp"],
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "description": "Beads task ID that was validated — MUST match the request task_id for correlation"
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["PASS", "FAIL", "PARTIAL", "BLOCKED"],
+      "description": "Overall validation result: PASS (all criteria met), FAIL (criteria not met), PARTIAL (some pass/some fail), BLOCKED (cannot validate — services down, files missing)"
+    },
+    "criteria_results": {
+      "type": "array",
+      "description": "Per-criterion validation results",
+      "items": {
+        "type": "object",
+        "required": ["criterion_id", "status", "evidence"],
+        "properties": {
+          "criterion_id": {
+            "type": "string",
+            "description": "Matches the id field from the request's acceptance_criteria"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["PASS", "FAIL", "SKIP", "BLOCKED"],
+            "description": "Individual criterion result"
+          },
+          "evidence": {
+            "type": "string",
+            "description": "Specific evidence supporting the status (file paths, test output, API responses)"
+          },
+          "remediation": {
+            "type": "string",
+            "description": "If FAIL: specific steps needed to fix. If PASS: omit or leave empty"
+          }
+        }
+      }
+    },
+    "evidence_collected": {
+      "type": "object",
+      "description": "Artifacts captured during validation",
+      "properties": {
+        "screenshots": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": { "type": "string" },
+              "description": { "type": "string" },
+              "step": { "type": "string" }
+            }
+          },
+          "description": "Browser screenshots captured during E2E validation"
+        },
+        "test_results": {
+          "type": "object",
+          "properties": {
+            "command": { "type": "string", "description": "Test command executed" },
+            "exit_code": { "type": "integer" },
+            "passed": { "type": "integer" },
+            "failed": { "type": "integer" },
+            "skipped": { "type": "integer" },
+            "output_snippet": { "type": "string", "description": "First 500 chars of test output" }
+          }
+        },
+        "api_responses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "endpoint": { "type": "string" },
+              "method": { "type": "string" },
+              "status_code": { "type": "integer" },
+              "response_snippet": { "type": "string" }
+            }
+          }
+        },
+        "file_checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": { "type": "string" },
+              "exists": { "type": "boolean" },
+              "size_bytes": { "type": "integer" },
+              "contains_expected": { "type": "boolean" },
+              "note": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "reasoning": {
+      "type": "string",
+      "description": "Overall assessment explaining the verdict, covering key findings and any concerns"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Validator's confidence in the verdict (0.0 = no confidence, 1.0 = certain)"
+    },
+    "duration_seconds": {
+      "type": "number",
+      "description": "Time taken to complete validation"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when validation completed"
+    },
+    "validator_id": {
+      "type": "string",
+      "description": "Name of the validator agent (e.g., s3-validator-task-123)"
+    }
+  }
+}
