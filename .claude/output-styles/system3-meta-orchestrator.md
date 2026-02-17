@@ -833,43 +833,25 @@ tmux send-keys -t orch-epic4 Enter
 
 **🚨 CRITICAL Requirements for Orchestrator Initialization**:
 
-**Environment Variables (ALL FOUR REQUIRED - set BEFORE launching Claude Code):**
-```bash
-# 1. Session isolation for completion state
-tmux send-keys -t "orch-[name]" "export CLAUDE_SESSION_DIR=[initiative]-$(date +%Y%m%d)"
-tmux send-keys -t "orch-[name]" Enter
+**Environment Variables (ALL FOUR REQUIRED -- set BEFORE launching Claude Code):**
+- `CLAUDE_SESSION_DIR` -- Session isolation for completion state
+- `CLAUDE_SESSION_ID` -- Message bus detection
+- `CLAUDE_CODE_TASK_LIST_ID` -- Shared task tracking with validation monitors
+- `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` -- Native team coordination
 
-# 2. Message bus detection
-tmux send-keys -t "orch-[name]" "export CLAUDE_SESSION_ID=orch-[name]"
-tmux send-keys -t "orch-[name]" Enter
-
-# 3. 🚨 TASK LIST ID - enables shared task tracking with validation monitors
-tmux send-keys -t "orch-[name]" "export CLAUDE_CODE_TASK_LIST_ID=PRD-[prd-name]"
-tmux send-keys -t "orch-[name]" Enter
-
-# 4. 🚨 AGENT TEAMS - enables native team coordination (Teammate, SendMessage, shared TaskList)
-tmux send-keys -t "orch-[name]" "export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1"
-tmux send-keys -t "orch-[name]" Enter
-```
+**Exact setup commands**: See `Skill("system3-orchestrator")` -> SPAWN WORKFLOW section.
 
 **After Environment Variables Are Set:**
 1. Launch Claude Code with `ccorch` (or `launchcc`)
 2. Wait for initialization (`sleep 5`)
-3. **System 3 selects output style via direct command** (orchestrator starts in "default" — it won't reliably follow text instructions to change its own style):
-   ```bash
-   # CRITICAL: Text and Enter MUST be separate send-keys calls (Pattern 1)
-   # Do NOT include a linebreak in the text — send the command text first, then Enter separately
-   tmux send-keys -t "orch-[name]" "/output-style orchestrator"
-   tmux send-keys -t "orch-[name]" Enter
-   sleep 3  # Wait for style to load
-   ```
-4. **THEN send wisdom injection prompt** — orchestrator is now in the correct output style
+3. **System 3 selects output style** via `/output-style orchestrator` (separate send-keys calls per Pattern 1)
+4. **THEN send wisdom injection prompt** -- orchestrator is now in the correct output style
 5. **Skill("orchestrator-multiagent")** must be invoked by orchestrator (first action in wisdom prompt)
-6. **Create worker team**: `Teammate(operation="spawnTeam", team_name="{initiative}-workers", description="Workers for {initiative}")` — establishes native team for worker coordination
+6. **Create worker team**: `Teammate(operation="spawnTeam", team_name="{initiative}-workers", description="Workers for {initiative}")`
 7. **Message bus registration** must happen after skill invocation
 8. **Background monitor** should be spawned for real-time message detection
 
-**Why System 3 selects the output style**: Orchestrators start in "default" output style. Embedding output style instructions in the wisdom prompt text is unreliable — the orchestrator in default mode may not follow it. System 3 physically typing `/output-style orchestrator` via tmux guarantees the correct style is active before any work begins.
+**Why System 3 selects the output style**: Orchestrators start in "default" output style. System 3 physically typing `/output-style orchestrator` via tmux guarantees the correct style is active before any work begins.
 
 **Full Template**: See `.claude/skills/orchestrator-multiagent/ORCHESTRATOR_INITIALIZATION_TEMPLATE.md`
 
@@ -879,43 +861,9 @@ Before spawning, gather wisdom from BOTH banks:
 
 **Template Reference**: For the actual wisdom injection template used in orchestrator spawning, see `Skill("system3-orchestrator")` → "SPAWN WORKFLOW" section which includes the full JSON structure and bank references.
 
-```python
-# 1. Meta-orchestration patterns (private)
-meta_patterns = mcp__hindsight__reflect(
-    f"What orchestration patterns apply to {initiative_type}?",
-    budget="mid",
-    bank_id="system3-orchestrator"
-)
+Gather meta-orchestration patterns from private bank and project-specific patterns from project bank. Format with skill invocation reminder.
 
-# 2. Project-specific patterns (from project bank)
-PROJECT_BANK = os.environ.get("CLAUDE_PROJECT_BANK", "default-project")
-project_patterns = mcp__hindsight__reflect(
-    f"What development patterns apply to {domain}?",
-    budget="mid",
-    bank_id=PROJECT_BANK
-)
-
-# 3. Format wisdom injection WITH skill invocation reminder
-wisdom = format_wisdom_injection(meta_patterns, project_patterns)
-
-# 4. CRITICAL: Wisdom injection MUST include these instructions
-#    NOTE: /output-style is already selected by System 3 via tmux BEFORE
-#    sending this prompt. Do NOT include /output-style in the wisdom text.
-skill_reminder = """
-## FIRST ACTIONS REQUIRED (DO NOT SKIP)
-
-> Your output style was already set to "orchestrator" by System 3 during spawn.
-> You do NOT need to run /output-style — it is already active.
-
-1. IMMEDIATE: Skill("orchestrator-multiagent")
-   This loads worker coordination patterns. Without it, you cannot properly delegate to workers.
-
-2. CREATE WORKER TEAM: Teammate(operation="spawnTeam", team_name="{initiative}-workers", description="Workers for {initiative}")
-   This creates the native team for worker coordination via TaskCreate + SendMessage.
-
-Do NOT skip these steps - orchestrators without the multiagent skill cannot properly delegate.
-"""
-```
+**Full wisdom injection template**: See `Skill("system3-orchestrator")` -> SPAWN WORKFLOW section.
 
 **Wisdom Injection Template**:
 ```markdown
@@ -978,143 +926,11 @@ System 3 (Opus)
         ──────────────────────────────────────────────────────────────────────────┘
 ```
 
-#### Step 1: Launch Background Validation-Agents (one per orchestrator)
+#### Implementation
 
-```python
-# For each orchestrator, spawn a background Sonnet monitor for deep validation
-orchestrator_sessions = ["orch-live-form-ui", "orch-employer-data-model"]
+Launch background Sonnet validation-agents (one per orchestrator) + one blocking Haiku watcher for all.
 
-for orch_session in orchestrator_sessions:
-    Task(
-        subagent_type="validation-test-agent",
-        model="sonnet",  # Sonnet has exit discipline; Haiku doesn't
-        run_in_background=True,  # Non-blocking
-        description=f"Background monitor: {orch_session}",
-        prompt=f"--mode=monitor --session-id={orch_session} --task-list-id=PRD-XXX"
-    )
-```
-
-#### Step 2: Launch ONE Blocking Haiku Watcher (monitors ALL orchestrators)
-
-```python
-# This keeps System 3 alive and reports when ANY orchestrator needs attention
-orchestrator_sessions = ["orch-live-form-ui", "orch-employer-data-model"]
-session_list = ", ".join(orchestrator_sessions)
-
-Task(
-    subagent_type="general-purpose",
-    model="haiku",
-    run_in_background=False,  # BLOCKING - keeps System 3 alive
-    description="Blocking watcher for all orchestrators",
-    prompt=f'''You are monitoring these orchestrators: {session_list}
-
-## Your Mission
-Poll all orchestrators periodically. Report back to System 3 IMMEDIATELY when ANY orchestrator:
-1. **COMPLETE**: Signals work is done
-2. **BLOCKED**: Stuck on same issue for >10 minutes
-3. **NEEDS_INPUT**: Waiting for user/System3 guidance
-4. **OFF_COURSE**: Modifying files outside scope or repeating actions
-5. **ERROR**: Same error repeated 3+ times
-
-## Monitoring Commands
-Check each orchestrator every 30-60 seconds:
-
-```bash
-# Capture recent output (use session name for each orchestrator)
-tmux capture-pane -t "ORCHESTRATOR_NAME" -p -S -100 2>/dev/null | tail -80
-```
-
-Also check beads progress:
-```bash
-bd list --status=in_progress
-bd list --status=closed | tail -5
-```
-
-## What "COMPLETE" Looks Like
-
-An orchestrator is DONE when you see these signs in the tmux output:
-
-1. **Final work report** — The orchestrator summarizes what it accomplished (files changed, tasks completed, commits made). This is typically a structured summary near the end of output.
-2. **Code committed and pushed** — You see `git commit` and `git push` commands with successful output (no errors).
-3. **Stop hook passed** — The orchestrator's session is winding down. You may see stop hook output or the Claude Code session exiting.
-4. **Claude Code exited** — The tmux pane shows a bash `$` prompt instead of Claude's `>` prompt, meaning Claude Code has exited.
-5. **tmux session gone** — `tmux has-session -t ORCHESTRATOR_NAME 2>/dev/null` returns non-zero (session no longer exists).
-
-**Any ONE of signs 4 or 5 is definitive** — report COMPLETE immediately.
-**Signs 1+2 together are strong evidence** — report COMPLETE.
-**Sign 1 alone** — wait one more poll cycle to confirm, then report COMPLETE.
-
-## Progress Indicators (Good Signs — Orchestrator Still Working)
-- Tasks being closed (`bd close`)
-- Files being edited matching scope
-- Tests being run
-- Commits being made
-- Workers being spawned or receiving results
-
-## Red Flags (Report Immediately)
-- "I'm stuck", "blocked", "need help", "waiting for"
-- Same file edited >5 times without commit
-- No activity for >10 minutes
-- Repeated errors in output
-- Questions directed at user without response
-
-## Report Format
-When ANY orchestrator needs attention:
-```
-STATUS: [COMPLETE|BLOCKED|NEEDS_INPUT|OFF_COURSE|ERROR]
-ORCHESTRATOR: [which one]
-SUMMARY: [What happened]
-LAST_ACTIVITY: [What it was doing]
-RECOMMENDED_ACTION: [What System 3 should do]
-```
-
-## Important
-- Report as soon as ONE orchestrator needs attention (don't wait for all)
-- Include which specific orchestrator needs help
-- System 3 will send guidance and may relaunch you to continue watching
-
-Begin monitoring now.
-'''
-)
-```
-
-#### Why This Pattern Works
-
-| Component | Role | Model | Blocking? |
-|-----------|------|-------|-----------|
-| validation-test-agent monitors | Deep validation, complex checks, exit discipline | Sonnet | No (background) |
-| Haiku watcher | Fast polling, session keep-alive, first-to-report | Haiku | Yes (blocking) |
-
-**Benefits:**
-- System 3 stays alive (blocking Haiku watcher)
-- Scalable to N orchestrators (one watcher monitors all)
-- Immediate intervention when any orchestrator needs help
-- Deep validation runs in parallel (Sonnet monitors with proper exit discipline)
-
-### Model Selection for Monitors
-
-| Monitor Type | Model | Reason |
-|--------------|-------|--------|
-| validation-test-agent --mode=monitor | **Sonnet** | Exit discipline required - Haiku keeps working instead of returning |
-| Blocking watcher | **Haiku** | Simple polling task, fast and cheap, exit discipline not critical |
-
-**Why not Haiku for validation-test-agent?** Testing (2026-01-25) showed:
-- ✅ Haiku validated correctly (5 tests passed)
-- ❌ Haiku failed to EXIT - kept writing documentation
-- ✅ Sonnet returned promptly: "MONITOR_COMPLETE: Task #15 validated"
-
-### tmux Monitoring Techniques
-
-```bash
-# View recent output without attaching
-tmux capture-pane -t orch-epic4 -p | tail -30
-
-# Attach to see full terminal (detach with Ctrl+B, D)
-tmux attach-session -t orch-epic4
-
-# List all orchestrator sessions
-tmux list-sessions | grep "^orch-"
-```
+**Full code examples, watcher prompts, and model selection guide**: See [references/monitoring-commands.md](references/monitoring-commands.md)
 
 ### What to Monitor
 - Task completion progress (via `bd list`)
@@ -1138,49 +954,11 @@ tmux list-sessions | grep "^orch-"
 - Deviation from learned patterns
 - Files modified outside declared scope
 
-### 🚨 MANDATORY: Review Final Report Before Cleanup
+### MANDATORY: Review Final Report Before Cleanup
 
-**When a monitor reports an orchestrator is COMPLETE, do NOT kill the session immediately.** First, capture and review the orchestrator's final output to understand what was actually accomplished.
+When a monitor reports COMPLETE, capture and review orchestrator output before killing the session.
 
-#### Step 1: Capture the Orchestrator's Final Report
-
-```bash
-# Capture the last 150 lines — this contains the orchestrator's final summary,
-# git commits, push output, and any completion messages
-tmux capture-pane -t orch-[initiative] -p -S -200 2>/dev/null | tail -150
-```
-
-**Read this output.** Look for:
-- What tasks were completed and what files were changed
-- Whether code was committed and pushed (and to which branch)
-- Any warnings, skipped items, or known issues the orchestrator flagged
-- The orchestrator's own summary of what it accomplished
-
-This is how you verify the monitor's COMPLETE status is real and understand the scope of delivered work.
-
-#### Step 2: Cleanup
-
-Only AFTER reviewing the final report:
-
-```bash
-# Kill the orchestrator's tmux session
-tmux kill-session -t orch-[initiative] 2>/dev/null && echo "Cleaned up: orch-[initiative]"
-
-# Verify cleanup
-remaining=$(tmux list-sessions 2>/dev/null | grep -c "^orch-" || echo "0")
-echo "Remaining orchestrator sessions: $remaining"
-```
-
-**Note**: Workers are now native teammates managed by the team lead (orchestrator). Shut down workers via `SendMessage(type="shutdown_request")` and clean up teams via `Teammate(operation="cleanup")` before killing the orchestrator tmux session.
-
-**Why review first**: Killing the tmux session destroys the orchestrator's output. If you kill first, you lose visibility into what was done, any issues flagged, and whether the work actually matches expectations.
-
-**Cleanup triggers:**
-| Event | Action |
-|-------|--------|
-| Orchestrator COMPLETE | Kill `orch-*` tmux session |
-| Orchestrator BLOCKED (abandoned) | Kill `orch-*` tmux session |
-| System 3 session end | Kill ALL remaining `orch-*` sessions |
+**Step-by-step review and cleanup process**: See [references/monitoring-commands.md](references/monitoring-commands.md)
 
 ### Post-Completion: Independent Validation via Oversight Agent Team
 
@@ -1723,11 +1501,7 @@ Strategic Theme: Automated Employment Verification
 
 ### Memory Contexts for OKR Tracking
 
-| Context | Bank | Purpose |
-|---------|------|---------|
-| `system3-okr-tracking` | Private | Active Business Epics, Key Result status, verification attempts |
-| `system3-prd-tracking` | Private | PRD-extracted goals (existing context) |
-| `roadmap` | Shared | Strategic Themes, long-term business direction |
+**Reference**: See [references/memory-context-taxonomy.md](references/memory-context-taxonomy.md) for OKR tracking contexts.
 
 ### Session Integration
 
@@ -2098,28 +1872,7 @@ If you catch yourself writing "Would you like me to..." when the path is clear:
 
 ## Memory Context Taxonomy
 
-### Private Bank: `system3-orchestrator`
-
-| Context | Purpose |
-|---------|---------|
-| `system3-patterns` | **Validated** orchestration patterns (passed process supervision) |
-| `system3-anti-patterns` | Failed approaches (failed process supervision) |
-| `system3-capabilities` | Capability confidence levels per domain |
-| `system3-narrative` | GEO chains (Goal-Experience-Outcome) |
-| `system3-active-goals` | Current initiatives and next steps |
-| `system3-prd-tracking` | **Active initiative goals**, acceptance criteria, and outcome records |
-
-### Project Bank: `$CLAUDE_PROJECT_BANK`
-
-| Context | Purpose |
-|---------|---------|
-| `project` | Core project knowledge |
-| `patterns` | Development patterns (backend, frontend, etc.) |
-| `architecture` | Solution designs and decisions |
-| `bugs` | Root causes and prevention strategies |
-| `deployment` | Infrastructure patterns |
-
-**Note:** The project bank ID is derived from your current directory name (e.g., `dspy-preemploymentdirectory-poc`). Access via `os.environ.get("CLAUDE_PROJECT_BANK")`.
+**Reference**: See [references/memory-context-taxonomy.md](references/memory-context-taxonomy.md) for complete bank/context taxonomy (private + project banks).
 
 ---
 
@@ -2131,136 +1884,12 @@ If you catch yourself writing "Would you like me to..." when the path is clear:
 
 ## Inter-Instance Messaging
 
-Real-time communication with orchestrators via the message bus.
+Real-time communication with orchestrators via the message bus. Key operations: `mb-init`, `mb-register`, `mb-send`, `mb-recv`, `mb-unregister`.
 
-**Architecture Reference**: See [MESSAGE_BUS_ARCHITECTURE.md](.claude/documentation/MESSAGE_BUS_ARCHITECTURE.md) for the complete architecture overview including message flow diagrams and failure modes.
+**Architecture**: See [MESSAGE_BUS_ARCHITECTURE.md](.claude/documentation/MESSAGE_BUS_ARCHITECTURE.md)
+**CLI Reference & Message Types**: See [references/inter-instance-messaging.md](references/inter-instance-messaging.md)
 
-### Initialization
-
-At session start, initialize and register:
-
-```bash
-# Initialize message bus (if needed)
-.claude/scripts/message-bus/mb-init
-
-# Register System 3
-.claude/scripts/message-bus/mb-register "system3" "main" "System 3 Meta-Orchestrator"
-
-# Check current status
-.claude/scripts/message-bus/mb-status
-```
-
-### Sending Messages to Orchestrators
-
-```bash
-# Guidance to specific orchestrator
-.claude/scripts/message-bus/mb-send "orch-epic4" "guidance" \
-    '{"subject":"Priority shift","body":"Focus on API endpoints first"}'
-
-# Broadcast to ALL active orchestrators
-.claude/scripts/message-bus/mb-send --broadcast "announcement" \
-    '{"subject":"Policy update","body":"All commits require passing tests"}'
-
-# Urgent message (triggers immediate tmux injection)
-.claude/scripts/message-bus/mb-send "orch-epic4" "urgent" \
-    '{"subject":"Stop work","body":"Regression detected in main branch"}' --urgent
-```
-
-### Message Types
-
-| Type | Direction | Purpose |
-|------|-----------|---------|
-| `guidance` | System 3 → Orch | Strategic direction, pattern reminders |
-| `completion` | Orch → System 3 | Task/epic completion report |
-| `broadcast` | System 3 → All | Announcements, policy changes |
-| `query` | Any → Any | Status request |
-| `urgent` | Any → Any | High-priority, triggers tmux inject |
-
-### Receiving Messages
-
-Messages are automatically injected via PostToolUse hook. For manual check:
-
-```bash
-/check-messages
-```
-
-### Orchestrator Registry
-
-View active orchestrators:
-
-```bash
-.claude/scripts/message-bus/mb-list
-```
-
-When spawning orchestrators, ensure they register:
-
-```bash
-# Include in orchestrator's initialization:
-.claude/scripts/message-bus/mb-register "orch-[name]" "orch-[name]" "[description]" \
-    --initiative="[epic]" --worktree="$(pwd)"
-```
-
-### Spawn Background Monitor (Recommended)
-
-For each active session, spawn a background monitor for real-time message detection:
-
-```python
-Task(
-    subagent_type="general-purpose",
-    model="haiku",
-    run_in_background=True,
-    description="Message queue monitor",
-    prompt="""[Monitor prompt from .claude/skills/message-bus/monitor-prompt-template.md]"""
-)
-```
-
-### Message Flow Architecture
-
-```
-System 3 ──mb-send──► SQLite Queue ◄──polls── Background Monitor (Haiku)
-                           │                          │
-                           │                          ▼
-                           │                   Signal File
-                           │                          │
-                           ▼                          ▼
-                    Orchestrator ◄─────────── PostToolUse Hook
-                                              (injects message)
-```
-
-### Session End
-
-**MANDATORY cleanup before stopping:**
-
-```bash
-# 1. Kill ALL orchestrator tmux sessions spawned during this session
-echo "Cleaning up orchestrator sessions..."
-for session in $(tmux list-sessions 2>/dev/null | grep "^orch-" | awk -F: '{print $1}'); do
-    tmux kill-session -t "$session" 2>/dev/null && echo "Killed: $session"
-done
-
-# 2. Verify cleanup
-remaining=$(tmux list-sessions 2>/dev/null | grep -c "^orch-" || echo "0")
-echo "Remaining orchestrator sessions: $remaining"
-
-# 3. Unregister from message bus
-.claude/scripts/message-bus/mb-unregister "system3"
-```
-
-**Note**: Workers are now native teammates managed by the team lead (orchestrator). Shut down workers via `SendMessage(type="shutdown_request")` and clean up teams via `Teammate(operation="cleanup")` before killing the orchestrator tmux session.
-
-**When orchestrator completes (before session end):**
-
-After a monitor reports completion, **always review the final report first** (see "Review Final Report Before Cleanup" above), then kill the session:
-
-```bash
-# 1. Review final output FIRST
-tmux capture-pane -t orch-[initiative] -p -S -200 2>/dev/null | tail -150
-
-# 2. THEN kill the session
-tmux kill-session -t orch-[initiative] 2>/dev/null && echo "Cleaned up: orch-[initiative]"
-```
-
-**Why review first**: Killing the tmux session destroys the orchestrator's output permanently.
+MANDATORY at session end: kill all `orch-*` tmux sessions and unregister from message bus.
 
 ---
 
@@ -2296,188 +1925,7 @@ pending → in_progress → verified | cancelled
 
 **For tmux-spawned orchestrators**: You must set `CLAUDE_SESSION_ID` manually before launching Claude Code (see Spawning Orchestrators section).
 
----
-
-### Session Initialization (MANDATORY for goal-oriented work)
-
-At session start, when user provides a goal or PRD:
-
-```bash
-# CLAUDE_SESSION_ID is already set by ccsystem3 - no cs-init needed!
-
-# 1. Create promise from user's goal
-cs-promise --create "Complete the user authentication feature with tests"
-
-# 2. Start work immediately (pending → in_progress)
-cs-promise --start <promise-id>
-
-# 3. (Optional) Check for orphaned promises from crashed sessions
-cs-status --orphans
-```
-
-### During Work
-
-```bash
-# View your active promises
-cs-promise --mine
-
-# Show promise details
-cs-promise --show <promise-id>
-
-# Check overall status
-cs-status
-
-# Verify when work is complete
-cs-verify --promise <promise-id> --type test --proof "All acceptance criteria met, tests passing"
-```
-
-### Ownership Management
-
-```bash
-# Release ownership (orphan the promise) if you need to hand off
-cs-promise --release <promise-id>
-
-# Adopt an orphaned promise from another session
-cs-promise --adopt <promise-id>
-
-# Cancel a promise that's no longer needed
-cs-promise --cancel <promise-id>
-```
-
-### Stop Hook Integration
-
-The `CompletionPromiseChecker` in `unified_stop_gate/checkers.py` evaluates promise status:
-
-- **Exit 0**: No owned promises OR all owned promises verified → session can end
-- **Exit 2**: Owned promises have `pending` or `in_progress` status → blocks stop
-
-When blocked, you'll see:
-```
-COMPLETION CRITERIA NOT MET
-
-Session: 20260110T142532Z-a7f3b9e1
-
-IN_PROGRESS PROMISES (1):
-  promise-b1afb394: "Complete user authentication..."
-
-NEXT ACTION:
-  Complete and verify: cs-verify --promise promise-b1afb394 --proof "..."
-```
-
-**Orphan Warnings**: The checker warns about orphaned in_progress promises but doesn't block on them.
-
-### Checking Status
-
-```bash
-# Full status overview (all sessions)
-cs-status
-
-# Only my promises
-cs-status --mine
-
-# Check for orphaned promises
-cs-status --orphans
-
-# View history (verified/cancelled)
-cs-status --history
-
-# JSON output for programmatic access
-cs-status --json
-
-# Check if session can end (for scripts)
-cs-verify --check
-```
-
-### Verification Sub-Agent
-
-For thorough verification, spawn a dedicated agent:
-
-```python
-Task(
-    subagent_type="general-purpose",
-    model="sonnet",
-    description="Verify completion criteria",
-    prompt="""
-    List promises owned by this session: cs-status --mine
-
-    For each in_progress promise:
-    1. Verify the acceptance criteria are actually met
-    2. Run relevant tests to confirm
-    3. Collect evidence/proof
-
-    Then verify each promise:
-    cs-verify --promise <id> --type test --proof "Evidence of completion"
-
-    Report what was verified and any gaps found.
-    """
-)
-```
-
-### Integration with Orchestrators
-
-When spawning orchestrators, inject completion context:
-
-```python
-# Include in wisdom injection
-completion_context = Bash("cs-status --json")
-
-wisdom = f"""
-## Active Completion Promises
-{completion_context}
-
-Report completion with:
-  cs-verify --promise <id> --type test --proof "Evidence..."
-
-If blocked, use:
-  cs-promise --release <id>  # To hand off to another session
-"""
-```
-
-### Promise JSON Schema
-
-```json
-{
-    "id": "promise-{8hex_chars}",
-    "summary": "Description of the promise",
-    "ownership": {
-        "created_by": "session-id",
-        "created_at": "timestamp",
-        "owned_by": "session-id",
-        "owned_since": "timestamp"
-    },
-    "status": "pending|in_progress|verified|cancelled",
-    "verification": {
-        "verified_at": null,
-        "verified_by": null,
-        "type": null,
-        "proof": null
-    },
-    "structure": {
-        "epics": [],
-        "goals": []
-    }
-}
-```
-
-### CLI Reference
-
-**Note**: `CLAUDE_SESSION_ID` is auto-set by `ccsystem3`. Only orchestrators in tmux need manual setup.
-
-| Command | Purpose |
-|---------|---------|
-| `cs-promise --create "..."` | Create new promise owned by current session |
-| `cs-promise --list` | List all promises with ownership |
-| `cs-promise --mine` | List only my promises |
-| `cs-promise --show <id>` | Show promise details |
-| `cs-promise --start <id>` | Set status to in_progress |
-| `cs-promise --adopt <id>` | Adopt an orphaned promise |
-| `cs-promise --release <id>` | Release ownership (orphan) |
-| `cs-promise --cancel <id>` | Cancel promise |
-| `cs-verify --promise <id> --proof "..."` | Verify and complete promise |
-| `cs-verify --check` | Check if session can end |
-| `cs-status` | Show completion state overview |
-
-**Scripts location**: `.claude/scripts/completion-state/`
+**Full CLI reference, JSON schema, and workflows**: See [references/completion-promise-cli.md](references/completion-promise-cli.md)
 
 ---
 

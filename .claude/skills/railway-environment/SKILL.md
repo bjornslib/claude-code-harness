@@ -145,9 +145,9 @@ railway environment config --json
 }
 ```
 
-For complete field reference, see [reference/environment-config.md](references/environment-config.md).
+For complete field reference, see [reference/environment-config.md](../railway-common/references/environment-config.md).
 
-For variable syntax and service wiring patterns, see [reference/variables.md](references/variables.md).
+For variable syntax and service wiring patterns, see [reference/variables.md](../railway-common/references/variables.md).
 
 ## Get Rendered Variables
 

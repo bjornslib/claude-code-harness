@@ -53,7 +53,7 @@ skill
 
 Before creating a database, check if one already exists.
 
-For full environment config structure, see [environment-config.md](references/environment-config.md).
+For full environment config structure, see [environment-config.md](../railway-common/references/environment-config.md).
 
 ```bash
 railway status --json
@@ -156,7 +156,7 @@ SCRIPT
 
 After deployment, other services connect using reference variables.
 
-For complete variable reference syntax and wiring patterns, see [variables.md](references/variables.md).
+For complete variable reference syntax and wiring patterns, see [variables.md](../railway-common/references/variables.md).
 
 ### Backend Services (Server-side)
 
