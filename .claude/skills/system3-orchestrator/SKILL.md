@@ -141,12 +141,33 @@ TeamCreate(team_name=f"s3-{initiative}-oversight", description=f"S3 independent 
 
 Spawn specialist workers into the team. See [references/oversight-team.md](references/oversight-team.md) for exact spawn commands and prompts.
 
+**On-demand validation**: For targeted single-task validations during execution (not just post-completion), spawn lightweight `s3-validator` teammates on-demand:
+
+```python
+# On-demand validator — spawns, validates, reports, exits
+Task(
+    subagent_type="validation-test-agent",
+    team_name=f"s3-{initiative}-oversight",
+    name=f"s3-validator-{task_id}",
+    model="sonnet",
+    prompt=f"Validate {task_id} against: {criteria}. Report to team-lead, then exit."
+)
+# For parallel validation of multiple tasks, spawn one validator per task
+```
+
+See [references/validation-workflow.md](references/validation-workflow.md) section "On-Demand Validation Teammate" for full patterns, parallel spawning, and browser validation.
+
 ### [ ] 6. Define Validation Expectations
 
 Determine which validation levels apply:
 - [ ] Unit tests required?
 - [ ] API tests required?
 - [ ] E2E browser tests required?
+
+Choose validation strategy:
+- **On-demand validators**: For incremental validation during execution
+- **Full oversight team**: For comprehensive post-completion checks
+- **Triple-gate**: On-demand validator + cs-verify programmatic gate + completion promise
 
 **Detailed workflow**: See [references/validation-workflow.md](references/validation-workflow.md)
 

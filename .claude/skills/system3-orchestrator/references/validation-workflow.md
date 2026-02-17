@@ -136,14 +136,182 @@ def test_create_user():
 
 ---
 
+## On-Demand Validation Teammate (F4.1)
+
+### Overview
+
+System 3 spawns `s3-validator` teammates **on-demand** — one per validation request. Validators are short-lived: they receive a request, validate, report results via `SendMessage`, and exit. This replaces the continuous-oversight model for targeted validations.
+
+**Key Principle**: Spawn per-request, validate, report, exit. Do NOT keep validators idle.
+
+### When to Use On-Demand vs Oversight Team
+
+| Scenario | Pattern | Why |
+|----------|---------|-----|
+| Single task validation after implementation | **On-demand s3-validator** | Cheap, focused, exits quickly |
+| Full PRD acceptance testing (multi-feature) | **On-demand s3-validator** | Same pattern, richer prompt |
+| Post-orchestrator comprehensive check | **Oversight team** (see oversight-team.md) | Multiple specialists needed |
+| Parallel validation of independent tasks | **Multiple on-demand validators** | Each validates independently |
+
+### Spawn Pattern: Single Validation
+
+```python
+# Step 1: Spawn s3-validator as a teammate
+Task(
+    subagent_type="validation-test-agent",
+    team_name=f"s3-{initiative}-oversight",
+    name=f"s3-validator-{task_id}",
+    model="sonnet",  # MUST be Sonnet — Haiku lacks exit discipline
+    prompt=f"""You are s3-validator-{task_id} in the System 3 oversight team.
+
+    ## Validation Request
+    Task ID: {task_id}
+    PRD: {prd_id}
+    Worktree: {worktree_path}
+    Validation Type: {validation_type}  # code | browser | both
+
+    ## Acceptance Criteria to Validate
+    {acceptance_criteria_list}
+
+    ## Claimed Evidence from Orchestrator
+    {orchestrator_claimed_evidence}
+
+    ## Instructions
+    1. Independently verify each acceptance criterion
+    2. For code validation: read files, run tests, check implementations
+    3. For browser validation: use Claude in Chrome tools for E2E checks
+    4. Capture evidence for every criterion (PASS/FAIL with specifics)
+    5. Report results via SendMessage to team-lead
+    6. Exit after reporting — do NOT wait for more work
+
+    ## Required Output (via SendMessage)
+    Include a JSON validation response in your message:
+    {{
+        "task_id": "{task_id}",
+        "verdict": "PASS" | "FAIL",
+        "criteria_results": [
+            {{"criterion": "...", "status": "PASS|FAIL", "evidence": "..."}}
+        ],
+        "screenshots": ["path1", "path2"],
+        "reasoning": "Overall assessment",
+        "confidence": 0.0-1.0
+    }}
+    """
+)
+```
+
+### Spawn Pattern: Parallel Validators
+
+For validating multiple independent tasks simultaneously:
+
+```python
+# Spawn one validator per task — they run in parallel
+for task in tasks_to_validate:
+    Task(
+        subagent_type="validation-test-agent",
+        team_name=f"s3-{initiative}-oversight",
+        name=f"s3-validator-{task.id}",
+        model="sonnet",
+        prompt=f"""You are s3-validator-{task.id} in the System 3 oversight team.
+        [Same prompt structure as single validation above]
+        Task ID: {task.id}
+        PRD: {task.prd_id}
+        Acceptance Criteria: {task.criteria}
+        """
+    )
+
+# Results arrive via SendMessage — correlate by task_id in the response JSON
+# Each validator exits independently after reporting
+```
+
+### Spawn Pattern: Browser Validation
+
+When acceptance criteria require browser/E2E verification:
+
+```python
+Task(
+    subagent_type="validation-test-agent",
+    team_name=f"s3-{initiative}-oversight",
+    name=f"s3-validator-{task_id}",
+    model="sonnet",
+    prompt=f"""You are s3-validator-{task_id} in the System 3 oversight team.
+
+    ## Validation Request (Browser Required)
+    Task ID: {task_id}
+    Validation Type: browser
+
+    ## Browser Validation Steps
+    1. Navigate to {app_url}
+    2. Verify: {ui_acceptance_criteria}
+    3. Take screenshots of key states
+    4. Check browser console for errors
+    5. Report via SendMessage with screenshot paths
+
+    ## Tools Available
+    - Claude in Chrome (mcp__claude-in-chrome__*) for browser automation
+    - File system tools for reading test specs
+    - Bash for running CLI tests
+
+    ## Exit Protocol
+    After validation: SendMessage results to team-lead, then exit.
+    """
+)
+```
+
+### Result Handling
+
+After validators report back:
+
+```python
+# Validators send results via SendMessage — auto-delivered to System 3
+# Parse the JSON validation response from the message content
+
+if verdict == "PASS":
+    # Gate 3: Run cs-verify programmatic check (triple-gate)
+    Bash(f"cs-verify --promise {promise_id} --type api --proof '{evidence_summary}'")
+    Bash(f"bd close {task_id} --reason 'S3 validated: all criteria pass'")
+elif verdict == "FAIL":
+    # Do NOT close — spawn orchestrator to fix
+    Bash(f"bd update {task_id} --status=in_progress")
+    # Send failure details to orchestrator via message bus
+    Bash(f"mb-send orch-{{name}} s3_rejected '{{\"task_id\": \"{task_id}\", \"failures\": \"{failure_list}\"}}'")
+```
+
+### Model Requirements
+
+| Role | Model | Why |
+|------|-------|-----|
+| s3-validator | **Sonnet 4.5** | Exit discipline — Haiku keeps running after reporting |
+| Multiple validators | **Sonnet 4.5 each** | Same reason; each must exit independently |
+
+**Tested finding (2026-01-25)**: Haiku validates correctly (5/5 tests passed) but fails to EXIT, continuing to write documentation. Sonnet returns promptly with structured results.
+
+### Lifecycle
+
+```
+System 3                    s3-validator
+   │                            │
+   │  Task(team_name=...) ─────►│
+   │                            │── Read PRD & criteria
+   │                            │── Run tests / browser
+   │                            │── Capture evidence
+   │◄── SendMessage(verdict) ───│
+   │                            │── EXIT (graceful)
+   │  Handle result             ✕
+   │  [spawn next if needed]
+```
+
+---
+
 ## Validation Agent Integration
 
-### Two Modes
+### Three Modes
 
 | Mode | Flag | Used By | Purpose |
 |------|------|---------|---------|
 | **Unit** | `--mode=unit` | Orchestrators | Fast technical checks (mocks OK) |
 | **E2E** | `--mode=e2e --prd=PRD-XXX` | Orchestrators & System 3 | Full acceptance validation against PRD criteria |
+| **Monitor** | `--mode=monitor` | System 3 | Continuous task completion monitoring |
 
 **CRITICAL**: `--prd` parameter is MANDATORY for E2E mode. The validation-test-agent will invoke `acceptance-test-runner` internally.
 
@@ -347,7 +515,7 @@ curl -s localhost:8000/health | jq .
 # Use chrome-devtools MCP or Playwright
 ```
 
-### Validation Agent
+### Validation Agent (Subagent — Orchestrator Use)
 
 ```python
 # For tasks - fast unit check (orchestrator)
@@ -355,12 +523,31 @@ Task(subagent_type="validation-test-agent", prompt="--mode=unit --task_id=<id>")
 
 # For tasks - full E2E validation (orchestrator)
 Task(subagent_type="validation-test-agent", prompt="--mode=e2e --prd=PRD-XXX --task_id=<id>")
+```
 
-# For business outcomes (System 3)
-Task(subagent_type="validation-test-agent", prompt="--mode=e2e --prd=PRD-XXX --task_id=<id>")
+### On-Demand Validator (Teammate — System 3 Use)
+
+```python
+# Spawn validator as teammate for independent verification
+Task(
+    subagent_type="validation-test-agent",
+    team_name=f"s3-{initiative}-oversight",
+    name=f"s3-validator-{task_id}",
+    model="sonnet",
+    prompt="[validation request with criteria, evidence, worktree path]"
+)
+# Results arrive via SendMessage — correlate by task_id
+```
+
+### Triple-Gate Validation (Full Chain)
+
+```
+Gate 1: Session self-reports completion (cs-promise)
+Gate 2: s3-validator teammate independently verifies (on-demand spawn)
+Gate 3: cs-verify calls Sonnet 4.5 as programmatic judge (Anthropic SDK)
 ```
 
 ---
 
-**Version**: 1.0.0
-**Source**: System 3 Output Style - Enforcing 3-Level Validation, Validation Agent Integration
+**Version**: 2.0.0
+**Source**: System 3 Output Style, PRD-S3-AUTONOMY-001 Epic 4 (F4.1, F4.2, F4.3)

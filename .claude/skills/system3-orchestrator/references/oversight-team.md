@@ -2,6 +2,63 @@
 
 Detailed reference for System 3's independent validation team.
 
+---
+
+## On-Demand Validator Pattern (PRD-S3-AUTONOMY-001 F4.1)
+
+For targeted, single-task validations, System 3 spawns lightweight `s3-validator` teammates on-demand rather than maintaining a full oversight team.
+
+### Quick Reference
+
+```python
+# Single on-demand validation
+Task(
+    subagent_type="validation-test-agent",
+    team_name=f"s3-{initiative}-oversight",
+    name=f"s3-validator-{task_id}",
+    model="sonnet",
+    prompt=f"""You are s3-validator-{task_id}. Validate task {task_id} against:
+    {acceptance_criteria}
+    Report via SendMessage to team-lead, then exit."""
+)
+```
+
+### When to Use On-Demand vs Full Oversight Team
+
+| Use On-Demand Validator | Use Full Oversight Team |
+|------------------------|------------------------|
+| Single task completed, need quick verification | Orchestrator reports ALL work complete |
+| Incremental validation during execution | Final comprehensive check before closing epic |
+| Specific acceptance criterion check | Multi-specialist verification needed |
+| Browser-only or code-only validation | Investigation + audit + testing + collation |
+
+### Parallel On-Demand Validators
+
+Spawn multiple validators simultaneously for independent tasks:
+
+```python
+# Each validator runs independently, reports separately
+for task in completed_tasks:
+    Task(
+        subagent_type="validation-test-agent",
+        team_name=f"s3-{initiative}-oversight",
+        name=f"s3-validator-{task.id}",
+        model="sonnet",
+        prompt=f"Validate {task.id}: {task.criteria}. Report to team-lead."
+    )
+# Correlate results by task_id in each validator's SendMessage
+```
+
+### Validator Lifecycle
+
+1. **Spawn**: System 3 creates Task with team_name + unique name
+2. **Receive**: Validator reads criteria from initial prompt
+3. **Validate**: Runs tests, checks files, browser automation as needed
+4. **Report**: Sends structured results via SendMessage to team-lead
+5. **Exit**: Validator exits gracefully (no idle waiting)
+
+---
+
 ## Worker Spawn Commands
 
 ### s3-investigator (Read-Only Codebase Verification)
