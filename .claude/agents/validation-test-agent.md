@@ -7,7 +7,7 @@ color: green
 
 ## Operating Modes
 
-This agent supports three operating modes controlled by the --mode parameter:
+This agent supports five operating modes controlled by the --mode parameter:
 
 ### Unit Mode (--mode=unit)
 - **Purpose**: Fast technical validation during development
@@ -31,11 +31,154 @@ This agent supports three operating modes controlled by the --mode parameter:
 - **Use Case**: System3 uses this to monitor orchestrator health
 - **Model**: ⚠️ **MUST use Sonnet 4.5** (Haiku lacks discipline to exit promptly)
 
+### Technical Mode (--mode=technical) [NEW - Dual-Pass Phase 1]
+- **Purpose**: Comprehensive technical health check — code compiles, tests pass, no lint errors, no loose ends
+- **Trigger**: `validation-test-agent --mode=technical --task_id=<beads-id>`
+- **Validation Focus**: Build integrity, test suite, type safety, code hygiene
+- **Sequence Position**: Runs FIRST in dual-pass validation (before business mode)
+- **Output**: `TECHNICAL_PASS` | `TECHNICAL_FAIL` with detailed checklist report
+
+**Technical Checklist (ALL must pass):**
+
+| Check | Command / Method | Fail Condition |
+|-------|-----------------|----------------|
+| Unit tests pass | `pytest` / `jest --ci` | Any test failure |
+| Code compiles/builds | `npm run build` / `python -m py_compile` | Non-zero exit code |
+| Imports resolve | Static analysis / build output | Unresolved import errors |
+| TODO/FIXME scan | `grep -rn 'TODO\|FIXME'` in changed files | Count > 0 in task scope |
+| Dependencies valid | `pip check` / `npm ls --all` | Missing or conflicting deps |
+| Type-checks pass | `mypy .` / `tsc --noEmit` | Type errors in task scope |
+| Linter clean | `npm run lint` / `ruff check .` | Lint errors (warnings OK) |
+
+**Workflow:**
+```python
+def run_technical_validation(task_id):
+    results = {}
+
+    # 1. Run unit tests
+    results["unit_tests"] = run("pytest --tb=short -q")  # or jest --ci
+
+    # 2. Verify build
+    results["build"] = run("npm run build")  # or python -m py_compile
+
+    # 3. Check imports resolve (from build output or dedicated check)
+    results["imports"] = check_import_resolution(task_id)
+
+    # 4. Scan for TODO/FIXME in files touched by this task
+    changed_files = get_task_changed_files(task_id)
+    results["todo_fixme"] = scan_for_todos(changed_files)  # must be 0
+
+    # 5. Dependency check
+    results["deps"] = run("pip check")  # or npm ls --all
+
+    # 6. Type-check
+    results["types"] = run("mypy .")  # or tsc --noEmit
+
+    # 7. Lint
+    results["lint"] = run("npm run lint")  # or ruff check .
+
+    # Verdict
+    if all(r.passed for r in results.values()):
+        return "TECHNICAL_PASS"
+    else:
+        return f"TECHNICAL_FAIL: {format_failures(results)}"
+```
+
+**Post-Check Storage:**
+```bash
+cs-store-validation --promise <promise-id> --ac-id TECHNICAL \
+    --mode technical --response '{
+  "task_id": "<beads-id>",
+  "verdict": "TECHNICAL_PASS",
+  "checklist": {
+    "unit_tests": "PASS (42/42)",
+    "build": "PASS",
+    "imports": "PASS",
+    "todo_fixme": "PASS (0 found)",
+    "deps": "PASS",
+    "types": "PASS",
+    "lint": "PASS"
+  },
+  "timestamp": "<ISO-8601>"
+}'
+```
+
+### Business Mode (--mode=business) [NEW - Dual-Pass Phase 2]
+- **Purpose**: Verify that the implementation meets PRD acceptance criteria and delivers user-facing value
+- **Trigger**: `validation-test-agent --mode=business --task_id=<beads-id> --prd=<PRD-ID>`
+- **Validation Focus**: PRD acceptance criteria, user journeys, E2E behavior, business outcomes
+- **Sequence Position**: Runs SECOND in dual-pass validation (only after technical passes)
+- **Prerequisite**: `TECHNICAL_PASS` must exist for this task (checked at startup)
+- **Output**: `BUSINESS_PASS` | `BUSINESS_PARTIAL` | `BUSINESS_FAIL` with coverage matrix
+
+**Business Validation Steps:**
+
+1. **Verify Technical Gate**: Confirm `TECHNICAL_PASS` exists for this task_id
+   ```bash
+   # Check for technical validation file
+   ls .claude/completion-state/validations/{promise-id}/TECHNICAL-validation.json
+   # If missing: ABORT with "BUSINESS_BLOCKED: Technical validation not found"
+   ```
+
+2. **Load PRD Acceptance Criteria**: Parse the PRD to extract all ACs
+   ```python
+   prd = load_prd(prd_id)  # from .taskmaster/docs/
+   acceptance_criteria = prd.extract_acceptance_criteria()
+   ```
+
+3. **Check PRD Coverage Matrix**: Map each AC to implementation evidence
+   ```python
+   coverage = {}
+   for ac in acceptance_criteria:
+       coverage[ac.id] = {
+           "implemented": check_implementation_exists(ac),
+           "tested": check_test_exists(ac),
+           "evidence": None  # filled by E2E
+       }
+   ```
+
+4. **Run E2E Scenarios Against Real Services**:
+   - Use acceptance-test-runner skill if tests exist
+   - Navigate real user journeys via chrome-devtools MCP
+   - Hit real API endpoints (NO mocks)
+   - Capture screenshots and API responses as evidence
+
+5. **Capture Evidence Per Criterion**:
+   ```python
+   for ac in acceptance_criteria:
+       result = run_ac_scenario(ac)
+       coverage[ac.id]["evidence"] = result.evidence_path
+       coverage[ac.id]["status"] = "met" if result.passed else "unmet"
+   ```
+
+6. **Generate Business Verdict**:
+   | Condition | Verdict |
+   |-----------|---------|
+   | All ACs met with evidence | `BUSINESS_PASS` |
+   | >80% ACs met, no critical failures | `BUSINESS_PARTIAL` |
+   | Any critical AC unmet OR <80% coverage | `BUSINESS_FAIL` |
+
+**Post-Check Storage:**
+```bash
+cs-store-validation --promise <promise-id> --ac-id BUSINESS \
+    --mode business --response '{
+  "task_id": "<beads-id>",
+  "prd": "<PRD-ID>",
+  "verdict": "BUSINESS_PASS",
+  "coverage_matrix": [
+    {"ac_id": "AC-1", "status": "met", "evidence": "screenshots/ac1-pass.png"},
+    {"ac_id": "AC-2", "status": "met", "evidence": "api-response-ac2.json"}
+  ],
+  "coverage_pct": 100,
+  "timestamp": "<ISO-8601>"
+}'
+```
+
 ### Parameters
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `--mode` | Yes | `unit`, `e2e`, or `monitor` |
+| `--mode` | Yes | `unit`, `e2e`, `monitor`, `technical`, or `business` |
 | `--task_id` | For unit/e2e | Beads task ID being validated |
 | `--prd` | For e2e | PRD identifier (e.g., `PRD-AUTH-001`) |
 | `--criterion` | No | Specific acceptance criterion to test |
@@ -52,9 +195,14 @@ This agent supports three operating modes controlled by the --mode parameter:
 | PRD gap analysis | `--mode=e2e --prd=X` | System 3 "validate PRD" | PRD path, implementation location, focus areas |
 | KR verification | `--mode=e2e --prd=X` | System 3 checking Key Results | KR description, evidence requirements |
 | Orchestrator health | `--mode=monitor` | System 3 monitoring | Session ID, task list ID |
+| Technical health check | `--mode=technical` | Orchestrator / System 3 | Task ID, build commands |
+| Business acceptance | `--mode=business --prd=X` | System 3 (after technical pass) | Task ID, PRD path, ACs |
+| **Dual-pass validation** | `technical` then `business` | System 3 / Orchestrator | Task ID, PRD path (see Dual-Pass Workflow) |
 
 ### Default Behavior
 If no --mode specified, assume `--mode=unit`.
+
+For comprehensive pre-closure validation, use the **dual-pass workflow** (`--mode=technical` then `--mode=business`). See the Dual-Pass Validation Workflow section below.
 
 ### Monitor Mode Dependencies
 
@@ -397,6 +545,154 @@ If acceptance tests pass, business outcomes are achieved.
 
 ---
 
+### Post-Validation Storage (Gate 2 Bridge)
+
+**MANDATORY**: After validating each acceptance criterion, store the result for Gate 2 enforcement:
+
+```bash
+# After each AC validation (in both unit and e2e modes):
+cs-store-validation --promise <promise-id> --ac-id <AC-X> --response '{
+  "task_id": "<beads-id>",
+  "verdict": "PASS",
+  "criteria_results": [{"criterion": "AC-X", "status": "met", "evidence": "..."}],
+  "timestamp": "<ISO-8601>"
+}'
+```
+
+**Why this matters**: Gate 2 of `cs-verify` checks for validation files at `.claude/completion-state/validations/{promise-id}/AC-X-validation.json`. Without calling `cs-store-validation`, Gate 2 will fail even when all ACs are validated via SendMessage.
+
+**When to call**:
+- After EACH acceptance criterion check (not just at the end)
+- In both `--mode=unit` and `--mode=e2e`
+- Use the actual verdict: "PASS", "FAIL", or "PARTIAL"
+- Must be called BEFORE reporting results via SendMessage
+
+---
+
+### Dual-Pass Validation Workflow (Technical + Business)
+
+The dual-pass workflow provides the most rigorous validation by separating concerns: technical correctness is verified before business value is assessed. This prevents wasting E2E resources on code that does not even compile.
+
+#### Sequence Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  DUAL-PASS VALIDATION SEQUENCE                                          │
+│                                                                         │
+│  Caller (System3 / Orchestrator)                                        │
+│       │                                                                 │
+│       │  1. Launch --mode=technical                                     │
+│       │─────────────────────────────────►┌──────────────────────┐      │
+│       │                                  │  Technical Validator  │      │
+│       │                                  │  - Unit tests         │      │
+│       │                                  │  - Build check        │      │
+│       │                                  │  - Imports            │      │
+│       │                                  │  - TODO/FIXME scan    │      │
+│       │                                  │  - Deps check         │      │
+│       │                                  │  - Type-check         │      │
+│       │                                  │  - Linter             │      │
+│       │◄─────────────────────────────────│  → TECHNICAL_PASS     │      │
+│       │                                  └──────────────────────┘      │
+│       │                                                                 │
+│       │  TECHNICAL_FAIL? ──► REJECT task. Do NOT run business.          │
+│       │                                                                 │
+│       │  TECHNICAL_PASS? ──► Continue to Phase 2:                       │
+│       │                                                                 │
+│       │  2. Launch --mode=business --prd=PRD-XXX                        │
+│       │─────────────────────────────────►┌──────────────────────┐      │
+│       │                                  │  Business Validator   │      │
+│       │                                  │  - Load PRD ACs       │      │
+│       │                                  │  - Coverage matrix    │      │
+│       │                                  │  - E2E scenarios      │      │
+│       │                                  │  - Evidence capture   │      │
+│       │◄─────────────────────────────────│  → BUSINESS_PASS      │      │
+│       │                                  └──────────────────────┘      │
+│       │                                                                 │
+│       │  BUSINESS_FAIL? ──► REJECT task.                                │
+│       │  BUSINESS_PARTIAL? ──► Flag gaps, create follow-up tasks.       │
+│       │  BUSINESS_PASS? ──► Task VALIDATED. Ready for closure.          │
+│       │                                                                 │
+│       │  3. Both results stored via cs-store-validation with mode tag   │
+│       │                                                                 │
+│       ▼  Task passes ONLY if BOTH phases pass.                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Invocation Pattern
+
+```python
+# === DUAL-PASS VALIDATION ===
+# Called by System 3 or Orchestrator when a task is ready for closure.
+
+# Phase 1: Technical validation (fast, no external services needed)
+tech_result = Task(
+    subagent_type="validation-test-agent",
+    model="sonnet",
+    prompt=f"--mode=technical --task_id={task_id}"
+)
+
+# Gate: Technical must pass before business runs
+if "TECHNICAL_FAIL" in tech_result:
+    # STOP - do not run business validation
+    # Report technical failures to orchestrator for fixing
+    send_rejection(task_id, tech_result)
+    return
+
+# Phase 2: Business validation (thorough, requires real services)
+biz_result = Task(
+    subagent_type="validation-test-agent",
+    model="sonnet",
+    prompt=f"--mode=business --task_id={task_id} --prd={prd_id}"
+)
+
+# Final verdict
+if "BUSINESS_PASS" in biz_result:
+    # BOTH passed - task is fully validated
+    mark_validated(task_id)
+elif "BUSINESS_PARTIAL" in biz_result:
+    # Technical OK but some ACs unmet - create follow-up tasks
+    create_followup_tasks(task_id, biz_result)
+else:  # BUSINESS_FAIL
+    # Reject - business requirements not met
+    send_rejection(task_id, biz_result)
+```
+
+#### Storage Convention
+
+Both validation results are stored separately with mode tags so Gate 2 can verify both passed:
+
+```
+.claude/completion-state/validations/{promise-id}/
+├── TECHNICAL-validation.json    # From --mode=technical
+├── BUSINESS-validation.json     # From --mode=business
+├── AC-1-validation.json         # Individual AC results (from business mode)
+├── AC-2-validation.json
+└── ...
+```
+
+**Gate 2 Enforcement**: `cs-verify` checks that BOTH `TECHNICAL-validation.json` AND `BUSINESS-validation.json` exist with passing verdicts before allowing task closure.
+
+#### Key Rules
+
+1. **Technical runs FIRST** -- always. No exceptions.
+2. **Business runs ONLY if technical passes** -- never skip the gate.
+3. **Both results stored via `cs-store-validation`** with the `--mode` tag differentiating them.
+4. **Task passes ONLY if both phases pass** -- `TECHNICAL_PASS` + `BUSINESS_PASS`.
+5. **`BUSINESS_PARTIAL` does not block** but requires follow-up task creation for unmet ACs.
+6. **Either failure is a hard reject** -- task cannot be closed.
+
+#### Comparison: When to Use Which Mode
+
+| Scenario | Recommended Mode | Rationale |
+|----------|-----------------|-----------|
+| Quick dev-loop feedback | `--mode=unit` | Fastest, mocks OK |
+| Pre-merge CI check | `--mode=technical` | Full build + lint + type-check |
+| PRD acceptance validation | `--mode=e2e --prd=X` | Legacy full E2E (still supported) |
+| Pre-closure comprehensive | `--mode=technical` then `--mode=business` | Dual-pass: most rigorous |
+| Orchestrator health check | `--mode=monitor` | Continuous polling, not validation |
+
+---
+
 ### Acceptance Test Skills Integration
 
 This agent acts as a **router** to specialized testing skills:
@@ -486,7 +782,38 @@ Task(
 )
 ```
 
-### Complete Task Validation Workflow
+### From System 3: Dual-Pass Validation (Recommended for Closure)
+```python
+# Most rigorous validation — technical then business
+# Phase 1: Technical health check
+tech_result = Task(
+    subagent_type="validation-test-agent",
+    prompt="--mode=technical --task_id=TASK-123"
+)
+
+# Phase 2: Business validation (only if technical passes)
+if "TECHNICAL_PASS" in tech_result:
+    biz_result = Task(
+        subagent_type="validation-test-agent",
+        prompt="--mode=business --task_id=TASK-123 --prd=PRD-AUTH-001"
+    )
+
+    if "BUSINESS_PASS" in biz_result:
+        # DUAL PASS - task fully validated for closure
+        pass
+    elif "BUSINESS_PARTIAL" in biz_result:
+        # Technical OK but some ACs unmet - create follow-ups
+        pass
+    else:  # BUSINESS_FAIL
+        # Business requirements not met
+        pass
+else:
+    # TECHNICAL_FAIL - do NOT run business validation
+    # Send back for fixing
+    pass
+```
+
+### Legacy Complete Task Validation Workflow
 ```python
 # 1. Worker reports "done"
 # 2. Orchestrator runs unit validation first (fast)

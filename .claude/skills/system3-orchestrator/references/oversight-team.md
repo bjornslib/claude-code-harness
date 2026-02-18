@@ -14,7 +14,7 @@ For targeted, single-task validations, System 3 spawns lightweight `s3-validator
 # Single on-demand validation
 Task(
     subagent_type="validation-test-agent",
-    team_name=f"s3-{initiative}-oversight",
+    team_name="s3-live",
     name=f"s3-validator-{task_id}",
     model="sonnet",
     prompt=f"""You are s3-validator-{task_id}. Validate task {task_id} against:
@@ -41,7 +41,7 @@ Spawn multiple validators simultaneously for independent tasks:
 for task in completed_tasks:
     Task(
         subagent_type="validation-test-agent",
-        team_name=f"s3-{initiative}-oversight",
+        team_name="s3-live",
         name=f"s3-validator-{task.id}",
         model="sonnet",
         prompt=f"Validate {task.id}: {task.criteria}. Report to team-lead."
@@ -59,6 +59,142 @@ for task in completed_tasks:
 
 ---
 
+## Persistent s3-validator with Dual-Mode Validation
+
+### Overview
+
+For pre-closure validation, System 3 maintains a **persistent s3-validator** as a long-lived member of the `s3-live` team. Unlike on-demand validators that spawn per-task and exit, the persistent validator handles the full dual-pass sequence (technical then business) and remains available for subsequent validations.
+
+### Spawn Pattern (Persistent)
+
+```python
+# Spawned ONCE during System 3 PREFLIGHT, persists for the session
+Task(
+    subagent_type="validation-test-agent",
+    team_name="s3-live",
+    name="s3-validator",
+    model="sonnet",
+    prompt="""You are s3-validator, a persistent member of the s3-live team.
+
+    Your role: Execute dual-pass validation (technical + business) for tasks
+    as they are assigned via TaskList.
+
+    DUAL-PASS PROTOCOL:
+    For each validation task:
+    1. Run --mode=technical first (build, tests, lint, types, TODO scan)
+    2. If TECHNICAL_FAIL → report failure, do NOT run business validation
+    3. If TECHNICAL_PASS → run --mode=business --prd=<PRD-ID>
+    4. Report combined result via SendMessage to team-lead
+    5. Store both results via cs-store-validation with mode tags
+    6. Check TaskList for next validation assignment
+
+    RESULT FORMAT (SendMessage to team-lead):
+    {
+        "task_id": "<id>",
+        "technical": "TECHNICAL_PASS",
+        "business": "BUSINESS_PASS",
+        "combined_verdict": "DUAL_PASS",
+        "evidence_dir": ".claude/evidence/<task-id>/"
+    }
+
+    COMBINED VERDICTS:
+    - DUAL_PASS: Both technical and business passed
+    - DUAL_FAIL_TECHNICAL: Technical failed (business not attempted)
+    - DUAL_FAIL_BUSINESS: Technical passed but business failed
+    - DUAL_PARTIAL: Technical passed, business partial (follow-ups needed)
+
+    After completing each validation:
+    - TaskUpdate(taskId=..., status="completed")
+    - SendMessage results to team-lead
+    - Check TaskList for more work (persistent — do NOT exit)
+    """
+)
+```
+
+### Dual-Mode Sequential Validation Flow
+
+When System 3 detects a task is ready for closure:
+
+```python
+# 1. Create dual-validation task for persistent s3-validator
+TaskCreate(
+    subject=f"Dual-pass validate {task_id} against {prd_id}",
+    description=f"""Execute dual-pass validation for {task_id}:
+
+    PHASE 1 - Technical (--mode=technical):
+    - Run unit tests (pytest/jest)
+    - Verify build (npm run build / python -m py_compile)
+    - Check imports resolve
+    - Scan for TODO/FIXME (must be 0 in task scope)
+    - Verify dependencies (pip check / npm ls)
+    - Run type-checks (mypy / tsc --noEmit)
+    - Run linter (npm run lint / ruff check)
+
+    PHASE 2 - Business (--mode=business --prd={prd_id}):
+    (Only if Phase 1 passes)
+    - Load PRD acceptance criteria from {prd_path}
+    - Check coverage matrix: each AC → implementation → test
+    - Run E2E scenarios against real services
+    - Capture evidence per criterion
+    - Generate coverage percentage
+
+    Store results:
+    - cs-store-validation --promise {promise_id} --ac-id TECHNICAL --mode technical
+    - cs-store-validation --promise {promise_id} --ac-id BUSINESS --mode business
+
+    Evidence dir: .claude/evidence/{task_id}/
+    """,
+    activeForm=f"Dual-pass validating {task_id}"
+)
+
+# 2. Notify persistent s3-validator
+SendMessage(
+    type="message",
+    recipient="s3-validator",
+    content=f"Dual-pass validation task available for {task_id}",
+    summary="Dual-pass validation request"
+)
+```
+
+### Handling Dual-Pass Results
+
+```python
+# After s3-validator reports via SendMessage:
+result = parse_validator_message(message)
+
+if result["combined_verdict"] == "DUAL_PASS":
+    # Both phases passed — proceed to closure
+    Bash(f"bd close {task_id} --reason 'S3 dual-pass validated: technical + business pass'")
+
+elif result["combined_verdict"] == "DUAL_FAIL_TECHNICAL":
+    # Technical issues — send back to orchestrator for fixes
+    Bash(f"bd update {task_id} --status=in_progress")
+    Bash(f"mb-send orch-{{name}} s3_rejected '{{\"task_id\": \"{task_id}\", \"phase\": \"technical\", \"issues\": \"{result['details']}\"}}'")
+
+elif result["combined_verdict"] == "DUAL_FAIL_BUSINESS":
+    # Code is clean but doesn't meet PRD — send back with specifics
+    Bash(f"bd update {task_id} --status=in_progress")
+    Bash(f"mb-send orch-{{name}} s3_rejected '{{\"task_id\": \"{task_id}\", \"phase\": \"business\", \"unmet_acs\": \"{result['unmet_acs']}\"}}'")
+
+elif result["combined_verdict"] == "DUAL_PARTIAL":
+    # Technical OK, business partially met — create follow-up tasks
+    for unmet_ac in result["unmet_acs"]:
+        TaskCreate(subject=f"Address unmet AC: {unmet_ac}", ...)
+```
+
+### Persistent vs On-Demand Decision Matrix
+
+| Criterion | Persistent s3-validator | On-Demand s3-validator-{id} |
+|-----------|------------------------|----------------------------|
+| **Lifetime** | Session-long (spawned at PREFLIGHT) | Single task (spawned, validates, exits) |
+| **Validation depth** | Dual-pass (technical + business) | Single mode (e2e or unit) |
+| **Use when** | Pre-closure comprehensive check | Quick incremental check during execution |
+| **Team membership** | Always present in s3-live | Ephemeral team member |
+| **Task flow** | Reads from TaskList continuously | Receives criteria in initial prompt |
+| **Result storage** | Both TECHNICAL + BUSINESS files | Single validation file |
+
+---
+
 ## Worker Spawn Commands
 
 ### s3-investigator (Read-Only Codebase Verification)
@@ -66,7 +202,7 @@ for task in completed_tasks:
 ```python
 Task(
     subagent_type="Explore",
-    team_name=f"s3-{initiative}-oversight",
+    team_name="s3-live",
     name="s3-investigator",
     model="sonnet",
     prompt="""You are s3-investigator in the System 3 oversight team.
@@ -95,7 +231,7 @@ Task(
 ```python
 Task(
     subagent_type="solution-design-architect",
-    team_name=f"s3-{initiative}-oversight",
+    team_name="s3-live",
     name="s3-prd-auditor",
     model="sonnet",
     prompt="""You are s3-prd-auditor in the System 3 oversight team.
@@ -125,7 +261,7 @@ Task(
 ```python
 Task(
     subagent_type="validation-test-agent",
-    team_name=f"s3-{initiative}-oversight",
+    team_name="s3-live",
     name="s3-validator",
     model="sonnet",
     prompt="""You are s3-validator in the System 3 oversight team.
@@ -159,7 +295,7 @@ Task(
 ```python
 Task(
     subagent_type="general-purpose",
-    team_name=f"s3-{initiative}-oversight",
+    team_name="s3-live",
     name="s3-evidence-clerk",
     model="haiku",
     prompt="""You are s3-evidence-clerk in the System 3 oversight team.

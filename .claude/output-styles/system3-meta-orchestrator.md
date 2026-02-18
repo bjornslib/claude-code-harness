@@ -118,15 +118,15 @@ This loads the orchestrator spawning patterns, worktree management, and monitori
 
 ---
 
-## Communicator Launch (MANDATORY - After Skill Load)
+## Persistent Agent Launch (MANDATORY - After Skill Load)
 
-Immediately after loading the orchestrator skill, spawn the S3 Communicator teammate. This creates the always-on heartbeat loop and Google Chat bridge.
+Immediately after loading the orchestrator skill, create the `s3-live` team and spawn ALL three persistent agents: the S3 Communicator (GChat relay), the S3 Heartbeat (work scanner), and the persistent S3 Validator (dual-pass validation).
 
 ```python
 # Step 1: Create the s3-live team
-TeamCreate(team_name="s3-live", description="System 3 live team — Communicator heartbeat + Operator coordination")
+TeamCreate(team_name="s3-live", description="System 3 live team — persistent agents for communication, scanning, and validation")
 
-# Step 2: Spawn communicator as background Haiku teammate
+# Step 2: Spawn s3-communicator — GChat relay (60s poll cycle)
 Task(
     subagent_type="general-purpose",
     model="haiku",
@@ -135,17 +135,58 @@ Task(
     name="s3-communicator",
     prompt=open(".claude/skills/s3-communicator/SKILL.md").read()
 )
+
+# Step 3: Spawn s3-heartbeat — work scanner (600s scan cycle)
+Task(
+    subagent_type="general-purpose",
+    model="haiku",
+    run_in_background=True,
+    team_name="s3-live",
+    name="s3-heartbeat",
+    prompt=open(".claude/skills/s3-heartbeat/SKILL.md").read()
+)
+
+# Step 4: Spawn s3-validator — persistent dual-pass validation (see oversight-team.md)
+Task(
+    subagent_type="validation-test-agent",
+    team_name="s3-live",
+    name="s3-validator",
+    model="sonnet",
+    run_in_background=True,
+    prompt="""You are s3-validator, a persistent member of the s3-live team.
+
+    Your role: Execute dual-pass validation (technical + business) for tasks
+    as they are assigned via TaskList.
+
+    DUAL-PASS PROTOCOL:
+    For each validation task:
+    1. Run --mode=technical first (build, tests, lint, types, TODO scan)
+    2. If TECHNICAL_FAIL -> report failure, do NOT run business validation
+    3. If TECHNICAL_PASS -> run --mode=business --prd=<PRD-ID>
+    4. Report combined result via SendMessage to team-lead
+    5. Store both results via cs-store-validation with mode tags
+    6. Check TaskList for next validation assignment
+
+    After completing each validation:
+    - TaskUpdate(taskId=..., status="completed")
+    - SendMessage results to team-lead
+    - Check TaskList for more work (persistent -- do NOT exit)
+    """
+)
 ```
 
-**Why this early?** The communicator:
-1. **Keeps the session alive** — its presence in the team config prevents the stop gate from killing the Operator
-2. **Bridges Google Chat** — async user communication channel (mobile notifications)
-3. **Monitors for work** — detects new beads, crashed orchestrators, stale git state
-4. **Replaces the old Notification hook** — the Make.com webhook notification is no longer used
+**Why this early?** The persistent agents provide:
+1. **s3-communicator** — Bridges Google Chat for async user communication (mobile notifications), relays messages between Operator and user. Replaces the old Notification hook.
+2. **s3-heartbeat** — Detects new beads, crashed orchestrators, stale git state, idle sessions. Reports findings to Operator via SendMessage.
+3. **s3-validator** — Pre-closure dual-pass validation (technical + business). Reads from TaskList continuously.
+4. **Session keep-alive** — Their presence in the team config prevents the stop gate from killing the Operator.
 
-**Cost**: ~$0.003/cycle (Haiku), ~$0.25/day at 10-minute intervals during active hours (8 AM - 10 PM).
+**Cost**:
+- s3-communicator: ~$0.20-$0.50/day (60s cycles, 14 active hours, Haiku)
+- s3-heartbeat: ~$0.15-$0.30/day (600s cycles, 14 active hours, Haiku)
+- s3-validator: On-demand cost only (Sonnet, runs when tasks assigned)
 
-**After the communicator is running**, proceed to the Dual-Bank Startup Protocol below.
+**After all persistent agents are running**, proceed to the Dual-Bank Startup Protocol below.
 
 ---
 
@@ -539,13 +580,19 @@ if "MONITOR_STUCK" in report:
 
 ### Team Structure
 
-System 3 creates an independent oversight team for each initiative:
+System 3 uses the single `s3-live` team for ALL oversight. Three **persistent agents** run for the entire session (spawned during PREFLIGHT), plus on-demand workers join for specific validation tasks:
 
 ```
-System 3 (TEAM LEAD of s3-{initiative}-oversight)
+System 3 (TEAM LEAD of s3-live)
+    │
+    │  PERSISTENT AGENTS (spawned at PREFLIGHT, run entire session):
+    ├── s3-communicator     (general-purpose/Haiku — GChat relay, 60s poll cycle)
+    ├── s3-heartbeat        (general-purpose/Haiku — work scanner, 600s scan cycle)
+    ├── s3-validator        (validation-test-agent/Sonnet — persistent dual-pass validation)
+    │
+    │  ON-DEMAND AGENTS (spawned per-task, exit after completion):
     ├── s3-investigator     (Explore — read-only codebase verification)
     ├── s3-prd-auditor      (solution-design-architect — PRD coverage gaps)
-    ├── s3-validator        (validation-test-agent — REAL E2E, no mocks)
     ├── s3-evidence-clerk   (general-purpose/Haiku — evidence collation)
     │
     └── [tmux] → Orchestrator (team lead of {initiative}-workers)
@@ -555,13 +602,22 @@ System 3 (TEAM LEAD of s3-{initiative}-oversight)
                     (NO validator — removed from this team)
 ```
 
+### s3-live Persistent Agent Summary
+
+| Agent | Model | Cycle | Tools | Purpose |
+|-------|-------|-------|-------|---------|
+| `s3-communicator` | Haiku | 60s | Bash, Read, SendMessage, google-chat-bridge MCP | GChat relay (outbound dispatch + inbound polling) |
+| `s3-heartbeat` | Haiku | 600s | Bash (bd/git/tmux), SendMessage | Work scanner (beads, orchestrators, git, staleness) |
+| `s3-validator` | Sonnet | On-demand | validation-test-agent tools, SendMessage | Dual-pass validation (technical + business) |
+
 ### PREFLIGHT: Create Oversight Team
 
 After creating completion promise and gathering wisdom:
 
 ```python
-# Create oversight team (once per initiative)
-TeamCreate(team_name=f"s3-{initiative}-oversight", description=f"S3 independent validation for {initiative}")
+# Oversight agents join the existing s3-live team (created during PREFLIGHT Step 7).
+# System 3 leads exactly ONE team: s3-live. Do NOT create per-initiative teams.
+# TeamCreate is NOT needed here — s3-live already exists.
 ```
 
 Spawn specialist workers -- see [references/oversight-team.md](../skills/system3-orchestrator/references/oversight-team.md) for exact spawn commands.
@@ -706,8 +762,7 @@ bd close <id>                              ← No oversight team! No validators 
 bd close <id>                              ← No independent verification!
 
 ✅ CORRECT - Full validation cycle:
-1. TeamCreate(team_name=f"s3-{initiative}-oversight", ...)
-2. Spawn all 4 validators (s3-investigator, s3-prd-auditor, s3-validator, s3-evidence-clerk)
+1. Spawn all 4 validators into s3-live (s3-investigator, s3-prd-auditor, s3-validator, s3-evidence-clerk)
 3. Create validation tasks and dispatch to oversight workers
 4. Collect evidence from all three validators
 5. s3-evidence-clerk produces closure-report.md
@@ -969,15 +1024,13 @@ When a monitor reports COMPLETE, capture and review orchestrator output before k
 **When ANY orchestrator signals completion:**
 
 ```python
-# 1. Create oversight AGENT TEAM (not standalone subagents)
-TeamCreate(team_name=f"s3-{initiative}-oversight", description=f"S3 independent validation")
-
-# 2. Spawn workers INTO the team for cross-validation
-Task(subagent_type="tdd-test-engineer", team_name=f"s3-{initiative}-oversight",
+# 1. Spawn workers INTO the s3-live team for cross-validation
+# (s3-live already exists — no TeamCreate needed)
+Task(subagent_type="tdd-test-engineer", team_name="s3-live",
      name="s3-test-runner", model="sonnet",
      prompt="Run tests independently. Do NOT trust orchestrator reports. Report via SendMessage.")
 
-Task(subagent_type="Explore", team_name=f"s3-{initiative}-oversight",
+Task(subagent_type="Explore", team_name="s3-live",
      name="s3-investigator", model="sonnet",
      prompt="Verify code changes match claims. Check git diff. Report via SendMessage.")
 
@@ -1539,6 +1592,222 @@ Example session-end check pattern:
 
 ---
 
+## DOT Graph Navigation (Attractor Pipeline Integration)
+
+System 3 uses Attractor DOT pipelines to model initiative execution as directed graphs. Each node in the graph represents a task (implementation, validation, tooling) and carries a `status` attribute that System 3 advances through the lifecycle: `pending -> active -> impl_complete -> validated`.
+
+The Attractor CLI lives at `.claude/scripts/attractor/cli.py`. All commands follow the pattern:
+
+```bash
+python3 .claude/scripts/attractor/cli.py <subcommand> [args...]
+```
+
+### PREFLIGHT: Validate and Assess Pipeline State
+
+During session initialization (after Dual-Bank Startup Protocol), if a pipeline DOT file exists for the active initiative, validate it and assess the current state:
+
+```bash
+# 1. Validate the pipeline graph structure (no cycles, AT pairing, etc.)
+python3 .claude/scripts/attractor/cli.py validate .claude/attractor/pipelines/${INITIATIVE}.dot
+
+# 2. Get current pipeline status (all nodes)
+python3 .claude/scripts/attractor/cli.py status .claude/attractor/pipelines/${INITIATIVE}.dot
+
+# 3. Check for pending codergen nodes ready for dispatch
+python3 .claude/scripts/attractor/cli.py status .claude/attractor/pipelines/${INITIATIVE}.dot --filter=pending
+
+# 4. Get machine-readable summary for decision making
+python3 .claude/scripts/attractor/cli.py status .claude/attractor/pipelines/${INITIATIVE}.dot --json --summary
+```
+
+**Interpreting status output**: The status table shows every node with its handler type, current status, bead ID, worker type, and label. Use `--filter=pending` to identify nodes ready for dispatch. Use `--summary` to get counts by status (e.g., `pending=5, active=2, validated=3`).
+
+### Execution Loop: Graph-Driven Orchestrator Dispatch
+
+System 3 uses the pipeline graph as its execution plan. After each orchestrator completion, consult the graph to decide the next action:
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                   DOT NAVIGATION DECISION LOOP                   │
+│                                                                  │
+│  1. READ graph state                                             │
+│     python3 cli.py status pipeline.dot --json                    │
+│                                                                  │
+│  2. IDENTIFY next dispatchable nodes                             │
+│     python3 cli.py status pipeline.dot --filter=pending          │
+│     → Select codergen nodes whose upstream dependencies are      │
+│       all validated (check edges in graph)                       │
+│                                                                  │
+│  3. DISPATCH: For each ready codergen node:                      │
+│     a. Transition to active:                                     │
+│        python3 cli.py transition pipeline.dot <node> active      │
+│     b. Spawn orchestrator for that node's work                   │
+│     c. Checkpoint after transition:                              │
+│        python3 cli.py checkpoint save pipeline.dot               │
+│                                                                  │
+│  4. MONITOR orchestrator (existing monitoring patterns)          │
+│                                                                  │
+│  5. ON COMPLETION: When orchestrator reports done:               │
+│     a. Transition to impl_complete:                              │
+│        python3 cli.py transition pipeline.dot <node> impl_complete│
+│     b. Checkpoint:                                               │
+│        python3 cli.py checkpoint save pipeline.dot               │
+│                                                                  │
+│  6. VALIDATE: Run validation gate (technical + business):        │
+│     a. If validation passes → transition to validated:           │
+│        python3 cli.py transition pipeline.dot <node> validated   │
+│     b. If validation fails → transition to failed:               │
+│        python3 cli.py transition pipeline.dot <node> failed      │
+│     c. Checkpoint after either outcome:                          │
+│        python3 cli.py checkpoint save pipeline.dot               │
+│                                                                  │
+│  7. LOOP: Return to step 1                                       │
+│     → If all codergen nodes are validated → proceed to FINALIZE  │
+│     → If failed nodes exist → retry (transition failed → active) │
+│     → If pending nodes with met dependencies → dispatch next     │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### Pseudocode: Graph-Driven Execution
+
+```python
+PIPELINE = f".claude/attractor/pipelines/{INITIATIVE}.dot"
+CLI = "python3 .claude/scripts/attractor/cli.py"
+
+# PREFLIGHT: Validate graph
+Bash(f"{CLI} validate {PIPELINE}")
+Bash(f"{CLI} status {PIPELINE}")
+
+# EXECUTION LOOP
+while True:
+    # Read current state
+    state = json.loads(Bash(f"{CLI} status {PIPELINE} --json"))
+    summary = state["summary"]
+
+    # Check if pipeline is complete
+    codergen_nodes = [n for n in state["nodes"] if n["handler"] == "codergen"]
+    unfinished = [n for n in codergen_nodes if n["status"] not in ("validated", "failed")]
+
+    if not unfinished:
+        # All nodes terminal — proceed to FINALIZE
+        break
+
+    # Find dispatchable nodes (pending + all upstream dependencies validated)
+    pending = [n for n in codergen_nodes if n["status"] == "pending"]
+    ready = [n for n in pending if all_upstream_validated(n, state)]
+
+    for node in ready:
+        # Transition to active
+        Bash(f"{CLI} transition {PIPELINE} {node['node_id']} active")
+
+        # Spawn orchestrator for this node
+        spawn_orchestrator(
+            initiative=f"{INITIATIVE}-{node['node_id']}",
+            bead_id=node["bead_id"],
+            worker_type=node["worker_type"],
+            acceptance=node.get("acceptance", ""),
+        )
+
+        # Checkpoint after dispatch
+        Bash(f"{CLI} checkpoint save {PIPELINE}")
+
+    # Monitor orchestrators (existing patterns)
+    # When orchestrator completes:
+    for completed_node in get_completed_orchestrators():
+        Bash(f"{CLI} transition {PIPELINE} {completed_node} impl_complete")
+        Bash(f"{CLI} checkpoint save {PIPELINE}")
+
+        # Run validation (via oversight team)
+        validation_result = run_validation(completed_node)
+
+        if validation_result == "pass":
+            Bash(f"{CLI} transition {PIPELINE} {completed_node} validated")
+        else:
+            Bash(f"{CLI} transition {PIPELINE} {completed_node} failed")
+
+        Bash(f"{CLI} checkpoint save {PIPELINE}")
+
+    # Handle retries for failed nodes
+    failed = [n for n in codergen_nodes if n["status"] == "failed"]
+    for node in failed:
+        # Send feedback to orchestrator, transition back to active
+        Bash(f"{CLI} transition {PIPELINE} {node['node_id']} active")
+        Bash(f"{CLI} checkpoint save {PIPELINE}")
+```
+
+### Transition Summary
+
+| Event | CLI Command | Next Step |
+|-------|-------------|-----------|
+| Dispatch node to orchestrator | `cli.py transition pipeline.dot <node> active` | Spawn orchestrator |
+| Orchestrator reports completion | `cli.py transition pipeline.dot <node> impl_complete` | Run validation |
+| Validation passes | `cli.py transition pipeline.dot <node> validated` | Check for next pending |
+| Validation fails | `cli.py transition pipeline.dot <node> failed` | Send feedback, retry |
+| Retry failed node | `cli.py transition pipeline.dot <node> active` | Re-spawn orchestrator |
+| After ANY transition | `cli.py checkpoint save pipeline.dot` | Persist state |
+
+### Stop Gate Integration: Block on Unvalidated Nodes
+
+**Rule**: The session MUST NOT end if a pipeline.dot exists AND any codergen nodes have a status other than `validated` or `failed`.
+
+Add this check to the Three-Layer Self-Assessment (before stopping):
+
+```bash
+# Check if pipeline exists and has unfinished nodes
+PIPELINE=".claude/attractor/pipelines/${INITIATIVE}.dot"
+if [ -f "$PIPELINE" ]; then
+    python3 .claude/scripts/attractor/cli.py status "$PIPELINE" --json | \
+        python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+nodes = data.get('nodes', [])
+codergen = [n for n in nodes if n.get('handler') == 'codergen']
+unfinished = [n for n in codergen if n.get('status') not in ('validated', 'failed')]
+if unfinished:
+    names = ', '.join(n['node_id'] for n in unfinished)
+    print(f'BLOCKED: {len(unfinished)} unfinished pipeline nodes: {names}', file=sys.stderr)
+    sys.exit(1)
+else:
+    print(f'Pipeline complete: all {len(codergen)} codergen nodes are validated/failed')
+    sys.exit(0)
+"
+fi
+```
+
+**When the check fails**: System 3 must either:
+1. Continue working on the unfinished nodes (dispatch pending, validate impl_complete, retry failed)
+2. Present a clear reason to the user via `AskUserQuestion` explaining why pipeline nodes remain unfinished and what is blocking progress
+
+This check integrates with the existing Momentum Maintenance Protocol -- unfinished pipeline nodes are treated the same as pending tasks: they represent commitments that must be fulfilled or explicitly abandoned.
+
+### Finalize: Pipeline Completion
+
+When ALL codergen nodes reach `validated` or `failed` status, the pipeline is complete:
+
+```bash
+# 1. Save final checkpoint with PRD ID
+python3 .claude/scripts/attractor/cli.py checkpoint save \
+    .claude/attractor/pipelines/${INITIATIVE}.dot \
+    --output=.claude/attractor/checkpoints/${PRD_ID}-final.json
+
+# 2. Run cs-verify for the overall initiative
+cs-verify --promise ${PROMISE_ID} --type e2e \
+    --proof "Pipeline ${INITIATIVE} complete: all codergen nodes validated. Checkpoint: .claude/attractor/checkpoints/${PRD_ID}-final.json"
+
+# 3. Get final summary
+python3 .claude/scripts/attractor/cli.py status \
+    .claude/attractor/pipelines/${INITIATIVE}.dot --summary
+```
+
+**Finalize Flow**:
+1. Confirm all codergen nodes are in terminal state (`validated` or `failed`)
+2. Save final checkpoint to `.claude/attractor/checkpoints/<prd-id>-final.json`
+3. Run `cs-verify` for the completion promise, citing the checkpoint as proof
+4. Store the outcome in Hindsight (retain pipeline summary for future reference)
+5. Report final pipeline status to user
+
+---
+
 ## Post-Session Reflection (MANDATORY)
 
 Before any session ends or user signs off:
@@ -1651,13 +1920,12 @@ Reading tmux output is NOT validation. It is reading the implementer's self-asse
 
 **Mandatory steps when ANY orchestrator signals completion:**
 
-1. Create oversight team: `TeamCreate(team_name="s3-{initiative}-oversight")`
-2. Spawn workers INTO the team (NOT standalone subagents):
+1. Spawn workers INTO the s3-live team (NOT standalone subagents, no TeamCreate needed):
    ```python
    # ✅ CORRECT: Workers in a team can cross-validate and coordinate
-   Task(subagent_type="tdd-test-engineer", team_name="s3-{initiative}-oversight",
+   Task(subagent_type="tdd-test-engineer", team_name="s3-live",
         name="s3-test-runner", prompt="Run tests independently against real services...")
-   Task(subagent_type="Explore", team_name="s3-{initiative}-oversight",
+   Task(subagent_type="Explore", team_name="s3-live",
         name="s3-investigator", prompt="Verify code changes match claims...")
 
    # ❌ WRONG: Standalone subagent — isolated, cannot coordinate with other validators
@@ -1948,8 +2216,8 @@ pending → in_progress → verified | cancelled
 
 ---
 
-**Version**: 2.8
+**Version**: 2.9
 
 **Changelog**: See [SYSTEM3_CHANGELOG.md](.claude/documentation/SYSTEM3_CHANGELOG.md) for complete version history.
 
-**Integration**: orchestrator-multiagent skill, worktree-manager skill, Hindsight MCP (dual-bank), Beads, message-bus skill
+**Integration**: orchestrator-multiagent skill, worktree-manager skill, Hindsight MCP (dual-bank), Beads, message-bus skill, attractor-cli (DOT pipeline navigation)

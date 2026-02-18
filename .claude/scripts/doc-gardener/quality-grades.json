@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "quality-grades.json",
+  "title": "Harness Documentation Quality Grades",
+  "description": "Defines quality grades for all documents in .claude/. Each grade indicates the reliability, maintenance commitment, and review cadence of a document or directory.",
+  "version": "1.0.0",
+  "lastUpdated": "2026-02-19",
+  "grades": {
+    "authoritative": {
+      "label": "Authoritative",
+      "description": "Source of truth. Actively maintained and updated with every related change to the harness.",
+      "maintenance": "Updated with every related change",
+      "reviewCadence": "continuous",
+      "trustLevel": "high",
+      "color": "#22c55e"
+    },
+    "reference": {
+      "label": "Reference",
+      "description": "Useful context and guidance. Periodically reviewed but may lag behind latest harness changes.",
+      "maintenance": "Reviewed quarterly",
+      "reviewCadence": "quarterly",
+      "trustLevel": "medium",
+      "color": "#3b82f6"
+    },
+    "archive": {
+      "label": "Archive",
+      "description": "Historical record preserved as-is. Not actively maintained. May contain outdated information.",
+      "maintenance": "Preserved as-is",
+      "reviewCadence": "none",
+      "trustLevel": "low",
+      "color": "#9ca3af"
+    },
+    "draft": {
+      "label": "Draft",
+      "description": "Work in progress. Not yet reviewed or approved. Will be promoted to a higher grade or removed.",
+      "maintenance": "Will be promoted or removed",
+      "reviewCadence": "on-completion",
+      "trustLevel": "unverified",
+      "color": "#f59e0b"
+    }
+  },
+  "directoryGrades": {
+    "output-styles": "authoritative",
+    "skills": "authoritative",
+    "agents": "authoritative",
+    "documentation": "reference",
+    "scripts": "reference",
+    "hooks": "reference",
+    "commands": "reference",
+    "tests": "reference"
+  },
+  "fileOverrides": {
+    "_comment": "Per-file grade overrides. Use when a specific file in a directory has a different grade than the directory default."
+  },
+  "promotionRules": {
+    "draft_to_reference": "Document has been reviewed and contains no known inaccuracies.",
+    "reference_to_authoritative": "Document is actively maintained, linked from CLAUDE.md, and updated with every related change.",
+    "any_to_archive": "Document is superseded, no longer relevant to current harness version, or refers to completed one-time work.",
+    "archive_to_removed": "Document has been in archive for 6+ months with no references. Delete or move to separate archive."
+  }
+}
