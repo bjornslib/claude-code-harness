@@ -9,6 +9,7 @@ Transform any website URL into implementation-ready specifications through a com
 **Output Produced:**
 - Comprehensive UX audit report with prioritized recommendations
 - Visual design concept mockups for improvements
+- HTML/CSS code files (when using Stitch engine)
 - Implementation-ready specifications (Briefs, Research, JSONC Specs)
 
 **Handoff:** Specifications are ready for `frontend-dev-expert` agent or human developer to implement.
@@ -39,8 +40,12 @@ Transform any website URL into implementation-ready specifications through a com
 │ ─────────────────────────────────────────────────────────────── │
 │ • Extract Tier 1 (implementable now) recommendations            │
 │ • Generate design prompts for each improvement                  │
-│ • Create visual mockup images using Gemini Pro                  │
-│ Output: design-concepts/{section}-mockup.png files              │
+│ • Stitch (default): Create project, generate screens,           │
+│   fetch code + images per section                               │
+│ • Gemini (fallback): Generate PNG mockups via Gemini Pro         │
+│ Output: design-concepts/{section}-mockup.png                    │
+│         design-concepts/{section}-code.html (Stitch only)       │
+│         design-concepts/stitch-project.json (Stitch only)       │
 └─────────────────────────────────────────────────────────────────┘
                               ↓
 ┌─────────────────────────────────────────────────────────────────┐
@@ -70,7 +75,8 @@ Transform any website URL into implementation-ready specifications through a com
 
 ### With Options
 ```
-/website-upgraded https://example.com --sections=homepage,navigation --resolution=2K
+/website-upgraded https://example.com --engine=stitch --sections=homepage,navigation
+/website-upgraded https://example.com --engine=gemini --sections=homepage --resolution=2K
 ```
 
 ## Detailed Execution Steps
@@ -176,7 +182,57 @@ Example sections:
 - publications
 - suppliers-providers
 
-#### 2.2 Launch Parallel Mockup Generation
+#### 2.2 Launch Parallel Design Generation
+
+##### Stitch Engine (Default)
+
+**Step 1**: Create Stitch project (once, before parallel generation):
+```python
+# Load Stitch tools
+ToolSearch("stitch")
+
+# Create project
+project = mcp__stitch__create_project(name="{site-name}-ux-improvements")
+# Save project ID for sub-agents
+```
+
+**Step 2**: Launch parallel sub-agents for each section:
+```python
+for section in sections:
+    Task(
+        subagent_type="general-purpose",
+        prompt=f"""Generate Stitch design for {section} page.
+
+First: Load Stitch tools via ToolSearch("stitch")
+Then:
+1. Read the UX audit: {OUTPUT_DIR}/ux-audit/{section}.md
+2. Extract Tier 1 recommendations and create design prompt
+3. Generate screen via mcp__stitch__generate_screen_from_text
+   - prompt: [design prompt from recommendations]
+   - projectId: "{project_id}"
+   - deviceType: "DESKTOP"
+4. Fetch code: mcp__stitch__fetch_screen_code → save to {OUTPUT_DIR}/design-concepts/{section}-code.html
+5. Fetch image: mcp__stitch__fetch_screen_image → save to {OUTPUT_DIR}/design-concepts/{section}-mockup.png
+
+Report the generated filenames when complete.""",
+        run_in_background=True
+    )
+```
+
+**Step 3**: After all agents complete, save project manifest:
+```json
+// {OUTPUT_DIR}/design-concepts/stitch-project.json
+{
+  "projectId": "...",
+  "engine": "stitch",
+  "screens": {
+    "homepage": { "screenId": "...", "codeFile": "homepage-code.html", "imageFile": "homepage-mockup.png" },
+    "navigation": { "screenId": "...", "codeFile": "navigation-code.html", "imageFile": "navigation-mockup.png" }
+  }
+}
+```
+
+##### Gemini Engine (`--engine=gemini`)
 
 **CRITICAL:** Each sub-agent MUST invoke `Skill("website-ux-design-concepts")` to follow the structured workflow.
 
@@ -210,16 +266,32 @@ Report the generated filename when complete.""",
 - 5+ sections can be processed simultaneously
 - Skill provides structured prompt templates
 - Each agent follows consistent workflow
-- 1K resolution is sufficient for specification generation
+- 1K resolution is sufficient for specification generation (Gemini)
+- HTML/CSS output eliminates visual re-interpretation (Stitch)
 
 #### 2.3 Collect Results
 
 After all agents complete, verify outputs:
 ```bash
-ls -la {OUTPUT_DIR}/design-concepts/*.png
+ls -la {OUTPUT_DIR}/design-concepts/*
 ```
 
-Expected output:
+Expected output (Stitch):
+```
+{OUTPUT_DIR}/design-concepts/
+├── stitch-project.json
+├── homepage-mockup.png
+├── homepage-code.html
+├── advertise-mockup.png
+├── advertise-code.html
+├── knowledge-center-mockup.png
+├── knowledge-center-code.html
+├── publications-mockup.png
+├── publications-code.html
+└── ...
+```
+
+Expected output (Gemini):
 ```
 {OUTPUT_DIR}/design-concepts/
 ├── homepage-mockup.png
@@ -251,8 +323,22 @@ ls -1 {OUTPUT_DIR}/design-concepts/*.png
 # Launch parallel Task agents for brief generation
 mockups = glob("{OUTPUT_DIR}/design-concepts/*-mockup.png")
 
+# Check if Stitch was used (stitch-project.json exists)
+stitch_manifest = f"{OUTPUT_DIR}/design-concepts/stitch-project.json"
+
 for mockup in mockups:
     section = extract_section_name(mockup)  # e.g., "homepage" from "homepage-mockup.png"
+
+    # Build Stitch context if available
+    stitch_context = ""
+    if stitch_manifest_exists:
+        stitch_context = f"""
+Additionally, read the HTML/CSS code file: {OUTPUT_DIR}/design-concepts/{section}-code.html
+This contains the actual DOM structure and CSS from Stitch MCP.
+Use this for more accurate component identification (HTML tags, not pixel guessing).
+Set source.tool="GoogleStitch" and source.hasHtmlCss=true in JSONC metadata.
+Include source.codeFile="{section}-code.html" in metadata.
+"""
 
     Task(
         subagent_type="general-purpose",
@@ -264,6 +350,7 @@ Then follow Steps 1-3 from the skill:
 
 Step 1 - Brief Generation:
 - Read the mockup image: {mockup}
+{stitch_context}
 - Generate PRD-style brief following the skill's template
 - Save to: {OUTPUT_DIR}/specs/{section}-brief.md
 
@@ -357,11 +444,14 @@ workspace/{site-name}-improvements/
 │       └── pagespeed-results.json
 │
 ├── design-concepts/
+│   ├── stitch-project.json          # Stitch project manifest (if Stitch engine)
 │   ├── homepage-mockup.png
+│   ├── homepage-code.html           # HTML/CSS from Stitch (if Stitch engine)
 │   ├── navigation-mockup.png
+│   ├── navigation-code.html
 │   ├── advertise-mockup.png
 │   ├── knowledge-center-mockup.png
-│   └── ...  (1K resolution, generated in parallel)
+│   └── ...  (generated in parallel)
 │
 └── specs/
     ├── navigation-brief.md
@@ -398,7 +488,8 @@ The pipeline pauses for user approval at these points:
 ## Prerequisites
 
 - **Browser automation tools** (for screenshots)
-- **GEMINI_API_KEY** in `.env` file (for design generation)
+- **Stitch MCP** configured in `.mcp.json` (default engine -- no API key needed)
+- **GEMINI_API_KEY** in `.env` file (only needed for `--engine=gemini`)
 - **uv** (for running Python scripts)
 
 ## Example Session
@@ -444,35 +535,33 @@ Shall I proceed with generating design concepts for these improvements?
 
 User: Yes, focus on navigation and hero section
 
-=== STAGE 2: DESIGN CONCEPTS ===
+=== STAGE 2: DESIGN CONCEPTS (Stitch) ===
 
-Identified 5 sections from UX audit:
-- homepage
-- admissions
-- academics
-- contact
-- about
+Creating Stitch project: university-contacts-ux-improvements...
+✓ Project created (ID: proj_abc123)
 
-Launching 5 parallel sub-agents for mockup generation...
+Launching 5 parallel sub-agents for design generation...
 
 Running 5 Task agents...
-├─ Generate homepage mockup · Reading ux-audit/homepage.md
-├─ Generate admissions mockup · Reading ux-audit/admissions.md
-├─ Generate academics mockup · Reading ux-audit/academics.md
-├─ Generate contact mockup · Reading ux-audit/contact.md
-└─ Generate about mockup · Reading ux-audit/about.md
+├─ Generate homepage design · Reading ux-audit/homepage.md → Stitch screen
+├─ Generate admissions design · Reading ux-audit/admissions.md → Stitch screen
+├─ Generate academics design · Reading ux-audit/academics.md → Stitch screen
+├─ Generate contact design · Reading ux-audit/contact.md → Stitch screen
+└─ Generate about design · Reading ux-audit/about.md → Stitch screen
 
 [All agents running in parallel...]
 
 ✓ Design Concepts Complete!
 
-Generated mockups (1K resolution):
-- workspace/university-contacts-improvements/design-concepts/homepage-mockup.png
-- workspace/university-contacts-improvements/design-concepts/admissions-mockup.png
-- workspace/university-contacts-improvements/design-concepts/academics-mockup.png
-- workspace/university-contacts-improvements/design-concepts/contact-mockup.png
-- workspace/university-contacts-improvements/design-concepts/about-mockup.png
+Generated artifacts:
+- workspace/.../design-concepts/homepage-mockup.png + homepage-code.html
+- workspace/.../design-concepts/admissions-mockup.png + admissions-code.html
+- workspace/.../design-concepts/academics-mockup.png + academics-code.html
+- workspace/.../design-concepts/contact-mockup.png + contact-code.html
+- workspace/.../design-concepts/about-mockup.png + about-code.html
+- workspace/.../design-concepts/stitch-project.json
 
+HTML/CSS code files are available for accurate component identification.
 Shall I proceed with creating implementation specifications?
 
 User: Yes
@@ -516,12 +605,15 @@ Claude: Spawning frontend-dev-expert with navigation specs...
 
 ## Troubleshooting
 
-| Issue | Solution |
-|-------|----------|
-| Browser tools unavailable | Use provided screenshots or WebFetch fallback |
-| GEMINI_API_KEY missing | Add to `.env` file in project root |
-| Mockup generation fails | Check API quota, try simpler prompts |
-| Component research fails | Fall back to basic shadcn components |
+| Issue | Solution | Notes |
+|-------|----------|-------|
+| Browser tools unavailable | Use provided screenshots or WebFetch fallback | |
+| GEMINI_API_KEY missing | Add to `.env` file in project root | Only needed for `--engine=gemini` |
+| Mockup generation fails | Check API quota, try simpler prompts | |
+| Component research fails | Fall back to basic shadcn components | |
+| Stitch tools not loading | Run ToolSearch("stitch") first | Loads deferred MCP tools |
+| Stitch project creation fails | Check .mcp.json Stitch config | Verify MCP server running |
+| Stitch screen generation slow | Normal -- Stitch renders full HTML | Wait for completion |
 
 ## Related Skills
 

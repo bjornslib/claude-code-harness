@@ -24,8 +24,21 @@ Each step produces an artifact that feeds into the next, ensuring alignment with
 ## Step 1: Generate Brief from Design
 
 ### Input
-- Design image (Figma export, Google Stitch output, screenshot)
-- Optional: HTML/CSS reference from design tool
+- Design image (Figma export, Stitch screenshot, Gemini mockup, manual screenshot)
+- HTML/CSS code file (when source is Stitch MCP -- `{section}-code.html`)
+- Optional: `stitch-project.json` manifest (for iteration via edit_screens)
+
+### Stitch-Aware Input Detection
+
+When the design source includes HTML/CSS files (from Stitch MCP):
+- Read BOTH the HTML file AND the screenshot
+- Brief is derived from actual code structure (DOM elements, CSS classes) -- not visual interpretation
+- Component identification from HTML tags, not guessing from pixels
+- Set `source.tool = "GoogleStitch"` and `source.hasHtmlCss = true` in JSONC metadata
+
+When source is screenshot-only (Gemini, Figma, manual screenshot):
+- Use existing visual analysis path (unchanged)
+- Set `source.hasHtmlCss = false`
 
 ### Process
 

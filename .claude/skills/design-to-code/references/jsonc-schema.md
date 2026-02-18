@@ -45,8 +45,11 @@ Complete schema for design specifications.
     "route": "/path/to/route",         // Target route in app
     "version": "1.0",
     "source": {
-      "tool": "Figma | GoogleStitch | Screenshot",
-      "hasHtmlCss": true | false
+      "tool": "Figma | GoogleStitch | Screenshot | GeminiImage",
+      "hasHtmlCss": true | false,               // true when Stitch HTML/CSS available
+      "stitchProjectId": "optional-project-id",  // For edit_screens iteration
+      "stitchScreenId": "optional-screen-id",    // For edit_screens iteration
+      "codeFile": "path/to/section-code.html"    // When hasHtmlCss=true
     }
   }
 }

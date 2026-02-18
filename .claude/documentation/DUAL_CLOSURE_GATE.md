@@ -35,7 +35,7 @@ System 3 had no independent verification capability. It trusted whatever the orc
 ### New Architecture
 
 ```
-System 3 (TEAM LEAD of s3-{initiative}-oversight)
+System 3 (TEAM LEAD of s3-live)
     ├── s3-investigator     (Explore — read-only codebase verification)
     ├── s3-prd-auditor      (solution-design-architect — PRD coverage analysis)
     ├── s3-validator        (validation-test-agent — REAL E2E, no mocks)

@@ -539,10 +539,10 @@ if "MONITOR_STUCK" in report:
 
 ### Team Structure
 
-System 3 creates an independent oversight team for each initiative:
+System 3 uses the single `s3-live` team for ALL oversight. All agents — Communicator, validators, investigators — join this team:
 
 ```
-System 3 (TEAM LEAD of s3-{initiative}-oversight)
+System 3 (TEAM LEAD of s3-live)
     ├── s3-investigator     (Explore — read-only codebase verification)
     ├── s3-prd-auditor      (solution-design-architect — PRD coverage gaps)
     ├── s3-validator        (validation-test-agent — REAL E2E, no mocks)
@@ -560,8 +560,9 @@ System 3 (TEAM LEAD of s3-{initiative}-oversight)
 After creating completion promise and gathering wisdom:
 
 ```python
-# Create oversight team (once per initiative)
-TeamCreate(team_name=f"s3-{initiative}-oversight", description=f"S3 independent validation for {initiative}")
+# Oversight agents join the existing s3-live team (created during PREFLIGHT Step 7).
+# System 3 leads exactly ONE team: s3-live. Do NOT create per-initiative teams.
+# TeamCreate is NOT needed here — s3-live already exists.
 ```
 
 Spawn specialist workers -- see [references/oversight-team.md](../skills/system3-orchestrator/references/oversight-team.md) for exact spawn commands.
@@ -706,8 +707,7 @@ bd close <id>                              ← No oversight team! No validators 
 bd close <id>                              ← No independent verification!
 
 ✅ CORRECT - Full validation cycle:
-1. TeamCreate(team_name=f"s3-{initiative}-oversight", ...)
-2. Spawn all 4 validators (s3-investigator, s3-prd-auditor, s3-validator, s3-evidence-clerk)
+1. Spawn all 4 validators into s3-live (s3-investigator, s3-prd-auditor, s3-validator, s3-evidence-clerk)
 3. Create validation tasks and dispatch to oversight workers
 4. Collect evidence from all three validators
 5. s3-evidence-clerk produces closure-report.md
@@ -969,15 +969,13 @@ When a monitor reports COMPLETE, capture and review orchestrator output before k
 **When ANY orchestrator signals completion:**
 
 ```python
-# 1. Create oversight AGENT TEAM (not standalone subagents)
-TeamCreate(team_name=f"s3-{initiative}-oversight", description=f"S3 independent validation")
-
-# 2. Spawn workers INTO the team for cross-validation
-Task(subagent_type="tdd-test-engineer", team_name=f"s3-{initiative}-oversight",
+# 1. Spawn workers INTO the s3-live team for cross-validation
+# (s3-live already exists — no TeamCreate needed)
+Task(subagent_type="tdd-test-engineer", team_name="s3-live",
      name="s3-test-runner", model="sonnet",
      prompt="Run tests independently. Do NOT trust orchestrator reports. Report via SendMessage.")
 
-Task(subagent_type="Explore", team_name=f"s3-{initiative}-oversight",
+Task(subagent_type="Explore", team_name="s3-live",
      name="s3-investigator", model="sonnet",
      prompt="Verify code changes match claims. Check git diff. Report via SendMessage.")
 
@@ -1651,13 +1649,12 @@ Reading tmux output is NOT validation. It is reading the implementer's self-asse
 
 **Mandatory steps when ANY orchestrator signals completion:**
 
-1. Create oversight team: `TeamCreate(team_name="s3-{initiative}-oversight")`
-2. Spawn workers INTO the team (NOT standalone subagents):
+1. Spawn workers INTO the s3-live team (NOT standalone subagents, no TeamCreate needed):
    ```python
    # ✅ CORRECT: Workers in a team can cross-validate and coordinate
-   Task(subagent_type="tdd-test-engineer", team_name="s3-{initiative}-oversight",
+   Task(subagent_type="tdd-test-engineer", team_name="s3-live",
         name="s3-test-runner", prompt="Run tests independently against real services...")
-   Task(subagent_type="Explore", team_name="s3-{initiative}-oversight",
+   Task(subagent_type="Explore", team_name="s3-live",
         name="s3-investigator", prompt="Verify code changes match claims...")
 
    # ❌ WRONG: Standalone subagent — isolated, cannot coordinate with other validators

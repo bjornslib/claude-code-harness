@@ -2,7 +2,7 @@
 name: system3-orchestrator
 description: This skill should be used when spawning orchestrators, launching new initiatives, starting parallel work, creating orchestrators in worktrees, or managing System 3 orchestration. Provides complete preflight checklists and spawn workflows for nested orchestrator management with Hindsight wisdom injection.
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Task, SlashCommand
-version: 3.2.0
+version: 3.4.0
 ---
 
 # System 3 Orchestrator Skill
@@ -101,7 +101,7 @@ cs-promise --start <promise-id>
 
 **For tmux-spawned orchestrators**: You must set `CLAUDE_SESSION_ID` manually before launching (see spawn sequence below).
 
-**Detailed workflow**: See [references/completion-promise.md](references/completion-promise.md)
+**Detailed workflow**: See [references/completion-promise-cli.md](references/completion-promise-cli.md)
 
 ### [ ] 3. Gather Wisdom from Hindsight
 
@@ -136,10 +136,12 @@ bd show <bo-id>
 ### [ ] 5. Create Oversight Team
 
 ```python
-TeamCreate(team_name=f"s3-{initiative}-oversight", description=f"S3 independent validation for {initiative}")
+# Oversight agents are spawned into the s3-live team (created in Step 7).
+# System 3 leads exactly ONE team: s3-live. Do NOT create per-initiative teams.
+# When validation is needed, spawn specialists directly:
 ```
 
-Spawn specialist workers into the team. See [references/oversight-team.md](references/oversight-team.md) for exact spawn commands and prompts.
+Spawn specialist workers into the s3-live team. See [references/oversight-team.md](references/oversight-team.md) for exact spawn commands and prompts.
 
 **On-demand validation**: For targeted single-task validations during execution (not just post-completion), spawn lightweight `s3-validator` teammates on-demand:
 
@@ -147,7 +149,7 @@ Spawn specialist workers into the team. See [references/oversight-team.md](refer
 # On-demand validator — spawns, validates, reports, exits
 Task(
     subagent_type="validation-test-agent",
-    team_name=f"s3-{initiative}-oversight",
+    team_name="s3-live",
     name=f"s3-validator-{task_id}",
     model="sonnet",
     prompt=f"Validate {task_id} against: {criteria}. Report to team-lead, then exit."
@@ -170,6 +172,42 @@ Choose validation strategy:
 - **Triple-gate**: On-demand validator + cs-verify programmatic gate + completion promise
 
 **Detailed workflow**: See [references/validation-workflow.md](references/validation-workflow.md)
+
+**Gate 2 Requirement**: Validators MUST call `cs-store-validation` after each AC check.
+Without this, `cs-verify` Gate 2 will fail even when validation passes.
+See `.claude/agents/validation-test-agent.md` "Post-Validation Storage" section.
+
+**Gate 3 is MANDATORY**: The `--skip-llm-gate` flag has been removed. Gate 3 cannot be bypassed.
+If the Agent SDK verification is unavailable, spawn a `validation-test-agent` teammate
+into `s3-live` for independent verification. See the cs-verify error message for exact syntax.
+
+### [ ] 7. Spawn s3-live Communicator (if not running)
+
+Check if the s3-live team exists. If not, create it and spawn the communicator:
+
+```python
+# Check if s3-live team exists
+team_exists = Bash("ls ~/.claude/teams/s3-live/config.json 2>/dev/null && echo 'EXISTS' || echo 'MISSING'")
+
+if "MISSING" in team_exists:
+    # Create the s3-live team
+    TeamCreate(team_name="s3-live", description="System 3 live team — Communicator heartbeat + Operator coordination")
+
+    # Spawn communicator as background Haiku teammate
+    Task(
+        subagent_type="general-purpose",
+        model="haiku",
+        run_in_background=True,
+        team_name="s3-live",
+        name="s3-communicator",
+        prompt=Read(".claude/skills/s3-communicator/SKILL.md")
+    )
+```
+
+**Why PREFLIGHT?** The communicator:
+1. Keeps the session alive (stop gate checks for active communicator)
+2. Bridges Google Chat (async user communication)
+3. Monitors for work (beads, orchestrators, git)
 
 ---
 
@@ -379,9 +417,8 @@ elif "MONITOR_HEALTHY" in result:
 ### Also Start Oversight Team
 
 After orchestrator is running:
-1. Create oversight team: `TeamCreate(team_name=f"s3-{initiative}-oversight")`
-2. Spawn 4 oversight workers (see [references/oversight-team.md](references/oversight-team.md))
-3. Oversight team runs independently -- validates `impl_complete` tasks
+1. Spawn 4 oversight workers into the s3-live team (see [references/oversight-team.md](references/oversight-team.md))
+2. Oversight workers run independently in s3-live — validates `impl_complete` tasks
 
 ---
 
@@ -582,13 +619,11 @@ Reading tmux output or orchestrator self-reports is NOT validation. System 3 mus
 # Step 0a: Check for impl_complete tasks
 # bd list --status=impl_complete
 
-# Step 0b: Create oversight team (Agent Team, NOT standalone subagents)
-TeamCreate(team_name=f"s3-{initiative}-oversight", description=f"S3 final validation for {initiative}")
-
-# Step 0c: Spawn workers INTO the team
+# Step 0b: Spawn workers INTO the s3-live team (Agent Team, NOT standalone subagents)
+# s3-live already exists — no TeamCreate needed.
 Task(
     subagent_type="tdd-test-engineer",
-    team_name=f"s3-{initiative}-oversight",
+    team_name="s3-live",
     name="s3-test-runner",
     model="sonnet",
     prompt=f"""You are s3-test-runner in the System 3 oversight team.
@@ -602,7 +637,7 @@ Task(
 
 Task(
     subagent_type="Explore",
-    team_name=f"s3-{initiative}-oversight",
+    team_name="s3-live",
     name="s3-investigator",
     model="sonnet",
     prompt=f"""You are s3-investigator in the System 3 oversight team.
@@ -762,7 +797,7 @@ Maintain active orchestrators in `.claude/state/active-orchestrators.json`:
 
 | File | Content |
 |------|---------|
-| [completion-promise.md](references/completion-promise.md) | Session state tracking, cs-* scripts |
+| [completion-promise-cli.md](references/completion-promise-cli.md) | Completion promise v2.0 CLI — session promises with structured acceptance criteria |
 | [prd-extraction.md](references/prd-extraction.md) | Goal extraction workflow |
 | [validation-workflow.md](references/validation-workflow.md) | 3-level validation, validation-test-agent |
 | [okr-tracking.md](references/okr-tracking.md) | Business Epic / Key Result tracking |
@@ -771,12 +806,20 @@ Maintain active orchestrators in `.claude/state/active-orchestrators.json`:
 | [post-orchestration.md](references/post-orchestration.md) | Post-completion workflow |
 | [troubleshooting.md](references/troubleshooting.md) | Common issues and solutions |
 | [oversight-team.md](references/oversight-team.md) | S3 oversight team spawn commands and patterns |
+| [inter-instance-messaging.md](references/inter-instance-messaging.md) | Message bus session lifecycle, tmux cleanup |
+| [memory-context-taxonomy.md](references/memory-context-taxonomy.md) | Hindsight memory bank context naming taxonomy |
+| [monitoring-commands.md](references/monitoring-commands.md) | Orchestrator monitoring patterns, Haiku watcher, tmux monitoring |
 
 ---
 
-**Version**: 3.3.0
+**Version**: 3.4.0
 **Dependencies**: worktree-manager-skill, orchestrator-multiagent, tmux, Hindsight MCP
 **Theory**: Sophia (arXiv:2512.18202), Hindsight (arXiv:2512.12818)
+
+**v3.4.0 Changes**:
+- Added PREFLIGHT step 7: Spawn s3-live Communicator
+- Moved 4 reference files from output-styles/references/ to system3-orchestrator/references/
+- New references: inter-instance-messaging.md, completion-promise-cli.md, memory-context-taxonomy.md, monitoring-commands.md
 
 **v3.3.0 Changes**:
 - Added PREFLIGHT step 5: Create Oversight Team (renumbered step 5 -> 6)

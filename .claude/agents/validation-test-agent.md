@@ -397,6 +397,30 @@ If acceptance tests pass, business outcomes are achieved.
 
 ---
 
+### Post-Validation Storage (Gate 2 Bridge)
+
+**MANDATORY**: After validating each acceptance criterion, store the result for Gate 2 enforcement:
+
+```bash
+# After each AC validation (in both unit and e2e modes):
+cs-store-validation --promise <promise-id> --ac-id <AC-X> --response '{
+  "task_id": "<beads-id>",
+  "verdict": "PASS",
+  "criteria_results": [{"criterion": "AC-X", "status": "met", "evidence": "..."}],
+  "timestamp": "<ISO-8601>"
+}'
+```
+
+**Why this matters**: Gate 2 of `cs-verify` checks for validation files at `.claude/completion-state/validations/{promise-id}/AC-X-validation.json`. Without calling `cs-store-validation`, Gate 2 will fail even when all ACs are validated via SendMessage.
+
+**When to call**:
+- After EACH acceptance criterion check (not just at the end)
+- In both `--mode=unit` and `--mode=e2e`
+- Use the actual verdict: "PASS", "FAIL", or "PARTIAL"
+- Must be called BEFORE reporting results via SendMessage
+
+---
+
 ### Acceptance Test Skills Integration
 
 This agent acts as a **router** to specialized testing skills:

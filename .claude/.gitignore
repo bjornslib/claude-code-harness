@@ -17,3 +17,27 @@ completion-state/validations/*/
 !completion-state/sessions/.gitkeep
 !completion-state/history/.gitkeep
 !completion-state/validations/.gitkeep
+
+# Runtime state (contents ignored, directory kept)
+state/*
+!state/.gitkeep
+
+# Progress logs
+progress/*
+!progress/.gitkeep
+
+# Worker assignments
+worker-assignments/*
+!worker-assignments/.gitkeep
+
+# Message bus runtime
+message-bus/queue.db
+message-bus/signals/*.signal
+message-bus/signals/*.msg
+
+# Local settings
+settings.local.json
+
+# Python cache
+__pycache__/
+*.pyc

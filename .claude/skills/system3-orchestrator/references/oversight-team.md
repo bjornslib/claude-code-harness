@@ -14,7 +14,7 @@ For targeted, single-task validations, System 3 spawns lightweight `s3-validator
 # Single on-demand validation
 Task(
     subagent_type="validation-test-agent",
-    team_name=f"s3-{initiative}-oversight",
+    team_name="s3-live",
     name=f"s3-validator-{task_id}",
     model="sonnet",
     prompt=f"""You are s3-validator-{task_id}. Validate task {task_id} against:
@@ -41,7 +41,7 @@ Spawn multiple validators simultaneously for independent tasks:
 for task in completed_tasks:
     Task(
         subagent_type="validation-test-agent",
-        team_name=f"s3-{initiative}-oversight",
+        team_name="s3-live",
         name=f"s3-validator-{task.id}",
         model="sonnet",
         prompt=f"Validate {task.id}: {task.criteria}. Report to team-lead."
@@ -66,7 +66,7 @@ for task in completed_tasks:
 ```python
 Task(
     subagent_type="Explore",
-    team_name=f"s3-{initiative}-oversight",
+    team_name="s3-live",
     name="s3-investigator",
     model="sonnet",
     prompt="""You are s3-investigator in the System 3 oversight team.
@@ -95,7 +95,7 @@ Task(
 ```python
 Task(
     subagent_type="solution-design-architect",
-    team_name=f"s3-{initiative}-oversight",
+    team_name="s3-live",
     name="s3-prd-auditor",
     model="sonnet",
     prompt="""You are s3-prd-auditor in the System 3 oversight team.
@@ -125,7 +125,7 @@ Task(
 ```python
 Task(
     subagent_type="validation-test-agent",
-    team_name=f"s3-{initiative}-oversight",
+    team_name="s3-live",
     name="s3-validator",
     model="sonnet",
     prompt="""You are s3-validator in the System 3 oversight team.
@@ -159,7 +159,7 @@ Task(
 ```python
 Task(
     subagent_type="general-purpose",
-    team_name=f"s3-{initiative}-oversight",
+    team_name="s3-live",
     name="s3-evidence-clerk",
     model="haiku",
     prompt="""You are s3-evidence-clerk in the System 3 oversight team.
