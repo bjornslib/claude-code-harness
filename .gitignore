@@ -52,6 +52,9 @@ Thumbs.db
 # Logs
 *.log
 
+# Compiled binaries
+tools/tmux-nav/tmux-nav
+
 # Temporary files
 *.tmp
 *.temp
