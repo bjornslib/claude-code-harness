@@ -139,6 +139,39 @@ and delegation patterns. This file is **part of the harness** and should be upda
 echo "✓ .claude/CLAUDE.md will be updated from harness source"
 ```
 
+### Step 4.5: Pre-Deployment Source Validation
+
+Before copying, verify the harness source is clean:
+
+```bash
+# Check for stale state files that shouldn't be in source
+STALE_COUNT=$(find "$HARNESS_SOURCE/.claude/state" -type f ! -name .gitkeep 2>/dev/null | wc -l | tr -d ' ')
+if [ "$STALE_COUNT" -gt 0 ]; then
+    echo "⚠ WARNING: Found $STALE_COUNT stale state files in harness source"
+    echo "  Run cleanup before deploying: find .claude/state -type f ! -name .gitkeep -delete"
+fi
+
+# Check for stale progress files
+PROGRESS_COUNT=$(find "$HARNESS_SOURCE/.claude/progress" -type f ! -name .gitkeep 2>/dev/null | wc -l | tr -d ' ')
+if [ "$PROGRESS_COUNT" -gt 0 ]; then
+    echo "⚠ WARNING: Found $PROGRESS_COUNT stale progress files in harness source"
+fi
+
+# Check .gitignore completeness
+REQUIRED_ENTRIES=("state/*" "progress/*" "worker-assignments/*" "message-bus/queue.db" "settings.local.json" "__pycache__/")
+MISSING=()
+for entry in "${REQUIRED_ENTRIES[@]}"; do
+    if ! grep -q "$entry" "$HARNESS_SOURCE/.claude/.gitignore" 2>/dev/null; then
+        MISSING+=("$entry")
+    fi
+done
+if [ ${#MISSING[@]} -gt 0 ]; then
+    echo "⚠ WARNING: .claude/.gitignore missing entries: ${MISSING[*]}"
+fi
+
+echo "✓ Source validation complete"
+```
+
 ### Step 5: Copy Harness with Exclusions
 
 Use `rsync` to copy while excluding runtime/state files:
@@ -157,7 +190,9 @@ fi
 # NOTE: scripts/completion-state/ and scripts/message-bus/ MUST be copied (CLI tools)
 # NOTE: Top-level message-bus/ and completion-state/ are RUNTIME dirs (excluded)
 # IMPORTANT: Use leading slash (/) to match ONLY top-level directories, not nested ones
-rsync -av --delete \
+# --delete-excluded: Removes files from target that match exclusion patterns
+# This ensures target doesn't accumulate runtime files from previous deploys
+rsync -av --delete --delete-excluded \
     --exclude='/state/*' \
     --exclude='/completion-state/' \
     --exclude='/progress/*' \

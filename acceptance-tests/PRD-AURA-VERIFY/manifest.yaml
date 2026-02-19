@@ -1,0 +1,104 @@
+---
+prd_id: PRD-AURA-VERIFY
+title: "Aura Call Form Extension — Create Task & Employer Details"
+description: |
+  Gherkin-style descriptive acceptance scenarios for blind validation of
+  the /aura-call form page extension. Confidence-scored (0.0-1.0), not binary.
+
+  The guardian uses these as a rubric to independently evaluate orchestrator
+  claims. When uncertain, the guardian must investigate further — reading code,
+  navigating the browser, inspecting network requests — until confidence is >= 0.95.
+
+  ULTIMATE BUSINESS GOAL: A pilot customer can visit /aura-call, fill in
+  candidate and employer details, and click "Create Task" to submit a
+  verification request via POST /api/v1/verify. This replaces the previous
+  "Make Call" button which only triggered direct voice calls without backend
+  task creation. The form now captures all required employer information
+  (company name, website, country, city, contact person name, contact phone)
+  in a dedicated "Employer Details" card.
+
+source_documents:
+  - prefect-bridge-implementation-report.md
+  - prefect-workflow-orchestration-prd.md
+target_repo: zenagent2/zenagent/agencheck
+target_paths:
+  - agencheck-support-frontend/app/aura-call/page.tsx
+  - agencheck-support-frontend/components/aura-call/VoiceInterface.tsx
+  - agencheck-support-frontend/types/aura-call.ts
+validation_mode: descriptive-gherkin
+scoring: gradient  # 0.0-1.0, not boolean
+accept_threshold: 0.6
+reject_threshold: 0.4
+created: 2026-02-19
+
+features:
+  - id: F1
+    name: "Employer Details Card — New UI Section"
+    weight: 0.30
+    criticality: CRITICAL
+    notes: |
+      A new card section matching the "Candidate Details" card visual pattern.
+      Must use identical CSS classes: bg-white border border-gray-200 rounded-xl p-6.
+      Must contain: company name, website, country, city, contact person name,
+      contact phone number. Fields previously in Candidate Details (employerName,
+      employerWebsite) and the standalone contactPersonName must be migrated here.
+
+  - id: F2
+    name: "Create Task Button — POST /api/v1/verify Integration"
+    weight: 0.30
+    criticality: CRITICAL
+    notes: |
+      The "Make Call" button text must be replaced with "Create Task".
+      On click, it must call POST /api/v1/verify with all form data
+      (candidate details + employer details) as a JSON payload.
+      Success should show a confirmation; errors should display clearly.
+
+  - id: F3
+    name: "Field Migration — Employer Fields Moved Correctly"
+    weight: 0.15
+    criticality: IMPORTANT
+    notes: |
+      employerName and employerWebsite must be REMOVED from the Candidate
+      Details card and placed in the new Employer Details card.
+      contactPersonName must be REMOVED from the call configuration row
+      and placed in the Employer Details card.
+      New fields (country, city, contactPhone) must be added to state
+      management in page.tsx and passed as props to VoiceInterface.
+
+  - id: F4
+    name: "Form Validation and Error Handling"
+    weight: 0.10
+    criticality: IMPORTANT
+    notes: |
+      Required fields should be validated before submission.
+      API errors from POST /api/v1/verify should be displayed to the user.
+      Network failures should be handled gracefully.
+      Loading state during API call should be visible.
+
+  - id: F5
+    name: "Visual Consistency and Responsiveness"
+    weight: 0.10
+    criticality: IMPORTANT
+    notes: |
+      Employer Details card must visually match Candidate Details card
+      (same border, padding, icon+header pattern, field layout).
+      Form should remain responsive on different screen sizes.
+      Tab order and keyboard navigation should work correctly.
+
+  - id: F6
+    name: "Browser Automation Validation"
+    weight: 0.05
+    criticality: NICE_TO_HAVE
+    notes: |
+      Claude in Chrome can navigate to /aura-call, fill the form, and
+      submit via "Create Task". Network request to POST /api/v1/verify
+      is visible and returns a success response.
+
+validation_protocol: |
+  When confidence on any scenario < 0.95:
+    1. Read the actual source files in the implementation repo
+    2. Navigate to /aura-call in the browser using Claude in Chrome
+    3. Inspect the DOM for card structure and field presence
+    4. Fill the form and click "Create Task" — verify network request
+    5. Check that POST /api/v1/verify payload contains all required fields
+    6. Do NOT accept self-reported "done" — verify independently

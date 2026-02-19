@@ -24,7 +24,7 @@
         {
           "timestamp": "2026-02-15T21:54:33.899926+00:00",
           "success": true,
-          "reason": "70 uncommitted changes; 1 recent commits; beads closed"
+          "reason": "9 uncommitted changes; 1 recent commits; beads closed"
         },
         {
           "timestamp": "2026-02-15T22:21:36.735481+00:00",
@@ -102,32 +102,32 @@
       "common_pitfalls": [],
       "recent_outcomes": [
         {
-          "timestamp": "2026-02-15T02:36:49.651439+00:00",
+          "timestamp": "2026-02-18T21:51:33.627117+00:00",
           "success": true,
-          "reason": "3 recent commits; beads closed"
+          "reason": "8 uncommitted changes; 1 recent commits; beads closed"
         },
         {
-          "timestamp": "2026-02-15T02:37:11.655241+00:00",
+          "timestamp": "2026-02-18T21:53:53.461235+00:00",
           "success": true,
-          "reason": "3 recent commits; beads closed"
+          "reason": "9 uncommitted changes; 1 recent commits; beads closed"
         },
         {
-          "timestamp": "2026-02-15T02:37:15.094772+00:00",
+          "timestamp": "2026-02-18T22:01:21.092054+00:00",
           "success": true,
-          "reason": "3 recent commits; beads closed"
+          "reason": "9 uncommitted changes; 1 recent commits; beads closed"
         },
         {
-          "timestamp": "2026-02-15T02:37:31.123689+00:00",
+          "timestamp": "2026-02-18T22:05:04.430198+00:00",
           "success": true,
-          "reason": "3 recent commits; beads closed"
+          "reason": "9 uncommitted changes; 1 recent commits; beads closed"
         },
         {
-          "timestamp": "2026-02-15T02:37:46.767180+00:00",
+          "timestamp": "2026-02-18T22:09:37.915093+00:00",
           "success": true,
-          "reason": "3 recent commits; beads closed"
+          "reason": "9 uncommitted changes; 1 recent commits; beads closed"
         },
         {
-          "timestamp": "2026-02-15T02:40:58.729425+00:00",
+          "timestamp": "2026-02-18T22:22:41.890213+00:00",
           "success": true,
           "reason": "3 recent commits; beads closed"
         },

@@ -87,7 +87,7 @@ Before stopping, System 3 MUST have completed:
 1. **Completion Promises**: All session promises verified with proof (cs-verify), or no promises created
 2. **Post-Session Reflection**: Learnings stored to Hindsight (mcp__hindsight__retain)
 3. **Validation Evidence**: Business outcomes validated via validation-test-agent (not direct bd close)
-4. **Cleanup**: Orchestrator tmux sessions killed, message bus unregistered
+4. **Cleanup**: Message bus unregistered (if registered). NOTE: Active orchestrator tmux sessions (orch-*) are EXPECTED and are NOT a cleanup issue — they run independently and persist beyond this session.
 
 ### Layer 1.5: Validation Integrity (HARD REQUIREMENT)
 If the WORK STATE shows ANY of these indicators, ALWAYS BLOCK:
@@ -136,9 +136,10 @@ Default to ALLOW (should_continue=false) when:
 - The conversation shows the user explicitly asked to stop
 - All protocol steps are clearly completed AND work state confirms exhaustion
 - System 3 has presented option questions to the user and is awaiting response
+- An orchestrator is actively running in a tmux session (this is by design — they persist independently)
 
 Default to BLOCK (should_continue=true) when:
-- Active orchestrators are mentioned but not cleaned up
+- Active orchestrators are mentioned but COMPLETED work was not validated (note: orchestrators actively RUNNING in tmux are expected and NOT a reason to block)
 - Completion promises exist but weren't verified
 - No post-session reflection was performed
 - Work was started but not validated
