@@ -18,19 +18,19 @@ Copy-paste commands to verify the core Attractor CLI is functional. All commands
 
 ```bash
 # 1. Parse a simple DOT pipeline to JSON
-python .claude/scripts/attractor/cli.py parse .claude/scripts/attractor/simple-pipeline.dot --output json
+python .claude/scripts/attractor/cli.py parse .claude/attractor/examples/simple-pipeline.dot --output json
 # Expected: Valid JSON with 3 nodes, 2 edges
 
 # 2. Validate a full initiative DOT file
-python .claude/scripts/attractor/cli.py validate .claude/scripts/attractor/full-initiative.dot
+python .claude/scripts/attractor/cli.py validate .claude/attractor/examples/full-initiative.dot
 # Expected: "VALID: passes all validation rules"
 
 # 3. Status summary of a full initiative
-python .claude/scripts/attractor/cli.py status .claude/scripts/attractor/full-initiative.dot
+python .claude/scripts/attractor/cli.py status .claude/attractor/examples/full-initiative.dot
 # Expected: Table with 17 nodes. Summary: active=2, impl_complete=1, pending=11, validated=3
 
 # 4. Transition a node state
-cp .claude/scripts/attractor/full-initiative.dot /tmp/smoke-test.dot
+cp .claude/attractor/examples/full-initiative.dot /tmp/smoke-test.dot
 python .claude/scripts/attractor/cli.py transition /tmp/smoke-test.dot impl_task active
 # Expected: "Transition applied: impl_task: pending -> active"
 
@@ -44,11 +44,11 @@ python .claude/scripts/attractor/cli.py status /tmp/smoke-test.dot
 # Expected: impl_task shows as active (preserved through save/restore cycle)
 
 # 7. Doc gardener lint
-python .claude/scripts/attractor/cli.py lint .claude/
+python .claude/scripts/attractor/cli.py lint
 # Expected: 297 files scanned, 395 violations found (174 auto-fixable, 221 manual)
 
 # 8. Doc gardener report
-python .claude/scripts/attractor/cli.py gardener .claude/ --report
+python .claude/scripts/attractor/cli.py gardener --report
 # Expected: Generates gardening-report.md correctly
 ```
 
@@ -63,9 +63,9 @@ python .claude/scripts/attractor/cli.py gardener .claude/ --report
 | **Attractor CLI - status** | Status of full initiative | `cli.py status full-initiative.dot` | 17 nodes; active=2, impl_complete=1, pending=11, validated=3 |
 | **Attractor CLI - transition** | Transition node state | `cli.py transition <file> impl_task active` | "Transition applied: impl_task: pending -> active" |
 | **Attractor CLI - checkpoint** | Save and restore round-trip | `cli.py checkpoint save` then `restore` | State preserved through round-trip |
-| **Doc Gardener - lint** | Lint .claude/ directory | `cli.py lint .claude/` | 297 files scanned, 395 violations (174 auto-fixable, 221 manual) |
-| **Doc Gardener - gardener** | Generate gardening report | `cli.py gardener .claude/ --report` | gardening-report.md generated |
-| **Doc Gardener - quality-grades** | Grade documentation quality | `cli.py gardener .claude/ --quality-grades` | Quality grade summary per directory |
+| **Doc Gardener - lint** | Lint .claude/ directory | `cli.py lint` | 297 files scanned, 395 violations (174 auto-fixable, 221 manual) |
+| **Doc Gardener - gardener** | Generate gardening report | `cli.py gardener --report` | gardening-report.md generated |
+| **Doc Gardener - quality-grades** | Grade documentation quality | `cli.py gardener --quality-grades` | Quality grade summary per directory |
 | **S3 Heartbeat** | SKILL.md structure check | Manual review of s3-heartbeat SKILL.md | No GChat MCP tool references present |
 | **S3 Communicator** | SKILL.md scope check | Manual review of s3-communicator SKILL.md | Narrowed scope; no bd/git/tmux scanning references |
 | **Validation Agent** | Dual-mode documentation | Review validation-test-agent.md | `--mode=technical` and `--mode=business` sections documented |
@@ -73,7 +73,7 @@ python .claude/scripts/attractor/cli.py gardener .claude/ --report
 | **S3 Meta-Orchestrator** | DOT navigation section | Review system3-meta-orchestrator.md | DOT Graph Navigation section present |
 | **Pre-push Hook** | Violation blocking | Attempt `git push` with violations | Push blocked when violations detected |
 | **DOT Schema** | Example validity | Parse all example DOT files | All examples parse without errors |
-| **generate-pipeline** | Script execution | Run generate-pipeline script | Produces valid DOT from beads |
+| **generate-pipeline** | CLI subcommand | `cli.py generate --prd <PRD-REF>` | Produces valid DOT from PRD/beads |
 | **annotate-pipeline** | Script execution | Run annotate-pipeline script | Updates node states in DOT file |
 | **init-promise** | Script execution | Run init-promise script | Creates completion promise with pipeline reference |
 
@@ -87,7 +87,7 @@ End-to-end test of the generate-validate-status-transition cycle:
 
 ```bash
 # Step 1: Generate a pipeline DOT from beads
-python .claude/scripts/attractor/generate-pipeline.py --from-beads > /tmp/integration-test.dot
+python .claude/scripts/attractor/cli.py generate --prd <PRD-REF> --output /tmp/integration-test.dot
 
 # Step 2: Validate the generated pipeline
 python .claude/scripts/attractor/cli.py validate /tmp/integration-test.dot
@@ -136,11 +136,11 @@ Verifies that System 3 reads pipeline status during its preflight checks:
 
 ```bash
 # Step 1: Ensure a valid pipeline DOT exists
-python .claude/scripts/attractor/cli.py validate .claude/scripts/attractor/full-initiative.dot
+python .claude/scripts/attractor/cli.py validate .claude/attractor/examples/full-initiative.dot
 
 # Step 2: Check that S3 preflight step references attractor status
 # The system3-orchestrator SKILL.md should include a preflight step that runs:
-python .claude/scripts/attractor/cli.py status .claude/scripts/attractor/full-initiative.dot
+python .claude/scripts/attractor/cli.py status .claude/attractor/examples/full-initiative.dot
 # Expected: S3 uses this output to determine which epics need attention
 ```
 

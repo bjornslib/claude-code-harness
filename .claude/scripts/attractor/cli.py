@@ -15,16 +15,25 @@ Usage:
     python3 cli.py generate --prd <PRD-REF> [--output pipeline.dot]
     python3 cli.py annotate <file.dot> [--output annotated.dot]
     python3 cli.py init-promise <file.dot> [--json]
+    python3 cli.py lint [--verbose] [--json] [--fix]
+    python3 cli.py gardener [--execute] [--report] [--json]
+    python3 cli.py install-hooks
     python3 cli.py --help
 """
 
 import os
+import subprocess
 import sys
 
 # Ensure the script directory is on the path so module imports work
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
+
+# Doc-gardener scripts live in the sibling doc-gardener/ directory
+DOC_GARDENER_DIR = os.path.join(os.path.dirname(SCRIPT_DIR), "doc-gardener")
+# .claude/ directory is the parent of scripts/
+CLAUDE_DIR = os.path.dirname(os.path.dirname(SCRIPT_DIR))
 
 
 def main() -> None:
@@ -41,6 +50,9 @@ def main() -> None:
         print("  generate      Generate pipeline.dot from beads task data")
         print("  annotate      Cross-reference pipeline.dot with beads")
         print("  init-promise  Generate cs-promise commands from pipeline.dot")
+        print("  lint          Lint .claude/ documentation (delegates to doc-gardener)")
+        print("  gardener      Run doc-gardener remediation (delegates to doc-gardener)")
+        print("  install-hooks Install pre-push git hook for doc-gardener")
         print()
         print("Run 'cli.py <command> --help' for subcommand details.")
         sys.exit(0)
@@ -73,10 +85,65 @@ def main() -> None:
     elif command in ("init-promise", "init_promise"):
         from init_promise import main as init_promise_main
         init_promise_main()
+    elif command == "lint":
+        lint_script = os.path.join(DOC_GARDENER_DIR, "lint.py")
+        result = subprocess.run(
+            [sys.executable, lint_script] + sys.argv[1:],
+        )
+        sys.exit(result.returncode)
+    elif command == "gardener":
+        gardener_script = os.path.join(DOC_GARDENER_DIR, "gardener.py")
+        result = subprocess.run(
+            [sys.executable, gardener_script] + sys.argv[1:],
+        )
+        sys.exit(result.returncode)
+    elif command in ("install-hooks", "install_hooks"):
+        _install_hooks()
     else:
         print(f"Unknown command: {command}", file=sys.stderr)
         print("Run 'cli.py --help' for available commands.", file=sys.stderr)
         sys.exit(1)
+
+
+def _install_hooks() -> None:
+    """Install doc-gardener pre-push hook into the git hooks directory."""
+    # Find the git common dir (works in worktrees too)
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--git-common-dir"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        git_common_dir = result.stdout.strip()
+    except subprocess.CalledProcessError:
+        print("Error: Not inside a git repository.", file=sys.stderr)
+        sys.exit(1)
+
+    hooks_dir = os.path.join(git_common_dir, "hooks")
+    os.makedirs(hooks_dir, exist_ok=True)
+
+    hook_source = os.path.join(CLAUDE_DIR, "hooks", "doc-gardener-pre-push.sh")
+    hook_dest = os.path.join(hooks_dir, "pre-push")
+
+    if not os.path.exists(hook_source):
+        print(f"Error: Hook source not found: {hook_source}", file=sys.stderr)
+        sys.exit(1)
+
+    # Make the source script executable
+    import stat
+    current_mode = os.stat(hook_source).st_mode
+    os.chmod(hook_source, current_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+    # Remove existing hook/symlink if present
+    if os.path.lexists(hook_dest):
+        os.remove(hook_dest)
+
+    # Create symlink: hooks/pre-push -> (absolute path to source)
+    os.symlink(os.path.abspath(hook_source), hook_dest)
+
+    print(f"Installed pre-push hook:")
+    print(f"  {hook_dest} -> {os.path.abspath(hook_source)}")
 
 
 if __name__ == "__main__":
