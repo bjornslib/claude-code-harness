@@ -11,21 +11,32 @@
 #   .claude/hooks/doc-gardener-pre-push.sh         # Direct invocation
 #   git push                                        # Via git hook symlink
 #
-# Environment:
-#   DOC_GARDENER_SKIP=1   - Skip lint (emergency bypass)
+# Bypass methods (any one is sufficient):
+#   DOC_GARDENER_SKIP=1   - Environment variable (emergency bypass)
+#   --no-verify           - Passed to git push (git convention)
+#   --skip-lint           - Passed to git push (explicit opt-out)
+#   .claude/.doc-gardener-skip  - Signal file (project-level temporary bypass)
 
 set -e
-
-# Allow emergency bypass
-if [ "${DOC_GARDENER_SKIP:-}" = "1" ]; then
-    echo "[doc-gardener] Skipped (DOC_GARDENER_SKIP=1)"
-    exit 0
-fi
 
 # Resolve paths relative to this script's location
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAUDE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 GARDENER="$CLAUDE_DIR/scripts/doc-gardener/gardener.py"
+
+# --- Bypass checks ---
+
+# 1. Environment variable
+if [ "${DOC_GARDENER_SKIP:-}" = "1" ]; then
+    echo "[doc-gardener] Skipped (DOC_GARDENER_SKIP=1)"
+    exit 0
+fi
+
+# 2. Signal file
+if [ -f "$CLAUDE_DIR/.doc-gardener-skip" ]; then
+    echo "[doc-gardener] Skipped (.doc-gardener-skip signal file)"
+    exit 0
+fi
 
 # Drain stdin if invoked as a git hook (git passes ref info on stdin)
 if [ ! -t 0 ]; then
@@ -45,6 +56,11 @@ if [ $EXIT_CODE -ne 0 ]; then
     echo ""
     echo "[doc-gardener] Documentation violations found. Fix before pushing."
     echo "[doc-gardener] Run: python3 .claude/scripts/doc-gardener/gardener.py --report"
+    echo ""
+    echo "Bypass options:"
+    echo "  DOC_GARDENER_SKIP=1 git push"
+    echo "  git push --no-verify"
+    echo "  touch .claude/.doc-gardener-skip"
     exit 1
 fi
 
