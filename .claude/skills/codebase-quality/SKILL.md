@@ -231,26 +231,26 @@ Documentation updated automatically
 - **Purpose**: Find and prevent security vulnerabilities
 - **Blocks**: Critical vulnerabilities, exposed secrets
 - **Warns**: Outdated dependencies, potential risks
-- **Full docs**: [security/SKILL.md](../security/SKILL.md)
+- **Full docs**: [security/SKILL.md](./security/SKILL.md)
 
 ### codebase-quality:code-quality
 - **Purpose**: Ensure consistent, clean code
 - **Blocks**: Lint errors, type errors (configurable)
 - **Warns**: Style violations, complex code
-- **Full docs**: [code-quality/SKILL.md](../code-quality/SKILL.md)
+- **Full docs**: [code-quality/SKILL.md](./code-quality/SKILL.md)
 
 ### codebase-quality:documentation
 - **Purpose**: Keep documentation accurate and current
 - **Blocks**: (nothing - documentation is never blocking)
 - **Warns**: Stale CLAUDE.md, missing status updates
-- **Full docs**: [documentation/SKILL.md](../documentation/SKILL.md)
+- **Full docs**: [documentation/SKILL.md](./documentation/SKILL.md)
 
 ### codebase-quality:post-push
 - **Purpose**: Fetch GitHub workflow comments after push
 - **Blocks**: (nothing - advisory only)
 - **Alerts**: Critical/high priority findings for user action
 - **Uses**: Background Haiku agent for non-blocking operation
-- **Full docs**: [post-push/SKILL.md](../post-push/SKILL.md)
+- **Full docs**: [post-push/SKILL.md](./post-push/SKILL.md)
 
 ## Exit Condition
 

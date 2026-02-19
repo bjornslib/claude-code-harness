@@ -749,7 +749,7 @@ System 3 → tdd-test-engineer / frontend-dev-expert / backend-solutions-enginee
 
 **Implementation Guide**: For complete worker delegation patterns, see:
 - `Skill("orchestrator-multiagent")` → SKILL.md "Core Rule" and "Worker Delegation" sections
-- [WORKERS.md](.claude/skills/orchestrator-multiagent/WORKERS.md) → Native team delegation patterns
+- [WORKERS.md](../skills/orchestrator-multiagent/WORKERS.md) → Native team delegation patterns
 
 ### 🚨 CRITICAL RULE #3: Never Close Without Independent Validation
 
@@ -990,7 +990,7 @@ System 3 (Opus)
 
 Launch background Sonnet validation-agents (one per orchestrator) + one blocking Haiku watcher for all.
 
-**Full code examples, watcher prompts, and model selection guide**: See [references/monitoring-commands.md](references/monitoring-commands.md)
+**Full code examples, watcher prompts, and model selection guide**: See [references/monitoring-commands.md](../skills/system3-orchestrator/references/monitoring-commands.md)
 
 ### What to Monitor
 - Task completion progress (via `bd list`)
@@ -1018,7 +1018,7 @@ Launch background Sonnet validation-agents (one per orchestrator) + one blocking
 
 When a monitor reports COMPLETE, capture and review orchestrator output before killing the session.
 
-**Step-by-step review and cleanup process**: See [references/monitoring-commands.md](references/monitoring-commands.md)
+**Step-by-step review and cleanup process**: See [references/monitoring-commands.md](../skills/system3-orchestrator/references/monitoring-commands.md)
 
 ### Post-Completion: Independent Validation via Oversight Agent Team
 
@@ -1559,7 +1559,7 @@ Strategic Theme: Automated Employment Verification
 
 ### Memory Contexts for OKR Tracking
 
-**Reference**: See [references/memory-context-taxonomy.md](references/memory-context-taxonomy.md) for OKR tracking contexts.
+**Reference**: See [references/memory-context-taxonomy.md](../skills/system3-orchestrator/references/memory-context-taxonomy.md) for OKR tracking contexts.
 
 ### Session Integration
 
@@ -2139,19 +2139,19 @@ If you catch yourself writing "Would you like me to..." when the path is clear:
 
 ## Exploration vs Exploitation Balance
 
-**Reference**: See [DECISION_FRAMEWORK.md](.claude/skills/system3-orchestrator/DECISION_FRAMEWORK.md) for exploration/exploitation decision framework and heuristics.
+**Reference**: See [DECISION_FRAMEWORK.md](../skills/system3-orchestrator/DECISION_FRAMEWORK.md) for exploration/exploitation decision framework and heuristics.
 
 ---
 
 ## Memory Context Taxonomy
 
-**Reference**: See [references/memory-context-taxonomy.md](references/memory-context-taxonomy.md) for complete bank/context taxonomy (private + project banks).
+**Reference**: See [references/memory-context-taxonomy.md](../skills/system3-orchestrator/references/memory-context-taxonomy.md) for complete bank/context taxonomy (private + project banks).
 
 ---
 
 ## Communication Style
 
-**Reference**: See [COMMUNICATION.md](.claude/skills/system3-orchestrator/COMMUNICATION.md) for communication guidelines with users and internal tracking practices.
+**Reference**: See [COMMUNICATION.md](../skills/system3-orchestrator/COMMUNICATION.md) for communication guidelines with users and internal tracking practices.
 
 ---
 
@@ -2159,8 +2159,8 @@ If you catch yourself writing "Would you like me to..." when the path is clear:
 
 Real-time communication with orchestrators via the message bus. Key operations: `mb-init`, `mb-register`, `mb-send`, `mb-recv`, `mb-unregister`.
 
-**Architecture**: See [MESSAGE_BUS_ARCHITECTURE.md](.claude/documentation/MESSAGE_BUS_ARCHITECTURE.md)
-**CLI Reference & Message Types**: See [references/inter-instance-messaging.md](references/inter-instance-messaging.md)
+**Architecture**: See [MESSAGE_BUS_ARCHITECTURE.md](../documentation/MESSAGE_BUS_ARCHITECTURE.md)
+**CLI Reference & Message Types**: See [references/inter-instance-messaging.md](../skills/system3-orchestrator/references/inter-instance-messaging.md)
 
 MANDATORY at session end: kill all `orch-*` tmux sessions and unregister from message bus.
 
@@ -2198,7 +2198,7 @@ pending → in_progress → verified | cancelled
 
 **For tmux-spawned orchestrators**: You must set `CLAUDE_SESSION_ID` manually before launching Claude Code (see Spawning Orchestrators section).
 
-**Full CLI reference, JSON schema, and workflows**: See [references/completion-promise-cli.md](references/completion-promise-cli.md)
+**Full CLI reference, JSON schema, and workflows**: See [references/completion-promise-cli.md](../skills/system3-orchestrator/references/completion-promise-cli.md)
 
 ---
 
@@ -2217,12 +2217,12 @@ pending → in_progress → verified | cancelled
 
 ## Quick Reference
 
-**Reference**: See [QUICK_REFERENCE.md](.claude/skills/system3-orchestrator/QUICK_REFERENCE.md) for Hindsight operations table and memory flow diagram.
+**Reference**: See [QUICK_REFERENCE.md](../skills/system3-orchestrator/QUICK_REFERENCE.md) for Hindsight operations table and memory flow diagram.
 
 ---
 
 **Version**: 2.9
 
-**Changelog**: See [SYSTEM3_CHANGELOG.md](.claude/documentation/SYSTEM3_CHANGELOG.md) for complete version history.
+**Changelog**: See [SYSTEM3_CHANGELOG.md](../documentation/SYSTEM3_CHANGELOG.md) for complete version history.
 
 **Integration**: orchestrator-multiagent skill, worktree-manager skill, Hindsight MCP (dual-bank), Beads, message-bus skill, attractor-cli (DOT pipeline navigation)

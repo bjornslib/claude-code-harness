@@ -340,7 +340,7 @@ evidence:
 ### ✅ AC-user-login (PASS)
 **Title**: User can log in with valid credentials
 **Duration**: 8.2s
-**Evidence**: [login-success-dashboard.png](./evidence/AC-user-login-success.png)
+**Evidence**: <!-- Evidence: AC-user-login-success.png (login-success-dashboard.png) -->
 
 **Verification**:
 - ✓ Login form displayed
@@ -353,7 +353,7 @@ evidence:
 ### ✅ AC-invalid-credentials (PASS)
 **Title**: Invalid credentials show error message
 **Duration**: 5.1s
-**Evidence**: [login-error.png](./evidence/AC-invalid-credentials.png)
+**Evidence**: <!-- Evidence: AC-invalid-credentials.png (login-error.png) -->
 
 **Verification**:
 - ✓ Error message displayed: "Invalid email or password"
@@ -365,7 +365,7 @@ evidence:
 ### ❌ AC-password-reset-complete (FAIL)
 **Title**: User can set new password via reset link
 **Duration**: 12.3s
-**Evidence**: [reset-fail.png](./evidence/AC-password-reset-complete-fail.png)
+**Evidence**: <!-- Evidence: AC-password-reset-complete-fail.png (reset-fail.png) -->
 
 **Expected**:
 ```

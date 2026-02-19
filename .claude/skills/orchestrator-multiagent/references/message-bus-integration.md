@@ -8,7 +8,7 @@
 | Orchestrator <-> Worker | Native Teams (SendMessage, TaskCreate, TaskList) |
 | Worker <-> Worker (peers) | Native Teams (SendMessage) |
 
-**Architecture Reference**: See [MESSAGE_BUS_ARCHITECTURE.md](../../documentation/MESSAGE_BUS_ARCHITECTURE.md) for the complete architecture overview.
+**Architecture Reference**: See [MESSAGE_BUS_ARCHITECTURE.md](../../../documentation/MESSAGE_BUS_ARCHITECTURE.md) for the complete architecture overview.
 
 ## Session Start: Register with Message Bus
 
@@ -115,4 +115,4 @@ Add to your session start/end routines:
 | `mb-list` | List active orchestrators |
 | `mb-status` | Queue status overview |
 
-**Full Guide**: See [message-bus skill](../message-bus/SKILL.md)
+**Full Guide**: See [message-bus skill](../../message-bus/SKILL.md)

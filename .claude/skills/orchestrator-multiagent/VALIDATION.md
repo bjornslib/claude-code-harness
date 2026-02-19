@@ -602,7 +602,7 @@ git diff <old-commit>..HEAD
 - **[SKILL.md](SKILL.md)** - Main orchestrator skill entry point
 - **[WORKFLOWS.md](WORKFLOWS.md)** - 4-Phase Pattern, Autonomous Mode, Validation Protocol
 - **[WORKERS.md](WORKERS.md)** - Worker delegation patterns
-- **[BEADS_INTEGRATION.md](BEADS_INTEGRATION.md)** - Task management with Beads
+- **Beads** - Task management (use `bd` commands directly)
 - **[PREFLIGHT.md](PREFLIGHT.md)** - Session start checklist
 
 ---

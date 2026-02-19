@@ -2,7 +2,7 @@
 
 **Status**: ARCHIVED - For migration and legacy project support only
 
-> **IMPORTANT**: New projects should use Beads. See [BEADS_INTEGRATION.md](BEADS_INTEGRATION.md).
+> **IMPORTANT**: New projects should use Beads (use `bd` commands directly).
 >
 > This document consolidates all legacy feature_list.json documentation from the orchestrator skill.
 
@@ -298,10 +298,10 @@ The migration script creates a mapping file:
 
 ## Related Documents
 
-- **[SKILL.md](SKILL.md)** - Main orchestration workflow (Beads-focused)
-- **[BEADS_INTEGRATION.md](BEADS_INTEGRATION.md)** - Current state management system
+- **[SKILL.md](../SKILL.md)** - Main orchestration workflow (Beads-focused)
+- **Beads** - Current state management system (use `bd` commands directly)
 - **[WORKERS.md](../WORKERS.md)** - Worker templates (Beads format preferred)
-- **[FEATURE_DECOMPOSITION.md](FEATURE_DECOMPOSITION.md)** - Task sizing and quality
+- **Feature Decomposition** - Task sizing and quality (consolidated into SKILL.md)
 
 ---
 

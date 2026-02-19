@@ -219,9 +219,9 @@ System 3 monitors orchestrator activity:
 
 ## References
 
-- **Operational Details**: [`Skill("message-bus")`](.claude/skills/message-bus/SKILL.md) - Full CLI usage, examples
-- **System 3 Integration**: [system3-meta-orchestrator.md](.claude/output-styles/system3-meta-orchestrator.md) - Inter-Instance Messaging section
-- **Orchestrator Integration**: [`Skill("orchestrator-multiagent")`](.claude/skills/orchestrator-multiagent/SKILL.md) - Message Bus Integration section
+- **Operational Details**: [`Skill("message-bus")`](../skills/message-bus/SKILL.md) - Full CLI usage, examples
+- **System 3 Integration**: [system3-meta-orchestrator.md](../output-styles/system3-meta-orchestrator.md) - Inter-Instance Messaging section
+- **Orchestrator Integration**: [`Skill("orchestrator-multiagent")`](../skills/orchestrator-multiagent/SKILL.md) - Message Bus Integration section
 
 ---
 

@@ -872,7 +872,7 @@ Establish **single source of truth** for each concept:
 1. Keep full content in canonical location
 2. Replace duplicates with references:
    ```markdown
-   **See [BEADS_INTEGRATION.md](BEADS_INTEGRATION.md#at-epic-convention) for full AT Epic pattern.**
+   **See the AT Epic convention section in the orchestrator skill documentation for the full AT Epic pattern.**
    ```
 3. Estimated line reduction: ~100 lines
 

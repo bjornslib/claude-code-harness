@@ -32,7 +32,7 @@ mcp__serena__switch_modes(["editing", "interactive"])  # For implementation sess
 
 ```bash
 lsof -i :5001 -i :8000 -i :5184 -i :5185 | grep LISTEN
-# Must show 4 ports listening. If not: see SERVICE_MANAGEMENT.md
+# Must show 4 ports listening. If not: see VALIDATION.md (Service Management section)
 ```
 
 **Expected output** (all 4 services):
@@ -157,7 +157,7 @@ bd reopen <id> --reason "Regression: [description]"
 
 ```bash
 bd list --type=epic
-# Existing uber-epic? → Continue to Phase 2 (AUTONOMOUS_MODE.md)
+# Existing uber-epic? → Continue to Phase 2 (see WORKFLOWS.md)
 # No uber-epic? → Create one first (MANDATORY)
 ```
 
@@ -188,17 +188,16 @@ bd dep add <at-epic-id> <uber-epic-id> --type=parent-child
 bd dep add <epic-a-id> <at-epic-id> --type=blocks
 ```
 
-**See [BEADS_INTEGRATION.md](BEADS_INTEGRATION.md#acceptance-test-at-epic-convention) for full AT Epic pattern.**
+**See the AT Epic convention section in the orchestrator skill documentation for the full AT Epic pattern.**
 
 ---
 
 ## Pre-Flight Complete
 
-**All boxes checked?** → Proceed to [AUTONOMOUS_MODE.md](AUTONOMOUS_MODE.md) for multi-feature session execution.
+**All boxes checked?** → Proceed to multi-feature session execution via [WORKFLOWS.md](WORKFLOWS.md).
 
 **Any box failed?** → Resolve before proceeding. See:
-- Service issues: [SERVICE_MANAGEMENT.md](SERVICE_MANAGEMENT.md)
-- Regression recovery: [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
+- Service issues and troubleshooting: [VALIDATION.md](VALIDATION.md#service-management)
 
 ---
 

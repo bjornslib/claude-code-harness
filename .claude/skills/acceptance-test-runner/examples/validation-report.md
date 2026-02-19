@@ -25,7 +25,7 @@
 ### ✅ AC-user-login (PASS)
 **Title**: User can log in with valid credentials
 **Duration**: 8.2s
-**Evidence**: [AC-user-login-success.png](./evidence/AC-user-login-success.png)
+**Evidence**: `./evidence/AC-user-login-success.png`
 
 **Verification**:
 - ✓ Navigate to /login: Page loaded successfully
@@ -41,7 +41,7 @@
 ### ✅ AC-invalid-credentials (PASS)
 **Title**: Invalid credentials show error message
 **Duration**: 5.1s
-**Evidence**: [AC-invalid-credentials.png](./evidence/AC-invalid-credentials.png)
+**Evidence**: `./evidence/AC-invalid-credentials.png`
 
 **Verification**:
 - ✓ Navigate to /login: Page loaded
@@ -56,7 +56,7 @@
 ### ✅ AC-password-reset-request (PASS)
 **Title**: User can request password reset email
 **Duration**: 6.4s
-**Evidence**: [AC-password-reset-request.png](./evidence/AC-password-reset-request.png)
+**Evidence**: `./evidence/AC-password-reset-request.png`
 
 **Verification**:
 - ✓ Navigate to /forgot-password: Page loaded
@@ -70,7 +70,7 @@
 ### ❌ AC-password-reset-complete (FAIL)
 **Title**: User can set new password via reset link
 **Duration**: 12.3s
-**Evidence**: [AC-password-reset-complete-fail.png](./evidence/AC-password-reset-complete-fail.png)
+**Evidence**: `./evidence/AC-password-reset-complete-fail.png`
 
 **Expected**:
 ```
@@ -105,7 +105,7 @@ The password reset completion endpoint was not implemented. The reset email send
 ### ✅ AC-session-timeout (PASS)
 **Title**: Session expires after inactivity period
 **Duration**: 15.2s
-**Evidence**: [AC-session-timeout.png](./evidence/AC-session-timeout.png)
+**Evidence**: `./evidence/AC-session-timeout.png`
 
 **Verification**:
 - ✓ Log in successfully: Session established

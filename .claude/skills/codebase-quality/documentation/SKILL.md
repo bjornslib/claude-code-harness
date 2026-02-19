@@ -152,7 +152,7 @@ agencheck/CLAUDE.md (root)
 ```markdown
 # [Module Name] - CLAUDE.md
 
-> Inherits from: [../CLAUDE.md](../CLAUDE.md)
+> Inherits from: [CLAUDE.md](../../../CLAUDE.md)
 
 ## Module Overview
 [Brief description]

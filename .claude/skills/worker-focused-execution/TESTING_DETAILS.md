@@ -403,4 +403,4 @@ curl -X POST http://localhost:8000/agencheck \
 
 ---
 
-**Reference**: See orchestrator's [TESTING_INFRASTRUCTURE.md](../orchestrator-multiagent/TESTING_INFRASTRUCTURE.md) for complete service documentation.
+**Reference**: See orchestrator's [VALIDATION.md](../orchestrator-multiagent/VALIDATION.md) for complete service and testing documentation.
