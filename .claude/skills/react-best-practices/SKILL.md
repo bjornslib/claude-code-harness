@@ -6,6 +6,8 @@ author: Vercel Engineering
 license: MIT
 tags: [React, Next.js, Performance, Optimization, Best Practices, Bundle Size, Rendering, Server Components]
 dependencies: []
+title: "React Best Practices"
+status: active
 ---
 
 # React Best Practices - Performance Optimization

@@ -2,6 +2,8 @@
 name: database
 description: This skill should be used when the user wants to add a database (Postgres, Redis, MySQL, MongoDB), says "add postgres", "add redis", "add database", "connect to database", or "wire up the database". For other templates (Ghost, Strapi, n8n, etc.), use the templates skill.
 allowed-tools: Bash(railway:*)
+title: "Database"
+status: active
 ---
 
 # Database

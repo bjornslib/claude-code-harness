@@ -2,6 +2,8 @@
 name: playwright
 description: Dynamic access to playwright MCP server (22 tools)
 version: 1.0.0
+title: "Playwright"
+status: active
 ---
 
 # playwright Skill

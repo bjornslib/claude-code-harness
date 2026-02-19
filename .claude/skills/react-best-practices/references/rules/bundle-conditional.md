@@ -3,6 +3,7 @@ title: Conditional Module Loading
 impact: CRITICAL
 impactDescription: loads large data only when needed
 tags: bundle, conditional-loading, lazy-loading
+status: active
 ---
 
 ## Conditional Module Loading

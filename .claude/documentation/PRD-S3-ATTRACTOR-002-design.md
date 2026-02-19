@@ -1,3 +1,11 @@
+---
+title: "Prd S3 Attractor 002 Design"
+status: active
+type: architecture
+last_verified: 2026-02-19
+grade: reference
+---
+
 # PRD-S3-ATTRACTOR-002: Execution Engine Design Document
 
 **Status**: Draft

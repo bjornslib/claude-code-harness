@@ -2,6 +2,8 @@
 name: worktree-manager-skill
 description: Comprehensive git worktree management. Use when the user wants to create, remove, list, or manage worktrees. Handles all worktree operations including creation, deletion, and status checking.
 allowed-tools: SlashCommand, Bash, Read, Write, Edit, Glob, Grep
+title: "Worktree Manager Skill"
+status: active
 ---
 
 # Worktree Manager Skill

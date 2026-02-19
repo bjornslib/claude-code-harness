@@ -3,6 +3,7 @@ title: Defer Non-Critical Third-Party Libraries
 impact: CRITICAL
 impactDescription: loads after hydration
 tags: bundle, third-party, analytics, defer
+status: active
 ---
 
 ## Defer Non-Critical Third-Party Libraries

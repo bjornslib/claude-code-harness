@@ -3,6 +3,7 @@ title: Deduplicate Global Event Listeners
 impact: MEDIUM-HIGH
 impactDescription: single listener for N components
 tags: client, swr, event-listeners, subscription
+status: active
 ---
 
 ## Deduplicate Global Event Listeners

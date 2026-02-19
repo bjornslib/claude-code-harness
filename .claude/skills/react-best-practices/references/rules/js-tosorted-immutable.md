@@ -3,6 +3,7 @@ title: Use toSorted() Instead of sort() for Immutability
 impact: MEDIUM
 impactDescription: prevents mutation bugs in React state
 tags: javascript, arrays, immutability, react, state, mutation
+status: active
 ---
 
 ## Use toSorted() Instead of sort() for Immutability

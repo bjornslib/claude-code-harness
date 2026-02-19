@@ -2,6 +2,8 @@
 name: domain
 description: This skill should be used when the user wants to add a domain, generate a railway domain, check current domains, get the URL for a service, or remove a domain.
 allowed-tools: Bash(railway:*)
+title: "Domain"
+status: active
 ---
 
 # Domain Management

@@ -1,3 +1,11 @@
+---
+title: "Update Validation Agent Integration"
+status: active
+type: architecture
+last_verified: 2026-02-19
+grade: reference
+---
+
 # Update Plan: validation-test-agent Integration
 
 **Date**: 2026-01-24

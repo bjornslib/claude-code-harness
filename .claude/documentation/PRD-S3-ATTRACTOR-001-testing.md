@@ -1,3 +1,11 @@
+---
+title: "Prd S3 Attractor 001 Testing"
+status: active
+type: architecture
+last_verified: 2026-02-19
+grade: reference
+---
+
 # PRD-S3-ATTRACTOR-001 Testing Guide
 
 Testing documentation for the S3 Attractor Pipeline system, covering the Attractor CLI, Doc Gardener, behavioral spec changes, and integration workflows.

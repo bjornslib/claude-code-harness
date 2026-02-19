@@ -2,6 +2,8 @@
 name: Design to Code
 description: This skill should be used when the user asks to "convert a design to code", "implement this UI", "build from Figma", "create component from screenshot", "one-shot UI generation", "generate code from design", or provides a design image (Figma export, Google Stitch output, screenshot) for implementation. Provides a structured multi-step workflow for translating visual designs into production-ready React components.
 version: 1.1.0
+title: "Design To Code"
+status: active
 ---
 
 # Design to Code Workflow

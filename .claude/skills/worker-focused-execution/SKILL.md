@@ -1,6 +1,8 @@
 ---
 name: worker-focused-execution
 description: Focused task execution for persistent team workers. Use when implementing features, following scope constraints, using TDD red-green-refactor, validating with browser/API/unit tests, or participating in voting consensus. Triggers on worker execution, feature implementation, scope enforcement, TDD, red-green-refactor, validation, superpowers skills, verification before completion.
+title: "Worker Focused Execution"
+status: active
 ---
 
 # Worker Focused Execution Skill

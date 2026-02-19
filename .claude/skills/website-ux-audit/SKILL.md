@@ -2,6 +2,8 @@
 name: website-ux-audit
 description: This skill should be used when the user asks to "audit this website", "UX review", "analyze user experience", "website modernization report", "evaluate website design", "improve website UX", or provides a URL for comprehensive UX/UI analysis. Produces actionable modernization reports structured for design and implementation handoff.
 version: 1.2
+title: "Website Ux Audit"
+status: active
 ---
 
 # Website UX Audit Skill

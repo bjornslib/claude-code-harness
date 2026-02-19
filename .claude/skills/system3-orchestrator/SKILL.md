@@ -3,6 +3,8 @@ name: system3-orchestrator
 description: This skill should be used when spawning orchestrators, launching new initiatives, starting parallel work, creating orchestrators in worktrees, or managing System 3 orchestration. Provides complete preflight checklists and spawn workflows for nested orchestrator management with Hindsight wisdom injection.
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Task, SlashCommand
 version: 3.5.0
+title: "System3 Orchestrator"
+status: active
 ---
 
 # System 3 Orchestrator Skill

@@ -2,6 +2,8 @@
 name: codebase-quality:security
 description: Security vulnerability scanning including secrets detection, dependency audits, and injection risk analysis. Use when checking for security issues, scanning for secrets, auditing dependencies, or before production deployment. First skill in codebase-quality chain. Triggers on security scan, secrets detection, vulnerability check, dependency audit, security review.
 version: 1.0.0
+title: "Codebase Quality:Security"
+status: active
 ---
 
 # Security Sub-Skill

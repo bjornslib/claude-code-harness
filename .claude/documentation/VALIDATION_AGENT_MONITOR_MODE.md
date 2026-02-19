@@ -1,3 +1,11 @@
+---
+title: "Validation_Agent_Monitor_Mode"
+status: active
+type: architecture
+last_verified: 2026-02-19
+grade: reference
+---
+
 # Validation Agent - Monitor Mode
 
 ## Overview

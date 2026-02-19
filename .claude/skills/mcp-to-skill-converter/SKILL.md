@@ -2,6 +2,8 @@
 name: mcp-to-skill-converter
 description: Convert MCP servers to Claude Skills with progressive disclosure. Use when asked to "convert MCP to skill", "create skill from MCP", "list MCP servers", "batch convert MCP", "generate skills from .mcp.json", or when working with MCP server configurations. Reduces context usage by 90%+ compared to native MCP loading.
 version: 1.0.0
+title: "Mcp To Skill Converter"
+status: active
 ---
 
 # MCP to Skill Converter

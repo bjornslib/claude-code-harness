@@ -3,6 +3,7 @@ title: Parallel Data Fetching with Component Composition
 impact: HIGH
 impactDescription: eliminates server-side waterfalls
 tags: server, rsc, parallel-fetching, composition
+status: active
 ---
 
 ## Parallel Data Fetching with Component Composition

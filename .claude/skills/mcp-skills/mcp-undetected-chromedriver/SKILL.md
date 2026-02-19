@@ -2,6 +2,8 @@
 name: mcp-undetected-chromedriver
 description: Use for stealth browser automation that bypasses bot detection. Undetected ChromeDriver for web scraping, anti-detection browsing, form filling, screenshots, PDF export, JavaScript evaluation. 16 tools for automation without triggering bot protection.
 version: 1.0.0
+title: "Mcp Undetected Chromedriver"
+status: active
 ---
 
 # mcp-undetected-chromedriver Skill

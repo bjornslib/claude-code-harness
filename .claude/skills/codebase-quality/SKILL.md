@@ -2,6 +2,8 @@
 name: codebase-quality
 description: Codebase quality orchestration for maintaining high-quality, secure, well-documented code. Use when completing features, running quality audits, checking security, updating documentation, or before merging PRs. Triggers on quality check, code review, security scan, documentation update, codebase audit, pre-merge check, bd close, feature complete. Sub-skills available via Skill("codebase-quality", args="security|code-quality|documentation|post-push|full-audit").
 version: 1.5.0
+title: "Codebase Quality"
+status: active
 ---
 
 # Codebase Quality Superpowers

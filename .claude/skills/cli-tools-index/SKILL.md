@@ -1,3 +1,8 @@
+---
+title: "CLI Tools Index"
+status: active
+---
+
 # CLI Tools Index
 
 This skill provides documentation and usage examples for various CLI helper scripts used within the AgenCheck project.

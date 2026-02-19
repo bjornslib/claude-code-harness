@@ -2,6 +2,8 @@
 name: codebase-quality:post-push
 description: Fetch GitHub feedback after git push OR PR creation. These are TWO SEPARATE use cases with different feedback sources. Use the Python script with appropriate flags.
 version: 3.0.0
+title: "Codebase Quality:Post Push"
+status: active
 ---
 
 # Post-Push Review Sub-Skill

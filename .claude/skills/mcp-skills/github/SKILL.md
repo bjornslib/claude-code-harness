@@ -2,6 +2,8 @@
 name: github
 description: Use for GitHub operations - create PR, pull request, issues, repository, commits, branches, code search, file contents, fork, merge. 26 tools for GitHub API integration.
 version: 1.0.0
+title: "Github"
+status: active
 ---
 
 # github Skill

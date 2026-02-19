@@ -3,6 +3,8 @@ name: s3-heartbeat
 description: Behavioral specification for the System 3 Heartbeat teammate. Loaded as prompt when spawning the Haiku work-finder agent within the s3-live team. Defines the heartbeat loop scanning for actionable work (beads, orchestrator failures, git staleness, stale tasks, idle orchestrators) and reporting findings to System 3 via SendMessage.
 allowed-tools: Bash, SendMessage
 version: 1.0.0
+title: "S3 Heartbeat"
+status: active
 ---
 
 # S3 Heartbeat — Work-Finder Teammate Specification

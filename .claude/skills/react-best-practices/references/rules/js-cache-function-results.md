@@ -3,6 +3,7 @@ title: Cache Repeated Function Calls
 impact: MEDIUM-HIGH
 impactDescription: avoid redundant computation
 tags: javascript, cache, memoization, performance
+status: active
 ---
 
 ## Cache Repeated Function Calls

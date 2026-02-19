@@ -2,6 +2,8 @@
 name: livekit-docs
 description: Dynamic access to livekit-docs MCP server (7 tools)
 version: 1.0.0
+title: "Livekit Docs"
+status: active
 ---
 
 # livekit-docs Skill

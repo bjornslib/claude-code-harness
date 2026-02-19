@@ -1,6 +1,8 @@
 ---
 name: linkedin-campaign-development
 description: This skill should be used when the user asks to "create a LinkedIn campaign", "develop personalized outreach", "write LinkedIn messages", "research leads for a campaign", "create Sales Navigator outreach", "build B2B outreach", "personalize messages for leads", or mentions LinkedIn campaign development, lead personalization, identity-first messaging, or Sales Navigator campaigns.
+title: "Linkedin Campaign Development"
+status: active
 ---
 
 # LinkedIn Campaign Development

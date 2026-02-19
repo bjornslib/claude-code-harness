@@ -1,3 +1,11 @@
+---
+title: "Stop_Gate_Consolidation"
+status: active
+type: architecture
+last_verified: 2026-02-19
+grade: reference
+---
+
 # Stop Gate Consolidation (2026-01-31)
 
 ## Problem

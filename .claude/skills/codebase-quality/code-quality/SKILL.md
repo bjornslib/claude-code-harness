@@ -2,6 +2,8 @@
 name: codebase-quality:code-quality
 description: Code quality analysis including linting, style, type safety, and refactoring suggestions. Use when checking code style, running linters, analyzing complexity, or suggesting refactoring. Invoked by codebase-quality:full-audit after security passes. Triggers on lint, code style, type check, refactor, code quality, complexity.
 version: 1.0.0
+title: "Codebase Quality:Code Quality"
+status: active
 ---
 
 # Code Quality Sub-Skill

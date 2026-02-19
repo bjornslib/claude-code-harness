@@ -2,6 +2,8 @@
 name: central-station
 description: This skill should be used when the user asks about Central Station threads, community discussions, support questions, feature requests, or wants to search Railway's community knowledge base. Use for queries like "search central station", "find threads about", "what are people asking about", "recent support threads", or "central station topics".
 allowed-tools: Bash(curl:*), Bash(jq:*)
+title: "Central Station"
+status: active
 ---
 
 # Central Station

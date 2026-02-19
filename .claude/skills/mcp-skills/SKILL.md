@@ -2,6 +2,8 @@
 name: mcp-skills
 description: Registry of MCP-derived skills with progressive disclosure. Use when asked about "github", "assistant-ui", "chrome-devtools", "playwright", "shadcn", "undetected-chromedriver", "logfire", "magicui", "livekit", "ToolUI", "generative UI", "chat components", "PR", "issues", "repository", "browser automation", "E2E testing", "screenshot", "console logs", "network requests", "performance tracing", "stealth browser", "bot detection bypass", "web scraping", "observability", "tracing", "exceptions", "Magic UI", "bento-grid", "animations", "voice agents", "real-time audio", "WebRTC", "UI components", "MCP tools", or any converted MCP server. Provides 90%+ context savings compared to native MCP loading.
 version: 1.0.0
+title: "Mcp Skills"
+status: active
 ---
 
 # MCP Skills Registry

@@ -5,6 +5,8 @@ description: >
   "validate against PRD", "test the outcomes", "execute E2E validation for PRD-XXX",
   "verify acceptance criteria", or when the validation-test-agent routes --mode=e2e
   requests. Executes acceptance tests and generates evidence-based validation reports.
+title: "Acceptance Test Runner"
+status: active
 ---
 
 # Acceptance Test Runner

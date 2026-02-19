@@ -1,3 +1,11 @@
+---
+title: "Decision_Time_Guidance"
+status: active
+type: architecture
+last_verified: 2026-02-19
+grade: reference
+---
+
 # Decision-Time Guidance Architecture
 
 Adapting Replit's decision-time guidance approach to the Claude Code harness for selective, situational instruction injection.

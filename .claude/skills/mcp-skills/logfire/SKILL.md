@@ -2,6 +2,8 @@
 name: logfire
 description: Use for Pydantic Logfire observability, tracing, and debugging. Query exceptions, spans, logs with SQL. View traces in Logfire UI. 4 tools for application monitoring and error analysis.
 version: 1.0.0
+title: "Logfire"
+status: active
 ---
 
 # logfire Skill

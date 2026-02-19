@@ -1,3 +1,11 @@
+---
+title: "Native Teams Epic1 Findings"
+status: active
+type: architecture
+last_verified: 2026-02-19
+grade: reference
+---
+
 # Epic 1 Findings: Native Agent Teams Compatibility Test
 
 **Date**: 2026-02-06

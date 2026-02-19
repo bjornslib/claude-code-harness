@@ -1,3 +1,11 @@
+---
+title: "Message_Bus_Architecture"
+status: active
+type: architecture
+last_verified: 2026-02-19
+grade: reference
+---
+
 # Message Bus Architecture
 
 Inter-instance messaging system for communication between Claude Code sessions (System 3, Orchestrators, Workers).

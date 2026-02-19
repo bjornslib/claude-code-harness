@@ -1,6 +1,8 @@
 ---
 name: orchestrator-multiagent
 description: Multi-agent orchestration for building software incrementally. Use when coordinating workers via native Agent Teams (Teammate + TaskCreate + SendMessage), managing task state with Beads, delegating features to specialized workers (frontend-dev-expert, backend-solutions-engineer, etc.), tracking progress across sessions, or implementing the four-phase pattern (ideation → planning → execution → validation). Triggers on orchestration, coordination, multi-agent, beads, worker delegation, session handoff, progress tracking, agent teams, teammates.
+title: "Orchestrator Multiagent"
+status: active
 ---
 
 # Multi-Agent Orchestrator Skill

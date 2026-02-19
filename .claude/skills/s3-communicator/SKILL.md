@@ -3,6 +3,8 @@ name: s3-communicator
 description: Behavioral specification for the System 3 Communicator teammate. Loaded as prompt when spawning the Haiku GChat relay agent within the s3-live team. Defines the outbound message dispatch, inbound user-response polling, and user intermediary relay protocols. All scanning/work-finding is handled by s3-heartbeat -- this agent is GChat relay only.
 allowed-tools: Bash, Read, SendMessage
 version: 2.0.0
+title: "S3 Communicator"
+status: active
 ---
 
 # S3 Communicator — GChat Relay Teammate Specification

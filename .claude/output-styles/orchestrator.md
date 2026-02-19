@@ -1,6 +1,8 @@
 ---
 name: orchestrator
 description: Output style for orchestrator sessions - thin layer establishing mindset
+title: "Orchestrator"
+status: active
 ---
 
 # Orchestrator

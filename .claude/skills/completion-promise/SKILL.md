@@ -1,6 +1,8 @@
 ---
 name: completion-promise
 description: Ralph Wiggum-style completion promise tracking for System 3 sessions. Use when starting a new session with user goals, when verifying feature completion, or when the stop hook needs to evaluate if the session can end. Triggers on session start, completion promise, goal tracking, feature verification, stop gate.
+title: "Completion Promise"
+status: active
 ---
 
 # Completion Promise Skill

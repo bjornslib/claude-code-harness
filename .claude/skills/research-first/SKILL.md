@@ -2,6 +2,8 @@
 name: research-first
 description: This skill should be used when the user asks about frameworks (React, Next.js, FastAPI, PydanticAI, Supabase, LiveKit, LlamaIndex, Tailwind, Zustand, etc.), when implementing new features, when expressing uncertainty ("how do I", "what's the best way", "should I", "is this right"), when designing solutions or architecture, or before committing to any implementation approach. Spawns a research sub-agent to query context7 (framework docs) and Perplexity (solution validation) in a separate context window, returning concise findings to keep the main context clean.
 version: 1.0.0
+title: "Research First"
+status: active
 ---
 
 # Research-First Skill

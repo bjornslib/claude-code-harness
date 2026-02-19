@@ -2,6 +2,8 @@
 name: assistant-ui
 description: Use for assistant-ui documentation, ToolUI, generative UI, chat components, Thread, Composer, Message primitives, runtime integrations. Get docs and code examples for building AI chat interfaces.
 version: 1.0.0
+title: "Assistant Ui"
+status: active
 ---
 
 # assistant-ui Skill

@@ -1,3 +1,11 @@
+---
+title: "System3_Monitoring_Architecture"
+status: active
+type: architecture
+last_verified: 2026-02-19
+grade: reference
+---
+
 # System3 Monitoring Architecture
 
 ## Key Finding

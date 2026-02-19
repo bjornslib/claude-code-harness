@@ -3,6 +3,7 @@ title: Per-Request Deduplication with React.cache()
 impact: HIGH
 impactDescription: deduplicates within request
 tags: server, cache, react-cache, deduplication
+status: active
 ---
 
 ## Per-Request Deduplication with React.cache()

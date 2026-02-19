@@ -2,6 +2,8 @@
 name: shadcn
 description: Use for shadcn/ui component library - searching components, viewing examples, getting add commands. Triggers on "shadcn", "UI components", "React components", "Tailwind components", "component registry", "add component", "component examples", "button", "card", "dialog", "form", "table", "input", "select", "tabs", "accordion", "alert", "badge", "checkbox", "dropdown", "modal", "popover", "slider", "switch", "toast", "tooltip".
 version: 1.0.0
+title: "Shadcn"
+status: active
 ---
 
 # shadcn Skill

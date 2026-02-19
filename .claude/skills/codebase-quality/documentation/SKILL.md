@@ -2,6 +2,8 @@
 name: codebase-quality:documentation
 description: Documentation maintenance including CLAUDE.md sync, status tracking, and quality validation. Use when completing features, merging PRs, checking documentation freshness, or updating deployment status. Last skill in codebase-quality chain. Triggers on documentation update, CLAUDE.md sync, doc status, feature complete, bd close, merge to main, doc validation.
 version: 1.0.0
+title: "Codebase Quality:Documentation"
+status: active
 ---
 
 # Documentation Sub-Skill

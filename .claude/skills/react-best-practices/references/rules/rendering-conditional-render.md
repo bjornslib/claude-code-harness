@@ -3,6 +3,7 @@ title: Use Explicit Conditional Rendering
 impact: MEDIUM
 impactDescription: prevents rendering 0 or NaN
 tags: rendering, conditional, jsx, falsy-values
+status: active
 ---
 
 ## Use Explicit Conditional Rendering

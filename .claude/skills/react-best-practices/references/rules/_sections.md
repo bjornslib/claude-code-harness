@@ -1,3 +1,8 @@
+---
+title: "Sections"
+status: active
+---
+
 # Sections
 
 This file defines all sections, their ordering, impact levels, and descriptions.

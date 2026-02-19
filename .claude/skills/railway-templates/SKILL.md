@@ -2,6 +2,8 @@
 name: templates
 description: This skill should be used when the user wants to add a service from a template, find templates for a specific use case, or deploy tools like Ghost, Strapi, n8n, Minio, Uptime Kuma, etc. For databases (Postgres, Redis, MySQL, MongoDB), prefer the database skill.
 allowed-tools: Bash(railway:*)
+title: "Templates"
+status: active
 ---
 
 # Templates

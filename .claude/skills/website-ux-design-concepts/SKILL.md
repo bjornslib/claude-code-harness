@@ -2,6 +2,8 @@
 name: website-ux-design-concepts
 description: This skill should be used when the user asks to "create design mockups", "generate UI concepts", "visualize UX improvements", "create wireframes", "design concept images", or needs to generate visual design mockups based on UX recommendations. Supports two engines: Stitch MCP (default, produces HTML/CSS + screenshots) and Gemini 3 Pro Image API (creative exploration fallback).
 version: 1.0.0
+title: "Website Ux Design Concepts"
+status: active
 ---
 
 # Website UX Design Concepts

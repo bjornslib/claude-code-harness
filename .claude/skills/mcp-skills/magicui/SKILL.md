@@ -2,6 +2,8 @@
 name: magicui
 description: Use for Magic UI React components, animations, text effects, buttons, backgrounds, device mocks. Includes bento-grid, marquee, globe, animated buttons, shimmer effects, particle backgrounds. 8 tools for beautiful UI components.
 version: 1.0.0
+title: "Magicui"
+status: active
 ---
 
 # Magic UI Skill

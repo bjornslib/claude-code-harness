@@ -1,3 +1,11 @@
+---
+title: "Skill Dedup Audit"
+status: active
+type: architecture
+last_verified: 2026-02-19
+grade: reference
+---
+
 # Skill Deduplication Audit Report
 
 **Date**: 2026-02-17

@@ -2,6 +2,8 @@
 name: s3-guardian
 description: This skill should be used when System 3 needs to act as an independent guardian angel — spawning System 3 operators in tmux, creating blind Gherkin acceptance tests from PRDs, monitoring operator progress, independently validating claims against acceptance criteria using gradient confidence scoring (0.0-1.0), and setting session promises. Use when asked to "spawn and monitor a system3 operator", "create acceptance tests for a PRD", "validate orchestrator claims", "act as guardian angel", or "independently verify implementation work".
 version: 0.1.0
+title: "S3 Guardian"
+status: active
 ---
 
 # S3 Guardian — Independent Validation Pattern

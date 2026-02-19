@@ -1,3 +1,11 @@
+---
+title: "Adr 001 Output Style Reliability"
+status: active
+type: architecture
+last_verified: 2026-02-19
+grade: reference
+---
+
 # ADR-001: Output Style Reliability for Critical Content
 
 ## Status

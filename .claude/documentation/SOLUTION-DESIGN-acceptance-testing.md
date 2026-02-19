@@ -1,3 +1,11 @@
+---
+title: "Solution Design Acceptance Testing"
+status: active
+type: architecture
+last_verified: 2026-02-19
+grade: reference
+---
+
 # Solution Design: Acceptance Testing Framework
 
 **Author**: System 3 + User Collaboration

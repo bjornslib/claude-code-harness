@@ -1,6 +1,8 @@
 ---
 name: message-bus
 description: Inter-instance messaging system for Claude Code sessions. Use when you need to send messages between System 3 and orchestrators, broadcast announcements, register/unregister orchestrators, or spawn message queue monitors. Triggers on messaging, communication, broadcast, orchestrator registry, inter-instance.
+title: "Message Bus"
+status: active
 ---
 
 # Message Bus Skill

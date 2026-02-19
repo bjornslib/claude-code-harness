@@ -2,6 +2,8 @@
 name: chrome-devtools
 description: Use for Chrome DevTools browser automation, E2E testing, screenshot capture, console log inspection, network request monitoring, performance tracing, Core Web Vitals, page navigation, form filling, JavaScript evaluation. 26 tools for browser debugging and testing.
 version: 1.0.0
+title: "Chrome Devtools"
+status: active
 ---
 
 # chrome-devtools Skill

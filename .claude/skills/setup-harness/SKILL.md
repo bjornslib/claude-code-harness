@@ -1,6 +1,8 @@
 ---
 name: setup-harness
 description: Copy Claude Code harness into a project directory for version control. Use when user wants to set up the harness or when they say "setup harness", "copy harness", "install harness", or provide a harness path.
+title: "Setup Harness"
+status: active
 ---
 
 # Setup Harness Skill

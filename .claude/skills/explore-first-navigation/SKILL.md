@@ -2,6 +2,8 @@
 name: explore-first-navigation
 description: This skill should be used when the user asks to "find files", "search code", "locate implementation", "understand architecture", "explore codebase", "where is X defined", "how does X work", "find pattern", "show me the structure", or any codebase navigation that involves searching, finding, or understanding code. CRITICALLY, this skill MUST also be used when the agent needs to "investigate root cause", "find where this is defined", "trace the error", "locate the source of", "find related files", "search for references", "understand how X works before implementing", "find the implementation of", "discover what files handle", or ANY internal reasoning that requires exploring the codebase to gather context. MANDATORY for open-ended searches requiring multiple file reads or pattern matching. Delegates exploration to Haiku sub-agents to preserve main context window.
 version: 1.1.0
+title: "Explore First Navigation"
+status: active
 ---
 
 # Explore-First Navigation

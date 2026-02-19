@@ -1,3 +1,11 @@
+---
+title: "Dual_Closure_Gate"
+status: active
+type: architecture
+last_verified: 2026-02-19
+grade: reference
+---
+
 # ADR: Dual Closure Gate — System 3 Independent Validation
 
 **Date**: 2026-02-10

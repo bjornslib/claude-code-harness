@@ -2,6 +2,8 @@
 name: new
 description: This skill should be used when the user says "setup", "deploy to railway", "initialize", "create project", "create service", or wants to deploy from GitHub. Handles initial setup AND adding services to existing projects. For databases, use the database skill instead.
 allowed-tools: Bash(railway:*), Bash(which:*), Bash(command:*), Bash(npm:*), Bash(npx:*)
+title: "New"
+status: active
 ---
 
 # New Project / Service / Database

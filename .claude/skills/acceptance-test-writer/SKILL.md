@@ -6,6 +6,8 @@ description: >
   "set up acceptance testing for PRD-XXX", "convert PRD to testable criteria",
   or when starting implementation of a new PRD and acceptance tests don't exist.
   Generates executable YAML test scripts from PRD documents.
+title: "Acceptance Test Writer"
+status: active
 ---
 
 # Acceptance Test Writer

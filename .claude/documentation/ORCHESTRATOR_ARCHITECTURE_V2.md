@@ -1,3 +1,11 @@
+---
+title: "Orchestrator_Architecture_V2"
+status: active
+type: architecture
+last_verified: 2026-02-19
+grade: reference
+---
+
 # Orchestrator Architecture V2: Task-Based Delegation
 
 ## Overview

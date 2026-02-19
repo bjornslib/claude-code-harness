@@ -3,6 +3,7 @@ title: Hoist Static JSX Elements
 impact: MEDIUM
 impactDescription: avoids re-creation
 tags: rendering, jsx, static, optimization
+status: active
 ---
 
 ## Hoist Static JSX Elements

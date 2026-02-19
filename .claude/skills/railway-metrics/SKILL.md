@@ -2,6 +2,8 @@
 name: metrics
 description: This skill should be used when the user asks about resource usage, CPU, memory, network, disk, or service performance. Covers questions like "how much memory is my service using" or "is my service slow".
 allowed-tools: Bash(railway:*)
+title: "Metrics"
+status: active
 ---
 
 # Service Metrics

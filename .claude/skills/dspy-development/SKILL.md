@@ -17,6 +17,8 @@ description: >-
   LM programming framework, Stanford NLP DSPy, declarative prompting, or
   automated prompt engineering. Also trigger when code contains `import dspy` or `from dspy`.
 version: 3.0.0
+title: "Dspy Development"
+status: active
 ---
 
 # DSPy: Declarative Language Model Programming

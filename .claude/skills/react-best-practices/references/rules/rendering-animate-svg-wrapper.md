@@ -3,6 +3,7 @@ title: Animate SVG Wrapper Instead of SVG Element
 impact: MEDIUM
 impactDescription: enables hardware acceleration
 tags: rendering, svg, css, animation, performance
+status: active
 ---
 
 ## Animate SVG Wrapper Instead of SVG Element
