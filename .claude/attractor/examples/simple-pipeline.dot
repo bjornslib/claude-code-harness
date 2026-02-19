@@ -1,0 +1,54 @@
+// simple-pipeline.dot — Minimal 3-node Attractor pipeline
+//
+// Demonstrates the simplest valid pipeline: start -> one task -> finish.
+// Validates with: dot -Tpng simple-pipeline.dot -o simple-pipeline.png
+//
+// Schema: .claude/attractor/schema.md
+
+digraph "simple-example" {
+    graph [
+        label="Simple Pipeline Example"
+        labelloc="t"
+        fontsize=16
+        rankdir="TB"
+        prd_ref="PRD-EXAMPLE-001"
+        promise_id=""
+    ];
+
+    node [fontname="Helvetica" fontsize=11];
+    edge [fontname="Helvetica" fontsize=9];
+
+    // Stage 1: PARSE — Pipeline entry
+    start [
+        shape=Mdiamond
+        label="PARSE\nPRD-EXAMPLE-001"
+        handler="start"
+        status="validated"
+    ];
+
+    // Stage 4: EXECUTE — Single implementation task
+    impl_task [
+        shape=box
+        label="Implement Feature"
+        handler="codergen"
+        bead_id="TASK-1"
+        worker_type="backend-solutions-engineer"
+        acceptance="API endpoint returns 200"
+        promise_ac="AC-1"
+        status="pending"
+        style=filled
+        fillcolor=lightyellow
+    ];
+
+    // Stage 5: FINALIZE — Pipeline exit
+    finalize [
+        shape=Msquare
+        label="FINALIZE"
+        handler="exit"
+        status="pending"
+    ];
+
+    // Edges
+    start -> impl_task [label="begin"];
+    impl_task -> finalize [label="done"];
+}

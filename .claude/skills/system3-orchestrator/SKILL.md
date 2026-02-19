@@ -2,7 +2,7 @@
 name: system3-orchestrator
 description: This skill should be used when spawning orchestrators, launching new initiatives, starting parallel work, creating orchestrators in worktrees, or managing System 3 orchestration. Provides complete preflight checklists and spawn workflows for nested orchestrator management with Hindsight wisdom injection.
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Task, SlashCommand
-version: 3.4.0
+version: 3.5.0
 ---
 
 # System 3 Orchestrator Skill
@@ -133,10 +133,47 @@ bd show <bo-id>
 
 **Detailed workflow**: See [references/okr-tracking.md](references/okr-tracking.md)
 
-### [ ] 5. Create Oversight Team
+### [ ] 5. Assess Pipeline State (if pipeline.dot exists)
+
+If an Attractor DOT pipeline exists for this initiative, validate it and assess the current state before spawning orchestrators. This tells System 3 which nodes are ready for dispatch.
+
+```bash
+PIPELINE=".claude/attractor/pipelines/${INITIATIVE}.dot"
+CLI="python3 .claude/scripts/attractor/cli.py"
+
+if [ -f "$PIPELINE" ]; then
+    # Validate graph structure (catches cycles, missing AT pairs, orphan nodes)
+    $CLI validate "$PIPELINE"
+
+    # Display current status table
+    $CLI status "$PIPELINE"
+
+    # Get machine-readable summary for decision-making
+    $CLI status "$PIPELINE" --json --summary
+fi
+```
+
+**Interpreting the output**:
+
+| Summary Field | Meaning | Action |
+|---------------|---------|--------|
+| `pending > 0` | Nodes ready for dispatch | Identify which have met upstream dependencies, spawn orchestrators |
+| `active > 0` | Orchestrators currently working | Monitor via existing patterns |
+| `impl_complete > 0` | Awaiting validation | Run oversight team validation cycle |
+| `validated = total` | Pipeline complete | Proceed to FINALIZE |
+| `failed > 0` | Validation rejected | Send feedback, retry (transition failed -> active) |
+
+**If no pipeline exists**: Skip this step. Orchestrator spawning proceeds without graph-driven navigation (traditional beads-based workflow).
+
+**If validation fails**: Fix the DOT file before proceeding. Common issues:
+- Missing AT pairing (every codergen needs a hexagon descendant)
+- Orphan nodes (disconnected from start/exit)
+- Missing pass/fail edges on diamond nodes
+
+### [ ] 6. Create Oversight Team
 
 ```python
-# Oversight agents are spawned into the s3-live team (created in Step 7).
+# Oversight agents are spawned into the s3-live team (created in Step 8).
 # System 3 leads exactly ONE team: s3-live. Do NOT create per-initiative teams.
 # When validation is needed, spawn specialists directly:
 ```
@@ -159,7 +196,7 @@ Task(
 
 See [references/validation-workflow.md](references/validation-workflow.md) section "On-Demand Validation Teammate" for full patterns, parallel spawning, and browser validation.
 
-### [ ] 6. Define Validation Expectations
+### [ ] 7. Define Validation Expectations
 
 Determine which validation levels apply:
 - [ ] Unit tests required?
@@ -181,7 +218,7 @@ See `.claude/agents/validation-test-agent.md` "Post-Validation Storage" section.
 If the Agent SDK verification is unavailable, spawn a `validation-test-agent` teammate
 into `s3-live` for independent verification. See the cs-verify error message for exact syntax.
 
-### [ ] 7. Spawn s3-live Communicator (if not running)
+### [ ] 8. Spawn s3-live Communicator (if not running)
 
 Check if the s3-live team exists. If not, create it and spawn the communicator:
 
@@ -812,9 +849,14 @@ Maintain active orchestrators in `.claude/state/active-orchestrators.json`:
 
 ---
 
-**Version**: 3.4.0
-**Dependencies**: worktree-manager-skill, orchestrator-multiagent, tmux, Hindsight MCP
+**Version**: 3.5.0
+**Dependencies**: worktree-manager-skill, orchestrator-multiagent, tmux, Hindsight MCP, attractor-cli
 **Theory**: Sophia (arXiv:2512.18202), Hindsight (arXiv:2512.12818)
+
+**v3.5.0 Changes**:
+- Added PREFLIGHT step 5: Assess Pipeline State (attractor status/validate if pipeline.dot exists)
+- Renumbered steps 5-7 to 6-8
+- Updated internal step references (oversight team now references Step 8)
 
 **v3.4.0 Changes**:
 - Added PREFLIGHT step 7: Spawn s3-live Communicator
