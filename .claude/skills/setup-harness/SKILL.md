@@ -18,12 +18,12 @@ Copies the Claude Code harness into project directories so it becomes part of th
 
 ## What This Skill Does
 
-Copies harness files from the source to the target project:
-1. Copy `.claude/` directory (excluding runtime files)
-2. Optionally copy `.mcp.json`
-3. Update `.gitignore` for runtime exclusions
-4. Verify the setup
-5. Provide next steps
+Deploys harness files from the source to target project(s) using `deploy-harness.sh`:
+1. Syncs `.claude/` directory (excluding runtime files) via rsync
+2. Creates runtime directories with `.gitkeep` files
+3. Updates `.gitignore` for runtime exclusions
+4. Installs git hooks (doc-gardener pre-push)
+5. Optionally copies `.mcp.json`
 
 ## Why Copy Instead of Symlink?
 
@@ -32,452 +32,196 @@ Copies harness files from the source to the target project:
 - **CI/CD Ready**: Works in pipelines without the source harness
 - **Project-Specific**: Customize without affecting other projects
 
-## Usage
+---
 
-**Interactive Mode** (recommended):
-```
-User: Setup the harness
-```
+## Deployment Script
 
-**Specify target path**:
-```
-User: Setup harness in /path/to/my-project
-```
+**All deployment logic is implemented in `deploy-harness.sh`.**
 
-## Implementation
+The script lives at `.claude/skills/setup-harness/deploy-harness.sh` and handles the full
+deployment lifecycle: source validation, rsync with exclusions, runtime directory creation,
+.gitignore updates, git hook installation, and verification.
 
-### Step 1: Determine Source Harness Path
+### Usage
 
-The source harness is the current working directory's `.claude/` or a known location.
-
-**Default source**: `/Users/theb/Documents/Windsurf/claude-harness-setup`
-
+**Deploy to all configured targets:**
 ```bash
-# Verify source harness exists
-HARNESS_SOURCE="/Users/theb/Documents/Windsurf/claude-harness-setup"
-
-if [ ! -d "$HARNESS_SOURCE/.claude" ]; then
-    echo "Error: Harness source not found at $HARNESS_SOURCE/.claude"
-    exit 1
-fi
-
-if [ ! -f "$HARNESS_SOURCE/.claude/settings.json" ] || \
-   [ ! -d "$HARNESS_SOURCE/.claude/skills" ]; then
-    echo "Error: Invalid harness - missing required files"
-    exit 1
-fi
-
-echo "✓ Found valid harness at $HARNESS_SOURCE"
+.claude/skills/setup-harness/deploy-harness.sh
 ```
 
-### Step 2: Select Target Directory
+**Deploy to a specific path:**
+```bash
+.claude/skills/setup-harness/deploy-harness.sh --target ~/Documents/Windsurf/my-project
+```
 
-**Use AskUserQuestion** to ask where to copy the harness:
+**Deploy to a named target:**
+```bash
+.claude/skills/setup-harness/deploy-harness.sh --name zenagent2-agencheck
+```
+
+**Preview without changes:**
+```bash
+.claude/skills/setup-harness/deploy-harness.sh --dry-run
+```
+
+**List configured targets:**
+```bash
+.claude/skills/setup-harness/deploy-harness.sh --list
+```
+
+**Include .mcp.json:**
+```bash
+.claude/skills/setup-harness/deploy-harness.sh --target ~/proj --include-mcp
+```
+
+### Targets Configuration
+
+Deployment targets are configured in `targets.json` (same directory as this skill).
+Edit `targets.json` to add or remove targets. The `~` in paths is expanded at runtime.
+
+---
+
+## Interactive Workflow (When Claude Runs This Skill)
+
+When triggered by a user, Claude should:
+
+### Step 1: Determine Target
+
+If the user specified a path, use it directly. Otherwise, ask:
 
 ```
 Question: "Where do you want to set up the Claude Code harness?"
 Header: "Target Dir"
 Options:
-1. "Current directory" - Set up harness in the current working directory
+1. "All configured targets (Recommended)" - Deploy to all targets in targets.json
 2. "Specify path" - Provide a custom directory path
 
 multiSelect: false
 ```
 
-**Verify target directory**:
-```bash
-# Check if target directory exists
-if [ ! -d "$TARGET_DIR" ]; then
-    echo "Error: Target directory $TARGET_DIR does not exist"
-    exit 1
-fi
+### Step 2: Handle .mcp.json
 
-# Check if target is writable
-if [ ! -w "$TARGET_DIR" ]; then
-    echo "Error: No write permission for $TARGET_DIR"
-    exit 1
-fi
-```
-
-### Step 3: Handle Existing .claude Directory
-
-```bash
-if [ -e "$TARGET_DIR/.claude" ]; then
-    if [ -L "$TARGET_DIR/.claude" ]; then
-        echo "Found existing .claude symlink -> $(readlink $TARGET_DIR/.claude)"
-        echo "Will remove symlink and copy fresh"
-        # User confirmation needed
-    else
-        echo "Found existing .claude directory"
-        echo "Will overwrite (.claude/CLAUDE.md updated from harness)"
-        # User confirmation needed
-    fi
-fi
-```
-
-**Use AskUserQuestion for confirmation**:
-```
-Question: "Existing .claude found. Overwrite with fresh copy?"
-Header: "Overwrite"
-Options:
-1. "Yes, overwrite" - Replace with fresh harness copy
-2. "No, cancel" - Abort setup
-
-multiSelect: false
-```
-
-### Step 4: Handle .claude/CLAUDE.md
-
-The harness ships a `.claude/CLAUDE.md` that documents the agent hierarchy, monitoring architecture,
-and delegation patterns. This file is **part of the harness** and should be updated on each deploy.
-
-**Important distinction**:
-- `.claude/CLAUDE.md` — Harness documentation (ALWAYS updated from harness source)
-- `CLAUDE.md` (project root) — Project-specific instructions (NEVER touched by harness)
-
-```bash
-# No backup needed for .claude/CLAUDE.md — it's a harness file, always overwritten
-# The project's root CLAUDE.md is unaffected by rsync (different directory)
-echo "✓ .claude/CLAUDE.md will be updated from harness source"
-```
-
-### Step 4.5: Pre-Deployment Source Validation
-
-Before copying, verify the harness source is clean:
-
-```bash
-# Check for stale state files that shouldn't be in source
-STALE_COUNT=$(find "$HARNESS_SOURCE/.claude/state" -type f ! -name .gitkeep 2>/dev/null | wc -l | tr -d ' ')
-if [ "$STALE_COUNT" -gt 0 ]; then
-    echo "⚠ WARNING: Found $STALE_COUNT stale state files in harness source"
-    echo "  Run cleanup before deploying: find .claude/state -type f ! -name .gitkeep -delete"
-fi
-
-# Check for stale progress files
-PROGRESS_COUNT=$(find "$HARNESS_SOURCE/.claude/progress" -type f ! -name .gitkeep 2>/dev/null | wc -l | tr -d ' ')
-if [ "$PROGRESS_COUNT" -gt 0 ]; then
-    echo "⚠ WARNING: Found $PROGRESS_COUNT stale progress files in harness source"
-fi
-
-# Check .gitignore completeness
-REQUIRED_ENTRIES=("state/*" "progress/*" "worker-assignments/*" "message-bus/queue.db" "settings.local.json" "__pycache__/")
-MISSING=()
-for entry in "${REQUIRED_ENTRIES[@]}"; do
-    if ! grep -q "$entry" "$HARNESS_SOURCE/.claude/.gitignore" 2>/dev/null; then
-        MISSING+=("$entry")
-    fi
-done
-if [ ${#MISSING[@]} -gt 0 ]; then
-    echo "⚠ WARNING: .claude/.gitignore missing entries: ${MISSING[*]}"
-fi
-
-echo "✓ Source validation complete"
-```
-
-### Step 5: Copy Harness with Exclusions
-
-Use `rsync` to copy while excluding runtime/state files:
-
-```bash
-# Remove existing .claude (symlink or directory)
-if [ -L "$TARGET_DIR/.claude" ]; then
-    rm "$TARGET_DIR/.claude"
-elif [ -d "$TARGET_DIR/.claude" ]; then
-    rm -rf "$TARGET_DIR/.claude"
-fi
-
-# Copy with exclusions
-# NOTE: learnings/ IS copied (contains useful templates)
-# NOTE: validation/ IS copied (contains validation configs)
-# NOTE: scripts/completion-state/ and scripts/message-bus/ MUST be copied (CLI tools)
-# NOTE: Top-level message-bus/ and completion-state/ are RUNTIME dirs (excluded)
-# IMPORTANT: Use leading slash (/) to match ONLY top-level directories, not nested ones
-# --delete-excluded: Removes files from target that match exclusion patterns
-# This ensures target doesn't accumulate runtime files from previous deploys
-rsync -av --delete --delete-excluded \
-    --exclude='/state/*' \
-    --exclude='/completion-state/' \
-    --exclude='/progress/*' \
-    --exclude='/worker-assignments/*' \
-    --exclude='/message-bus/' \
-    --exclude='/logs/' \
-    --exclude='*.log' \
-    --exclude='.DS_Store' \
-    --exclude='__pycache__/' \
-    --exclude='*.pyc' \
-    --exclude='node_modules/' \
-    --exclude='settings.local.json' \
-    "$HARNESS_SOURCE/.claude/" "$TARGET_DIR/.claude/"
-
-echo "✓ Copied harness to $TARGET_DIR/.claude/"
-```
-
-### Step 6: Verify .claude/CLAUDE.md Updated
-
-```bash
-# .claude/CLAUDE.md is now the harness version (updated by rsync in Step 5)
-if [ -f "$TARGET_DIR/.claude/CLAUDE.md" ]; then
-    echo "✓ .claude/CLAUDE.md updated from harness source"
-else
-    echo "⚠ .claude/CLAUDE.md missing after copy"
-fi
-```
-
-### Step 7: Update .gitignore
-
-Add runtime exclusions to the target project's `.gitignore`:
-
-```bash
-GITIGNORE="$TARGET_DIR/.gitignore"
-
-# Check if .gitignore exists
-if [ ! -f "$GITIGNORE" ]; then
-    touch "$GITIGNORE"
-fi
-
-# Add Claude Code runtime exclusions if not already present
-if ! grep -q "Claude Code runtime files" "$GITIGNORE" 2>/dev/null; then
-    cat >> "$GITIGNORE" << 'GITIGNORE_ENTRIES'
-
-# Claude Code runtime files (not version controlled)
-# Directories are kept via .gitkeep, but contents are ignored
-.claude/state/*
-!.claude/state/.gitkeep
-.claude/completion-state/*
-!.claude/completion-state/.gitkeep
-.claude/progress/*
-!.claude/progress/.gitkeep
-.claude/worker-assignments/*
-!.claude/worker-assignments/.gitkeep
-.claude/message-bus/*
-!.claude/message-bus/.gitkeep
-.claude/logs/
-.claude/*.log
-.claude/settings.local.json
-GITIGNORE_ENTRIES
-    echo "✓ Updated .gitignore with runtime exclusions"
-else
-    echo "✓ Runtime exclusions already in .gitignore"
-fi
-```
-
-### Step 8: Handle .mcp.json
-
-**Use AskUserQuestion**:
 ```
 Question: "How do you want to handle .mcp.json?"
 Header: "MCP Config"
 Options:
-1. "Copy it (Recommended)" - Copy .mcp.json to project (can customize per-project)
-2. "Keep existing" - Don't touch .mcp.json
-3. "Symlink it" - Share MCP config across projects (not version controlled)
+1. "Skip it (Recommended)" - Don't copy .mcp.json (API keys differ per project)
+2. "Copy it" - Copy .mcp.json to target (remember to update API keys)
 
 multiSelect: false
 ```
 
-```bash
-case "$MCP_CHOICE" in
-    "copy")
-        cp "$HARNESS_SOURCE/.mcp.json" "$TARGET_DIR/.mcp.json"
-        echo "✓ Copied .mcp.json"
-        echo "⚠ Remember to update API keys for this project"
-        ;;
-    "symlink")
-        ln -sf "$HARNESS_SOURCE/.mcp.json" "$TARGET_DIR/.mcp.json"
-        echo "✓ Symlinked .mcp.json"
-        ;;
-    "keep")
-        echo "✓ Kept existing .mcp.json"
-        ;;
-esac
-```
+### Step 3: Run the Script
 
-### Step 9: Create Runtime Directories
-
-Create the excluded directories with proper structure so Claude Code works immediately:
+Based on user choices, construct and run the appropriate command:
 
 ```bash
-# Create directories with .gitkeep files so git tracks them
-mkdir -p "$TARGET_DIR/.claude/state"
-touch "$TARGET_DIR/.claude/state/.gitkeep"
+# Example: Deploy to all targets without .mcp.json
+.claude/skills/setup-harness/deploy-harness.sh
 
-mkdir -p "$TARGET_DIR/.claude/completion-state/default"
-mkdir -p "$TARGET_DIR/.claude/completion-state/history"
-mkdir -p "$TARGET_DIR/.claude/completion-state/promises"
-mkdir -p "$TARGET_DIR/.claude/completion-state/sessions"
-touch "$TARGET_DIR/.claude/completion-state/.gitkeep"
-
-mkdir -p "$TARGET_DIR/.claude/progress"
-touch "$TARGET_DIR/.claude/progress/.gitkeep"
-
-mkdir -p "$TARGET_DIR/.claude/worker-assignments"
-touch "$TARGET_DIR/.claude/worker-assignments/.gitkeep"
-
-mkdir -p "$TARGET_DIR/.claude/message-bus/signals"
-touch "$TARGET_DIR/.claude/message-bus/.gitkeep"
-
-echo "✓ Created runtime directories with .gitkeep files"
+# Example: Deploy to specific path with .mcp.json
+.claude/skills/setup-harness/deploy-harness.sh --target /path/to/project --include-mcp
 ```
 
-### Step 10: Verify Setup
+### Step 4: Report Results
 
-```bash
-echo ""
-echo "=== Verification ==="
+The script outputs verification results. Summarize for the user and remind them to:
+1. Review `.claude/CLAUDE.md` (harness docs — updated each deploy)
+2. Review `.mcp.json` API keys (if copied)
+3. Commit the `.claude/` directory to git
 
-# Check key files exist
-[ -f "$TARGET_DIR/.claude/settings.json" ] && echo "✓ settings.json" || echo "✗ settings.json missing"
-[ -d "$TARGET_DIR/.claude/skills" ] && echo "✓ skills/" || echo "✗ skills/ missing"
-[ -d "$TARGET_DIR/.claude/hooks" ] && echo "✓ hooks/" || echo "✗ hooks/ missing"
-[ -d "$TARGET_DIR/.claude/output-styles" ] && echo "✓ output-styles/" || echo "✗ output-styles/ missing"
+---
 
-# Check scripts are executable
-if [ -x "$TARGET_DIR/.claude/scripts/message-bus/mb-init" 2>/dev/null ]; then
-    echo "✓ Scripts are executable"
-else
-    echo "⚠ Making scripts executable..."
-    find "$TARGET_DIR/.claude/scripts" -type f -name "*.sh" -exec chmod +x {} \;
-    find "$TARGET_DIR/.claude/scripts" -type f -name "mb-*" -exec chmod +x {} \;
-fi
-```
+## What the Script Does (Reference)
 
-### Step 10.5: Install Git Hooks
+The following steps are all handled by `deploy-harness.sh`. They are documented here
+for reference only — Claude should NOT execute these manually.
 
-If the target is a git repository and the hook source file was copied, install the
-pre-push hook automatically. Skip gracefully for non-git targets (R1.2).
+### Source Validation
+- Checks harness source exists with `settings.json` and `skills/`
+- Warns about stale state/progress files in source
 
-```bash
-# Check if target is a git repo
-if git -C "$TARGET_DIR" rev-parse --git-dir > /dev/null 2>&1; then
-    HOOK_SOURCE="$TARGET_DIR/.claude/hooks/doc-gardener-pre-push.sh"
+### rsync with Exclusions
+Copies `.claude/` while excluding runtime artifacts:
+- `/state/*` — Runtime state files
+- `/completion-state/` — Session completion tracking
+- `/progress/*` — Session progress files
+- `/worker-assignments/*` — Worker task assignments
+- `/message-bus/` — Inter-instance messaging queue
+- `/logs/` — Log files
+- `*.log`, `.DS_Store`, `__pycache__/`, `*.pyc`, `node_modules/`
+- `settings.local.json` — Local overrides
 
-    if [ -f "$HOOK_SOURCE" ]; then
-        HOOK_DEST="$(git -C "$TARGET_DIR" rev-parse --git-common-dir)/hooks/pre-push"
+**Important**: `scripts/completion-state/` and `scripts/message-bus/` (CLI tools) ARE copied.
+Only the top-level runtime directories are excluded.
 
-        # R1.4: Do not silently overwrite existing non-symlink hooks
-        if [ -e "$HOOK_DEST" ] && [ ! -L "$HOOK_DEST" ]; then
-            echo "⚠ Existing pre-push hook found at $HOOK_DEST"
-            # Use AskUserQuestion to confirm replacement
-            # Question: "A pre-push hook already exists. Replace it with the doc-gardener hook?"
-            # Header: "Hook"
-            # Options:
-            # 1. "Yes, replace" - Replace existing hook with doc-gardener
-            # 2. "No, keep existing" - Leave existing hook in place
-            #
-            # If user chooses "No, keep existing":
-            #     echo "✓ Kept existing pre-push hook (skipped doc-gardener installation)"
-            # If user chooses "Yes, replace":
-            #     python3 "$TARGET_DIR/.claude/scripts/attractor/cli.py" install-hooks --force
-        else
-            # No existing hook or existing symlink — safe to install/update
-            python3 "$TARGET_DIR/.claude/scripts/attractor/cli.py" install-hooks
-        fi
+### .claude/CLAUDE.md Handling
+- `.claude/CLAUDE.md` is harness documentation — ALWAYS overwritten from source
+- `CLAUDE.md` at project root is project-specific — NEVER touched
 
-        # Verify symlink was created and is executable (AC-4)
-        if [ -L "$HOOK_DEST" ] && [ -x "$HOOK_DEST" ]; then
-            echo "✓ Pre-push hook installed (doc-gardener lint enforcement)"
-        elif [ -e "$HOOK_DEST" ]; then
-            echo "✓ Pre-push hook exists (user-managed)"
-        else
-            echo "⚠ Pre-push hook installation skipped"
-        fi
-    else
-        echo "⚠ Hook source not found — skipping pre-push hook installation"
-    fi
-else
-    echo "ℹ Target is not a git repository — skipping hook installation"
-fi
-```
+### Runtime Directory Creation
+Creates excluded directories with `.gitkeep` so git tracks the structure:
+- `state/`, `progress/`, `worker-assignments/`
+- `completion-state/` (with subdirs: `default/`, `history/`, `promises/`, `sessions/`)
+- `message-bus/` (with subdirs: `signals/`)
 
-### Step 11: Provide Next Steps
+### .gitignore Updates
+Appends Claude Code runtime exclusion entries if not already present.
 
-```
-✓ Harness setup complete!
+### Git Hook Installation
+Installs doc-gardener pre-push hook via `attractor/cli.py install-hooks`.
+Skips gracefully for non-git targets or existing non-symlink hooks.
 
-Copied to: $TARGET_DIR/.claude/
-
-What was copied:
-  - settings.json (Claude Code configuration)
-  - skills/ (21 skills including orchestrator-multiagent)
-  - hooks/ (lifecycle automation)
-  - output-styles/ (orchestrator, system3)
-  - scripts/ (message-bus, utilities)
-
-Runtime directories created (gitignored, with .gitkeep):
-  - state/, progress/, worker-assignments/
-  - completion-state/ (with subdirs: default/, history/, promises/, sessions/)
-  - message-bus/ (with subdirs: signals/)
-
-Next steps:
-1. Review .claude/CLAUDE.md (harness docs — updated each deploy)
-2. Review .mcp.json API keys
-3. Git hooks: pre-push hook installed (doc-gardener lint enforcement)
-4. Commit the .claude/ directory to git
-5. Launch Claude Code:
-   - System 3: ccsystem3
-   - Orchestrator: ccorch
-   - Worker: launchcc
-
-To update harness later:
-  Run /setup-harness again (.claude/CLAUDE.md updated from harness; root CLAUDE.md untouched)
-```
+---
 
 ## Files Copied vs Excluded
 
 ### Copied (version controlled)
-- `settings.json` - Core configuration
-- `skills/` - All skill definitions
-- `hooks/` - Lifecycle hooks
-- `output-styles/` - Agent behavior definitions
-- `scripts/` - CLI utilities (includes `scripts/completion-state/` and `scripts/message-bus/`)
-- `commands/` - Slash commands
-- `schemas/` - JSON schemas
-- `tests/` - Hook tests
-- `utils/` - Utility scripts
-- `agents/` - Agent configurations
-- `documentation/` - Architecture docs
-- `validation/` - Validation agent configs
-- `learnings/` - Multi-agent coordination guides (coordination.md, decomposition.md, failures.md)
-- `TM_COMMANDS_GUIDE.md` - Task Master reference
-
-**Note**: `scripts/completion-state/` (cs-* CLI tools) and `scripts/message-bus/` (mb-* CLI tools) are COPIED because they are CLI utilities, not runtime data. The TOP-LEVEL `completion-state/` and `message-bus/` directories are excluded because those contain runtime state.
+- `settings.json` — Core configuration
+- `skills/` — All skill definitions
+- `hooks/` — Lifecycle hooks
+- `output-styles/` — Agent behavior definitions
+- `scripts/` — CLI utilities (includes `scripts/completion-state/` and `scripts/message-bus/`)
+- `commands/` — Slash commands
+- `schemas/` — JSON schemas
+- `tests/` — Hook tests
+- `agents/` — Agent configurations
+- `documentation/` — Architecture docs
+- `validation/` — Validation agent configs
+- `learnings/` — Multi-agent coordination guides
 
 ### Excluded (runtime, gitignored)
-- `state/*` - Runtime state files (directory kept with .gitkeep)
-- `completion-state/*` - Session completion tracking (subdirs created: default/, history/, promises/, sessions/)
-- `progress/*` - Session progress files (directory kept with .gitkeep)
-- `worker-assignments/*` - Worker task assignments (directory kept with .gitkeep)
-- `message-bus/*` - Inter-instance messaging (subdirs created: signals/)
-- `logs/` - Log files
-- `settings.local.json` - Local overrides
+- `state/*` — Directory kept with .gitkeep
+- `completion-state/*` — Subdirs created: default/, history/, promises/, sessions/
+- `progress/*` — Directory kept with .gitkeep
+- `worker-assignments/*` — Directory kept with .gitkeep
+- `message-bus/*` — Subdirs created: signals/
+- `logs/` — Log files
+- `settings.local.json` — Local overrides
 
-## Error Handling
-
-**Source harness not found**:
-```
-Error: Harness source not found at /path/.claude
-Please ensure the claude-harness-setup repository exists
-```
-
-**Target not writable**:
-```
-Error: No write permission for /path/to/project
-Check directory permissions or run with appropriate access
-```
-
-**rsync not available**:
-```bash
-# Fallback to cp if rsync unavailable
-if ! command -v rsync &> /dev/null; then
-    cp -R "$HARNESS_SOURCE/.claude" "$TARGET_DIR/.claude"
-    # Manual cleanup of excluded directories
-    rm -rf "$TARGET_DIR/.claude/state"
-    rm -rf "$TARGET_DIR/.claude/completion-state"
-    # ... etc
-fi
-```
+---
 
 ## Example Interaction
 
 ```
-User: Setup harness in /Users/theb/Documents/Windsurf/DSPY_PreEmploymentDirectory_PoC
+User: Setup harness in ~/Documents/Windsurf/new-project
+
+Claude: Running deploy-harness.sh --target ~/Documents/Windsurf/new-project
+
+[Script output with verification results]
+
+Harness deployed successfully. 550 files synced. Next steps:
+1. Review .claude/CLAUDE.md
+2. Commit .claude/ to git
+3. Launch: ccsystem3 | ccorch | launchcc
+```
+
+```
+User: Deploy harness to all targets
+
+Claude: Running deploy-harness.sh (deploying to all configured targets)
+
+[Script deploys to zenagent2-agencheck and zenagent3-agencheck]
+
+Both targets updated successfully.
+```
