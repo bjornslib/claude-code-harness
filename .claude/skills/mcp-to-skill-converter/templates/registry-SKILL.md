@@ -1,5 +1,7 @@
 ---
 name: mcp-skills
+title: "MCP Skills Registry"
+status: active
 description: Registry of MCP-derived skills with progressive disclosure. Use when asked about "github", "assistant-ui", "MCP tools", or any converted MCP server. Provides 90%+ context savings compared to native MCP loading.
 version: 1.0.0
 ---

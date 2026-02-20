@@ -782,7 +782,7 @@ tmux send-keys -t worker Enter
 
 2. **WORKER_DELEGATION_GUIDE.md** (lines 290-303):
 ```markdown
-**⚠️ CRITICAL tmux Pattern**: Enter must be separate `send-keys` command! See [SKILL.md](SKILL.md) top banner for details.
+**⚠️ CRITICAL tmux Pattern**: Enter must be separate `send-keys` command! See [SKILL.md](../SKILL.md) top banner for details.
 
 # Launch Claude Code in INTERACTIVE mode (no -p flag!)
 # NOTE: Enter is SEPARATE command (critical pattern!)
@@ -792,7 +792,7 @@ tmux send-keys -t worker-F001 Enter
 
 3. **SERVICE_MANAGEMENT.md** (lines 44-56):
 ```markdown
-**⚠️ tmux Pattern**: Enter must be separate `send-keys` command or it gets ignored. See [SKILL.md](SKILL.md) for details.
+**⚠️ tmux Pattern**: Enter must be separate `send-keys` command or it gets ignored. See [SKILL.md](../SKILL.md) for details.
 
 # Start services (from clean state)
 # NOTE: Each Enter is SEPARATE command (critical!)

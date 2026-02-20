@@ -69,6 +69,13 @@ SKIP_DIRS = {
     "user-input-queue",
 }
 
+# Specific files to skip (paths relative to CLAUDE_DIR)
+# gardening-report.md is auto-generated and contains markdown link syntax
+# in its violation tables, causing self-referential crosslink false positives.
+SKIP_FILES = {
+    "documentation/gardening-report.md",
+}
+
 # Top-level files that should use UPPER_CASE naming
 UPPER_CASE_FILES = {"CLAUDE.md", "README.md", "INDEX.md", "CHANGELOG.md"}
 
@@ -90,9 +97,31 @@ KEBAB_FILE_PATTERN = re.compile(
 )
 
 # UPPER_CASE pattern for top-level docs (e.g. CLAUDE.md, SKILL.md)
+# Allows hyphens for UPPER-WITH-HYPHENS convention (NATIVE-TEAMS-FINDINGS.md)
 UPPER_FILE_PATTERN = re.compile(
-    r"^[A-Z][A-Z0-9_]*"   # UPPER start
+    r"^[A-Z][A-Z0-9_-]*"  # UPPER start (hyphens allowed)
     r"\.[a-z]+$"           # extension
+)
+
+# Mixed: one or more UPPER word groups followed by kebab suffix
+# Handles: ADR-001-foo.md, PRD-S3-ATTRACTOR-001-testing.md, SOLUTION-DESIGN-acceptance-testing.md
+MIXED_FILE_PATTERN = re.compile(
+    r"^([A-Z][A-Z0-9._]*-)+[a-z0-9]+(-[a-z0-9]+)*\.[a-z]+$"
+)
+
+# Kebab-case prefix with UPPER suffix (registry-SKILL.md, config-README.md)
+KEBAB_UPPER_FILE_PATTERN = re.compile(
+    r"^[a-z0-9]+(-[a-z0-9]+)*-[A-Z][A-Z0-9_]*\.[a-z]+$"
+)
+
+# Version-prefixed files (v3.9-foo.md, v2-bar.md)
+VERSION_FILE_PATTERN = re.compile(
+    r"^v\d+(\.\d+)*-[a-z0-9]+(-[a-z0-9]+)*\.[a-z]+$"
+)
+
+# Underscore-prefixed private files (_sections.md, _template.md)
+UNDERSCORE_FILE_PATTERN = re.compile(
+    r"^_[a-z0-9]+(-[a-z0-9]+)*\.[a-z]+$"
 )
 
 # Severity levels
@@ -249,6 +278,9 @@ def collect_md_files() -> list[Path]:
         rel = p.relative_to(CLAUDE_DIR)
         if any(part.startswith(".") for part in rel.parts):
             continue
+        # Skip specific files (e.g. auto-generated reports)
+        if str(rel) in SKIP_FILES:
+            continue
         files.append(p)
     return sorted(files)
 
@@ -395,9 +427,18 @@ def check_crosslinks(filepath: Path, content: str) -> list[Violation]:
     violations = []
     rel = get_relative_path(filepath)
 
+    # Strip fenced code blocks to avoid false positives from code examples.
+    # E.g., Python `Agent(model=model, mcp_servers=[...], system_prompt=prompt)`
+    # contains `[...]` followed by `(...)` which matches the link regex.
+    stripped = re.sub(r"```[^\n]*\n.*?```", "", content, flags=re.DOTALL)
+
+    # Also strip inline code spans: `[link](target)` should not trigger violations.
+    # E.g., ``[filename](./evidence/filename)`` in prose is an example, not a real link.
+    stripped = re.sub(r"`[^`\n]+`", "", stripped)
+
     # Find markdown links: [text](path) -- only relative paths
     link_pattern = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
-    for match in link_pattern.finditer(content):
+    for match in link_pattern.finditer(stripped):
         link_target = match.group(2)
 
         # Skip external URLs, anchors, mailto, etc.
@@ -407,6 +448,10 @@ def check_crosslinks(filepath: Path, content: str) -> list[Violation]:
         # Strip anchor from target
         target_path = link_target.split("#")[0]
         if not target_path:
+            continue
+
+        # Skip template placeholders (e.g. {evidence_filename} in report templates)
+        if "{" in target_path:
             continue
 
         # Resolve relative to the file's directory
@@ -539,10 +584,14 @@ def check_naming(filepath: Path) -> list[Violation]:
                 fixable=False,
             ))
     else:
-        # Non-top-level files: kebab-case or UPPER_CASE are both acceptable
+        # Non-top-level files: accept various naming conventions
         if (
             not KEBAB_FILE_PATTERN.match(name)
             and not UPPER_FILE_PATTERN.match(name)
+            and not MIXED_FILE_PATTERN.match(name)
+            and not VERSION_FILE_PATTERN.match(name)
+            and not UNDERSCORE_FILE_PATTERN.match(name)
+            and not KEBAB_UPPER_FILE_PATTERN.match(name)
         ):
             violations.append(Violation(
                 file=rel,
@@ -550,7 +599,8 @@ def check_naming(filepath: Path) -> list[Violation]:
                 severity=SEVERITY_WARNING,
                 message=(
                     f"Filename '{name}' doesn't follow naming conventions. "
-                    f"Expected: kebab-case.md or UPPER_CASE.md"
+                    f"Expected: kebab-case.md, UPPER_CASE.md, "
+                    f"UPPER-kebab.md, v1.0-kebab.md, or _private.md"
                 ),
                 fixable=False,
             ))
