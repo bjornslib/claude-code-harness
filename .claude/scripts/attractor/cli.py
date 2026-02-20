@@ -113,6 +113,10 @@ def _install_hooks() -> None:
     # Strip --force from argv so it doesn't confuse downstream code
     sys.argv = [a for a in sys.argv if a != "--force"]
 
+    # Resolve project root from script location (works regardless of caller's CWD).
+    # CLAUDE_DIR = .claude/, so its parent is the project root.
+    project_root = os.path.dirname(CLAUDE_DIR)
+
     # Find the git common dir (works in worktrees too)
     try:
         result = subprocess.run(
@@ -120,11 +124,16 @@ def _install_hooks() -> None:
             capture_output=True,
             text=True,
             check=True,
+            cwd=project_root,  # Use project root, not caller's CWD
         )
         git_common_dir = result.stdout.strip()
     except subprocess.CalledProcessError:
         print("Error: Not inside a git repository.", file=sys.stderr)
         sys.exit(1)
+
+    # Make git_common_dir absolute (git may return relative path like "../.git")
+    if not os.path.isabs(git_common_dir):
+        git_common_dir = os.path.normpath(os.path.join(project_root, git_common_dir))
 
     hooks_dir = os.path.join(git_common_dir, "hooks")
     os.makedirs(hooks_dir, exist_ok=True)
