@@ -1,0 +1,96 @@
+# Guardian Acceptance Test Manifest
+# PRD-AURA-VERIFY: Aura Call Form - Create Verification Task
+# Date: 2026-02-19
+# Created by: s3-guardian
+#
+# The /aura-call page is extended to support a "Create Task" mode
+# that submits verification requests via POST /api/v1/verify.
+# Employer Details section is added matching Candidate Details card style.
+# Contact person name moves into Employer Details.
+
+prd_id: "PRD-AURA-VERIFY"
+prd_title: "Aura Call Form - Create Verification Task via /verify API"
+created_at: "2026-02-19T00:59:09Z"
+created_by: "s3-guardian"
+impl_repo: "/Users/theb/Documents/Windsurf/zenagent2/zenagent/agencheck"
+
+# Scoring thresholds
+thresholds:
+  accept: 0.60       # Weighted score >= this -> ACCEPT
+  investigate: 0.40   # Weighted score >= this but < accept -> INVESTIGATE
+  reject: 0.40        # Weighted score < this -> REJECT
+
+# Validation protocol
+validation_protocol:
+  evidence_sources:
+    - git_diff          # Check actual code changes
+    - file_contents     # Read implementation files
+    - browser_test      # Claude in Chrome navigation + form submission
+    - api_response      # POST /api/v1/verify returns 201
+    - prefect_flow      # Prefect flow created from form submission
+  require_test_execution: true
+  time_limit_hours: 4
+
+# Features with weights (sum = 1.00)
+features:
+  - name: "F1 - Employer Details Card"
+    description: >
+      New 'Employer Details' card section on /aura-call matching Candidate Details
+      styling (white card, icon header, responsive grid). Contains: company name,
+      website, country, city, contact person name (moved from current location),
+      and contact person phone number.
+    weight: 0.30
+    criticality: CRITICAL
+    scenarios:
+      - "employer_details_card_renders"
+      - "employer_details_fields_present"
+      - "contact_person_name_moved"
+
+  - name: "F2 - Create Task Button + API Integration"
+    description: >
+      Replace 'Make Call' button with 'Create Task' button that sends POST
+      /api/v1/verify with candidate + employer data. Button should show loading
+      state, success feedback, and error handling.
+    weight: 0.30
+    criticality: CRITICAL
+    scenarios:
+      - "create_task_button_exists"
+      - "create_task_calls_verify_api"
+      - "create_task_shows_success"
+      - "create_task_handles_errors"
+
+  - name: "F3 - Full E2E: Form -> API -> Prefect Flow"
+    description: >
+      Complete flow: fill form in browser -> click Create Task -> POST /verify
+      returns 201 -> Prefect flow run is created automatically via bridge ->
+      flow tasks execute (prepare_call, dispatch_livekit_call).
+    weight: 0.20
+    criticality: HIGH
+    scenarios:
+      - "e2e_form_to_prefect_flow"
+
+  - name: "F4 - Data Mapping (Form Fields -> API Payload)"
+    description: >
+      Form fields correctly map to /verify API schema: candidate.first_name,
+      candidate.last_name, employer.company_name, phone_numbers array from
+      contact phone, check_type='work_history'.
+    weight: 0.10
+    criticality: MEDIUM
+    scenarios:
+      - "data_mapping_candidate"
+      - "data_mapping_employer"
+      - "data_mapping_phone_numbers"
+
+  - name: "F5 - UI Polish + Validation"
+    description: >
+      Form validation (required fields highlighted), responsive layout on
+      mobile/desktop, consistent styling with existing Candidate Details card,
+      loading indicators during submission.
+    weight: 0.10
+    criticality: LOW
+    scenarios:
+      - "form_validation_required_fields"
+      - "responsive_layout"
+
+# Weight verification: 0.30 + 0.30 + 0.20 + 0.10 + 0.10 = 1.00
+total_weight: 1.00
