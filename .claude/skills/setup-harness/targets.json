@@ -10,6 +10,21 @@
       "name": "zenagent3-agencheck",
       "path": "~/Documents/Windsurf/zenagent3/zenagent/agencheck",
       "description": "zenagent3 application repo"
+    },
+    {
+      "name": "zenagent-agencheck",
+      "path": "~/Documents/Windsurf/zenagent/agencheck",
+      "description": "zenagent application repo"
+    },
+    {
+      "name": "dspy-preemployment-poc",
+      "path": "~/Documents/Windsurf/DSPY_PreEmploymentDirectory_PoC",
+      "description": "DSPy Pre-Employment Directory PoC"
+    },
+    {
+      "name": "story-writer",
+      "path": "~/Documents/Windsurf/story-writer",
+      "description": "Story Writer project"
     }
   ]
 }
