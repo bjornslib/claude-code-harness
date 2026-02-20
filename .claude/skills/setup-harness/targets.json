@@ -1,0 +1,15 @@
+{
+  "description": "Default deployment targets for setup-harness. Paths with ~ are expanded at runtime.",
+  "targets": [
+    {
+      "name": "zenagent2-agencheck",
+      "path": "~/Documents/Windsurf/zenagent2/zenagent/agencheck",
+      "description": "zenagent2 application repo"
+    },
+    {
+      "name": "zenagent3-agencheck",
+      "path": "~/Documents/Windsurf/zenagent3/zenagent/agencheck",
+      "description": "zenagent3 application repo"
+    }
+  ]
+}
