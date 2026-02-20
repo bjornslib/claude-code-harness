@@ -107,6 +107,12 @@ def main() -> None:
 
 def _install_hooks() -> None:
     """Install doc-gardener pre-push hook into the git hooks directory."""
+    import stat
+
+    force = "--force" in sys.argv
+    # Strip --force from argv so it doesn't confuse downstream code
+    sys.argv = [a for a in sys.argv if a != "--force"]
+
     # Find the git common dir (works in worktrees too)
     try:
         result = subprocess.run(
@@ -131,19 +137,45 @@ def _install_hooks() -> None:
         sys.exit(1)
 
     # Make the source script executable
-    import stat
     current_mode = os.stat(hook_source).st_mode
     os.chmod(hook_source, current_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
-    # Remove existing hook/symlink if present
+    # Check for existing hook — do not silently overwrite (R1.4 / AC-3)
     if os.path.lexists(hook_dest):
-        os.remove(hook_dest)
+        if os.path.islink(hook_dest):
+            existing_target = os.path.realpath(hook_dest)
+            expected_target = os.path.realpath(hook_source)
+            if existing_target == expected_target:
+                print("Pre-push hook already installed (up to date).")
+                return
+            # Different symlink target — safe to replace
+            print(f"Updating pre-push hook symlink (was -> {os.readlink(hook_dest)})")
+            os.remove(hook_dest)
+        else:
+            # Regular file — refuse to overwrite without --force
+            if not force:
+                print(
+                    "Warning: A pre-push hook already exists and is not a symlink:",
+                    file=sys.stderr,
+                )
+                print(f"  {hook_dest}", file=sys.stderr)
+                print(
+                    "Use 'cli.py install-hooks --force' to replace it.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            print(f"Replacing existing pre-push hook (--force)")
+            os.remove(hook_dest)
 
-    # Create symlink: hooks/pre-push -> (absolute path to source)
-    os.symlink(os.path.abspath(hook_source), hook_dest)
+    # Create symlink: hooks/pre-push -> (canonical path to source)
+    # Use realpath() instead of abspath() so symlinks are resolved to the
+    # main working tree.  This keeps the hook functional even after a
+    # worktree is removed (abspath would resolve to the worktree CWD).
+    source_real = os.path.realpath(hook_source)
+    os.symlink(source_real, hook_dest)
 
     print(f"Installed pre-push hook:")
-    print(f"  {hook_dest} -> {os.path.abspath(hook_source)}")
+    print(f"  {hook_dest} -> {source_real}")
 
 
 if __name__ == "__main__":
