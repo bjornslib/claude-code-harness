@@ -1,3 +1,11 @@
+---
+title: "To Cancelled"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Cancel a task permanently.
 
 Arguments: $ARGUMENTS (task ID)

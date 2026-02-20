@@ -1,3 +1,11 @@
+---
+title: "Project Status"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Enhanced status command with comprehensive project insights.
 
 Arguments: $ARGUMENTS

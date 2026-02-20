@@ -1,3 +1,11 @@
+---
+title: "Implementation Rules"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Implementation Rules
 
 Detailed guidelines for Step 3: JSONC to Code implementation.

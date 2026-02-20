@@ -1,3 +1,11 @@
+---
+title: "Zerorepo"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # ZeroRepo: Codebase-Aware Orchestration
 
 ZeroRepo provides a codebase context graph that maps PRD requirements against existing code. It classifies every component as EXISTING (already implemented), MODIFIED (needs changes), or NEW (must be created from scratch). This classification enables orchestrators to generate precise, scoped task descriptions rather than blind decompositions.

@@ -1,3 +1,11 @@
+---
+title: "Command Pipeline"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Execute a pipeline of commands based on a specification.
 
 Arguments: $ARGUMENTS

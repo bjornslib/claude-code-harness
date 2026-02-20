@@ -1,3 +1,11 @@
+---
+title: "Parse Prd With Research"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Parse PRD with enhanced research mode for better task generation.
 
 Arguments: $ARGUMENTS (PRD file path)

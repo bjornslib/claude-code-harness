@@ -1,3 +1,11 @@
+---
+title: "Message Bus Integration"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Message Bus Integration
 
 **Scope**: The message bus handles communication between **System 3 and Orchestrators** only. Worker communication within a team uses native Agent Teams (SendMessage/TaskCreate) -- NOT the message bus.

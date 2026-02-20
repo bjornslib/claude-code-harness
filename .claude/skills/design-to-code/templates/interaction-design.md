@@ -1,3 +1,11 @@
+---
+title: "Interaction Design"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Interaction Design Document Template
 
 Use this template to generate professional interaction design documentation from a design image.

@@ -1,3 +1,11 @@
+---
+title: "Use Codex Support"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 # Codex Support Tools - O3-Pro & GPT-5 Integration
 
 Launch advanced AI models (O3-Pro and GPT-5) using the specialized model support tools for complex analysis, architecture design, and code generation.

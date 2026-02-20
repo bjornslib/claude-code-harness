@@ -1,3 +1,11 @@
+---
+title: "Monitoring Patterns"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Monitoring Patterns Reference
 
 Commands, signal detection, intervention protocols, and red flags for continuous tmux monitoring of S3 operators.

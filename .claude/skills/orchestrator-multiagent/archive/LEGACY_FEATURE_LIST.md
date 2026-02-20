@@ -1,3 +1,11 @@
+---
+title: "Legacy_Feature_List"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Legacy feature_list.json Reference
 
 **Status**: ARCHIVED - For migration and legacy project support only

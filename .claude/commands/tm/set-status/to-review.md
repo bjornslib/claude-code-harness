@@ -1,3 +1,11 @@
+---
+title: "To Review"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Set a task's status to review.
 
 Arguments: $ARGUMENTS (task ID)

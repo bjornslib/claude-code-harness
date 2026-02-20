@@ -1,3 +1,11 @@
+---
+title: "Prd"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Product Requirements Document Template
 
 Use this template to generate a PRD from a design image. This document is structured for extension via Claude Code.

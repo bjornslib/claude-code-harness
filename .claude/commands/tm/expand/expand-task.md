@@ -1,3 +1,11 @@
+---
+title: "Expand Task"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Break down a complex task into subtasks.
 
 Arguments: $ARGUMENTS (task ID)

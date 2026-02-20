@@ -1,3 +1,11 @@
+---
+title: "Troubleshooting"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Troubleshooting Reference
 
 Common issues and solutions for orchestrator management.

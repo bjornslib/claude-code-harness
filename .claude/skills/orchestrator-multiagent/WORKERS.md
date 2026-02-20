@@ -1,3 +1,11 @@
+---
+title: "Workers"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Worker Delegation
 
 Patterns for delegating implementation to worker teammates via native Agent Teams.

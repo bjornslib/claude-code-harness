@@ -1,3 +1,11 @@
+---
+title: "Remove Task"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Remove a task permanently from the project.
 
 Arguments: $ARGUMENTS (task ID)

@@ -1,3 +1,11 @@
+---
+title: "Fix Dependencies"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Automatically fix dependency issues found during validation.
 
 ## Automatic Dependency Repair

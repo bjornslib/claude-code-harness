@@ -1,3 +1,11 @@
+---
+title: "Monorepo"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Monorepo Reference
 
 Railway supports two types of monorepo deployments with different configuration approaches.

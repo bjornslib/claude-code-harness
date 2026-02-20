@@ -1,3 +1,11 @@
+---
+title: "To Done"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Mark a task as completed.
 
 Arguments: $ARGUMENTS (task ID)

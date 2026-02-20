@@ -341,6 +341,54 @@ else
 fi
 ```
 
+### Step 10.5: Install Git Hooks
+
+If the target is a git repository and the hook source file was copied, install the
+pre-push hook automatically. Skip gracefully for non-git targets (R1.2).
+
+```bash
+# Check if target is a git repo
+if git -C "$TARGET_DIR" rev-parse --git-dir > /dev/null 2>&1; then
+    HOOK_SOURCE="$TARGET_DIR/.claude/hooks/doc-gardener-pre-push.sh"
+
+    if [ -f "$HOOK_SOURCE" ]; then
+        HOOK_DEST="$(git -C "$TARGET_DIR" rev-parse --git-common-dir)/hooks/pre-push"
+
+        # R1.4: Do not silently overwrite existing non-symlink hooks
+        if [ -e "$HOOK_DEST" ] && [ ! -L "$HOOK_DEST" ]; then
+            echo "⚠ Existing pre-push hook found at $HOOK_DEST"
+            # Use AskUserQuestion to confirm replacement
+            # Question: "A pre-push hook already exists. Replace it with the doc-gardener hook?"
+            # Header: "Hook"
+            # Options:
+            # 1. "Yes, replace" - Replace existing hook with doc-gardener
+            # 2. "No, keep existing" - Leave existing hook in place
+            #
+            # If user chooses "No, keep existing":
+            #     echo "✓ Kept existing pre-push hook (skipped doc-gardener installation)"
+            # If user chooses "Yes, replace":
+            #     python3 "$TARGET_DIR/.claude/scripts/attractor/cli.py" install-hooks --force
+        else
+            # No existing hook or existing symlink — safe to install/update
+            python3 "$TARGET_DIR/.claude/scripts/attractor/cli.py" install-hooks
+        fi
+
+        # Verify symlink was created and is executable (AC-4)
+        if [ -L "$HOOK_DEST" ] && [ -x "$HOOK_DEST" ]; then
+            echo "✓ Pre-push hook installed (doc-gardener lint enforcement)"
+        elif [ -e "$HOOK_DEST" ]; then
+            echo "✓ Pre-push hook exists (user-managed)"
+        else
+            echo "⚠ Pre-push hook installation skipped"
+        fi
+    else
+        echo "⚠ Hook source not found — skipping pre-push hook installation"
+    fi
+else
+    echo "ℹ Target is not a git repository — skipping hook installation"
+fi
+```
+
 ### Step 11: Provide Next Steps
 
 ```
@@ -363,8 +411,9 @@ Runtime directories created (gitignored, with .gitkeep):
 Next steps:
 1. Review .claude/CLAUDE.md (harness docs — updated each deploy)
 2. Review .mcp.json API keys
-3. Commit the .claude/ directory to git
-4. Launch Claude Code:
+3. Git hooks: pre-push hook installed (doc-gardener lint enforcement)
+4. Commit the .claude/ directory to git
+5. Launch Claude Code:
    - System 3: ccsystem3
    - Orchestrator: ccorch
    - Worker: launchcc

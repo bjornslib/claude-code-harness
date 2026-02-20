@@ -1,3 +1,11 @@
+---
+title: "Jsonc Schema"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # JSONC Schema Reference
 
 Complete schema for design specifications.

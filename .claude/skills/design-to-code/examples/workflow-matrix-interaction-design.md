@@ -1,3 +1,11 @@
+---
+title: "Workflow Matrix Interaction Design"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # AgenCheck Workflow Matrix: Interaction Design Specification
 
 **Version:** 1.0  

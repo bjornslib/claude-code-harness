@@ -1,3 +1,11 @@
+---
+title: "Prd Extraction"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # PRD-Driven Outcome Tracking Reference
 
 Extract goals and acceptance criteria from PRDs to maintain meta-level awareness of what orchestrators are trying to achieve.

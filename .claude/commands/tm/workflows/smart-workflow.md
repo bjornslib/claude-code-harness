@@ -1,3 +1,11 @@
+---
+title: "Smart Workflow"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Execute an intelligent workflow based on current project state and recent commands.
 
 This command analyzes:

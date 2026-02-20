@@ -1,3 +1,11 @@
+---
+title: "Optimizers"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # DSPy Optimizers (DSPy 3.1+)
 
 Complete guide to DSPy's optimization algorithms for improving prompts, evolving instructions, and training model weights.

@@ -1,3 +1,11 @@
+---
+title: "Research Workflow"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Research Workflow Reference
 
 Detailed guide for Step 2: Component and Pattern Research.

@@ -29,6 +29,18 @@ AC_ID=""
 RESPONSE_JSON=""
 RESPONSE_FILE=""
 
+# Show usage if no arguments provided
+if [[ $# -eq 0 ]]; then
+    echo "cs-store-validation - Store validation responses from s3-validator teammates" >&2
+    echo "" >&2
+    echo "Usage:" >&2
+    echo "  cs-store-validation --promise <id> --ac-id <AC-X> --response '<json>'" >&2
+    echo "  cs-store-validation --promise <id> --ac-id <AC-X> --response-file /path/to/response.json" >&2
+    echo "" >&2
+    echo "Run 'cs-store-validation --help' for full usage details." >&2
+    exit 1
+fi
+
 while [[ $# -gt 0 ]]; do
     case $1 in
         --promise)

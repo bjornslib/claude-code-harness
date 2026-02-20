@@ -1,3 +1,11 @@
+---
+title: "Orchestrator Prompt"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Orchestrator Prompt Examples
 
 Example initialization prompts for different orchestrator types.

@@ -1,15 +1,15 @@
 # Harness Documentation Gardening Report
 
-**Generated**: 2026-02-19T20:54:57
-**Target**: `/Users/theb/Documents/Windsurf/claude-harness-setup/trees/ws1-fixes/.claude`
-**Mode**: DRY-RUN (no changes)
+**Generated**: 2026-02-19T21:07:20
+**Target**: `/Users/theb/Documents/Windsurf/claude-harness-setup/.claude`
+**Mode**: EXECUTE (fixes applied)
 
 ## Summary
 
 - **Files scanned**: 299
 - **Total violations found**: 355
-- **Auto-fixed**: 0
-- **Remaining violations**: 355
+- **Auto-fixed**: 154
+- **Remaining violations**: 201
 
 ### Before
 
@@ -20,9 +20,17 @@
 | Info     | 0 |
 | Fixable  | 154 |
 
+### After Auto-fix
+
+| Severity | Count |
+|----------|-------|
+| Errors   | 187 |
+| Warnings | 14 |
+| Info     | 0 |
+
 ## Auto-fixed Violations
 
-These violations **would be** auto-fixed with `--execute`:
+These violations were automatically remediated:
 
 | File | Category | Severity | Message |
 |------|----------|----------|---------|

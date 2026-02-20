@@ -1,3 +1,11 @@
+---
+title: "Setup"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 # Parallel Development Setup
 
 ## Initialize Multi-Process Development Environment

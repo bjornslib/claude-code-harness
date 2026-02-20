@@ -1,3 +1,11 @@
+---
+title: "Readme"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # mcp-to-skill-converter
 
 A Claude Skill that converts MCP servers into Claude Skills with 90%+ context savings.

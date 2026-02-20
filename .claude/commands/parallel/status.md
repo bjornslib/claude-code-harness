@@ -1,3 +1,11 @@
+---
+title: "Status"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 # Parallel Development Status Monitor
 
 ## Monitor Active Multi-Process Development

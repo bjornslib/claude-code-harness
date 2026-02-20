@@ -1,3 +1,11 @@
+---
+title: "Cleanup"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 # Parallel Development Cleanup
 
 ## Clean Up Multi-Process Development Resources

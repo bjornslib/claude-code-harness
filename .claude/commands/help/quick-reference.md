@@ -1,3 +1,11 @@
+---
+title: "Quick Reference"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 # Quick Reference - Emergency Patterns and Daily Shortcuts
 
 ## Daily Startup Checklist ⚡

@@ -1,3 +1,11 @@
+---
+title: "Memory Context Taxonomy"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Memory Context Taxonomy Reference
 
 > Extracted from `system3-meta-orchestrator.md` to reduce output style context size.

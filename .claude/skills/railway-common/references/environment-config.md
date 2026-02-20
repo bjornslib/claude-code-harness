@@ -1,3 +1,11 @@
+---
+title: "Environment Config"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Environment Config Reference
 
 The `EnvironmentConfig` object is used to configure services, volumes, and shared variables in Railway.

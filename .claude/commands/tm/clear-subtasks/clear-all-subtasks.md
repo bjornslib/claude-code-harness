@@ -1,3 +1,11 @@
+---
+title: "Clear All Subtasks"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Clear all subtasks from all tasks globally.
 
 ## Global Subtask Clearing

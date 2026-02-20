@@ -1,3 +1,11 @@
+---
+title: "Troubleshooting"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Worktree Troubleshooting Guide
 
 Common issues and their solutions when managing worktrees.

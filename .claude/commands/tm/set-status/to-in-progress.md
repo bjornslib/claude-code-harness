@@ -1,3 +1,11 @@
+---
+title: "To In Progress"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Start working on a task by setting its status to in-progress.
 
 Arguments: $ARGUMENTS (task ID)

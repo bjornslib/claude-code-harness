@@ -1,3 +1,11 @@
+---
+title: "Generate Tasks"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Generate individual task files from tasks.json.
 
 ## Task File Generation

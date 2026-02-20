@@ -1,3 +1,11 @@
+---
+title: "Show Task"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Show detailed task information with rich context and insights.
 
 Arguments: $ARGUMENTS

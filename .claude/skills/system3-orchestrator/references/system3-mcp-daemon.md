@@ -1,3 +1,11 @@
+---
+title: "System3 Mcp Daemon"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # System 3 MCP Daemon Design
 
 Architecture and implementation plan for System 3 as a persistent MCP-accessible process.

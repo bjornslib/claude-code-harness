@@ -1,3 +1,11 @@
+---
+title: "Auto Implement Tasks"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Enhanced auto-implementation with intelligent code generation and testing.
 
 Arguments: $ARGUMENTS

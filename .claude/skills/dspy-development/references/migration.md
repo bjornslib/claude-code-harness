@@ -1,3 +1,11 @@
+---
+title: "Migration"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # DSPy Migration Guide
 
 Breaking changes and migration patterns across major DSPy versions.

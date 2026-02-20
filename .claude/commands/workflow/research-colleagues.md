@@ -1,3 +1,11 @@
+---
+title: "Research Colleagues"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 # Research with Colleagues Workflow
 
 ## Always Research Implementation Approaches with Colleagues Before Coding

@@ -1,3 +1,11 @@
+---
+title: "Communication"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # System 3 Communication Style
 
 This document contains optional communication guidelines for System 3 orchestration.

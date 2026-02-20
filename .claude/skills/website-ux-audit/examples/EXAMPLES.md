@@ -1,3 +1,11 @@
+---
+title: "Examples"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Example Prompts for Website UX Audit Skill
 
 These example prompts demonstrate how to invoke and work with this skill effectively.

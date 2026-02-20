@@ -1,3 +1,11 @@
+---
+title: "Install Taskmaster"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Check if Task Master is installed and install it if needed.
 
 This command helps you get Task Master set up globally on your system.

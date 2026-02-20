@@ -1,3 +1,11 @@
+---
+title: "Gherkin Test Patterns"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Gherkin Test Patterns for Blind Validation
 
 Syntax, conventions, and calibration guides for writing Gherkin-style acceptance tests used in the S3 Guardian pattern.

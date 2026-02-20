@@ -1,3 +1,11 @@
+---
+title: "Next Task"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Intelligently determine and prepare the next action based on comprehensive context.
 
 This enhanced version of 'next' considers:

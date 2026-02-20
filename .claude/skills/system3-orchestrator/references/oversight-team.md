@@ -1,3 +1,11 @@
+---
+title: "Oversight Team"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Oversight Team Management Reference
 
 Detailed reference for System 3's independent validation team.

@@ -1,3 +1,11 @@
+---
+title: "Validation Scoring"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Validation Scoring Methodology
 
 Detailed methodology for independently scoring implementation work against blind acceptance tests using gradient confidence scoring (0.0-1.0).

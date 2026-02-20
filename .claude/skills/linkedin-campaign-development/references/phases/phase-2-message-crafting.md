@@ -1,3 +1,11 @@
+---
+title: "Phase 2 Message Crafting"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Phase 2: Personalized Observation
 
 ## Purpose

@@ -1,3 +1,11 @@
+---
+title: "Parallel Patterns"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Parallel Exploration Patterns
 
 Advanced patterns for launching multiple Explore agents simultaneously.

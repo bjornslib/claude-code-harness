@@ -1,3 +1,11 @@
+---
+title: "Schemas"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # YAML Schemas for Acceptance Tests
 
 Complete schema definitions for acceptance test files.

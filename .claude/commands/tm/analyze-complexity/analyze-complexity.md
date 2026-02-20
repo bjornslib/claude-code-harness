@@ -1,3 +1,11 @@
+---
+title: "Analyze Complexity"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Analyze task complexity and generate expansion recommendations.
 
 Arguments: $ARGUMENTS

@@ -1,3 +1,11 @@
+---
+title: "Modules"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # DSPy Modules (DSPy 3.1+)
 
 Complete guide to DSPy's built-in modules for language model programming.

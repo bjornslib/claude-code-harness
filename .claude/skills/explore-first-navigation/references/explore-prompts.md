@@ -1,3 +1,11 @@
+---
+title: "Explore Prompts"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Explore Agent Prompt Templates
 
 Comprehensive collection of prompt templates for common codebase navigation tasks.

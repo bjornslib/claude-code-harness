@@ -1,3 +1,11 @@
+---
+title: "O3 Pro"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 # O3-Pro Integration
 
 Launch OpenAI's O3-Pro model using the specialized model support tools for advanced code review and architecture analysis.

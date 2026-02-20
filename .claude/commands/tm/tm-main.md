@@ -1,3 +1,11 @@
+---
+title: "Tm Main"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 # Task Master Command Reference
 
 Comprehensive command structure for Task Master integration with Claude Code.

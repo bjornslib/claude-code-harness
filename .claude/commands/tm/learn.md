@@ -1,3 +1,11 @@
+---
+title: "Learn"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Learn about Task Master capabilities through interactive exploration.
 
 Arguments: $ARGUMENTS

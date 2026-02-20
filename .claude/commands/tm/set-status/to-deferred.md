@@ -1,3 +1,11 @@
+---
+title: "To Deferred"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Defer a task for later consideration.
 
 Arguments: $ARGUMENTS (task ID)

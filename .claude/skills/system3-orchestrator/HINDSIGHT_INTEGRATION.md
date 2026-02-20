@@ -1,3 +1,11 @@
+---
+title: "Hindsight_Integration"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Hindsight Integration for System 3
 
 System 3's memory is implemented via **Hindsight MCP** with a **dual-bank architecture**. This document defines the architecture, query patterns, process supervision, and storage conventions.

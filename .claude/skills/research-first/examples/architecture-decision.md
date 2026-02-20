@@ -1,3 +1,11 @@
+---
+title: "Architecture Decision"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Example: Architecture Decision Research
 
 ## Scenario

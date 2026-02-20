@@ -1,3 +1,11 @@
+---
+title: "Website Upgraded"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 # Website Upgraded - End-to-End UX Improvement Pipeline
 
 Transform any website URL into implementation-ready specifications through a comprehensive 3-stage automated pipeline.

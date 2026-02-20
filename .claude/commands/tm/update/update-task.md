@@ -1,3 +1,11 @@
+---
+title: "Update Task"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Update tasks with intelligent field detection and bulk operations.
 
 Arguments: $ARGUMENTS

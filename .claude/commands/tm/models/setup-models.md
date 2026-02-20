@@ -1,3 +1,11 @@
+---
+title: "Setup Models"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Run interactive setup to configure AI models.
 
 ## Interactive Model Configuration

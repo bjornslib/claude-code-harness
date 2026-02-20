@@ -1,3 +1,11 @@
+---
+title: "List Commands"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 # Project Commands Reference
 
 ## Available Slash Commands

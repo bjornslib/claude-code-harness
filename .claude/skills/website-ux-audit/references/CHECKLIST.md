@@ -1,3 +1,11 @@
+---
+title: "Checklist"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # UX Audit Checklist
 
 Use this checklist during the audit process to ensure comprehensive coverage and proper tier classification.

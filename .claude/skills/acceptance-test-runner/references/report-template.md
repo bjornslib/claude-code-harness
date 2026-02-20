@@ -1,3 +1,11 @@
+---
+title: "Report Template"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Validation Report Template
 
 Use this template when generating validation reports.

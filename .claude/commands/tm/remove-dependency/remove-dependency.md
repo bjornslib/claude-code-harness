@@ -1,3 +1,11 @@
+---
+title: "Remove Dependency"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Remove a dependency between tasks.
 
 Arguments: $ARGUMENTS

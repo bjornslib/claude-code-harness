@@ -1,3 +1,11 @@
+---
+title: "Railpack"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Railpack Reference
 
 Railpack is Railway's default builder. Zero-config for most projects.

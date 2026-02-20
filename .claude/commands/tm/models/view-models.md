@@ -1,3 +1,11 @@
+---
+title: "View Models"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 View current AI model configuration.
 
 ## Model Configuration Display
