@@ -1,0 +1,72 @@
+---
+prd_id: PRD-PREFECT
+title: "Prefect Pipeline Productionisation — Acceptance Scenarios"
+description: |
+  Gherkin-style descriptive acceptance scenarios for blind validation of
+  Prefect productionisation work. Confidence-scored (0.0-1.0), not binary.
+
+  System 3 uses these as a rubric to independently evaluate orchestrator
+  claims. When uncertain, System 3 must investigate further — reading code,
+  querying databases, running endpoints — until confidence is >= 0.95.
+
+  ULTIMATE BUSINESS GOAL: POST /api/v1/verify automatically kicks off the
+  Prefect orchestration flow, which then automatically performs voice call
+  verification steps (prepare → dispatch → process → results stored).
+  The human should not need to do anything after submitting the request.
+
+source_documents:
+  - prefect-bridge-implementation-report.md
+  - prefect-workflow-orchestration-prd.md
+  - prefect-local-e2e-setup-prd.md
+target_repo: zenagent2/zenagent/agencheck
+validation_mode: descriptive-gherkin
+scoring: gradient  # 0.0-1.0, not boolean
+accept_threshold: 0.6
+reject_threshold: 0.4
+created: 2026-02-19
+
+features:
+  - id: F1
+    name: "Bridge Integration — The Critical Gap"
+    weight: 0.30
+    criticality: CRITICAL
+  - id: F2
+    name: "Prefect Flow Scheduling Pipeline"
+    weight: 0.05
+    criticality: IMPORTANT
+  - id: F3
+    name: "Local Docker Stack Completeness"
+    weight: 0.10
+    criticality: IMPORTANT
+  - id: F4
+    name: "Stub Wiring — Flow Tasks Execute Real Logic"
+    weight: 0.20
+    criticality: IMPORTANT
+  - id: F5
+    name: "Complete Pipeline Execution (API to Results, including Live LiveKit Dispatch)"
+    weight: 0.25
+    criticality: CRITICAL
+    notes: |
+      Includes local_mock happy path AND real LiveKit dispatch with case 18
+      (Marcus Rivera → DataStream Analytics, +61404236990).
+      Live dispatch is the ultimate proof of business value.
+  - id: F6
+    name: "Pipeline Observability and Traceability"
+    weight: 0.05
+    criticality: NICE_TO_HAVE
+  - id: F7
+    name: "Test Suite Quality and Coverage"
+    weight: 0.03
+    criticality: NICE_TO_HAVE
+  - id: F8
+    name: "Database Schema Supports Prefect Pipeline"
+    weight: 0.02
+    criticality: NICE_TO_HAVE
+
+validation_protocol: |
+  When confidence on any scenario < 0.95:
+    1. Read the actual source files in the implementation repo
+    2. Query the running database for state assertions
+    3. Call API endpoints and inspect responses
+    4. Ask the other System 3 operator to demonstrate the claim
+    5. Do NOT accept self-reported "done" — verify independently

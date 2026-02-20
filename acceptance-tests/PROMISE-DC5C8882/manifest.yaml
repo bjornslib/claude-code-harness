@@ -1,0 +1,32 @@
+id: PROMISE-DC5C8882
+title: "Fix post-task-creation redirect on /aura-call"
+promise_id: promise-dc5c8882
+created: 2026-02-19
+thresholds:
+  accept: 0.60
+  investigate: 0.40
+
+features:
+  - id: F1-no-redirect
+    title: "Create Task does NOT navigate to /verify-call/"
+    weight: 0.40
+    scenarios:
+      - "create-task-no-redirect"
+
+  - id: F2-success-feedback
+    title: "User sees success feedback after task creation"
+    weight: 0.25
+    scenarios:
+      - "success-feedback-shown"
+
+  - id: F3-web-call-regression
+    title: "Web Call Make Call flow unaffected"
+    weight: 0.25
+    scenarios:
+      - "web-call-still-navigates"
+
+  - id: F4-build
+    title: "Build passes"
+    weight: 0.10
+    scenarios:
+      - "build-no-errors"

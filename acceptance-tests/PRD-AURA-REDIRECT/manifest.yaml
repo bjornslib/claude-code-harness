@@ -1,0 +1,38 @@
+---
+prd_id: PRD-AURA-REDIRECT
+title: "Fix /aura-call Post-Task Redirect"
+description: |
+  After clicking Create Task on the Phone Call tab, the page incorrectly
+  navigates to /verify-call/{taskId} (LiveKit voice call page). The fix
+  should show success feedback on /aura-call instead, while preserving
+  Web Call tab behavior.
+
+created: 2026-02-19
+promise_id: promise-156ddc26
+
+thresholds:
+  accept: 0.60
+  investigate: 0.40
+
+features:
+  - id: F1
+    name: "Phone Call tab post-submit behavior"
+    weight: 0.45
+    description: "After Create Task succeeds, stay on /aura-call with success feedback"
+    scenarios:
+      - "phone_call_no_redirect"
+      - "phone_call_success_feedback"
+
+  - id: F2
+    name: "Web Call tab no-regression"
+    weight: 0.35
+    description: "Make Call button still navigates to /verify-call/{taskId} correctly"
+    scenarios:
+      - "web_call_still_works"
+
+  - id: F3
+    name: "Error handling preserved"
+    weight: 0.20
+    description: "API errors still show error messages, not redirect"
+    scenarios:
+      - "api_error_no_redirect"
