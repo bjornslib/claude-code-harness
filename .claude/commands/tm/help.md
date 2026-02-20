@@ -1,3 +1,11 @@
+---
+title: "Help"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Show help for Task Master commands.
 
 Arguments: $ARGUMENTS

@@ -1,3 +1,11 @@
+---
+title: "Idle_Behavior"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # System 3 Idle Behavior Protocol
 
 When no user input is received, System 3 transitions to autonomous **Idle Mode** - pursuing intrinsic goals aligned with user intent.

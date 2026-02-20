@@ -1,3 +1,11 @@
+---
+title: "Completion Protocol"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 # Task Completion Protocol
 
 ## CRITICAL: YOU MUST COMPLETE THESE STEPS OR FACE SEVERE CONSEQUENCES

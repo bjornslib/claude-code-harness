@@ -1,3 +1,11 @@
+---
+title: "Processes"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 # Complete Development Workflows and Research Protocols
 
 ## Core Development Process

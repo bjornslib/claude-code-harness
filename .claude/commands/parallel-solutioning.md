@@ -1,3 +1,11 @@
+---
+title: "Parallel Solutioning"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 # Parallel Architect Consensus Command
 
 Execute the "Parallel Architect Consensus with Majority Voting Aggregation" methodology for complex solution design tasks.

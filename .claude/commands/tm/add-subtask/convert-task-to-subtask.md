@@ -1,3 +1,11 @@
+---
+title: "Convert Task To Subtask"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Convert an existing task into a subtask.
 
 Arguments: $ARGUMENTS

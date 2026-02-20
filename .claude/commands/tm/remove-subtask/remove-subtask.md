@@ -1,3 +1,11 @@
+---
+title: "Remove Subtask"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Remove a subtask from its parent task.
 
 Arguments: $ARGUMENTS

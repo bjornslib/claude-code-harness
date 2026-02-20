@@ -1,3 +1,11 @@
+---
+title: "Expand All Tasks"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Expand all pending tasks that need subtasks.
 
 ## Bulk Task Expansion

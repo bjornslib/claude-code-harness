@@ -1,3 +1,11 @@
+---
+title: "Readme"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # DSPy — At a Glance
 
 > Personal quick-reference for DSPy (Declarative Language Model Programming).

@@ -1,3 +1,11 @@
+---
+title: "Guides"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Campaign Guides
 
 Combined reference for Perfect Future Customer (PFC) criteria and CSV schema.

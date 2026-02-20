@@ -1,3 +1,11 @@
+---
+title: "Chrome Mcp Actions"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Chrome DevTools MCP Action Patterns
 
 Patterns for executing browser acceptance tests using chrome-devtools MCP.

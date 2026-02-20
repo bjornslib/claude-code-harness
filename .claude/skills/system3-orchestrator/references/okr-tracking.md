@@ -1,3 +1,11 @@
+---
+title: "Okr Tracking"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # OKR-Driven Development Reference
 
 Business Epic and Key Result tracking for human-AI partnership in steering toward business outcomes.

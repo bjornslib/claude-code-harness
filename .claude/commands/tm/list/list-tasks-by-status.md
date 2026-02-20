@@ -1,3 +1,11 @@
+---
+title: "List Tasks By Status"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 List tasks filtered by a specific status.
 
 Arguments: $ARGUMENTS

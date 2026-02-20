@@ -1,3 +1,11 @@
+---
+title: "Troubleshooting"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Troubleshooting Guide
 
 Common issues and solutions when running LinkedIn campaign development.

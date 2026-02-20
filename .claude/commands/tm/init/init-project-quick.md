@@ -1,3 +1,11 @@
+---
+title: "Init Project Quick"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Quick initialization with auto-confirmation.
 
 Arguments: $ARGUMENTS

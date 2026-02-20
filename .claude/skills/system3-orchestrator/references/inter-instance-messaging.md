@@ -1,3 +1,11 @@
+---
+title: "Inter Instance Messaging"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Inter-Instance Messaging Reference
 
 > Extracted from `system3-meta-orchestrator.md` to reduce output style context size.

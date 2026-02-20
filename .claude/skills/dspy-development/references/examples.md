@@ -1,3 +1,11 @@
+---
+title: "Examples"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # DSPy Real-World Examples (DSPy 3.1+)
 
 Practical examples of building production systems with DSPy.

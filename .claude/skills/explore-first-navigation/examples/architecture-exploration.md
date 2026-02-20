@@ -1,3 +1,11 @@
+---
+title: "Architecture Exploration"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Example: Full Architecture Exploration
 
 This example demonstrates a complete architecture exploration workflow.

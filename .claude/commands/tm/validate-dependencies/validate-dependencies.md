@@ -1,3 +1,11 @@
+---
+title: "Validate Dependencies"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Validate all task dependencies for issues.
 
 ## Dependency Validation

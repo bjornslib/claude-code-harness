@@ -1,3 +1,11 @@
+---
+title: "Tmux Commands"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Tmux Commands Reference
 
 All tmux commands for orchestrator management.

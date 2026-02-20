@@ -1,3 +1,11 @@
+---
+title: "Check Messages"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 # Check Message Bus
 
 Check for incoming messages from the inter-instance message bus.

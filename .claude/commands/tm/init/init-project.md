@@ -1,3 +1,11 @@
+---
+title: "Init Project"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Initialize a new Task Master project.
 
 Arguments: $ARGUMENTS

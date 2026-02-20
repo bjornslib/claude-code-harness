@@ -1,3 +1,11 @@
+---
+title: "Brief Template"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Brief Template for Design Analysis
 
 Use this template to generate a comprehensive brief from a design image.

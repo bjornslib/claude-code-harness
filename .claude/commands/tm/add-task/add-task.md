@@ -1,3 +1,11 @@
+---
+title: "Add Task"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Add new tasks with intelligent parsing and context awareness.
 
 Arguments: $ARGUMENTS

@@ -1,3 +1,11 @@
+---
+title: "Parse Prd"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Parse a PRD document to generate tasks.
 
 Arguments: $ARGUMENTS (PRD file path)

@@ -1,3 +1,11 @@
+---
+title: "Workflows"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Orchestrator Workflows
 
 Execution workflows for multi-feature development.

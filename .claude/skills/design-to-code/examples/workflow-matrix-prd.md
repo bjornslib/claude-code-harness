@@ -1,3 +1,11 @@
+---
+title: "Workflow Matrix Prd"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 ```yaml
 # PRD FRONTMATTER (REQUIRED)
 # The prd_id is the canonical identifier used throughout the system

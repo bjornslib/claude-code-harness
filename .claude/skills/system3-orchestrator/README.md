@@ -1,3 +1,11 @@
+---
+title: "Readme"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # System 3 Meta-Orchestrator (System 3 Pattern)
 
 > **Level 3 Reflective Thinking** - A self-aware coordination system that launches, monitors, and guides orchestrator agents.

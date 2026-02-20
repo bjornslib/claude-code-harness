@@ -1,3 +1,11 @@
+---
+title: "Preflight"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Session Pre-Flight Checklist
 
 **ALL STEPS MANDATORY - NO EXCEPTIONS**

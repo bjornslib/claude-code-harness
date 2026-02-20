@@ -1,3 +1,11 @@
+---
+title: "Complexity Report"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Display the task complexity analysis report.
 
 Arguments: $ARGUMENTS

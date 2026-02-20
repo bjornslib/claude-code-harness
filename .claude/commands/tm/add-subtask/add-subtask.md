@@ -1,3 +1,11 @@
+---
+title: "Add Subtask"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Add a subtask to a parent task.
 
 Arguments: $ARGUMENTS

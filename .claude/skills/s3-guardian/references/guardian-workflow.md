@@ -1,3 +1,11 @@
+---
+title: "Guardian Workflow"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Guardian Workflow — End-to-End Reference
 
 Complete workflow for the S3 Guardian pattern, from pre-flight checks through post-validation actions.

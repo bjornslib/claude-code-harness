@@ -1,3 +1,11 @@
+---
+title: "Readme"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Multilead Add Lead Script
 
 Add leads to Multilead campaigns with personalised messages. Built for integration with your personalization workflow.

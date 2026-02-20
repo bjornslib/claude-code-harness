@@ -1,3 +1,11 @@
+---
+title: "Post Orchestration"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Post-Orchestration Reference
 
 Workflow after an orchestrator completes its mission.

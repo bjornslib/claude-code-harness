@@ -1,3 +1,11 @@
+---
+title: "Completion Promise Cli"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Completion Promise CLI Reference (v2.0)
 
 File-based state tracking that ensures sessions only complete when user goals are verifiably achieved, using structured acceptance criteria.

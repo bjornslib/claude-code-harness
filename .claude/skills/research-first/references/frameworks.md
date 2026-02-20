@@ -1,3 +1,11 @@
+---
+title: "Frameworks"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Frameworks and Libraries Reference
 
 Complete list of frameworks and libraries that should trigger the research-first skill.

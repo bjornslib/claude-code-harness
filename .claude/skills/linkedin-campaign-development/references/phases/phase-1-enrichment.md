@@ -1,3 +1,11 @@
+---
+title: "Phase 1 Enrichment"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Phase 1: Lead Enrichment
 
 ## Purpose

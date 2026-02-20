@@ -1,3 +1,11 @@
+---
+title: "Quick Install Taskmaster"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Quick install Task Master globally if not already installed.
 
 Execute this streamlined installation:

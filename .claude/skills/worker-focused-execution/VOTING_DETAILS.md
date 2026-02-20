@@ -1,3 +1,11 @@
+---
+title: "Voting_Details"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Voting Details for Workers
 
 **Purpose**: Detailed voting procedures when orchestrator triggers consensus-building

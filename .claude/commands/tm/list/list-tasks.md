@@ -1,3 +1,11 @@
+---
+title: "List Tasks"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 List tasks with intelligent argument parsing.
 
 Parse arguments to determine filters and display options:

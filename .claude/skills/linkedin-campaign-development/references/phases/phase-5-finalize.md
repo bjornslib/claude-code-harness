@@ -1,3 +1,11 @@
+---
+title: "Phase 5 Finalize"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Phase 5: Finalize
 
 ## Purpose

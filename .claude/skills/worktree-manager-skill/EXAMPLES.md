@@ -1,3 +1,11 @@
+---
+title: "Examples"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Worktree Usage Examples
 
 Real-world examples demonstrating how to handle different worktree management scenarios.

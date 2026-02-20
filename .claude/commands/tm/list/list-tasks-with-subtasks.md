@@ -1,3 +1,11 @@
+---
+title: "List Tasks With Subtasks"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 List all tasks including their subtasks in a hierarchical view.
 
 This command shows all tasks with their nested subtasks, providing a complete project overview.

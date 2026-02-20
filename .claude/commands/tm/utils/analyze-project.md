@@ -1,3 +1,11 @@
+---
+title: "Analyze Project"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Advanced project analysis with actionable insights and recommendations.
 
 Arguments: $ARGUMENTS

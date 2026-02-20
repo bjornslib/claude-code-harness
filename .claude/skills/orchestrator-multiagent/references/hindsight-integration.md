@@ -1,3 +1,11 @@
+---
+title: "Hindsight Integration"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Memory-Driven Decision Making (Hindsight Integration)
 
 The orchestrator uses Hindsight as extended memory to learn from experience and avoid repeating mistakes.

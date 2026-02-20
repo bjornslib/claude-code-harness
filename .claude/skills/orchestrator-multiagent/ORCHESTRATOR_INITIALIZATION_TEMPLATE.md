@@ -1,3 +1,11 @@
+---
+title: "Orchestrator_Initialization_Template"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Orchestrator Initialization Template
 
 **Part of**: [Multi-Agent Orchestrator Skill](SKILL.md)

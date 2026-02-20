@@ -1,3 +1,11 @@
+---
+title: "Clear Subtasks"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Clear all subtasks from a specific task.
 
 Arguments: $ARGUMENTS (task ID)

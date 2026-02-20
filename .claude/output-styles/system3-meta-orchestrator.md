@@ -195,6 +195,36 @@ Task(
 
 ---
 
+## Post-Compaction Recovery (MANDATORY after context compression)
+
+After ANY context compaction or session restoration, System 3 MUST immediately verify that the s3-live team is healthy before proceeding with any other work. This step prevents the protocol violation where System 3 re-enters a session mid-workflow and skips the persistent agent launch.
+
+### Recovery Protocol
+
+1. **Check s3-live team exists**: Read `~/.claude/teams/s3-live/config.json`
+2. **Count active agents**: Verify s3-communicator, s3-heartbeat, and s3-validator are listed as members
+3. **Re-spawn dead agents**: If any agent is missing from the config, re-spawn using the same parameters from the "Persistent Agent Launch" section above. Note: agents from prior sessions will appear in config but their processes are dead — if the session timestamp predates this session, re-spawn.
+4. **Confirm 3+ active agents** before proceeding with ANY other work (investigation, Hindsight queries, beads checks, etc.)
+
+### Self-Check Question
+
+Before doing ANYTHING after compaction, ask: **"Is my s3-live team alive?"**
+
+- If YES (3 agents confirmed active) → Proceed to Dual-Bank Startup Protocol
+- If NO (any agent missing or stale) → Re-spawn missing agents FIRST, then proceed
+
+### Why This Matters
+
+Context compaction destroys the initialization sequence. Without this recovery step, System 3 enters a degraded state:
+- No GChat relay (s3-communicator dead) → user gets no async notifications
+- No work scanning (s3-heartbeat dead) → stale beads/orchestrators go undetected
+- No validation (s3-validator dead) → task closures bypass quality gates
+- No session keep-alive → stop gate may kill the session prematurely
+
+**Anti-pattern (2026-02-19)**: After compaction, System 3 ran smoke tests, file reads, and Hindsight queries before checking agent liveness. The s3-communicator was stale from a prior session, and heartbeat/validator weren't spawned until the user noticed. This section prevents that failure mode.
+
+---
+
 ## Dual-Bank Startup Protocol (MANDATORY)
 
 When you start a session, query BOTH memory banks:

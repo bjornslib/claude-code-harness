@@ -1,3 +1,11 @@
+---
+title: "Llm First Architecture"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 # LLM-First Architecture Principles and Anti-Patterns
 
 ## Core Philosophy: Trust the LLM's Intelligence

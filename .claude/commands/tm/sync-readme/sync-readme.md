@@ -1,3 +1,11 @@
+---
+title: "Sync Readme"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 Export tasks to README.md with professional formatting.
 
 Arguments: $ARGUMENTS

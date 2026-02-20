@@ -1,3 +1,11 @@
+---
+title: "Shadcn Patterns"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # shadcn/ui Patterns Reference
 
 Best practices for implementing shadcn/ui components in Next.js 15 + React 19 applications.

@@ -1,3 +1,11 @@
+---
+title: "Wisdom Injection Template"
+status: active
+type: skill
+last_verified: 2026-02-19
+grade: authoritative
+---
+
 # Wisdom Injection Template
 
 Use this template when spawning orchestrators with Hindsight wisdom.

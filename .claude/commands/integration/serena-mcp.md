@@ -1,3 +1,11 @@
+---
+title: "Serena Mcp"
+status: active
+type: command
+last_verified: 2026-02-19
+grade: reference
+---
+
 # Serena MCP Integration Guide
 
 ## Essential for All Coding Work
