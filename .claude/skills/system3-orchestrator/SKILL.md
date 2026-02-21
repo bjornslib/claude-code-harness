@@ -69,6 +69,24 @@ System 3 (Uber-Orchestrator)
 
 Before spawning ANY orchestrator, complete this checklist:
 
+### [ ] 0. Activate Serena for Code Navigation
+
+**Do this before any codebase investigation** — enables semantic tools for the entire session:
+
+```python
+mcp__serena__check_onboarding_performed()
+# If not active: mcp__serena__activate_project(project="<project-name>")
+mcp__serena__switch_modes(["planning", "one-shot"])  # System 3 mode
+```
+
+Once active, use these for all codebase exploration (no `activate_project` needed again):
+- `find_symbol(name_path="Class/method", include_body=True)` — read specific functions
+- `get_symbols_overview("path/to/file.py")` — understand file structure
+- `find_referencing_symbols("Class/method")` — impact analysis before delegation
+- `search_for_pattern("pattern")` — flexible codebase-wide search
+
+**Do NOT read entire files** when a targeted symbol lookup will suffice. Serena saves 70-95% of tokens vs full-file reads.
+
 ### [ ] 1. Extract Goals from PRD
 
 ```python

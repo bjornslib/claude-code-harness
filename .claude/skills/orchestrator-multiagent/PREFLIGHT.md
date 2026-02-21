@@ -25,16 +25,29 @@ echo $CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
 # If not set: export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
 ```
 
-### [ ] Serena Active
+### [ ] Serena Active (MANDATORY — enables all code navigation)
 
 ```bash
 mcp__serena__check_onboarding_performed
-# If not active: mcp__serena__activate_project with project="agencheck"
+# If not active: mcp__serena__activate_project with project="<project-name>"
 
 # Set session mode based on work type:
 mcp__serena__switch_modes(["editing", "interactive"])  # For implementation sessions
 # OR mcp__serena__switch_modes(["planning", "one-shot"])  # For design sessions
 ```
+
+**Once active, use Serena's symbolic tools for ALL code investigation:**
+
+| Task | Tool | Replaces |
+|------|------|---------|
+| Read a function | `find_symbol(name_path="Class/method", include_body=True)` | `Read` entire file |
+| Understand a class | `find_symbol(name_path="Class", depth=1)` | `Read` entire file |
+| Find callers | `find_referencing_symbols("Class/method")` | `Grep` + reading |
+| Search codebase | `search_for_pattern("pattern")` | `Grep` + manual |
+| Edit a method | `replace_symbol_body("Class/method", new_body)` | `Edit` with long strings |
+
+**Reserve `Read` for**: Non-code files only (PRDs, YAML configs, markdown docs).
+**Reserve `Grep`/`Glob` for**: When you don't know the symbol name or need file-pattern matching.
 
 ### [ ] Services Healthy
 
@@ -209,14 +222,17 @@ bd dep add <epic-a-id> <at-epic-id> --type=blocks
 
 ---
 
-**Version**: 1.2
+**Version**: 1.3
 **Created**: 2025-12-21
-**Updated**: 2026-02-06
+**Updated**: 2026-02-22
 **Source**: Consolidated from CLAUDE.md, SKILL.md, SERVICE_MANAGEMENT.md circuit breaker sections
+**v1.3 Changes**:
+- Strengthened Serena section: added symbolic tool usage table, reserve guidance for Read/Grep/Glob
+- Clarified that Serena is for code navigation (not memory); Hindsight is for memory
 **v1.2 Changes**:
 - Added Agent Teams env var check (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`) to Phase 1
 - Added "Create Worker Team" step (`Teammate(operation="spawnTeam", ...)`) to Phase 1
 **v1.1 Changes**:
-- Hindsight-Only Memory - Removed Serena/Byterover memory checks, replaced with Hindsight `recall` and `reflect`
+- Memory checks: replaced Serena/Byterover memory tools with Hindsight `recall` and `reflect`
 - Updated Phase 2 to use `mcp__hindsight__recall()` for context loading
-- Updated checkpoints to use Hindsight instead of Serena thinking tools
+- Note: Serena was never removed for CODE navigation — only for memory operations
