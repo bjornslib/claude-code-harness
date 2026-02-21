@@ -287,7 +287,19 @@ tmux new-session -d -s "orch-[name]"
 tmux send-keys -t "orch-[name]" "cd trees/[name]/agencheck"
 tmux send-keys -t "orch-[name]" Enter
 
-# 4. CRITICAL: Set env vars BEFORE launching Claude
+# 4. CRITICAL: Switch to zsh — tmux defaults to bash, but ccorch is a zsh function.
+#    Without this, ccorch will fail with "command not found".
+tmux send-keys -t "orch-[name]" "exec zsh"
+tmux send-keys -t "orch-[name]" Enter
+sleep 2  # Wait for zsh to initialize and source .zshrc
+
+# 5. CRITICAL: Unset CLAUDECODE — prevents "nested session" error.
+#    The parent System 3 session sets CLAUDECODE, which propagates to tmux.
+#    ccorch will refuse to launch if it detects an existing session.
+tmux send-keys -t "orch-[name]" "unset CLAUDECODE"
+tmux send-keys -t "orch-[name]" Enter
+
+# 6. Set env vars BEFORE launching Claude Code
 tmux send-keys -t "orch-[name]" "export CLAUDE_SESSION_DIR=[initiative]-$(date +%Y%m%d)"
 tmux send-keys -t "orch-[name]" Enter
 tmux send-keys -t "orch-[name]" "export CLAUDE_SESSION_ID=orch-[name]"
@@ -297,14 +309,14 @@ tmux send-keys -t "orch-[name]" Enter
 tmux send-keys -t "orch-[name]" "export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1"
 tmux send-keys -t "orch-[name]" Enter
 
-# 5. Launch Claude Code with ccorch (Enter MUST be separate!)
+# 7. Launch Claude Code with ccorch (Enter MUST be separate — Pattern 1!)
 tmux send-keys -t "orch-[name]" "ccorch"
 tmux send-keys -t "orch-[name]" Enter
 
-# 6. Wait for initialization
-sleep 5
+# 8. Wait for Claude Code initialization (longer than default — ccorch needs time)
+sleep 8
 
-# 7. CRITICAL: Select orchestrator output style via direct command
+# 9. CRITICAL: Select orchestrator output style via direct command
 #    This MUST happen BEFORE the wisdom injection prompt.
 #    The orchestrator starts in "default" output style - it won't reliably
 #    follow output-style instructions embedded in text. System 3 must
@@ -317,9 +329,10 @@ tmux send-keys -t "orch-[name]" "/output-style orchestrator"
 tmux send-keys -t "orch-[name]" Enter
 sleep 3  # Wait for output style to load
 
-# 8. Send initialization prompt (orchestrator output style is now active)
-tmux send-keys -t "orch-[name]" "$(cat /tmp/wisdom-${INITIATIVE}.md)"
-sleep 2  # CRITICAL: Large pastes need time for bracketed paste processing
+# 10. Send initialization prompt via file reference (NOT paste — markdown breaks paste)
+#     Write wisdom to a temp file BEFORE this step, then reference it here.
+#     This avoids tmux bracketed paste issues with large markdown content.
+tmux send-keys -t "orch-[name]" "Read the file at /tmp/wisdom-${INITIATIVE}.md and follow those instructions."
 tmux send-keys -t "orch-[name]" Enter
 ```
 
