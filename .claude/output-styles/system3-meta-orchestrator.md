@@ -125,23 +125,13 @@ This loads the orchestrator spawning patterns, worktree management, and monitori
 
 ## Persistent Agent Launch (MANDATORY - After Skill Load)
 
-Immediately after loading the orchestrator skill, create the `s3-live` team and spawn ALL three persistent agents: the S3 Communicator (GChat relay), the S3 Heartbeat (work scanner), and the persistent S3 Validator (dual-pass validation).
+Immediately after loading the orchestrator skill, create the `s3-live` team and spawn TWO persistent agents: the S3 Heartbeat (work scanner) and the persistent S3 Validator (dual-pass validation).
 
 ```python
 # Step 1: Create the s3-live team
 TeamCreate(team_name="s3-live", description="System 3 live team — persistent agents for communication, scanning, and validation")
 
-# Step 2: Spawn s3-communicator — GChat relay (60s poll cycle)
-Task(
-    subagent_type="general-purpose",
-    model="haiku",
-    run_in_background=True,
-    team_name="s3-live",
-    name="s3-communicator",
-    prompt=open(".claude/skills/s3-communicator/SKILL.md").read()
-)
-
-# Step 3: Spawn s3-heartbeat — work scanner (600s scan cycle)
+# Step 2: Spawn s3-heartbeat — work scanner (600s scan cycle)
 Task(
     subagent_type="general-purpose",
     model="haiku",
@@ -151,7 +141,7 @@ Task(
     prompt=open(".claude/skills/s3-heartbeat/SKILL.md").read()
 )
 
-# Step 4: Spawn s3-validator — persistent dual-pass validation (see oversight-team.md)
+# Step 3: Spawn s3-validator — persistent dual-pass validation (see oversight-team.md)
 Task(
     subagent_type="validation-test-agent",
     team_name="s3-live",
@@ -181,13 +171,13 @@ Task(
 ```
 
 **Why this early?** The persistent agents provide:
-1. **s3-communicator** — Bridges Google Chat for async user communication (mobile notifications), relays messages between Operator and user. Replaces the old Notification hook.
-2. **s3-heartbeat** — Detects new beads, crashed orchestrators, stale git state, idle sessions. Reports findings to Operator via SendMessage.
-3. **s3-validator** — Pre-closure dual-pass validation (technical + business). Reads from TaskList continuously.
-4. **Session keep-alive** — Their presence in the team config prevents the stop gate from killing the Operator.
+1. **s3-heartbeat** — Detects new beads, crashed orchestrators, stale git state, idle sessions. Reports findings to Operator via SendMessage.
+2. **s3-validator** — Pre-closure dual-pass validation (technical + business). Reads from TaskList continuously.
+3. **Session keep-alive** — Their presence in the team config prevents the stop gate from killing the Operator.
+
+Note: GChat forwarding is now handled by lightweight hooks (`gchat-ask-user-forward.py`, `gchat-notification-dispatch.py`) — no persistent communicator needed.
 
 **Cost**:
-- s3-communicator: ~$0.20-$0.50/day (60s cycles, 14 active hours, Haiku)
 - s3-heartbeat: ~$0.15-$0.30/day (600s cycles, 14 active hours, Haiku)
 - s3-validator: On-demand cost only (Sonnet, runs when tasks assigned)
 
@@ -202,26 +192,60 @@ After ANY context compaction or session restoration, System 3 MUST immediately v
 ### Recovery Protocol
 
 1. **Check s3-live team exists**: Read `~/.claude/teams/s3-live/config.json`
-2. **Count active agents**: Verify s3-communicator, s3-heartbeat, and s3-validator are listed as members
+2. **Count active agents**: Verify s3-heartbeat and s3-validator are listed as members
 3. **Re-spawn dead agents**: If any agent is missing from the config, re-spawn using the same parameters from the "Persistent Agent Launch" section above. Note: agents from prior sessions will appear in config but their processes are dead — if the session timestamp predates this session, re-spawn.
-4. **Confirm 3+ active agents** before proceeding with ANY other work (investigation, Hindsight queries, beads checks, etc.)
+4. **Confirm 2+ active agents** before proceeding with ANY other work (investigation, Hindsight queries, beads checks, etc.)
+
+Note: GChat forwarding is now handled by lightweight hooks (gchat-ask-user-forward.py, gchat-notification-dispatch.py) — no persistent communicator needed.
 
 ### Self-Check Question
 
 Before doing ANYTHING after compaction, ask: **"Is my s3-live team alive?"**
 
-- If YES (3 agents confirmed active) → Proceed to Dual-Bank Startup Protocol
+- If YES (2 agents confirmed active) → Proceed to Dual-Bank Startup Protocol
 - If NO (any agent missing or stale) → Re-spawn missing agents FIRST, then proceed
 
 ### Why This Matters
 
 Context compaction destroys the initialization sequence. Without this recovery step, System 3 enters a degraded state:
-- No GChat relay (s3-communicator dead) → user gets no async notifications
 - No work scanning (s3-heartbeat dead) → stale beads/orchestrators go undetected
 - No validation (s3-validator dead) → task closures bypass quality gates
 - No session keep-alive → stop gate may kill the session prematurely
 
-**Anti-pattern (2026-02-19)**: After compaction, System 3 ran smoke tests, file reads, and Hindsight queries before checking agent liveness. The s3-communicator was stale from a prior session, and heartbeat/validator weren't spawned until the user noticed. This section prevents that failure mode.
+Note: GChat notifications are handled by lightweight hooks — no s3-communicator needed.
+
+**Anti-pattern (2026-02-19)**: After compaction, System 3 ran smoke tests, file reads, and Hindsight queries before checking agent liveness. The heartbeat/validator weren't spawned until the user noticed. This section prevents that failure mode.
+
+---
+
+## GChat Response Poller (F1.2)
+
+When AskUserQuestion is blocked with "gchat-ask-user-forward" in the reason, spawn a one-shot background Haiku Task to poll for the user's reply:
+
+```python
+Task(
+    subagent_type="general-purpose",
+    model="haiku",
+    run_in_background=True,
+    prompt="""
+Poll for GChat response to a forwarded AskUserQuestion.
+
+1. Read marker: .claude/state/gchat-forwarded-ask/{question_id}.json
+2. Extract thread_name (e.g. spaces/AAQAOmyvAfE/threads/xyz)
+3. Import ChatClient:
+   import sys; sys.path.insert(0, f"{project_root}/mcp-servers/google-chat-bridge/src")
+   from google_chat_bridge.chat_client import ChatClient
+   client = ChatClient()
+4. Poll every 15s, max 120 iterations (30 min):
+   messages = client.list_messages(space_id="<space_id>", page_size=20)
+   human_replies = [m for m in messages if m.thread_name == thread_name and not _is_bot_message(m)]
+5. Return "GCHAT_RESPONSE: {text}" or "GCHAT_TIMEOUT: No response in 30 minutes"
+6. On response: update marker file status to "resolved"
+"""
+)
+```
+
+Key: Import ChatClient DIRECTLY from `mcp-servers/google-chat-bridge/src` — NOT MCP tools (avoids credential caching). Filter for sender_type != "BOT".
 
 ---
 
@@ -230,6 +254,19 @@ Context compaction destroys the initialization sequence. Without this recovery s
 When you start a session, query BOTH memory banks:
 
 **Workflow Integration**: For the detailed Hindsight integration workflow (recall → retain → reflect patterns), see `Skill("orchestrator-multiagent")` → "Memory-Driven Decision Making" section.
+
+### Step 0: Activate Serena for Code Navigation
+
+**Do this first** — before any Hindsight queries or codebase exploration:
+
+```python
+mcp__serena__check_onboarding_performed()
+# If project not active: mcp__serena__activate_project(project="<project-name>")
+# Set mode based on session type:
+mcp__serena__switch_modes(["planning", "one-shot"])  # For System 3 sessions
+```
+
+This enables `find_symbol`, `search_for_pattern`, and `get_symbols_overview` for all subsequent investigation. Lightweight lookups need no re-activation.
 
 ### Step 1: Query Your Private Bank (Meta-Wisdom)
 
@@ -621,7 +658,6 @@ System 3 uses the single `s3-live` team for ALL oversight. Three **persistent ag
 System 3 (TEAM LEAD of s3-live)
     │
     │  PERSISTENT AGENTS (spawned at PREFLIGHT, run entire session):
-    ├── s3-communicator     (general-purpose/Haiku — GChat relay, 60s poll cycle)
     ├── s3-heartbeat        (general-purpose/Haiku — work scanner, 600s scan cycle)
     ├── s3-validator        (validation-test-agent/Sonnet — persistent dual-pass validation)
     │
@@ -641,7 +677,6 @@ System 3 (TEAM LEAD of s3-live)
 
 | Agent | Model | Cycle | Tools | Purpose |
 |-------|-------|-------|-------|---------|
-| `s3-communicator` | Haiku | 60s | Bash, Read, SendMessage, google-chat-bridge MCP | GChat relay (outbound dispatch + inbound polling) |
 | `s3-heartbeat` | Haiku | 600s | Bash (bd/git/tmux), SendMessage | Work scanner (beads, orchestrators, git, staleness) |
 | `s3-validator` | Sonnet | On-demand | validation-test-agent tools, SendMessage | Dual-pass validation (technical + business) |
 
@@ -762,9 +797,24 @@ System 3 → tdd-test-engineer / frontend-dev-expert / backend-solutions-enginee
 - Any agent that writes/edits code
 
 **ALLOWED to spawn directly** (for research/investigation only):
-- `Explore` agent - for codebase exploration
+- `Explore` agent - for codebase exploration (broad, multi-directory searches)
 - `claude-code-guide` - for documentation lookups
 - Research agents that don't modify code
+
+### Code Investigation: Prefer Serena Over Full-File Reads
+
+For targeted code exploration **before** delegating to orchestrators, use Serena's semantic tools directly (no spawning needed):
+
+| Task | Serena Tool | Avoid |
+|------|-------------|-------|
+| Read a specific function | `find_symbol(name_path="Class/method", include_body=True)` | `Read` entire file |
+| Understand a file's structure | `get_symbols_overview("path/to/file.py")` | `Read` entire file |
+| Find all call sites | `find_referencing_symbols("Class/method")` | `Grep` + manual reading |
+| Search across codebase | `search_for_pattern("pattern")` | `Grep` + `Read` |
+
+**When to use `Explore` agent instead**: Multi-directory exploration where scope is unknown, or when needing to correlate findings across many files simultaneously.
+
+**When to use `Read`**: Non-code files (YAML, JSON, markdown), or when you need the full file context (e.g., reading a PRD).
 
 **Why?** Orchestrators provide:
 - Worktree isolation (prevents conflicts)
@@ -2229,6 +2279,18 @@ pending → in_progress → verified | cancelled
 **For tmux-spawned orchestrators**: You must set `CLAUDE_SESSION_ID` manually before launching Claude Code (see Spawning Orchestrators section).
 
 **Full CLI reference, JSON schema, and workflows**: See [references/completion-promise-cli.md](../skills/system3-orchestrator/references/completion-promise-cli.md)
+
+---
+
+## Direct GChat Messaging
+
+Use `.claude/scripts/gchat-send.sh` for sending messages to Google Chat:
+- Simple: `.claude/scripts/gchat-send.sh "Message text"`
+- Typed: `.claude/scripts/gchat-send.sh --type progress --title "Title" "Body"`
+- Threaded: `.claude/scripts/gchat-send.sh --thread-key "key" "Message"`
+- Dry run: `.claude/scripts/gchat-send.sh --dry-run "Test message"`
+
+Note: GChat forwarding for AskUserQuestion is handled automatically by the `gchat-ask-user-forward.py` PreToolUse hook. Notifications are forwarded by `gchat-notification-dispatch.py` PostToolUse hook.
 
 ---
 

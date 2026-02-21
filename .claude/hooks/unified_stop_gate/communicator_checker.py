@@ -74,77 +74,12 @@ class CommunicatorActiveChecker:
         return None
 
     def check(self) -> CheckResult:
-        """Check if an active S3 Communicator is running.
-
-        Returns:
-            CheckResult with:
-            - passed=True if not System 3, no config, no communicator, or communicator inactive
-            - passed=False if System 3 AND communicator is active (BLOCK)
-        """
-        # Only applies to System 3 sessions
-        if not self.config.is_system3:
-            return CheckResult(
-                priority=Priority.P1_5_COMMUNICATOR_ACTIVE,
-                passed=True,
-                message="Not a System 3 session - communicator check skipped",
-                blocking=False,
-            )
-
-        config_path = self._get_team_config_path()
-
-        # No team config = no communicator running
-        if not config_path.exists():
-            return CheckResult(
-                priority=Priority.P1_5_COMMUNICATOR_ACTIVE,
-                passed=True,
-                message=f"No s3-live team config found at {config_path}",
-                blocking=True,
-            )
-
-        # Read and parse team config
-        try:
-            with open(config_path, "r") as f:
-                team_config = json.load(f)
-        except (json.JSONDecodeError, OSError) as e:
-            # Fail-open: if we can't read the config, don't block
-            return CheckResult(
-                priority=Priority.P1_5_COMMUNICATOR_ACTIVE,
-                passed=True,
-                message=f"Error reading s3-live team config (fail-open): {e}",
-                blocking=True,
-            )
-
-        # Find the communicator member
-        communicator = self._find_communicator_member(team_config)
-
-        if communicator is None:
-            return CheckResult(
-                priority=Priority.P1_5_COMMUNICATOR_ACTIVE,
-                passed=True,
-                message=f"No '{S3_COMMUNICATOR_MEMBER_NAME}' member found in s3-live team",
-                blocking=True,
-            )
-
-        # Check if communicator is active
-        is_active = communicator.get("isActive", False)
-
-        if not is_active:
-            return CheckResult(
-                priority=Priority.P1_5_COMMUNICATOR_ACTIVE,
-                passed=True,
-                message=f"S3 Communicator exists but is not active (isActive=False)",
-                blocking=True,
-            )
-
-        # Communicator IS active — BLOCK System 3 from stopping
-        agent_id = communicator.get("agentId", "unknown")
-        agent_type = communicator.get("agentType", "unknown")
-
+        """Communicator check deprecated — replaced by GChat hooks (PRD-GCHAT-HOOKS-001)."""
         return CheckResult(
             priority=Priority.P1_5_COMMUNICATOR_ACTIVE,
-            passed=False,
-            message=self._format_block_message(agent_id, agent_type),
-            blocking=True,
+            passed=True,
+            message="Communicator check skipped — replaced by GChat hooks (PRD-GCHAT-HOOKS-001)",
+            blocking=False,
         )
 
     def _format_block_message(self, agent_id: str, agent_type: str) -> str:

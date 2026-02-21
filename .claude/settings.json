@@ -78,7 +78,14 @@
         ]
       }
     ],
-    "Notification": [],
+    "Notification": [
+      {
+        "hooks": [{
+          "type": "command",
+          "command": "python3 $CLAUDE_PROJECT_DIR/.claude/hooks/gchat-notification-dispatch.py"
+        }]
+      }
+    ],
     "Stop": [
       {
         "hooks": [
@@ -152,6 +159,16 @@
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/doc-gardener-pre-push-hook.py",
             "timeout": 65
+          }
+        ]
+      },
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $CLAUDE_PROJECT_DIR/.claude/hooks/gchat-ask-user-forward.py",
+            "timeout": 10000
           }
         ]
       }

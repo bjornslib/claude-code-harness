@@ -111,6 +111,7 @@ Check the WORK STATE for remaining actionable work:
 ### Layer 3: Session Exit Validation
 The conversation MUST show that System 3 presented option questions to the user:
 - Did System 3 use AskUserQuestion to present 2-4 concrete next-step options?
+- GChat-forwarded AskUserQuestion (via gchat-ask-user-forward.py hook) also counts — if the GCHAT QUESTION STATUS section above is present, the requirement is satisfied even if no terminal AskUserQuestion appears in the transcript
 - Is System 3 waiting for the user's response?
 - If no option questions were presented, the session is NOT properly complete
 
@@ -487,6 +488,21 @@ class System3ContinuationJudgeChecker:
         if work_state:
             prompt_parts.append(f"## WORK STATE AND TASK PRIMITIVES\n\n{work_state}\n")
 
+        # Check for GChat-forwarded questions (satisfies Layer 3 AskUserQuestion requirement)
+        if self._is_strict:
+            gchat_markers_present = self._check_gchat_markers()
+            if gchat_markers_present:
+                prompt_parts.append(
+                    "## GCHAT QUESTION STATUS\n\n"
+                    "Recent GChat-forwarded AskUserQuestion marker(s) found (written < 30 min ago). "
+                    "The gchat-ask-user-forward.py hook intercepted an AskUserQuestion call, "
+                    "forwarded it to Google Chat, and wrote a marker file. "
+                    "This SATISFIES the Layer 3 requirement — AskUserQuestion WAS presented to "
+                    "the user (via GChat instead of the terminal). "
+                    "Do NOT block the stop solely because no terminal AskUserQuestion is visible "
+                    "in the conversation transcript.\n"
+                )
+
         if self._is_strict:
             prompt_parts.append(
                 "## KEY QUESTION\n"
@@ -503,6 +519,53 @@ class System3ContinuationJudgeChecker:
         prompt_parts.append(f"## CONVERSATION (last turns)\n\n{conversation}")
 
         return "\n".join(prompt_parts)
+
+    def _check_gchat_markers(self) -> bool:
+        """Check if there are recent GChat-forwarded AskUserQuestion marker files.
+
+        Marker files at .claude/state/gchat-forwarded-ask/{question_id}.json are written
+        by the gchat-ask-user-forward.py PreToolUse hook when it blocks an interactive
+        AskUserQuestion and forwards the question to Google Chat instead.
+
+        A recent marker (modified within 30 minutes) counts as equivalent to a terminal
+        AskUserQuestion for Layer 3 compliance purposes, breaking the potential infinite loop:
+          AskUserQuestion denied → stop gate blocks → AskUserQuestion denied → ...
+
+        Returns:
+            True if at least one recent marker file (< 30 min) exists.
+            False if no markers, or all markers are stale (> 30 min).
+        """
+        import time
+
+        project_dir = os.environ.get('CLAUDE_PROJECT_DIR', os.getcwd())
+        marker_dir = os.path.join(project_dir, '.claude', 'state', 'gchat-forwarded-ask')
+
+        if not os.path.exists(marker_dir):
+            return False
+
+        max_age_seconds = 30 * 60  # 30 minutes
+        now = time.time()
+
+        try:
+            for filename in os.listdir(marker_dir):
+                if not filename.endswith('.json'):
+                    continue
+                filepath = os.path.join(marker_dir, filename)
+                try:
+                    mtime = os.path.getmtime(filepath)
+                    if (now - mtime) <= max_age_seconds:
+                        print(
+                            f"[System3Judge] GChat marker found: {filename} "
+                            f"(age {int(now - mtime)}s < 1800s)",
+                            file=sys.stderr,
+                        )
+                        return True  # At least one recent marker — question was presented
+                except OSError:
+                    continue  # Skip files we can't stat
+        except Exception as e:
+            print(f"[System3Judge] Error checking GChat markers: {e}", file=sys.stderr)
+
+        return False
 
     def _call_haiku_judge(self, api_key: str, user_prompt: str) -> Dict[str, Any]:
         """Call Haiku API to evaluate session continuation.

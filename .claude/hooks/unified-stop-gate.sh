@@ -352,5 +352,12 @@ ${IMPL_COMPLETE_WORK}
 These tasks have been implemented but not yet validated by System 3's oversight team."
 fi
 
+# Send session end notification to GChat (best-effort, S3 sessions only)
+if [[ "$SESSION_ID" == system3-* ]] || [[ "$CLAUDE_OUTPUT_STYLE" == *system3* ]]; then
+    "$CLAUDE_PROJECT_DIR/.claude/scripts/gchat-send.sh" --type session_end \
+        --title "Session Ending" \
+        "System 3 session ending. Result: $RESULT" 2>/dev/null || true
+fi
+
 # Always approve (blocking happens earlier or not at all)
 output_json "approve" "systemMessage" "$MSG_PARTS"
