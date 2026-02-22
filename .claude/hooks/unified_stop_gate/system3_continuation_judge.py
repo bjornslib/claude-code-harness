@@ -488,20 +488,21 @@ class System3ContinuationJudgeChecker:
         if work_state:
             prompt_parts.append(f"## WORK STATE AND TASK PRIMITIVES\n\n{work_state}\n")
 
-        # Check for GChat-forwarded questions (satisfies Layer 3 AskUserQuestion requirement)
+        # Check GChat communication status (did S3 consult the user?)
         if self._is_strict:
-            gchat_markers_present = self._check_gchat_markers()
-            if gchat_markers_present:
-                prompt_parts.append(
-                    "## GCHAT QUESTION STATUS\n\n"
-                    "GChat-forwarded AskUserQuestion marker found (created after the last stop-gate block). "
-                    "The gchat-ask-user-forward.py hook intercepted an AskUserQuestion call, "
-                    "forwarded it to Google Chat, and wrote a marker file. "
-                    "This SATISFIES the Layer 3 requirement — AskUserQuestion WAS presented to "
-                    "the user (via GChat instead of the terminal). "
-                    "Do NOT block the stop solely because no terminal AskUserQuestion is visible "
-                    "in the conversation transcript.\n"
-                )
+            gchat_status = self._check_gchat_markers()
+            prompt_parts.append(
+                "## GCHAT COMMUNICATION STATUS\n\n"
+                f"{gchat_status['details']}\n\n"
+                "Consider carefully:\n"
+                "- If the user was asked a question AND replied, their reply should inform "
+                "whether stopping is appropriate (e.g., if user said 'end session', allow stop).\n"
+                "- If the user was asked a question but hasn't replied yet, S3 should wait for the reply.\n"
+                "- If NO question was asked to the user this session, consider whether one SHOULD be asked "
+                "before stopping — especially if there's available work or the session accomplished something "
+                "the user should be informed about.\n"
+                "- GChat questions are equivalent to terminal AskUserQuestion — both reach the user.\n"
+            )
 
         if self._is_strict:
             prompt_parts.append(
@@ -520,38 +521,35 @@ class System3ContinuationJudgeChecker:
 
         return "\n".join(prompt_parts)
 
-    def _check_gchat_markers(self) -> bool:
-        """Check if a GChat-forwarded AskUserQuestion marker exists after the last stop-block.
+    def _check_gchat_markers(self) -> Dict[str, Any]:
+        """Check GChat-forwarded AskUserQuestion markers for this session.
 
         Marker files at .claude/state/gchat-forwarded-ask/{question_id}.json are written
         by the gchat-ask-user-forward.py PreToolUse hook when it blocks an interactive
         AskUserQuestion and forwards the question to Google Chat instead.
 
-        Uses the stop-block timestamp file (written by Step 1.8 of the stop gate) to
-        determine if a question was asked SINCE the last stop attempt. This replaces
-        the previous 30-minute window approach.
-
-        Returns:
-            True if at least one marker for this session was created after the last stop-block.
-            False if no markers exist after the last stop-block.
+        Returns a dict with:
+            - asked: bool — whether any question was forwarded to GChat this session
+            - answered: bool — whether the user replied to any forwarded question
+            - details: str — human-readable summary for the judge prompt
         """
         import json as _json
 
         project_dir = os.environ.get('CLAUDE_PROJECT_DIR', os.getcwd())
         session_id = os.environ.get('CLAUDE_SESSION_ID', '')
         marker_dir = os.path.join(project_dir, '.claude', 'state', 'gchat-forwarded-ask')
-        block_file = os.path.join(project_dir, '.claude', 'state', f'last-stop-block-{session_id}')
+
+        result = {"asked": False, "answered": False, "details": ""}
 
         if not os.path.exists(marker_dir):
-            return False
+            result["details"] = "No GChat markers directory found — no questions forwarded to GChat this session."
+            return result
 
-        # Get the last stop-block timestamp (0 if no block file = first attempt)
-        last_block_ts = 0.0
-        if os.path.isfile(block_file):
-            try:
-                last_block_ts = float(open(block_file).read().strip())
-            except (ValueError, OSError):
-                last_block_ts = 0.0
+        asked_count = 0
+        resolved_count = 0
+        pending_count = 0
+        latest_question = ""
+        latest_answer = ""
 
         try:
             for filename in os.listdir(marker_dir):
@@ -559,25 +557,45 @@ class System3ContinuationJudgeChecker:
                     continue
                 filepath = os.path.join(marker_dir, filename)
                 try:
-                    # Check session ownership
                     with open(filepath) as f:
                         marker_data = _json.load(f)
                     if marker_data.get('session_id') != session_id:
                         continue
-                    mtime = os.path.getmtime(filepath)
-                    if mtime > last_block_ts:
-                        print(
-                            f"[System3Judge] GChat marker found: {filename} "
-                            f"(created {int(mtime - last_block_ts)}s after last stop-block)",
-                            file=sys.stderr,
-                        )
-                        return True  # At least one recent marker — question was presented
-                except OSError:
-                    continue  # Skip files we can't stat
+                    asked_count += 1
+                    status = marker_data.get('status', 'pending')
+                    if status == 'resolved':
+                        resolved_count += 1
+                        latest_answer = marker_data.get('answer', marker_data.get('response', ''))
+                    else:
+                        pending_count += 1
+                    # Track the latest question text
+                    questions = marker_data.get('questions', [])
+                    if questions:
+                        latest_question = questions[0].get('question', '')
+                except (OSError, _json.JSONDecodeError):
+                    continue
         except Exception as e:
             print(f"[System3Judge] Error checking GChat markers: {e}", file=sys.stderr)
 
-        return False
+        result["asked"] = asked_count > 0
+        result["answered"] = resolved_count > 0
+
+        if asked_count == 0:
+            result["details"] = "No GChat questions were forwarded to the user during this session."
+        else:
+            parts = [f"{asked_count} question(s) forwarded to GChat this session."]
+            if resolved_count > 0:
+                parts.append(f"{resolved_count} answered by user.")
+                if latest_answer:
+                    parts.append(f"Latest user reply: \"{latest_answer}\"")
+            if pending_count > 0:
+                parts.append(f"{pending_count} still awaiting reply.")
+            if latest_question:
+                parts.append(f"Latest question asked: \"{latest_question}\"")
+            result["details"] = " ".join(parts)
+
+        print(f"[System3Judge] GChat markers: asked={asked_count}, resolved={resolved_count}, pending={pending_count}", file=sys.stderr)
+        return result
 
     def _call_haiku_judge(self, api_key: str, user_prompt: str) -> Dict[str, Any]:
         """Call Haiku API to evaluate session continuation.

@@ -169,109 +169,11 @@ Marker directory: $GCHAT_ASK_DIR"
     fi
 fi
 
-# --- Step 1.8: Mandatory AskUserQuestion Before Exit (system3-* sessions) ---
-# S3 sessions MUST ask the user a question (via AskUserQuestion → GChat) as
-# the LAST thing before stopping. There is NO exception — every stop attempt
-# requires a fresh question asked SINCE the previous stop attempt.
-#
-# Mechanism: timestamp-based state machine.
-#   1. Stop gate blocks → writes "last-stop-block" timestamp file
-#   2. S3 asks question → GChat marker created (timestamp > last-stop-block)
-#   3. Stop gate runs again → finds marker after last block → PASS
-#
-# This ensures the user is ALWAYS notified before a session ends, even when
-# away from the terminal. Old questions from earlier don't count.
-
-if [[ "$SESSION_ID" == system3-* ]] && [ "$PROMISE_PASSED" = true ]; then
-    GCHAT_ASK_DIR="$PROJECT_ROOT/.claude/state/gchat-forwarded-ask"
-    STOP_BLOCK_FILE="$PROJECT_ROOT/.claude/state/last-stop-block-${SESSION_ID}"
-
-    if [ -f "$STOP_BLOCK_FILE" ]; then
-        # Subsequent stop attempt — check if a question was asked SINCE the last block
-        LAST_BLOCK_TS=$(cat "$STOP_BLOCK_FILE" 2>/dev/null || echo "0")
-        ASKED_SINCE_BLOCK=false
-
-        if [ -d "$GCHAT_ASK_DIR" ]; then
-            for marker in "$GCHAT_ASK_DIR"/*.json; do
-                [ -f "$marker" ] || continue
-                if python3 -c "
-import json, sys, os
-m = json.load(open('$marker'))
-if m.get('session_id') != os.environ.get('CLAUDE_SESSION_ID', ''):
-    sys.exit(1)
-marker_ts = os.path.getmtime('$marker')
-if marker_ts > float('$LAST_BLOCK_TS'):
-    sys.exit(0)
-sys.exit(1)
-" 2>/dev/null; then
-                    ASKED_SINCE_BLOCK=true
-                    break
-                fi
-            done
-        fi
-
-        if [ "$ASKED_SINCE_BLOCK" = true ]; then
-            # Question asked since last block → allow stop
-            rm -f "$STOP_BLOCK_FILE"  # Clean up for next cycle
-            # Fall through to remaining checks
-            :
-        else
-            # Still no question since block → block again (update timestamp)
-            python3 -c "import time; print(time.time())" > "$STOP_BLOCK_FILE"
-
-            output_json "block" "reason" "🚫 NO USER QUESTION BEFORE EXIT
-
-You were already told to ask the user a question before stopping.
-Use AskUserQuestion to propose next steps (it will forward to GChat).
-Wait for the reply via the GChat round-trip poller, then try stopping again."
-            exit 0
-        fi
-    else
-        # First stop attempt — ALWAYS block. S3 must ask user before stopping.
-        mkdir -p "$(dirname "$STOP_BLOCK_FILE")"
-        python3 -c "import time; print(time.time())" > "$STOP_BLOCK_FILE"
-
-        # Gather available beads work to include in the block message
-        BEADS_SUMMARY=""
-        if command -v bd &>/dev/null; then
-            BD_READY=$(bd ready 2>/dev/null || echo "")
-            BD_OPEN=$(bd list --status=open 2>/dev/null || echo "")
-            BD_PROGRESS=$(bd list --status=in_progress 2>/dev/null || echo "")
-            if [ -n "$BD_READY" ] && ! echo "$BD_READY" | grep -qi "no.*ready\|no.*issues\|nothing"; then
-                BEADS_SUMMARY="
-
-## Available Beads Work (bd ready)
-$BD_READY"
-            fi
-            if [ -n "$BD_OPEN" ] && ! echo "$BD_OPEN" | grep -qi "no.*open\|no.*issues\|nothing"; then
-                BEADS_SUMMARY="${BEADS_SUMMARY}
-
-## Open Issues (bd list --status=open)
-$BD_OPEN"
-            fi
-            if [ -n "$BD_PROGRESS" ] && ! echo "$BD_PROGRESS" | grep -qi "no.*progress\|no.*issues\|nothing"; then
-                BEADS_SUMMARY="${BEADS_SUMMARY}
-
-## In Progress (bd list --status=in_progress)
-$BD_PROGRESS"
-            fi
-        fi
-
-        output_json "block" "reason" "🚫 NO USER QUESTION BEFORE EXIT
-
-System 3 sessions MUST ask the user a question before stopping. No exceptions.
-
-Before stopping, you MUST:
-1. Review available work (shown below if any)
-2. Propose next steps via AskUserQuestion (which forwards to GChat)
-   - If work is available: propose which tasks to tackle
-   - If no work: ask the user what they'd like you to work on
-3. Wait for the user's reply via the GChat round-trip poller
-4. Then you may stop (the stop gate will pass on the next attempt)
-${BEADS_SUMMARY}"
-        exit 0
-    fi
-fi
+# --- Step 1.8: REMOVED (2026-02-22) ---
+# Previously enforced AskUserQuestion programmatically before exit.
+# Now handled by the Haiku judge (Step 5) which considers GChat markers
+# as part of its holistic session evaluation. This avoids race conditions
+# with timestamp-based state machines.
 
 # --- Step 2: Orchestrator Guidance Check (orch-* sessions only) ---
 
