@@ -286,8 +286,10 @@ def format_auto_answer_for_gchat(
     reasoning = auto_result.get("reasoning", "")
     short_session = session_id[:24]
 
+    project_ctx = _get_project_context()
     lines = [
         f"*[Auto-Answered]* AskUserQuestion from session `{short_session}`",
+        f"_{project_ctx}_",
         "",
     ]
 
@@ -318,6 +320,29 @@ def format_auto_answer_for_gchat(
     return "\n".join(lines)
 
 
+def _get_project_context() -> str:
+    """
+    Derive a short project context string from the environment.
+
+    Returns a 1-2 sentence summary like:
+      "Project: claude-harness-setup | Output style: system3-meta-orchestrator"
+    """
+    project_dir = os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())
+    project_name = os.path.basename(project_dir)
+    output_style = os.environ.get("CLAUDE_OUTPUT_STYLE", "")
+
+    parts = [f"Project: *{project_name}*"]
+    if output_style:
+        parts.append(f"Style: `{output_style}`")
+
+    # Check for active initiative from CLAUDE_SESSION_DIR or session ID
+    session_dir = os.environ.get("CLAUDE_SESSION_DIR", "")
+    if session_dir:
+        parts.append(f"Initiative: `{session_dir}`")
+
+    return " | ".join(parts)
+
+
 def format_question_for_gchat(questions: list[dict], session_id: str) -> str:
     """
     Format the AskUserQuestion payload into a Google Chat message string.
@@ -337,11 +362,14 @@ def format_question_for_gchat(questions: list[dict], session_id: str) -> str:
 def _format_via_haiku(questions: list[dict], session_id: str) -> str:
     """Call claude-haiku to produce a well-formatted GChat message."""
     questions_json = json.dumps(questions, indent=2)
+    project_ctx = _get_project_context()
     prompt = (
         f"Format the following Claude Code AskUserQuestion payload as a Google Chat "
         f"message.\n\n"
         f"Be concise and clear. Use Google Chat markdown (*bold*, _italic_, `code`).\n"
-        f"Include: the question(s), options (numbered), and a note to reply with the "
+        f"Start with a 1-2 sentence context summary so the reader knows which "
+        f"project/topic this relates to. Use this context: {project_ctx}\n"
+        f"Then include: the question(s), options (numbered), and a note to reply with the "
         f"option number or custom text.\n\n"
         f"Session: {session_id[:30]}\n\n"
         f"Questions payload:\n{questions_json}\n\n"
@@ -375,8 +403,10 @@ def _format_manually(questions: list[dict], session_id: str) -> str:
     Produces a readable GChat message with *bold* labels and numbered options.
     """
     short_session = session_id[:24]
+    project_ctx = _get_project_context()
     lines: list[str] = [
         f"*[Claude Code — System 3]* Question from session `{short_session}`",
+        f"_{project_ctx}_",
         "",
     ]
 
