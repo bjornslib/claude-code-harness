@@ -533,6 +533,114 @@ def generate_pipeline_dot(
     return "\n".join(lines)
 
 
+def generate_scaffold_dot(
+    prd_ref: str = "PRD-SCAFFOLD",
+    label: str = "",
+    promise_id: str = "",
+) -> str:
+    """Generate a minimal scaffold DOT pipeline with only standard structural nodes.
+
+    Produces start -> validate_graph -> init_env -> finalize with no task
+    nodes.  Intended as a starting skeleton to which nodes and edges can be
+    added incrementally with the ``node`` and ``edge`` sub-commands.
+
+    Args:
+        prd_ref:    PRD reference identifier (default: 'PRD-SCAFFOLD').
+        label:      Human-readable initiative label (default: derived from prd_ref).
+        promise_id: Completion promise ID (default: empty).
+
+    Returns:
+        Valid DOT string.
+    """
+    if not label:
+        label = f"Initiative: {prd_ref}"
+
+    slug = re.sub(r"[^a-z0-9]+", "-", prd_ref.lower()).strip("-")
+
+    lines: list[str] = []
+
+    lines.append(f'digraph "{prd_ref}" {{')
+    lines.append("    graph [")
+    lines.append(f'        label="{escape_dot_string(label)}"')
+    lines.append('        labelloc="t"')
+    lines.append("        fontsize=16")
+    lines.append('        rankdir="TB"')
+    lines.append(f'        prd_ref="{prd_ref}"')
+    lines.append(f'        promise_id="{promise_id}"')
+    lines.append("    ];")
+    lines.append("")
+    lines.append('    node [fontname="Helvetica" fontsize=11];')
+    lines.append('    edge [fontname="Helvetica" fontsize=9];')
+    lines.append("")
+
+    # Stage 1: PARSE
+    lines.append("    // ===== STAGE 1: PARSE =====")
+    lines.append("")
+    lines.append("    start [")
+    lines.append("        shape=Mdiamond")
+    lines.append(f'        label="PARSE\\n{prd_ref}"')
+    lines.append('        handler="start"')
+    lines.append('        status="validated"')
+    lines.append("        style=filled")
+    lines.append("        fillcolor=lightgreen")
+    lines.append("    ];")
+    lines.append("")
+
+    # Stage 2: VALIDATE
+    lines.append("    // ===== STAGE 2: VALIDATE =====")
+    lines.append("")
+    lines.append("    validate_graph [")
+    lines.append("        shape=box")
+    lines.append('        label="Validate Graph\\nStructure"')
+    lines.append('        handler="tool"')
+    lines.append('        command="attractor validate pipeline.dot"')
+    lines.append('        status="pending"')
+    lines.append("        style=filled")
+    lines.append("        fillcolor=lightyellow")
+    lines.append("    ];")
+    lines.append("")
+    lines.append('    start -> validate_graph [label="parse complete"];')
+    lines.append("")
+
+    # Stage 3: INITIALIZE
+    lines.append("    // ===== STAGE 3: INITIALIZE =====")
+    lines.append("")
+    lines.append("    init_env [")
+    lines.append("        shape=box")
+    lines.append('        label="Initialize\\nEnvironment"')
+    lines.append('        handler="tool"')
+    lines.append(f'        command="launchorchestrator {slug}"')
+    lines.append('        status="pending"')
+    lines.append("        style=filled")
+    lines.append("        fillcolor=lightyellow")
+    lines.append("    ];")
+    lines.append("")
+    lines.append('    validate_graph -> init_env [label="graph valid"];')
+    lines.append("")
+
+    # Stage 5: FINALIZE (Stage 4 EXECUTE left empty for manual population)
+    lines.append("    // ===== STAGE 5: FINALIZE =====")
+    lines.append("    // Stage 4 EXECUTE: add task nodes with 'cli.py node <file> add ...'")
+    lines.append("")
+    lines.append("    finalize [")
+    lines.append("        shape=Msquare")
+    lines.append('        label="FINALIZE\\nTriple Gate\\ncs-verify"')
+    lines.append('        handler="exit"')
+    lines.append(f'        promise_id="{promise_id}"')
+    lines.append('        status="pending"')
+    lines.append("        style=filled")
+    lines.append("        fillcolor=lightyellow")
+    lines.append("    ];")
+    lines.append("")
+    lines.append('    init_env -> finalize [label="ready"];')
+    lines.append("")
+
+    lines.append("}")
+    lines.append("")
+
+    return "\n".join(lines)
+
+
 def main() -> None:
     """CLI entry point."""
     ap = argparse.ArgumentParser(
@@ -540,8 +648,16 @@ def main() -> None:
     )
     ap.add_argument(
         "--prd",
-        required=True,
-        help="PRD reference identifier (e.g., PRD-S3-ATTRACTOR-001)",
+        default="",
+        help="PRD reference identifier (e.g., PRD-S3-ATTRACTOR-001). Required unless --scaffold.",
+    )
+    ap.add_argument(
+        "--scaffold",
+        action="store_true",
+        help=(
+            "Generate a minimal skeleton pipeline with only structural nodes "
+            "(start, validate_graph, init_env, finalize). No beads data required."
+        ),
     )
     ap.add_argument(
         "--output",
@@ -572,6 +688,30 @@ def main() -> None:
         help="Include all beads without filtering",
     )
     args = ap.parse_args()
+
+    # --- Scaffold mode: bypass beads entirely ---
+    if args.scaffold:
+        prd_ref = args.prd or "PRD-SCAFFOLD"
+        dot = generate_scaffold_dot(
+            prd_ref=prd_ref,
+            label=args.label or "",
+            promise_id=args.promise_id,
+        )
+        if args.output:
+            out_dir = os.path.dirname(os.path.abspath(args.output))
+            if out_dir:
+                os.makedirs(out_dir, exist_ok=True)
+            with open(args.output, "w") as f:
+                f.write(dot)
+            print(f"Scaffold generated: {args.output}", file=sys.stderr)
+            print(f"PRD: {prd_ref}", file=sys.stderr)
+        else:
+            print(dot)
+        return
+
+    # --- Full generation mode ---
+    if not args.prd:
+        ap.error("--prd is required unless --scaffold is specified")
 
     # Get beads data
     beads = get_beads_data(args.beads_json or "")

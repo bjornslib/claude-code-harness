@@ -15,8 +15,11 @@ Usage:
 """
 
 import argparse
+import contextlib
 import datetime
+import fcntl
 import json
+import os
 import re
 import sys
 
@@ -40,6 +43,80 @@ STATUS_COLORS: dict[str, str] = {
     "validated": "lightgreen",
     "failed": "lightcoral",
 }
+
+
+# ---------------------------------------------------------------------------
+# File-level helpers: locking, JSONL logging, finalize signal files
+# ---------------------------------------------------------------------------
+
+_SIGNALS_DIR_NAME = "signals"
+_TRANSITIONS_LOG_SUFFIX = ".transitions.jsonl"
+
+
+@contextlib.contextmanager
+def _dot_file_lock(dot_file: str):
+    """Acquire an exclusive file lock on *dot_file* to prevent concurrent writes.
+
+    Creates a companion `<dot_file>.lock` file for the duration of the
+    critical section and removes it on exit (AC-4).
+    """
+    lock_path = dot_file + ".lock"
+    lock_fd = open(lock_path, "w")
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        lock_fd.close()
+        try:
+            os.unlink(lock_path)
+        except OSError:
+            pass
+
+
+def _append_transition_jsonl(dot_file: str, entry: dict) -> None:
+    """Append *entry* as a single JSON line to the transitions log alongside *dot_file*."""
+    log_path = dot_file + _TRANSITIONS_LOG_SUFFIX
+    with open(log_path, "a") as fh:
+        fh.write(json.dumps(entry) + "\n")
+
+
+def _write_finalize_signal(
+    dot_file: str, node_id: str, new_status: str, node_attrs: dict, session_id: str = ""
+) -> str | None:
+    """Write a signal file when a finalize/exit node reaches 'active' or 'validated' (AC-3).
+
+    Signal files are placed in a ``signals/`` directory adjacent to *dot_file*.
+    If *session_id* is provided it is included in the signal payload so that
+    the receiving session can filter signals by origin.
+
+    Returns the signal file path if written, else None.
+    """
+    node_shape = node_attrs.get("shape", "")
+    node_handler = node_attrs.get("handler", "")
+    is_finalize = node_shape == "Msquare" or node_handler == "exit"
+    if not is_finalize or new_status not in ("active", "validated"):
+        return None
+
+    dot_dir = os.path.dirname(os.path.abspath(dot_file))
+    signals_dir = os.path.join(dot_dir, _SIGNALS_DIR_NAME)
+    os.makedirs(signals_dir, exist_ok=True)
+
+    dot_basename = os.path.splitext(os.path.basename(dot_file))[0]
+    signal_name = f"{dot_basename}-{node_id}-{new_status}.signal"
+    signal_path = os.path.join(signals_dir, signal_name)
+    timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    payload: dict = {
+        "timestamp": timestamp,
+        "node_id": node_id,
+        "status": new_status,
+        "dot_file": dot_file,
+    }
+    if session_id:
+        payload["session_id"] = session_id
+    with open(signal_path, "w") as fh:
+        fh.write(json.dumps(payload))
+    return signal_path
 
 
 def check_transition(current: str, target: str) -> tuple[bool, str]:
@@ -464,6 +541,12 @@ def main() -> None:
         )
         leg.add_argument("--dry-run", action="store_true")
         leg.add_argument("--output", choices=["json", "text"], default="text")
+        leg.add_argument(
+            "--session-id",
+            default="",
+            dest="session_id",
+            help="Session ID embedded in finalize signal files (AC-3)",
+        )
         largs = leg.parse_args(_argv)
         try:
             with open(largs.file, "r") as f:
@@ -503,6 +586,12 @@ def main() -> None:
         default="text",
         help="Output format (default: text)",
     )
+    trans_p.add_argument(
+        "--session-id",
+        default="",
+        dest="session_id",
+        help="Session ID embedded in finalize signal files (AC-3)",
+    )
 
     # --- activate-hexagon sub-command (R4.1 cascade) ---
     ah_p = subparsers.add_parser(
@@ -523,6 +612,12 @@ def main() -> None:
         choices=["json", "text"],
         default="text",
         help="Output format (default: text)",
+    )
+    ah_p.add_argument(
+        "--session-id",
+        default="",
+        dest="session_id",
+        help="Session ID embedded in finalize signal files (AC-3)",
     )
 
     # --- route-decision sub-command (R4.5 cascade) ---
@@ -550,6 +645,12 @@ def main() -> None:
         choices=["json", "text"],
         default="text",
         help="Output format (default: text)",
+    )
+    rd_p.add_argument(
+        "--session-id",
+        default="",
+        dest="session_id",
+        help="Session ID embedded in finalize signal files (AC-3)",
     )
 
     # --- check-finalize-gate sub-command (R4.7) ---
@@ -611,6 +712,17 @@ def _cmd_transition(args: argparse.Namespace, content: str) -> None:
     """Handle the 'transition' sub-command (or legacy positional mode)."""
     dry_run: bool = getattr(args, "dry_run", False)
     output: str = getattr(args, "output", "text")
+    session_id: str = getattr(args, "session_id", "")
+
+    # Fetch node attrs before transition for AC-3 signal check
+    from parser import parse_dot as _parse_dot
+
+    _pre_data = _parse_dot(content)
+    _pre_node_attrs: dict = {}
+    for _n in _pre_data["nodes"]:
+        if _n["id"] == args.node_id:
+            _pre_node_attrs = _n["attrs"]
+            break
 
     try:
         updated, log_msg = apply_transition(content, args.node_id, args.new_status)
@@ -628,13 +740,40 @@ def _cmd_transition(args: argparse.Namespace, content: str) -> None:
             print(f"DRY RUN: {log_msg}")
             print("(no changes written)")
     else:
-        with open(args.file, "w") as f:
-            f.write(updated)
+        with _dot_file_lock(args.file):  # AC-4: exclusive lock during write
+            with open(args.file, "w") as f:
+                f.write(updated)
+
+            # JSONL transition log
+            timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            _append_transition_jsonl(
+                args.file,
+                {
+                    "timestamp": timestamp,
+                    "file": args.file,
+                    "command": "transition",
+                    "node_id": args.node_id,
+                    "new_status": args.new_status,
+                    "log": log_msg,
+                },
+            )
+
+            # AC-3: finalize signal file
+            _sig = _write_finalize_signal(
+                args.file, args.node_id, args.new_status, _pre_node_attrs,
+                session_id=session_id,
+            )
+
         if output == "json":
-            print(json.dumps({"success": True, "log": log_msg, "file": args.file}, indent=2))
+            result = {"success": True, "log": log_msg, "file": args.file}
+            if _sig:
+                result["signal_file"] = _sig
+            print(json.dumps(result, indent=2))
         else:
             print(f"Transition applied: {log_msg}")
             print(f"Updated: {args.file}")
+            if _sig:
+                print(f"Signal written: {_sig}")
 
 
 def _cmd_activate_hexagon(args: argparse.Namespace, content: str) -> None:
@@ -666,8 +805,23 @@ def _cmd_activate_hexagon(args: argparse.Namespace, content: str) -> None:
             print(f"DRY RUN: would activate hexagons: {activated}")
             print("(no changes written)")
     else:
-        with open(args.file, "w") as f:
-            f.write(updated)
+        with _dot_file_lock(args.file):  # AC-4: exclusive lock during write
+            with open(args.file, "w") as f:
+                f.write(updated)
+
+            # JSONL transition log
+            timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            _append_transition_jsonl(
+                args.file,
+                {
+                    "timestamp": timestamp,
+                    "file": args.file,
+                    "command": "activate-hexagon",
+                    "node_id": args.node_id,
+                    "activated": activated,
+                },
+            )
+
         if output == "json":
             print(json.dumps({"success": True, "activated": activated, "file": args.file}, indent=2))
         else:
@@ -708,8 +862,24 @@ def _cmd_route_decision(args: argparse.Namespace, content: str) -> None:
             print(f"DRY RUN: '{args.result}' routing would affect: {affected}")
             print("(no changes written)")
     else:
-        with open(args.file, "w") as f:
-            f.write(updated)
+        with _dot_file_lock(args.file):  # AC-4: exclusive lock during write
+            with open(args.file, "w") as f:
+                f.write(updated)
+
+            # JSONL transition log
+            timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            _append_transition_jsonl(
+                args.file,
+                {
+                    "timestamp": timestamp,
+                    "file": args.file,
+                    "command": "route-decision",
+                    "node_id": args.node_id,
+                    "result": args.result,
+                    "affected": affected,
+                },
+            )
+
         if output == "json":
             print(json.dumps({"success": True, "result": args.result, "affected": affected, "file": args.file}, indent=2))
         else:

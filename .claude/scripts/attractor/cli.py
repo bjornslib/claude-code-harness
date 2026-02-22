@@ -13,10 +13,12 @@ Usage:
     python3 cli.py transition <file.dot> <node_id> <new_status> [--dry-run]
     python3 cli.py checkpoint save <file.dot> [--output=<path>]
     python3 cli.py checkpoint restore <checkpoint.json> [--output=<file.dot>]
-    python3 cli.py generate --prd <PRD-REF> [--output pipeline.dot]
+    python3 cli.py generate --prd <PRD-REF> [--output pipeline.dot] [--scaffold]
     python3 cli.py annotate <file.dot> [--output annotated.dot]
     python3 cli.py init-promise <file.dot> [--json]
     python3 cli.py dashboard <file.dot> [--output json] [--checkpoint <path>]
+    python3 cli.py node <file.dot> list|add|remove|modify [...]
+    python3 cli.py edge <file.dot> list|add|remove [...]
     python3 cli.py lint [--verbose] [--json] [--fix]
     python3 cli.py gardener [--execute] [--report] [--json]
     python3 cli.py install-hooks
@@ -49,10 +51,12 @@ def main() -> None:
         print("  status        Display node status table")
         print("  transition    Advance a node's status")
         print("  checkpoint    Save/restore pipeline state")
-        print("  generate      Generate pipeline.dot from beads task data")
+        print("  generate      Generate pipeline.dot from beads task data (--scaffold for skeleton)")
         print("  annotate      Cross-reference pipeline.dot with beads")
         print("  init-promise  Generate cs-promise commands from pipeline.dot")
         print("  dashboard     Show unified lifecycle dashboard (stage, progress, nodes)")
+        print("  node          CRUD operations for nodes (list/add/remove/modify)")
+        print("  edge          CRUD operations for edges (list/add/remove)")
         print("  lint          Lint .claude/ documentation (delegates to doc-gardener)")
         print("  gardener      Run doc-gardener remediation (delegates to doc-gardener)")
         print("  install-hooks Install pre-push git hook for doc-gardener")
@@ -91,6 +95,12 @@ def main() -> None:
     elif command == "dashboard":
         from dashboard import main as dashboard_main
         dashboard_main()
+    elif command == "node":
+        from node_ops import main as node_ops_main
+        node_ops_main()
+    elif command == "edge":
+        from edge_ops import main as edge_ops_main
+        edge_ops_main()
     elif command == "lint":
         lint_script = os.path.join(DOC_GARDENER_DIR, "lint.py")
         result = subprocess.run(

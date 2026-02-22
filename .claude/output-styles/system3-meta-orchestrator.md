@@ -1958,6 +1958,57 @@ python3 .claude/scripts/attractor/cli.py status \
 4. Store the outcome in Hindsight (retain pipeline summary for future reference)
 5. Report final pipeline status to user
 
+### Iterative Refinement Loop
+
+Use node/edge CRUD commands to iteratively build and refine pipeline graphs after initial scaffolding.
+
+**Workflow**: scaffold → add nodes → add edges → validate → refine → validate
+
+1. **Scaffold** the initial graph from a PRD:
+```bash
+python3 .claude/scripts/attractor/cli.py generate \
+    --scaffold --prd PRD-XXX-001 --output pipeline.dot
+```
+
+2. **Add task nodes** as work items are identified:
+```bash
+python3 .claude/scripts/attractor/cli.py node pipeline.dot add task_auth \
+    --handler codergen --label "Implement auth module" \
+    --set bead_id=AUTH-001
+```
+
+3. **Connect nodes with edges** to define dependencies:
+```bash
+python3 .claude/scripts/attractor/cli.py edge pipeline.dot add task_auth task_api \
+    --label "auth required" --condition pass
+```
+
+4. **Update node status** as work progresses:
+```bash
+python3 .claude/scripts/attractor/cli.py node pipeline.dot modify task_auth \
+    --set status=active
+```
+
+5. **Remove nodes/edges** when scope changes:
+```bash
+# Removing a node automatically cascades edge removal
+python3 .claude/scripts/attractor/cli.py node pipeline.dot remove task_deprecated
+# Remove a specific edge
+python3 .claude/scripts/attractor/cli.py edge pipeline.dot remove task_a task_b \
+    --condition fail
+```
+
+6. **Validate** after every mutation:
+```bash
+python3 .claude/scripts/attractor/cli.py validate pipeline.dot
+```
+
+**Key notes**:
+- `node remove` automatically cascades edge removal (no orphan edges)
+- Use `--dry-run` on any mutating command to preview changes
+- Use `--output json` for machine-readable output in automation
+- All mutations are logged to `<file>.ops.jsonl` for audit
+
 ---
 
 ## Post-Session Reflection (MANDATORY)

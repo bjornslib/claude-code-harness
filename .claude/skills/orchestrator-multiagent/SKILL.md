@@ -715,6 +715,40 @@ The orchestrator does NOT need to set up E2E infrastructure or run acceptance te
 
 ---
 
+## Graph Editing Workflow
+
+Orchestrators use the attractor CLI CRUD commands to build and maintain pipeline graphs.
+
+### Command Reference
+
+| Command | Description |
+|---------|-------------|
+| `cli.py node <file> list [--output json]` | List all nodes in the pipeline |
+| `cli.py node <file> add <id> --handler <type> --label "..." [--set key=value ...]` | Add a new task node |
+| `cli.py node <file> modify <id> --set key=value ... [--dry-run]` | Update node attributes |
+| `cli.py node <file> remove <id> [--dry-run]` | Remove a node (cascades edge removal) |
+| `cli.py edge <file> list [--output json]` | List all edges in the pipeline |
+| `cli.py edge <file> add <src> <dst> [--label "..."] [--condition pass\|fail\|partial]` | Add a dependency edge |
+| `cli.py edge <file> remove <src> <dst> [--condition ...] [--label ...]` | Remove matching edge(s) |
+| `cli.py generate --scaffold --prd <PRD-REF> [--output file.dot]` | Scaffold initial graph from PRD |
+| `cli.py validate <file>` | Validate graph structure and constraints |
+
+### Typical Workflow
+
+1. **Scaffold**: `cli.py generate --scaffold --prd PRD-XXX-001 --output pipeline.dot`
+2. **Populate**: Add task nodes with `node add`, connect with `edge add`
+3. **Validate**: `cli.py validate pipeline.dot` after each batch of changes
+4. **Iterate**: Modify status with `node modify --set status=active`, remove obsolete nodes/edges as scope evolves
+
+### Notes
+
+- `--dry-run` is available on all mutating commands (add, remove, modify)
+- `--output json` is available on list/add/remove for machine-readable output
+- `node remove` automatically removes all edges referencing the deleted node
+- All mutations append to `<file>.ops.jsonl` for audit trail
+
+---
+
 ## Message Bus Integration
 
 **Scope**: Message bus handles System 3 ↔ Orchestrator communication. Worker communication uses native Agent Teams (SendMessage/TaskCreate).
