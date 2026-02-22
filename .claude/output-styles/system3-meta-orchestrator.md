@@ -248,10 +248,14 @@ Parse these from the block reason string.
 
 ### Spawn Blocking Reply Watcher
 
+Uses `gchat-poll-replies.py` which handles OAuth2 credentials directly and uses
+the raw Google Chat API (not ChatMessage objects) for proper `sender.type` and
+`thread.name` matching.
+
 ```python
-# Extract thread_name and marker_path from the block reason
-# thread_name = "spaces/AAQAOmyvAfE/threads/xyz"  (from "Thread name   : ...")
+# Extract marker_path and question_id from the block reason
 # marker_path = ".claude/state/gchat-forwarded-ask/xxx.json"  (from "Marker file   : ...")
+# question_id = the marker filename without .json extension
 # project_dir = os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())
 
 result = Task(
@@ -261,60 +265,34 @@ result = Task(
     description="Watch for GChat reply",
     prompt=f"""
 You are a GChat reply watcher. Your ONLY job: poll for a human reply
-in a specific GChat thread and return it.
+to a forwarded AskUserQuestion and return it.
 
-Thread name: {thread_name}
+Question ID: {question_id}
 Marker file: {marker_path}
 Project dir: {project_dir}
 
 ## Polling Loop
 
-Every 10 seconds, run this Bash command to fetch recent messages
-from the Google Chat API and check for replies in our thread.
-
-IMPORTANT: You MUST pass OAuth2 credentials to ChatClient. A bare
-`ChatClient()` falls back to ADC which may have expired tokens.
+Every 10 seconds, run this Bash command which uses the existing
+gchat-poll-replies.py script (handles OAuth2 creds and thread matching):
 
 ```bash
-python3 -c "
-import sys, json
-sys.path.insert(0, '{project_dir}/mcp-servers/google-chat-bridge/src')
-from google_chat_bridge.chat_client import ChatClient
+python3 {project_dir}/.claude/scripts/gchat-poll-replies.py \
+    --marker-dir {project_dir}/.claude/state/gchat-forwarded-ask
+```
 
-# Read credentials from .mcp.json (same as the MCP server uses)
-mcp_cfg = json.load(open('{project_dir}/.mcp.json'))
-gchat_env = mcp_cfg.get('mcpServers', {{}}).get('google-chat-bridge', {{}}).get('env', {{}})
-
-client = ChatClient(
-    oauth_client_file=gchat_env.get('GOOGLE_CHAT_OAUTH_CLIENT_FILE', ''),
-    token_file=gchat_env.get('GOOGLE_CHAT_TOKEN_FILE', ''),
-    default_space_id=gchat_env.get('GOOGLE_CHAT_SPACE_ID', ''),
-)
-
-# Read the marker to get the forwarded_at timestamp (for time filtering)
-marker = json.load(open('{marker_path}'))
-forwarded_at = marker.get('forwarded_at', '2026-01-01T00:00:00Z')
-
-# Fetch messages AFTER our question was sent, then filter for our thread
-msgs = client.get_messages_after(forwarded_at, page_size=50)
-thread_msgs = [m for m in msgs if getattr(m, 'thread_name', '') == '{thread_name}']
-# The time filter (forwarded_at) already excludes our own question.
-# Any message in this thread after our question is a reply.
-replies = thread_msgs
-if replies:
-    latest = replies[-1]
-    print(json.dumps({{'found': True, 'text': getattr(latest, 'text', ''), 'sender': getattr(latest, 'sender', '')}}))
-else:
-    print(json.dumps({{'found': False}}))
-"
+The script outputs JSON:
+```json
+{{"replies": [{{"question_id": "...", "reply_text": "...", "sender_name": "..."}}], "pending_count": 0}}
 ```
 
 ## Rules
-- Run the command, check the JSON output
-- If `found: true` -> update the marker file (set status="resolved",
-  add response text) -> return EXACTLY: "GCHAT_RESPONSE: <the reply text>"
-- If `found: false` -> sleep 10s -> try again
-- Max 180 attempts (30 minutes). If timeout -> update marker (status="timeout")
+- Run the command, parse JSON output
+- If `replies` array contains an entry matching question_id "{question_id}":
+  -> return EXACTLY: "GCHAT_RESPONSE: <the reply_text>"
+- If `replies` is empty or no match -> sleep 10s -> try again
+- Max 180 attempts (30 minutes). If timeout:
+  -> update marker (set status="timeout" in the JSON file)
   -> return EXACTLY: "GCHAT_TIMEOUT: No response in 30 minutes"
 - Do NOT do anything else. No exploration, no investigation, no extra work.
 - Return as soon as you have a result. EXIT IMMEDIATELY after returning.

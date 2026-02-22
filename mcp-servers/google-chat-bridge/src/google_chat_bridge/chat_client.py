@@ -1,11 +1,13 @@
-"""Google Chat API client with dual authentication support.
+"""Google Chat API client with triple authentication support.
 
 Wraps the Google Chat API (google-api-python-client) with a clean
 interface for sending/receiving messages in Google Chat spaces.
 
 Authentication (tried in order):
     1. Service account JSON key file (GOOGLE_CHAT_CREDENTIALS_FILE)
-    2. Application Default Credentials (ADC) via google.auth.default()
+    2. OAuth2 Installed App with stored token (GOOGLE_CHAT_TOKEN_FILE)
+    3. OAuth2 Installed App flow (GOOGLE_CHAT_OAUTH_CLIENT_FILE) — opens browser once
+    4. Application Default Credentials (ADC) via google.auth.default()
 
 Scopes:
     - https://www.googleapis.com/auth/chat.spaces
@@ -41,6 +43,7 @@ class ChatMessage(BaseModel):
     name: str = Field(description="Resource name: spaces/{space}/messages/{message}")
     sender_name: str = Field(default="unknown")
     sender_display_name: str = Field(default="Unknown")
+    sender_type: str = Field(default="", description="HUMAN, BOT, or empty")
     text: str = Field(default="")
     create_time: str = Field(default="")
     thread_name: str = Field(default="")
@@ -50,20 +53,35 @@ class ChatMessage(BaseModel):
 class ChatClient:
     """Client for Google Chat API operations.
 
-    Uses google-api-python-client with service account credentials
-    for server-to-server authentication (no user OAuth flow needed).
+    Supports three authentication modes in priority order:
+    1. Service account JSON key file (server-to-server, no user interaction)
+    2. OAuth2 Installed App with stored token (user-authorized, auto-refreshes)
+    3. OAuth2 Installed App flow (opens browser once, then stores token)
+    4. Application Default Credentials (ADC) fallback
     """
 
-    def __init__(self, credentials_file: str = "", default_space_id: str = "") -> None:
+    def __init__(
+        self,
+        credentials_file: str = "",
+        default_space_id: str = "",
+        oauth_client_file: str = "",
+        token_file: str = "",
+    ) -> None:
         """Initialize the Chat client.
 
         Args:
             credentials_file: Path to service account JSON key file (optional).
-                If empty or file doesn't exist, falls back to ADC.
+                If empty or file doesn't exist, falls through to OAuth2 paths.
             default_space_id: Default Google Chat space ID (e.g., "spaces/AAAA...").
+            oauth_client_file: Path to OAuth2 client secret JSON file (optional).
+                Used for the installed app flow when no stored token exists.
+            token_file: Path to stored OAuth2 token JSON file (optional).
+                Loaded and refreshed automatically on each call.
         """
         self._credentials_file = credentials_file
         self._default_space_id = default_space_id
+        self._oauth_client_file = oauth_client_file
+        self._token_file = token_file
         self._service: Any = None
         self._credentials: Any = None
 
@@ -78,8 +96,11 @@ class ChatClient:
     def _get_service(self) -> Any:
         """Lazily initialize and return the Google Chat API service.
 
-        Tries service account credentials first (if file provided and exists),
-        then falls back to Application Default Credentials (ADC).
+        Auth priority:
+        1. Service account JSON (if credentials_file exists and is a service account)
+        2. OAuth2 stored token (if token_file exists and is valid/refreshable)
+        3. OAuth2 installed app flow (if oauth_client_file exists, opens browser once)
+        4. Application Default Credentials (ADC) fallback
         """
         if self._service is not None:
             return self._service
@@ -87,9 +108,11 @@ class ChatClient:
         from googleapiclient.discovery import build
 
         creds_path = Path(self._credentials_file) if self._credentials_file else None
+        oauth_client_path = Path(self._oauth_client_file) if self._oauth_client_file else None
+        token_path = Path(self._token_file) if self._token_file else None
 
+        # --- Auth path 1: Service account ---
         if creds_path and creds_path.exists():
-            # Try service account first
             try:
                 from google.oauth2 import service_account
 
@@ -98,17 +121,52 @@ class ChatClient:
                 )
                 logger.info("Using service account credentials from %s", creds_path)
             except Exception:
-                # If service account fails, fall through to ADC
-                import google.auth
+                logger.info("Service account load failed, trying OAuth2 paths")
 
-                self._credentials, _ = google.auth.default(scopes=CHAT_SCOPES)
-                logger.info("Service account failed, using ADC")
-        else:
-            # No credentials file - use ADC
+        # --- Auth path 2: OAuth2 stored token ---
+        if self._credentials is None and token_path and token_path.exists():
+            try:
+                from google.oauth2.credentials import Credentials
+
+                creds = Credentials.from_authorized_user_file(str(token_path), CHAT_SCOPES)
+                if creds and creds.valid:
+                    self._credentials = creds
+                    logger.info("Using stored OAuth2 token from %s", token_path)
+                elif creds and creds.expired and creds.refresh_token:
+                    from google.auth.transport.requests import Request
+
+                    creds.refresh(Request())
+                    token_path.write_text(creds.to_json())
+                    self._credentials = creds
+                    logger.info("Refreshed OAuth2 token, saved to %s", token_path)
+                else:
+                    logger.info("Stored OAuth2 token invalid and cannot refresh, trying flow")
+            except Exception as exc:
+                logger.info("Failed to load stored OAuth2 token (%s), trying flow", exc)
+
+        # --- Auth path 3: OAuth2 installed app flow (opens browser once) ---
+        if self._credentials is None and oauth_client_path and oauth_client_path.exists():
+            try:
+                from google_auth_oauthlib.flow import InstalledAppFlow
+
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    str(oauth_client_path), CHAT_SCOPES
+                )
+                self._credentials = flow.run_local_server(port=0)
+                if token_path:
+                    token_path.parent.mkdir(parents=True, exist_ok=True)
+                    token_path.write_text(self._credentials.to_json())
+                    logger.info("OAuth2 token saved to %s", token_path)
+                logger.info("OAuth2 installed app flow completed successfully")
+            except Exception as exc:
+                logger.info("OAuth2 installed app flow failed (%s), falling back to ADC", exc)
+
+        # --- Auth path 4: ADC fallback ---
+        if self._credentials is None:
             import google.auth
 
             self._credentials, _ = google.auth.default(scopes=CHAT_SCOPES)
-            logger.info("No credentials file, using ADC")
+            logger.info("Using Application Default Credentials (ADC)")
 
         self._service = build("chat", "v1", credentials=self._credentials)
         logger.info("Google Chat API service initialized successfully")
@@ -284,12 +342,29 @@ class ChatClient:
             Dict with connection status, space details, and any errors.
         """
         creds_path = Path(self._credentials_file) if self._credentials_file else None
+        oauth_client_path = Path(self._oauth_client_file) if self._oauth_client_file else None
+        token_path = Path(self._token_file) if self._token_file else None
+
+        # Determine the auth mode description before building service
+        if creds_path and creds_path.exists():
+            auth_mode = "service_account"
+        elif token_path and token_path.exists():
+            auth_mode = "oauth2_stored_token"
+        elif oauth_client_path and oauth_client_path.exists():
+            auth_mode = "oauth2_installed_app_flow"
+        else:
+            auth_mode = "adc"
+
         result: dict[str, Any] = {
             "status": "unknown",
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "credentials_file": str(self._credentials_file) if self._credentials_file else "(not set)",
             "credentials_exists": creds_path.exists() if creds_path else False,
-            "auth_mode": "service_account" if (creds_path and creds_path.exists()) else "adc",
+            "oauth_client_file": str(self._oauth_client_file) if self._oauth_client_file else "(not set)",
+            "oauth_client_exists": oauth_client_path.exists() if oauth_client_path else False,
+            "token_file": str(self._token_file) if self._token_file else "(not set)",
+            "token_exists": token_path.exists() if token_path else False,
+            "auth_mode": auth_mode,
         }
 
         try:
@@ -359,6 +434,7 @@ class ChatClient:
             name=data.get("name", ""),
             sender_name=sender.get("name", "unknown"),
             sender_display_name=sender.get("displayName", "Unknown"),
+            sender_type=sender.get("type", ""),
             text=data.get("text", ""),
             create_time=data.get("createTime", ""),
             thread_name=thread.get("name", ""),
