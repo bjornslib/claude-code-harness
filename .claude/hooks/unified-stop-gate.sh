@@ -87,6 +87,88 @@ To proceed:
     exit 0
 fi
 
+# --- Step 1.5: Heartbeat Existence Check (system3-* sessions only) ---
+# Ensures System 3 sessions have spawned a session-scoped team with a heartbeat agent.
+# Team naming convention: s3-live-${CLAUDE_SESSION_ID: -8}
+# Example: system3-20260222T103045Z-7fe01d4c → s3-live-7fe01d4c
+
+if [[ "$SESSION_ID" == system3-* ]]; then
+    TEAM_HASH="${SESSION_ID: -8}"
+    TEAM_CONFIG="$HOME/.claude/teams/s3-live-${TEAM_HASH}/config.json"
+
+    if [ ! -f "$TEAM_CONFIG" ]; then
+        output_json "block" "reason" "🚫 NO SESSION-SCOPED TEAM
+
+System 3 session detected but no s3-live-${TEAM_HASH} team exists.
+
+The session-scoped team (s3-live-${TEAM_HASH}) must be created during PREFLIGHT
+with at least an s3-heartbeat member.
+
+To proceed:
+1. Create the team: TeamCreate(team_name=\"s3-live-${TEAM_HASH}\")
+2. Spawn the heartbeat agent into the team
+3. Try stopping again"
+        exit 0
+    fi
+
+    HAS_HEARTBEAT=$(jq '[.members[] | select(.name | startswith("s3-heartbeat"))] | length' "$TEAM_CONFIG" 2>/dev/null)
+    if [ "$HAS_HEARTBEAT" -eq 0 ] 2>/dev/null; then
+        output_json "block" "reason" "🚫 NO HEARTBEAT AGENT
+
+System 3 team s3-live-${TEAM_HASH} exists but has no heartbeat member.
+
+The s3-heartbeat agent must be spawned during PREFLIGHT to enable
+work scanning and session keep-alive.
+
+To proceed:
+1. Spawn the heartbeat: Task(subagent_type=\"general-purpose\", model=\"haiku\", team_name=\"s3-live-${TEAM_HASH}\", name=\"s3-heartbeat\", ...)
+2. Try stopping again"
+        exit 0
+    fi
+fi
+
+# --- Step 1.7: Pending GChat Questions Check (system3-* sessions only) ---
+# S3 sessions must not stop if they have unanswered GChat questions for THIS session.
+# The hook writes session_id (CLAUDE_SESSION_ID) into each marker file.
+
+if [[ "$SESSION_ID" == system3-* ]]; then
+    GCHAT_ASK_DIR="$PROJECT_ROOT/.claude/state/gchat-forwarded-ask"
+    if [ -d "$GCHAT_ASK_DIR" ]; then
+        GCHAT_PENDING_FOR_SESSION=0
+        for marker in "$GCHAT_ASK_DIR"/*.json; do
+            [ -f "$marker" ] || continue
+            # Block on ANY marker that isn't definitively resolved or timed out.
+            # This catches: pending, auth_failed, or any other non-terminal status.
+            if python3 -c "
+import json, sys, os
+m = json.load(open('$marker'))
+terminal = ('resolved', 'timeout')
+if m.get('status') not in terminal and m.get('session_id') == os.environ.get('CLAUDE_SESSION_ID', ''):
+    sys.exit(0)
+sys.exit(1)
+" 2>/dev/null; then
+                GCHAT_PENDING_FOR_SESSION=$((GCHAT_PENDING_FOR_SESSION + 1))
+            fi
+        done
+
+        if [ "$GCHAT_PENDING_FOR_SESSION" -gt 0 ]; then
+            output_json "block" "reason" "🚫 UNRESOLVED GCHAT QUESTIONS
+
+You have $GCHAT_PENDING_FOR_SESSION unresolved GChat question(s) for this session.
+(Status is not 'resolved' or 'timeout' — could be pending, auth_failed, or other.)
+
+Spawn a blocking Haiku agent to poll for replies before stopping.
+See output style section 'GChat AskUserQuestion Round-Trip' for the exact pattern.
+
+If the poller previously failed (auth_failed), fix the issue and retry.
+If the user already replied, manually update the marker status to 'resolved'.
+
+Marker directory: $GCHAT_ASK_DIR"
+            exit 0
+        fi
+    fi
+fi
+
 # --- Step 2: Orchestrator Guidance Check (orch-* sessions only) ---
 
 if [[ "$SESSION_ID" == orch-* ]]; then
@@ -235,6 +317,13 @@ if [ "$WORK_EXHAUSTION_PASSED" = false ]; then
     exit 0
 fi
 
+# --- Step 4.5: REMOVED (2026-02-22) ---
+# Previously: approved stop when GChat questions were pending ("async reply" pattern).
+# Now: Step 1.7 blocks S3 sessions with pending GChat questions (forces poller spawn).
+# Non-S3 sessions are auto-answered by Haiku (no pending markers created).
+# Removing the early approval ensures Step 5 judge always runs for S3 sessions,
+# which enforces the "must present AskUserQuestion before stopping" rule.
+
 # --- Step 5: Continuation Judge (System 3 sessions only) ---
 # Uses Haiku 4.5 API call to evaluate if System 3 session should continue
 # Non-System 3 sessions skip this step entirely (Step 4 already passes them)
@@ -352,12 +441,19 @@ ${IMPL_COMPLETE_WORK}
 These tasks have been implemented but not yet validated by System 3's oversight team."
 fi
 
-# Send session end notification to GChat (best-effort, S3 sessions only)
-if [[ "$SESSION_ID" == system3-* ]] || [[ "$CLAUDE_OUTPUT_STYLE" == *system3* ]]; then
-    "$CLAUDE_PROJECT_DIR/.claude/scripts/gchat-send.sh" --type session_end \
-        --title "Session Ending" \
-        "System 3 session ending. Result: $RESULT" 2>/dev/null || true
-fi
+# Session end GChat notifications DISABLED per user request (2026-02-22).
+# Only AskUserQuestion forwarding is sent to GChat.
+# Previously: sent "Session Ending" messages via gchat-send.sh --type session_end
+# if [[ "$SESSION_ID" == system3-* ]] || [[ "$CLAUDE_OUTPUT_STYLE" == *system3* ]]; then
+#     _session_summary="System 3 session ending."
+#     if [[ -n "${CLAUDE_SESSION_ID:-}" ]]; then
+#         _session_summary="$_session_summary Session: $CLAUDE_SESSION_ID."
+#     fi
+#     _session_summary="$_session_summary Result: $RESULT"
+#     "$CLAUDE_PROJECT_DIR/.claude/scripts/gchat-send.sh" --type session_end \
+#         --title "Session Ending" \
+#         "$_session_summary" 2>/dev/null || true
+# fi
 
 # Always approve (blocking happens earlier or not at all)
 output_json "approve" "systemMessage" "$MSG_PARTS"

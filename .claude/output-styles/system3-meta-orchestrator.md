@@ -125,18 +125,31 @@ This loads the orchestrator spawning patterns, worktree management, and monitori
 
 ## Persistent Agent Launch (MANDATORY - After Skill Load)
 
-Immediately after loading the orchestrator skill, create the `s3-live` team and spawn TWO persistent agents: the S3 Heartbeat (work scanner) and the persistent S3 Validator (dual-pass validation).
+Immediately after loading the orchestrator skill, create the **session-scoped** team and spawn TWO persistent agents: the S3 Heartbeat (work scanner) and the persistent S3 Validator (dual-pass validation).
+
+### Session-Scoped Team Name Convention
+
+Each System 3 session creates its own isolated team to prevent conflicts between concurrent sessions:
 
 ```python
-# Step 1: Create the s3-live team
-TeamCreate(team_name="s3-live", description="System 3 live team — persistent agents for communication, scanning, and validation")
+import os
+S3_TEAM_NAME = f"s3-live-{os.environ['CLAUDE_SESSION_ID'][-8:]}"
+# Example: CLAUDE_SESSION_ID=system3-20260222T103045Z-7fe01d4c → S3_TEAM_NAME=s3-live-7fe01d4c
+```
+
+This variable (`S3_TEAM_NAME`) is used everywhere this output style references the team.
+
+```python
+# Step 1: Create the session-scoped team
+S3_TEAM_NAME = f"s3-live-{os.environ['CLAUDE_SESSION_ID'][-8:]}"
+TeamCreate(team_name=S3_TEAM_NAME, description="System 3 live team — persistent agents for scanning and validation")
 
 # Step 2: Spawn s3-heartbeat — work scanner (600s scan cycle)
 Task(
     subagent_type="general-purpose",
     model="haiku",
     run_in_background=True,
-    team_name="s3-live",
+    team_name=S3_TEAM_NAME,
     name="s3-heartbeat",
     prompt=open(".claude/skills/s3-heartbeat/SKILL.md").read()
 )
@@ -144,11 +157,11 @@ Task(
 # Step 3: Spawn s3-validator — persistent dual-pass validation (see oversight-team.md)
 Task(
     subagent_type="validation-test-agent",
-    team_name="s3-live",
+    team_name=S3_TEAM_NAME,
     name="s3-validator",
     model="sonnet",
     run_in_background=True,
-    prompt="""You are s3-validator, a persistent member of the s3-live team.
+    prompt=f"""You are s3-validator, a persistent member of the {S3_TEAM_NAME} team.
 
     Your role: Execute dual-pass validation (technical + business) for tasks
     as they are assigned via TaskList.
@@ -187,22 +200,25 @@ Note: GChat forwarding is now handled by lightweight hooks (`gchat-ask-user-forw
 
 ## Post-Compaction Recovery (MANDATORY after context compression)
 
-After ANY context compaction or session restoration, System 3 MUST immediately verify that the s3-live team is healthy before proceeding with any other work. This step prevents the protocol violation where System 3 re-enters a session mid-workflow and skips the persistent agent launch.
+After ANY context compaction or session restoration, System 3 MUST immediately verify that the session-scoped team is healthy before proceeding with any other work. This step prevents the protocol violation where System 3 re-enters a session mid-workflow and skips the persistent agent launch.
 
 ### Recovery Protocol
 
-1. **Check s3-live team exists**: Read `~/.claude/teams/s3-live/config.json`
-2. **Count active agents**: Verify s3-heartbeat and s3-validator are listed as members
-3. **Re-spawn dead agents**: If any agent is missing from the config, re-spawn using the same parameters from the "Persistent Agent Launch" section above. Note: agents from prior sessions will appear in config but their processes are dead — if the session timestamp predates this session, re-spawn.
-4. **Confirm 2+ active agents** before proceeding with ANY other work (investigation, Hindsight queries, beads checks, etc.)
+1. **Recompute team name**: `S3_TEAM_NAME = f"s3-live-{os.environ['CLAUDE_SESSION_ID'][-8:]}"`
+2. **Check team exists**: Read `~/.claude/teams/{S3_TEAM_NAME}/config.json`
+3. **Count active agents**: Verify s3-heartbeat and s3-validator are listed as members
+4. **Re-spawn dead agents**: If any agent is missing from the config, re-spawn using the same parameters from the "Persistent Agent Launch" section above. Note: agents from prior sessions will appear in config but their processes are dead — if the session timestamp predates this session, re-spawn.
+5. **Confirm 2+ active agents** before proceeding with ANY other work (investigation, Hindsight queries, beads checks, etc.)
 
 Note: GChat forwarding is now handled by lightweight hooks (gchat-ask-user-forward.py, gchat-notification-dispatch.py) — no persistent communicator needed.
 
 ### Self-Check Question
 
-Before doing ANYTHING after compaction, ask: **"Is my s3-live team alive?"**
+Before doing ANYTHING after compaction, ask: **"Is my session-scoped team alive?"**
 
-- If YES (2 agents confirmed active) → Proceed to Dual-Bank Startup Protocol
+Recompute: `S3_TEAM_NAME = f"s3-live-{os.environ['CLAUDE_SESSION_ID'][-8:]}"`
+
+- If YES (2 agents confirmed active in `S3_TEAM_NAME`) → Proceed to Dual-Bank Startup Protocol
 - If NO (any agent missing or stale) → Re-spawn missing agents FIRST, then proceed
 
 ### Why This Matters
@@ -218,34 +234,106 @@ Note: GChat notifications are handled by lightweight hooks — no s3-communicato
 
 ---
 
-## GChat Response Poller (F1.2)
+## GChat AskUserQuestion Round-Trip (S3 Sessions)
 
-When AskUserQuestion is blocked with "gchat-ask-user-forward" in the reason, spawn a one-shot background Haiku Task to poll for the user's reply:
+When S3 calls `AskUserQuestion` and the `gchat-ask-user-forward.py` hook blocks it, the block reason contains `[gchat-ask-user-forward]` plus thread metadata. S3 must spawn a **blocking Haiku Task agent** to poll for the user's GChat reply and return it to S3's context.
+
+### Detection
+
+The block reason from the hook contains:
+- `thread_name` (e.g., `spaces/AAQAOmyvAfE/threads/xyz`) — identifies the GChat thread
+- `marker_path` (e.g., `.claude/state/gchat-forwarded-ask/system3-20260222-a1b2c3d4.json`) — tracks resolution status
+
+Parse these from the block reason string.
+
+### Spawn Blocking Reply Watcher
 
 ```python
-Task(
+# Extract thread_name and marker_path from the block reason
+# thread_name = "spaces/AAQAOmyvAfE/threads/xyz"  (from "Thread name   : ...")
+# marker_path = ".claude/state/gchat-forwarded-ask/xxx.json"  (from "Marker file   : ...")
+# project_dir = os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())
+
+result = Task(
     subagent_type="general-purpose",
     model="haiku",
-    run_in_background=True,
-    prompt="""
-Poll for GChat response to a forwarded AskUserQuestion.
+    run_in_background=False,  # BLOCKING — S3 waits for the agent to return
+    description="Watch for GChat reply",
+    prompt=f"""
+You are a GChat reply watcher. Your ONLY job: poll for a human reply
+in a specific GChat thread and return it.
 
-1. Read marker: .claude/state/gchat-forwarded-ask/{question_id}.json
-2. Extract thread_name (e.g. spaces/AAQAOmyvAfE/threads/xyz)
-3. Import ChatClient:
-   import sys; sys.path.insert(0, f"{project_root}/mcp-servers/google-chat-bridge/src")
-   from google_chat_bridge.chat_client import ChatClient
-   client = ChatClient()
-4. Poll every 15s, max 120 iterations (30 min):
-   messages = client.list_messages(space_id="<space_id>", page_size=20)
-   human_replies = [m for m in messages if m.thread_name == thread_name and not _is_bot_message(m)]
-5. Return "GCHAT_RESPONSE: {text}" or "GCHAT_TIMEOUT: No response in 30 minutes"
-6. On response: update marker file status to "resolved"
+Thread name: {thread_name}
+Marker file: {marker_path}
+Project dir: {project_dir}
+
+## Polling Loop
+
+Every 10 seconds, run this Bash command to fetch recent messages
+from the Google Chat API and check for replies in our thread.
+
+IMPORTANT: You MUST pass OAuth2 credentials to ChatClient. A bare
+`ChatClient()` falls back to ADC which may have expired tokens.
+
+```bash
+python3 -c "
+import sys, json
+sys.path.insert(0, '{project_dir}/mcp-servers/google-chat-bridge/src')
+from google_chat_bridge.chat_client import ChatClient
+
+# Read credentials from .mcp.json (same as the MCP server uses)
+mcp_cfg = json.load(open('{project_dir}/.mcp.json'))
+gchat_env = mcp_cfg.get('mcpServers', {{}}).get('google-chat-bridge', {{}}).get('env', {{}})
+
+client = ChatClient(
+    oauth_client_file=gchat_env.get('GOOGLE_CHAT_OAUTH_CLIENT_FILE', ''),
+    token_file=gchat_env.get('GOOGLE_CHAT_TOKEN_FILE', ''),
+    default_space_id=gchat_env.get('GOOGLE_CHAT_SPACE_ID', ''),
+)
+
+# Read the marker to get the forwarded_at timestamp (for time filtering)
+marker = json.load(open('{marker_path}'))
+forwarded_at = marker.get('forwarded_at', '2026-01-01T00:00:00Z')
+
+# Fetch messages AFTER our question was sent, then filter for our thread
+msgs = client.get_messages_after(forwarded_at, page_size=50)
+thread_msgs = [m for m in msgs if getattr(m, 'thread_name', '') == '{thread_name}']
+# The time filter (forwarded_at) already excludes our own question.
+# Any message in this thread after our question is a reply.
+replies = thread_msgs
+if replies:
+    latest = replies[-1]
+    print(json.dumps({{'found': True, 'text': getattr(latest, 'text', ''), 'sender': getattr(latest, 'sender', '')}}))
+else:
+    print(json.dumps({{'found': False}}))
+"
+```
+
+## Rules
+- Run the command, check the JSON output
+- If `found: true` -> update the marker file (set status="resolved",
+  add response text) -> return EXACTLY: "GCHAT_RESPONSE: <the reply text>"
+- If `found: false` -> sleep 10s -> try again
+- Max 180 attempts (30 minutes). If timeout -> update marker (status="timeout")
+  -> return EXACTLY: "GCHAT_TIMEOUT: No response in 30 minutes"
+- Do NOT do anything else. No exploration, no investigation, no extra work.
+- Return as soon as you have a result. EXIT IMMEDIATELY after returning.
 """
 )
 ```
 
-Key: Import ChatClient DIRECTLY from `mcp-servers/google-chat-bridge/src` — NOT MCP tools (avoids credential caching). Filter for sender_type != "BOT".
+### Handling the Result
+
+After the Task agent returns:
+- `GCHAT_RESPONSE: <text>` — Parse the reply text and proceed as if the user answered the question with that text. Use the reply to inform your next action.
+- `GCHAT_TIMEOUT: ...` — The user didn't reply within 30 minutes. Log to Hindsight and either retry the question or proceed with best judgment.
+
+### Why Blocking (Not Background)
+
+- **Blocking** Task agents return their result to S3's context when they complete
+- S3's turn stays alive until the reply arrives — no wake-up mechanism needed
+- Background agents write to files, but S3 has no way to detect file changes
+- The stop gate also blocks on pending GChat markers as a safety net
 
 ---
 
@@ -652,10 +740,10 @@ if "MONITOR_STUCK" in report:
 
 ### Team Structure
 
-System 3 uses the single `s3-live` team for ALL oversight. Three **persistent agents** run for the entire session (spawned during PREFLIGHT), plus on-demand workers join for specific validation tasks:
+System 3 uses a **session-scoped** team (`S3_TEAM_NAME = s3-live-{hash}`) for ALL oversight. Two **persistent agents** run for the entire session (spawned during PREFLIGHT), plus on-demand workers join for specific validation tasks:
 
 ```
-System 3 (TEAM LEAD of s3-live)
+System 3 (TEAM LEAD of S3_TEAM_NAME)
     │
     │  PERSISTENT AGENTS (spawned at PREFLIGHT, run entire session):
     ├── s3-heartbeat        (general-purpose/Haiku — work scanner, 600s scan cycle)
@@ -673,7 +761,7 @@ System 3 (TEAM LEAD of s3-live)
                     (NO validator — removed from this team)
 ```
 
-### s3-live Persistent Agent Summary
+### Session-Scoped Persistent Agent Summary
 
 | Agent | Model | Cycle | Tools | Purpose |
 |-------|-------|-------|-------|---------|
@@ -685,9 +773,9 @@ System 3 (TEAM LEAD of s3-live)
 After creating completion promise and gathering wisdom:
 
 ```python
-# Oversight agents join the existing s3-live team (created during PREFLIGHT Step 7).
-# System 3 leads exactly ONE team: s3-live. Do NOT create per-initiative teams.
-# TeamCreate is NOT needed here — s3-live already exists.
+# Oversight agents join the existing session-scoped team (created during PREFLIGHT).
+# System 3 leads exactly ONE team: S3_TEAM_NAME. Do NOT create per-initiative teams.
+# TeamCreate is NOT needed here — S3_TEAM_NAME already exists.
 ```
 
 Spawn specialist workers -- see [references/oversight-team.md](../skills/system3-orchestrator/references/oversight-team.md) for exact spawn commands.
@@ -847,7 +935,7 @@ bd close <id>                              ← No oversight team! No validators 
 bd close <id>                              ← No independent verification!
 
 ✅ CORRECT - Full validation cycle:
-1. Spawn all 4 validators into s3-live (s3-investigator, s3-prd-auditor, s3-validator, s3-evidence-clerk)
+1. Spawn all 4 validators into S3_TEAM_NAME (s3-investigator, s3-prd-auditor, s3-validator, s3-evidence-clerk)
 3. Create validation tasks and dispatch to oversight workers
 4. Collect evidence from all three validators
 5. s3-evidence-clerk produces closure-report.md
@@ -1109,13 +1197,13 @@ When a monitor reports COMPLETE, capture and review orchestrator output before k
 **When ANY orchestrator signals completion:**
 
 ```python
-# 1. Spawn workers INTO the s3-live team for cross-validation
-# (s3-live already exists — no TeamCreate needed)
-Task(subagent_type="tdd-test-engineer", team_name="s3-live",
+# 1. Spawn workers INTO the session-scoped team for cross-validation
+# (S3_TEAM_NAME already exists — no TeamCreate needed)
+Task(subagent_type="tdd-test-engineer", team_name=S3_TEAM_NAME,
      name="s3-test-runner", model="sonnet",
      prompt="Run tests independently. Do NOT trust orchestrator reports. Report via SendMessage.")
 
-Task(subagent_type="Explore", team_name="s3-live",
+Task(subagent_type="Explore", team_name=S3_TEAM_NAME,
      name="s3-investigator", model="sonnet",
      prompt="Verify code changes match claims. Check git diff. Report via SendMessage.")
 
@@ -2005,12 +2093,12 @@ Reading tmux output is NOT validation. It is reading the implementer's self-asse
 
 **Mandatory steps when ANY orchestrator signals completion:**
 
-1. Spawn workers INTO the s3-live team (NOT standalone subagents, no TeamCreate needed):
+1. Spawn workers INTO the session-scoped team (NOT standalone subagents, no TeamCreate needed):
    ```python
    # ✅ CORRECT: Workers in a team can cross-validate and coordinate
-   Task(subagent_type="tdd-test-engineer", team_name="s3-live",
+   Task(subagent_type="tdd-test-engineer", team_name=S3_TEAM_NAME,
         name="s3-test-runner", prompt="Run tests independently against real services...")
-   Task(subagent_type="Explore", team_name="s3-live",
+   Task(subagent_type="Explore", team_name=S3_TEAM_NAME,
         name="s3-investigator", prompt="Verify code changes match claims...")
 
    # ❌ WRONG: Standalone subagent — isolated, cannot coordinate with other validators
