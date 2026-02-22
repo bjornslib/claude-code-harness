@@ -57,6 +57,7 @@ SEND ONLINE STATUS TO OPERATOR
 |     d. Stale tasks        |
 |     e. Idle orchestrators |
 |     f. GChat reply poll   |
+|     g. Pipeline status    |
 |                           |
 |  3. Evaluate findings     |
 |     - Nothing actionable? |
@@ -188,6 +189,53 @@ GCHAT_REPLY_RECEIVED:
 
 **Priority**: This scan target should run on EVERY cycle (not just active hours), because the user may reply at any time.
 
+### Target 7: Pipeline Lifecycle Status
+
+Detect stalled or newly-finalized Attractor pipelines in the `.claude/attractor/pipelines/` directory.
+
+```bash
+# List all active pipeline DOT files
+PIPELINE_DIR="$CLAUDE_PROJECT_DIR/.claude/attractor/pipelines"
+ls "$PIPELINE_DIR"/*.dot 2>/dev/null
+
+# For each pipeline, query the dashboard
+for dot_file in "$PIPELINE_DIR"/*.dot; do
+    python3 "$CLAUDE_PROJECT_DIR/.claude/scripts/attractor/dashboard.py" "$dot_file" --output json 2>/dev/null
+done
+```
+
+**Evaluation** (per pipeline):
+- Parse JSON output from `dashboard.py --output json`
+- `pipeline_stage == "Finalized"` and last cycle stage was NOT Finalized → ACTIONABLE (category: `PIPELINE_FINALIZED`)
+- Any node with `status == "failed"` → ACTIONABLE (category: `PIPELINE_NODE_FAILED`)
+- `promise_progress.percentage < 100` and all codergen nodes are `impl_complete` but hexagons are still `pending` → ACTIONABLE (category: `PIPELINE_VALIDATION_STALLED`)
+- `pipeline_stage == "Implementation"` and no `active` nodes → ACTIONABLE (category: `PIPELINE_STALLED`) if confirmed stale for 2+ cycles
+- Pipeline healthy (progressing) → OK
+
+**Dedup**: Track `{pipeline_name}:{stage}` between cycles. Do NOT re-report the same stage transition within 3 cycles.
+
+**Report Format** (when pipeline event detected):
+```
+PIPELINE_FINALIZED:
+  Pipeline: {graph_name}
+  PRD: {prd_ref}
+  Stage: Finalized
+  Promise: {validated}/{total} gates validated
+
+PIPELINE_NODE_FAILED:
+  Pipeline: {graph_name}
+  Failed nodes: {node_id_1}, {node_id_2}
+  Recommended: Re-trigger failed nodes or inspect bead {bead_id}
+
+PIPELINE_STALLED:
+  Pipeline: {graph_name}
+  Stage: {stage}
+  Active nodes: 0 (expected some)
+  Recommended: Check orchestrators and dispatch pending nodes
+```
+
+**Priority**: Advisory — runs during active hours only. Finalization is `Immediate`.
+
 ---
 
 ## HEARTBEAT_OK -- Silent Return
@@ -241,6 +289,10 @@ Token cost this cycle: ~{token_estimate} tokens""",
 | `ORCH_IDLE` | No tool calls in > 30 minutes | Advisory |
 | `GCHAT_REPLY_RECEIVED` | GChat reply to forwarded question | Immediate |
 | `WORK_READY` | `bd ready` returns P2+ beads | Normal |
+| `PIPELINE_FINALIZED` | All hexagon nodes validated in pipeline | Immediate |
+| `PIPELINE_NODE_FAILED` | One or more pipeline nodes have `failed` status | Immediate |
+| `PIPELINE_VALIDATION_STALLED` | Codergen impl_complete but hexagons still pending | Advisory |
+| `PIPELINE_STALLED` | Stage unchanged with 0 active nodes for 2+ cycles | Advisory |
 
 ### Report Rules
 

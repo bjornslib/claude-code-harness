@@ -176,17 +176,35 @@ cs-store-validation --promise <promise-id> --ac-id BUSINESS \
 }'
 ```
 
+### Pipeline Mode (--mode=pipeline) [NEW - DOT Attractor Integration]
+- **Purpose**: Validate a single hexagon gate node in a `.dot` attractor pipeline
+- **Trigger**: `validation-test-agent --mode=pipeline --node-id=<node-id> --pipeline=<path-to.dot>`
+- **Validation Focus**: Node `acceptance` criteria, scoped to node `files` only
+- **Output**: `PIPELINE_PASS` | `PIPELINE_FAIL` + evidence stored at `.claude/evidence/<node-id>/`
+- **Side Effect**: Advances the pipeline node status via `python3 transition.py`
+
+**How it differs from technical/business mode:**
+- Scope is exact: only the `files` listed in the node are examined (no glob expansion)
+- Acceptance criteria come from the node's `acceptance` attribute, not the PRD
+- Evidence is stored in the node-scoped directory (`.claude/evidence/<node-id>/`)
+- The pipeline `.dot` file is transitioned after validation (node status → `passed` or `failed`)
+- Completion promise ACs are met directly from the node's `promise_ac` attribute
+
+---
+
 ### Parameters
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `--mode` | Yes | `unit`, `e2e`, `monitor`, `technical`, or `business` |
+| `--mode` | Yes | `unit`, `e2e`, `monitor`, `technical`, `business`, or `pipeline` |
 | `--task_id` | For unit/e2e | Beads task ID being validated |
 | `--prd` | For e2e | PRD identifier (e.g., `PRD-AUTH-001`) |
 | `--criterion` | No | Specific acceptance criterion to test |
 | `--session-id` | For monitor | Orchestrator session ID (e.g., `orch-auth-123`) |
 | `--task-list-id` | For monitor | Task list ID from `~/.claude/tasks/` |
 | `--max-iterations` | For monitor | Max poll iterations before heartbeat (default: 30) |
+| `--node-id` | For pipeline | DOT graph node ID to validate (e.g., `validate_backend_tech`) |
+| `--pipeline` | For pipeline | Path to the `.dot` attractor pipeline file |
 
 ### Use Cases
 
@@ -200,6 +218,7 @@ cs-store-validation --promise <promise-id> --ac-id BUSINESS \
 | Technical health check | `--mode=technical` | Orchestrator / System 3 | Task ID, build commands |
 | Business acceptance | `--mode=business --prd=X` | System 3 (after technical pass) | Task ID, PRD path, ACs |
 | **Dual-pass validation** | `technical` then `business` | System 3 / Orchestrator | Task ID, PRD path (see Dual-Pass Workflow) |
+| **DOT pipeline gate** | `--mode=pipeline --node-id=X --pipeline=Y` | S3 Guardian / Orchestrator | Node ID, pipeline `.dot` path |
 
 ### Default Behavior
 If no --mode specified, assume `--mode=unit`.
@@ -692,6 +711,225 @@ Both validation results are stored separately with mode tags so Gate 2 can verif
 | PRD acceptance validation | `--mode=e2e --prd=X` | Legacy full E2E (still supported) |
 | Pre-closure comprehensive | `--mode=technical` then `--mode=business` | Dual-pass: most rigorous |
 | Orchestrator health check | `--mode=monitor` | Continuous polling, not validation |
+| DOT pipeline gate node | `--mode=pipeline` | Node-scoped, files-exact, pipeline-aware |
+
+---
+
+### DOT Pipeline Validation Workflow (--mode=pipeline)
+
+When invoked with `--mode=pipeline --node-id=<id> --pipeline=<path>`:
+
+**Purpose**: Validate a single hexagon gate node in an attractor `.dot` pipeline. Scope is locked to the files and acceptance criteria declared in the node itself.
+
+#### Step 1: Parse Node Attributes from Pipeline
+
+```python
+import re
+
+def parse_dot_node(pipeline_path: str, node_id: str) -> dict:
+    """Extract attributes from a hexagon node in the .dot file."""
+    content = open(pipeline_path).read()
+    # Find the node definition block
+    pattern = rf'{node_id}\s*\[([^\]]+)\]'
+    match = re.search(pattern, content, re.DOTALL)
+    if not match:
+        raise ValueError(f"Node {node_id} not found in {pipeline_path}")
+
+    attrs = {}
+    for line in match.group(1).splitlines():
+        if '=' in line:
+            k, v = line.split('=', 1)
+            attrs[k.strip()] = v.strip().strip('"')
+
+    return attrs
+```
+
+Required attributes extracted:
+
+| Attribute | Used For |
+|-----------|----------|
+| `gate` | Which validation category (technical/business/e2e) |
+| `mode` | `--mode` equivalent (technical/business) |
+| `acceptance` | The exact criteria to verify against |
+| `files` | Comma-separated list — ONLY these files are in scope |
+| `bead_id` | Beads task to comment on (e.g., `AT-10-TECH`) |
+| `promise_ac` | Completion promise criterion to meet on PASS |
+
+#### Step 2: Infer Validation Method from File Paths
+
+```python
+def infer_validation_method(files: list[str]) -> str:
+    """
+    Determine the right validation approach from the file list.
+    This avoids spinning up a browser for pure Python backend changes.
+    """
+    for f in files:
+        # Frontend components / pages require browser rendering
+        if any(p in f for p in ["page.tsx", "page.jsx", "components/", ".tsx", ".vue", "stores/"]):
+            return "browser-required"
+        # API routes require live endpoint calls
+        if any(p in f for p in ["routes.py", "api/", "controllers/", "handlers/", "views.py", "endpoints/"]):
+            return "api-required"
+    # Pure business logic, utilities, models — static analysis is sufficient
+    return "code-analysis"
+```
+
+**Method dispatch:**
+
+| Method | Tools Used | When |
+|--------|-----------|------|
+| `browser-required` | chrome-devtools MCP, screenshot capture | Files include `.tsx`, `page.tsx`, `components/` |
+| `api-required` | HTTP calls to real endpoints (no mocks) | Files include `routes.py`, `api/`, `handlers/` |
+| `code-analysis` | Read file + grep + pytest (targeted) | All other Python/TS files |
+
+#### Step 3: Execute Scoped Validation
+
+**Critical rule**: Only examine files listed in the node's `files` attribute. Do NOT expand scope.
+
+```python
+files = node_attrs["files"].split(",")
+acceptance = node_attrs["acceptance"]
+mode = node_attrs["mode"]  # "technical" or "business"
+method = infer_validation_method(files)
+
+if mode == "technical":
+    # Run targeted technical checks on scoped files only
+    results = {
+        "tests": run_targeted_tests(files),   # pytest -k matching file names
+        "imports": check_imports(files),
+        "todos": scan_todos(files),
+        "types": check_types(files),
+    }
+    verdict = "PIPELINE_PASS" if all_pass(results) else "PIPELINE_FAIL"
+
+elif mode == "business":
+    # Verify acceptance criteria are met by the scoped files
+    if method == "browser-required":
+        evidence = run_browser_validation(acceptance, files)
+    elif method == "api-required":
+        evidence = run_api_validation(acceptance, files)
+    else:
+        evidence = run_code_analysis_validation(acceptance, files)
+
+    verdict = "PIPELINE_PASS" if evidence.criteria_met else "PIPELINE_FAIL"
+```
+
+#### Step 4: Store Evidence at Node-Scoped Path
+
+Evidence MUST be stored at `.claude/evidence/<node-id>/` before transitioning the pipeline:
+
+```python
+import json, os
+from datetime import datetime
+
+evidence_dir = f".claude/evidence/{node_id}/"
+os.makedirs(evidence_dir, exist_ok=True)
+
+# Write human-readable validation report
+report_file = f"technical-validation.md" if mode == "technical" else f"business-validation.md"
+with open(f"{evidence_dir}{report_file}", "w") as f:
+    f.write(f"""# {mode.title()} Validation: {node_id}
+
+**Gate**: {gate}
+**Bead**: {bead_id}
+**Acceptance**: {acceptance}
+
+## Files Examined
+{chr(10).join(f'- {fp}' for fp in files)}
+
+## Verdict
+**{verdict}** (confidence: {confidence:.2f})
+
+## Evidence
+{evidence_summary}
+
+## Timestamp
+{datetime.utcnow().isoformat()}Z
+""")
+
+# Write machine-readable summary
+with open(f"{evidence_dir}validation-summary.json", "w") as f:
+    json.dump({
+        "node_id": node_id,
+        "bead_id": bead_id,
+        "gate": gate,
+        "mode": mode,
+        "verdict": verdict,
+        "confidence": confidence,
+        "files_examined": files,
+        "acceptance_criteria": acceptance,
+        "evidence": evidence_summary,
+        "timestamp": datetime.utcnow().isoformat() + "Z"
+    }, f, indent=2)
+```
+
+**Evidence directory layout:**
+```
+.claude/evidence/
+└── validate_backend_tech/
+    ├── technical-validation.md    # Human-readable findings
+    └── validation-summary.json   # Machine-readable summary
+
+.claude/evidence/
+└── validate_backend_biz/
+    ├── business-validation.md    # Human-readable findings
+    └── validation-summary.json
+```
+
+#### Step 5: Advance Pipeline and Meet Promise
+
+After storing evidence, transition the node status and meet the promise AC:
+
+```bash
+# Advance node status in the pipeline
+python3 transition.py <pipeline.dot> <node_id> passed   # or: failed
+
+# Meet the promise AC if PASS
+cs-promise --meet <promise-id> --ac-id <promise_ac> \
+    --evidence "Evidence at .claude/evidence/<node_id>/" \
+    --type pipeline
+```
+
+**If PIPELINE_FAIL:**
+```bash
+# Mark node as failed (pipeline routing will handle retry/escalation)
+python3 transition.py <pipeline.dot> <node_id> failed
+
+# Add beads comment for visibility
+bd comment add <bead_id> "PIPELINE_FAIL: <failure reason>. Evidence: .claude/evidence/<node_id>/"
+```
+
+#### Step 6: Return Result
+
+```
+PIPELINE_PASS: Node <node_id> validated. Evidence: .claude/evidence/<node_id>/validation-summary.json
+```
+
+or
+
+```
+PIPELINE_FAIL: Node <node_id> failed gate '<gate>'. Reason: <specific failure>. Evidence: .claude/evidence/<node_id>/
+```
+
+#### Invocation Example
+
+```python
+# From S3 Guardian validating a DOT pipeline gate:
+Task(
+    subagent_type="validation-test-agent",
+    model="sonnet",
+    prompt="--mode=pipeline --node-id=validate_backend_tech --pipeline=.claude/attractor/PRD-AUTH-001.dot"
+)
+```
+
+#### Key Rules for Pipeline Mode
+
+1. **Files are exact** — only validate the files listed in the node. No globbing, no expansion.
+2. **Acceptance from node** — the `acceptance` attribute is the source of truth, not the PRD.
+3. **Evidence before transition** — always write `.claude/evidence/<node-id>/` BEFORE calling `transition.py`.
+4. **Promise AC on PASS** — call `cs-promise --meet` with the node's `promise_ac` when the gate passes.
+5. **Bead comment on FAIL** — add a comment to the `bead_id` task with the failure reason.
+6. **No scope expansion** — do NOT read adjacent files, related modules, or parent directories.
 
 ---
 

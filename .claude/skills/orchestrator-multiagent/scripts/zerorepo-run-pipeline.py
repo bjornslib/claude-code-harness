@@ -101,13 +101,113 @@ def run_init(project_path: Path, exclude_patterns: str) -> int:
         return 1
 
 
+def run_attractor_export(output_dir: Path, prd_ref: str = "") -> int:
+    """Generate pipeline.dot from RPGGraph output and validate it.
+
+    Loads the RPGGraph from output_dir/04-rpg.json, converts it to an
+    Attractor-compatible DOT pipeline using AttractorExporter, writes the
+    result to output_dir/pipeline.dot, and validates via the attractor CLI.
+
+    Args:
+        output_dir: Directory containing 04-rpg.json (pipeline output dir).
+        prd_ref: Optional PRD reference string embedded in the .dot graph.
+
+    Returns:
+        0 on success, 1 on failure.
+    """
+    import subprocess
+
+    rpg_json_path = output_dir / "04-rpg.json"
+    dot_output_path = output_dir / "pipeline.dot"
+
+    print("\n=== Attractor DOT Export ===", flush=True)
+    print(f"Loading RPGGraph from: {rpg_json_path}", flush=True)
+
+    if not rpg_json_path.exists():
+        print(f"[ERROR] RPGGraph JSON not found: {rpg_json_path}", flush=True)
+        print("  Hint: run generate first, or check the output directory.", flush=True)
+        return 1
+
+    try:
+        from zerorepo.models.graph import RPGGraph
+        content = rpg_json_path.read_text(encoding="utf-8")
+        rpg = RPGGraph.model_validate(json.loads(content))
+        print(
+            f"[zerorepo-runner] Loaded RPGGraph: {rpg.node_count} nodes, "
+            f"{rpg.edge_count} edges",
+            flush=True,
+        )
+    except Exception as e:
+        print(f"[ERROR] Failed to load RPGGraph: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+        return 1
+
+    try:
+        from zerorepo.graph_construction.attractor_exporter import AttractorExporter
+        exporter = AttractorExporter(prd_ref=prd_ref or "PRD-UNKNOWN")
+        dot_content = exporter.export(rpg)
+        dot_output_path.write_text(dot_content, encoding="utf-8")
+        print(
+            f"[zerorepo-runner] Written pipeline DOT: {dot_output_path} "
+            f"({len(dot_content)} bytes)",
+            flush=True,
+        )
+    except Exception as e:
+        print(f"[ERROR] AttractorExporter failed: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+        return 1
+
+    # --- Validate the generated .dot file using the attractor CLI ---
+    # Resolve attractor cli.py relative to this script's location.
+    # Layout: .claude/skills/orchestrator-multiagent/scripts/zerorepo-run-pipeline.py
+    #         .claude/scripts/attractor/cli.py
+    this_script = Path(__file__).resolve()
+    claude_dir = this_script.parent.parent.parent.parent  # .claude/
+    attractor_cli = claude_dir / "scripts" / "attractor" / "cli.py"
+
+    if not attractor_cli.exists():
+        print(
+            f"[WARNING] Attractor CLI not found at {attractor_cli}; skipping validation.",
+            flush=True,
+        )
+        print(f"[zerorepo-runner] pipeline.dot written (unvalidated): {dot_output_path}", flush=True)
+        return 0
+
+    print(f"\n[zerorepo-runner] Validating {dot_output_path} ...", flush=True)
+    try:
+        result = subprocess.run(
+            [sys.executable, str(attractor_cli), "validate", str(dot_output_path)],
+            capture_output=False,  # stream to stdout/stderr directly
+            text=True,
+        )
+        if result.returncode == 0:
+            print(
+                "\n[zerorepo-runner] Attractor validation PASSED.",
+                flush=True,
+            )
+        else:
+            print(
+                f"\n[zerorepo-runner] Attractor validation FAILED (exit {result.returncode}).",
+                flush=True,
+            )
+            return 1
+    except Exception as e:
+        print(f"[ERROR] Failed to run attractor validate: {e}", flush=True)
+        return 1
+
+    return 0
+
+
 def run_generate(
     prd_path: Path,
     baseline_path: Optional[Path],
     model: str,
     output_dir: Path,
     skip_enrichment: bool,
-    timeout: int
+    timeout: int,
+    fmt: str = "",
 ) -> int:
     """Run zerorepo generate operation."""
     print("\n=== ZeroRepo Generate ===", flush=True)
@@ -181,6 +281,14 @@ def run_generate(
         delta_report = output_dir / "05-delta-report.md"
         if delta_report.exists():
             print(f"[zerorepo-runner] Delta report: {delta_report}", flush=True)
+
+        # Post-generate attractor export (when --format attractor-pipeline)
+        if fmt == "attractor-pipeline":
+            prd_ref = prd_path.stem.upper() if prd_path else ""
+            rc = run_attractor_export(output_dir=output_dir, prd_ref=prd_ref)
+            if rc != 0:
+                return rc
+
         return 0
     except Exception as e:
         error_msg = str(e)
@@ -229,6 +337,9 @@ Examples:
 
   # Generate delta report
   %(prog)s --operation generate --prd prd.md --baseline baseline.json
+
+  # Generate delta report AND export as Attractor pipeline DOT
+  %(prog)s --operation generate --prd prd.md --baseline baseline.json --format attractor-pipeline
 
   # Update baseline (backup + re-init)
   %(prog)s --operation update --project-path .
@@ -282,6 +393,18 @@ Examples:
     )
 
     parser.add_argument(
+        "--format",
+        dest="fmt",
+        default="",
+        choices=["attractor-pipeline"],
+        help=(
+            "Post-generate output format. "
+            "'attractor-pipeline': after generate, load 04-rpg.json, "
+            "convert to Attractor DOT, write pipeline.dot, and validate."
+        )
+    )
+
+    parser.add_argument(
         "--project-path",
         type=Path,
         default=Path("."),
@@ -306,7 +429,8 @@ Examples:
             model=args.model,
             output_dir=args.output,
             skip_enrichment=args.skip_enrichment,
-            timeout=args.timeout
+            timeout=args.timeout,
+            fmt=args.fmt,
         )
 
     elif args.operation == "init":

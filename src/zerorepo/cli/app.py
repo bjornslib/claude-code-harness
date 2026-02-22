@@ -19,6 +19,7 @@ from zerorepo.cli.init_cmd import run_init
 from zerorepo.cli.logging_setup import setup_logging
 from zerorepo.cli.ontology import ontology_app
 from zerorepo.cli.spec import spec_app
+from zerorepo.cli.diff_cmd import run_diff
 
 logger = logging.getLogger(__name__)
 
@@ -400,6 +401,61 @@ def generate(
             )
 
         _console.print("\n[bold green]Generation complete.[/bold green]")
+
+
+# ---------------------------------------------------------------------------
+# Diff command
+# ---------------------------------------------------------------------------
+
+
+@app.command()
+def diff(
+    before: Path = typer.Argument(
+        ...,
+        help="Path to the 'before' RPGGraph JSON baseline.",
+    ),
+    after: Path = typer.Argument(
+        ...,
+        help="Path to the 'after' RPGGraph JSON (updated graph).",
+    ),
+    pipeline: Optional[Path] = typer.Option(
+        None,
+        "--pipeline",
+        "-p",
+        help=(
+            "Path to an Attractor .dot pipeline file. "
+            "When provided, only nodes whose file_path appears in a "
+            "codergen node of this pipeline are checked for regressions."
+        ),
+    ),
+    output: Optional[Path] = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Output path for regression-check.dot. Defaults to stdout.",
+    ),
+) -> None:
+    """Compare two RPGGraph baselines and detect regressions.
+
+    A regression is a node that was ``delta_status=existing`` in the BEFORE
+    baseline but is ``modified`` or ``new`` in the AFTER graph — indicating a
+    previously stable component has changed unexpectedly.
+
+    Example::
+
+        zerorepo diff .zerorepo/baseline.json .zerorepo/updated.json
+        zerorepo diff before.json after.json --pipeline pipeline.dot -o regression-check.dot
+    """
+    with error_handler(_console):
+        result = run_diff(
+            before_path=before,
+            after_path=after,
+            pipeline_path=pipeline,
+            output_path=output,
+            console=_console,
+        )
+        if result.has_regressions:
+            raise typer.Exit(code=1)
 
 
 def _build_generate_report(

@@ -4,7 +4,7 @@
 Displays the status of all nodes in a pipeline DOT file as a formatted table.
 
 Usage:
-    python3 status.py <file.dot> [--json] [--filter=active]
+    python3 status.py <file.dot> [--json] [--filter=active] [--deps-met]
     python3 status.py --help
 """
 
@@ -15,25 +15,67 @@ import sys
 from parser import parse_file
 
 
-def get_status_table(data: dict, filter_status: str = "") -> list[dict]:
+def build_predecessors(data: dict) -> dict[str, set[str]]:
+    """Build a map of node_id -> set of predecessor node_ids from edges."""
+    predecessors: dict[str, set[str]] = {}
+    for node in data.get("nodes", []):
+        predecessors[node["id"]] = set()
+    for edge in data.get("edges", []):
+        dst = edge["dst"]
+        src = edge["src"]
+        if dst not in predecessors:
+            predecessors[dst] = set()
+        predecessors[dst].add(src)
+    return predecessors
+
+
+def get_status_table(
+    data: dict, filter_status: str = "", deps_met: bool = False
+) -> list[dict]:
     """Build a status table from parsed DOT data.
 
     Returns a list of dicts with keys:
         node_id, handler, status, bead_id, worker_type, label
+
+    Args:
+        data: Parsed DOT data from parse_file.
+        filter_status: If set, only include nodes with this status.
+        deps_met: If True, only include non-validated nodes whose all upstream
+                  predecessors have status "validated".
     """
+    # Build node status lookup for deps-met check
+    node_status: dict[str, str] = {}
+    predecessors: dict[str, set[str]] = {}
+    if deps_met:
+        for node in data.get("nodes", []):
+            node_status[node["id"]] = node["attrs"].get("status", "pending")
+        predecessors = build_predecessors(data)
+
     rows = []
     for node in data.get("nodes", []):
         attrs = node["attrs"]
+        status = attrs.get("status", "pending")
         row = {
             "node_id": node["id"],
             "handler": attrs.get("handler", ""),
-            "status": attrs.get("status", "pending"),
+            "status": status,
             "bead_id": attrs.get("bead_id", ""),
             "worker_type": attrs.get("worker_type", ""),
             "label": attrs.get("label", "").replace("\\n", " ").replace("\n", " "),
         }
         if filter_status and row["status"] != filter_status:
             continue
+        if deps_met:
+            # Exclude nodes already validated (they don't need work)
+            if status == "validated":
+                continue
+            # Include only nodes whose all predecessors are validated
+            all_deps_done = all(
+                node_status.get(pred, "pending") == "validated"
+                for pred in predecessors.get(node["id"], set())
+            )
+            if not all_deps_done:
+                continue
         rows.append(row)
     return rows
 
@@ -109,6 +151,16 @@ def main() -> None:
         action="store_true",
         help="Show only status summary counts",
     )
+    ap.add_argument(
+        "--deps-met",
+        action="store_true",
+        dest="deps_met",
+        help=(
+            "Show only nodes whose upstream dependencies are all 'validated'. "
+            "Excludes nodes that are already validated themselves. "
+            "Useful for finding actionable next steps."
+        ),
+    )
     args = ap.parse_args()
 
     try:
@@ -122,7 +174,9 @@ def main() -> None:
 
     # Get all rows (unfiltered) for summary, filtered for display
     all_rows = get_status_table(data)
-    display_rows = get_status_table(data, filter_status=args.filter)
+    display_rows = get_status_table(
+        data, filter_status=args.filter, deps_met=args.deps_met
+    )
     summary = status_summary(all_rows)
 
     if args.json_output:
@@ -132,6 +186,8 @@ def main() -> None:
             "total_nodes": len(all_rows),
             "summary": summary,
         }
+        if args.deps_met:
+            result["deps_met_filter"] = True
         if args.summary:
             print(json.dumps(result, indent=2))
         else:
@@ -151,8 +207,13 @@ def main() -> None:
             for status, count in sorted(summary.items()):
                 print(f"  {status:20s}  {count}")
         else:
+            active_filters = []
             if args.filter:
-                print(f"Filter: status={args.filter}")
+                active_filters.append(f"status={args.filter}")
+            if args.deps_met:
+                active_filters.append("deps-met (all predecessors validated)")
+            if active_filters:
+                print(f"Filter: {', '.join(active_filters)}")
                 print()
             print(format_table(display_rows))
             print()

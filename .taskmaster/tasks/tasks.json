@@ -2,392 +2,233 @@
   "master": {
     "tasks": [
       {
-        "id": 26,
-        "title": "Implement Pre-compaction Memory Flush Hook",
-        "description": "Enhance existing PreCompact hook to trigger Hindsight retain() before context compression (F3.1, Phase 1 quick win)",
-        "details": "Modify claude-harness-setup PreCompact hook: 1) Check session state for prior flush this cycle 2) Extract active goals, in-progress decisions, unresolved questions, key findings 3) Call Hindsight retain() to both banks with NO_REPLY pattern if nothing to save 4) Log flush completion. Use existing Hindsight HTTP API at localhost:8888.",
-        "testStrategy": "Unit test hook trigger on simulated compaction; Integration test with Hindsight recall post-compaction verifies 90%+ context preservation; Measure flush time < 10s (AC-3.1)",
+        "id": 56,
+        "title": "Create Attractor-compatible DOT exporter module",
+        "description": "Implement a new export module that transforms ZeroRepo delta reports into Attractor-compatible pipeline DOT graphs with proper node types and shapes",
+        "details": "Create `src/zerorepo/graph_construction/attractor_exporter.py` that maps delta classifications to DOT nodes: MODIFIED/NEW → box (codergen), auto-generated hexagon (validation gates), diamond (decision nodes). Include node attributes: worker_type, acceptance, bead_id, prd_ref. Generate start (Mdiamond) and finalize (Msquare) nodes. Implement worker type inference from file paths using pattern matching.",
+        "testStrategy": "Unit tests for delta-to-DOT mapping, node attribute generation, worker type inference. Integration test with sample delta report producing valid DOT output.",
         "priority": "high",
         "dependencies": [],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 27,
-        "title": "Create USER.md Operator Profile File",
-        "description": "Generate structured USER.md with work hours, preferences, loaded at session start (F5.2, Phase 1 quick win)",
-        "details": "Create .claude/USER.md template: work_hours: '8AM-10PM', comm_prefs: {}, tool_prefs: {}. Add SessionStart hook to read/parse USER.md and inject into system prompt. Auto-populate from Hindsight user-preferences context.",
-        "testStrategy": "Verify USER.md loads in new session prompt; Test preference application (e.g., 'morning briefings'); Validate parsing edge cases (AC-5.2)",
-        "priority": "high",
-        "dependencies": [],
-        "status": "pending",
-        "subtasks": []
-      },
-      {
-        "id": 28,
-        "title": "Implement Session Health Monitoring",
-        "description": "Real-time context window tracking with 80% threshold pre-compaction trigger (F5.3, Phase 1 quick win)",
-        "details": "Enhance statusline analyzer: 1) Track context_tokens/current_window via API 2) Alert at 80% threshold → trigger PreCompact flush 3) Track token_spend/session_duration 4) Stale context detection (>24h old history). Configurable thresholds in .claude/config.json.",
-        "testStrategy": "Simulate context growth to 80%; Verify auto-flush triggers; Test token alerts at configured limits (AC-5.3)",
+        "id": 57,
+        "title": "Extend ZeroRepo export.py with attractor-pipeline format",
+        "description": "Modify the existing export module to support --format=attractor-pipeline option that leverages the new attractor exporter",
+        "details": "Modify `src/zerorepo/graph_construction/export.py` to add attractor-pipeline format option. Integrate with the new attractor_exporter module. Ensure the export produces valid DOT files that pass `attractor validate`. Include proper edge generation following RPG dependency order.",
+        "testStrategy": "Test export format option, validate generated DOT structure, ensure no circular dependencies, verify attractor CLI validation passes.",
         "priority": "high",
         "dependencies": [
-          26
+          56
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 29,
-        "title": "Add Orchestrator Failure Classification",
-        "description": "Classify failures into auth/resource/logic/scope/external categories (F4.1, Phase 1 quick win)",
-        "details": "Extend orchestrator monitoring: Parse error messages/return codes → classify into 5 categories → store classification in beads metadata JSON. Categories: auth (API errors), resource (OOM/rate limit), logic (infinite loops), scope (budget exceeded), external (service down).",
-        "testStrategy": "Unit tests for each failure category classification; Integration test stores classification in bead metadata; Verify 30s classification time (AC-4.1)",
-        "priority": "high",
-        "dependencies": [],
-        "status": "pending",
-        "subtasks": []
-      },
-      {
-        "id": 30,
-        "title": "Spawn S3-Communicator Teammate Core",
-        "description": "Create Haiku communicator teammate in s3-live team with background execution (F1.1, Phase 2 core)",
-        "details": "In System 3 Operator session: TeamCreate('s3-live'); Task(subagent_type='general-purpose', model='haiku', run_in_background=True, team_name='s3-live', name='s3-communicator', prompt='.claude/skills/system3-orchestrator/communicator/'). Inherits all MCP tools from parent.",
-        "testStrategy": "Verify teammate spawns in ~/.claude/teams/s3-live/; Test inherits Hindsight/beads MCP tools; Confirm background execution doesn't block parent (AC-1.1)",
-        "priority": "high",
-        "dependencies": [],
-        "status": "pending",
-        "subtasks": []
-      },
-      {
-        "id": 31,
-        "title": "Implement Communicator Heartbeat Loop",
-        "description": "10-minute sleep → check → sleep cycle with configurable active hours",
-        "details": "In communicator skill: while True: if active_hours(): read HEARTBEAT.md → execute checks → sleep(600). Active hours default 8AM-10PM user local time from USER.md. Early return 'HEARTBEAT_OK' if no action.",
-        "testStrategy": "Test 10-min cycle timing; Verify active hours respect; Confirm HEARTBEAT_OK silent return (AC-1.1, AC-1.2)",
+        "id": 58,
+        "title": "Update zerorepo-run-pipeline.py with attractor format support",
+        "description": "Modify the pipeline runner script to support the new attractor-pipeline export format",
+        "details": "Update `.claude/skills/orchestrator-multiagent/scripts/zerorepo-run-pipeline.py` to accept and process --format=attractor-pipeline option. Ensure the script calls the updated export functionality and outputs the DOT file alongside the delta report.",
+        "testStrategy": "End-to-end test running the pipeline script with attractor format, verify DOT file generation, validate output structure.",
         "priority": "high",
         "dependencies": [
-          30
+          57
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 32,
-        "title": "Create HEARTBEAT.md Configuration File",
-        "description": "Define heartbeat check instructions: beads, tmux, git, Hindsight goals (F1.2)",
-        "details": "Generate .claude/HEARTBEAT.md: beads_status: 'bd ready, bd list --status=in_progress'; orchestrator_health: 'tmux ls'; git_status: 'git status'; hindsight_goals: 'recall private bank'. Communicator reads on each cycle.",
-        "testStrategy": "Verify communicator reads empty file → early return; Test parses all check types correctly (AC-1.2)",
+        "id": 59,
+        "title": "Create comprehensive unit tests for attractor exporter",
+        "description": "Implement thorough unit tests for the new attractor exporter functionality",
+        "details": "Create `tests/unit/test_attractor_exporter.py` with test cases for: delta classification mapping, node attribute generation, worker type inference patterns, edge generation, start/finalize node creation, and validation gate pairing logic.",
+        "testStrategy": "Unit tests with mock delta reports, edge case testing for file path patterns, validation of generated DOT syntax and structure.",
         "priority": "medium",
         "dependencies": [
-          30,
-          31
+          56
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 33,
-        "title": "Implement Google Chat MCP Server",
-        "description": "Stdio MCP server with Google Chat API integration (F2.1, Phase 2 core)",
-        "details": "Create google-chat-bridge MCP server: tools=['send_message', 'get_new_messages', 'mark_read', 'send_task_completion', 'get_stats']. Configure via .mcp.json with service account credentials. Use Google Chat API v2 (webhook + REST).",
-        "testStrategy": "Start MCP server → verify tools register in .mcp.json; Test send_message to configured space (AC-2.1)",
-        "priority": "high",
-        "dependencies": [],
-        "status": "pending",
-        "subtasks": []
-      },
-      {
-        "id": 34,
-        "title": "Add Heartbeat Beads Status Check",
-        "description": "Check bd ready, bd list --status=in_progress in heartbeat cycle",
-        "details": "Communicator executes: bd ready → parse P0-P1 beads; bd list --status=in_progress → check stuck beads (>2h). If actionable → prepare WORK_FOUND context brief.",
-        "testStrategy": "Create test P0 bead → verify detection in heartbeat; Test in_progress bead aging detection (AC-1.3)",
-        "priority": "medium",
-        "dependencies": [
-          31,
-          32
-        ],
-        "status": "pending",
-        "subtasks": []
-      },
-      {
-        "id": 35,
-        "title": "Add Heartbeat Tmux/Orchestrator Health Check",
-        "description": "Monitor tmux session status in heartbeat cycle",
-        "details": "tmux ls → parse System 3 Operator session status. If crashed/stopped → classify failure → SendMessage to team-lead: 'ORCHESTRATOR_DOWN: [details]'.",
-        "testStrategy": "Kill tmux session → verify detection and wake message (AC-1.3)",
-        "priority": "medium",
-        "dependencies": [
-          31,
-          32
-        ],
-        "status": "pending",
-        "subtasks": []
-      },
-      {
-        "id": 36,
-        "title": "Implement Google Chat Outbound Message Formatting",
-        "description": "Structured cards, markdown rendering, 4096 char chunking (F2.3, Phase 2 core)",
-        "details": "MCP send_message tool: Convert markdown → Google Chat format; Chunk >4096 chars; Support cards with action buttons; Media: screenshots, code blocks. Thread by conversation_id.",
-        "testStrategy": "Test long message chunking; Verify card rendering; Test media attachment (AC-2.2)",
+        "id": 60,
+        "title": "Create zerorepo-pipeline.sh workflow script",
+        "description": "Implement the single-command workflow script that orchestrates the complete definition pipeline from PRD to executable DOT graph",
+        "details": "Create `.claude/skills/orchestrator-multiagent/scripts/zerorepo-pipeline.sh` that executes: zerorepo init (if needed), zerorepo generate with PRD spec, export to DOT, attractor validate, attractor annotate, attractor init-promise. Store output at `.claude/attractor/pipelines/<PRD-ID>.dot` and create checkpoints.",
+        "testStrategy": "End-to-end workflow testing with sample PRD, verify each pipeline stage completes, validate checkpoint creation and file placement.",
         "priority": "high",
         "dependencies": [
-          33
+          58
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 37,
-        "title": "Add Heartbeat Git Status Check",
-        "description": "Check uncommitted changes, pending PR reviews",
-        "details": "git status → parse uncommitted changes; gh pr list --status=open → count pending reviews. Actionable if >5 files changed or P0 PRs pending.",
-        "testStrategy": "Create uncommitted files → verify detection; Test PR list parsing (AC-1.3)",
+        "id": 61,
+        "title": "Enhance attractor annotate.py for bead cross-referencing",
+        "description": "Modify the attractor annotate script to cross-reference generated DOT nodes with existing beads database",
+        "details": "Update `.claude/scripts/attractor/annotate.py` to match DOT node attributes with beads database entries, populate bead_id attributes where matches exist, and handle cases where no matching beads are found.",
+        "testStrategy": "Test annotation with existing beads database, verify bead_id population, test handling of unmatched nodes.",
         "priority": "medium",
         "dependencies": [
-          31,
-          32
+          60
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 38,
-        "title": "Implement Cost-Optimized Model Routing",
-        "description": "Haiku→Sonnet→Opus escalation with token tracking (F1.3)",
-        "details": "Communicator default: haiku. Actionable work → SendMessage to sonnet-planner teammate. Strategic → escalate to opus operator. Track tokens/cycle in ~/.claude/heartbeat_costs.json. HEARTBEAT_OK <5000 tokens.",
-        "testStrategy": "Verify Haiku default; Test escalation paths; Confirm <5000 token non-actionable cycles (AC-1.5)",
+        "id": 62,
+        "title": "Enhance attractor init-promise.py for completion promise creation",
+        "description": "Modify the init-promise script to create completion promises from generated DOT graphs with acceptance criteria per validation gate",
+        "details": "Update `.claude/scripts/attractor/init_promise.py` to parse hexagon validation gates from DOT graphs, extract acceptance criteria from node attributes, and create completion promises with one AC per hexagon node.",
+        "testStrategy": "Test promise creation from DOT graphs, verify acceptance criteria extraction, validate promise structure and completeness.",
         "priority": "medium",
         "dependencies": [
-          30,
-          31
+          60
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 39,
-        "title": "Create Communicator Skill Definition",
-        "description": "Define .claude/skills/system3-orchestrator/communicator/SKILL.md",
-        "details": "Skill prompt: 'You are S3-Communicator. Heartbeat loop: read HEARTBEAT.md → check → SendMessage if actionable. User intermediary for ASK_USER questions. Cost-conscious: early HEARTBEAT_OK returns.'",
-        "testStrategy": "Load skill in test teammate → verify behavior matches spec (AC-1.1)",
-        "priority": "medium",
-        "dependencies": [
-          30
-        ],
-        "status": "pending",
-        "subtasks": []
-      },
-      {
-        "id": 40,
-        "title": "Implement Google Chat Inbound Message Routing",
-        "description": "Webhook receives messages → route to System 3 or queue (F2.2)",
-        "details": "Google Chat webhook → parse {sender, text, timestamp, thread_id} → rate limit → if System3 running: SendMessage(recipient='team-lead'); else: queue for heartbeat.",
-        "testStrategy": "Send test webhook → verify routing to running session; Test queueing when idle (AC-2.3)",
-        "priority": "high",
-        "dependencies": [
-          33
-        ],
-        "status": "pending",
-        "subtasks": []
-      },
-      {
-        "id": 41,
-        "title": "Implement Operator Wake-Up SendMessage",
-        "description": "Communicator → team-lead WORK_FOUND messages (F1.6)",
-        "details": "SendMessage(type='message', recipient='team-lead', content='WORK_FOUND: [beads/git/tmux context]', summary='P0 work detected'). Wakes idle Operator in same session.",
-        "testStrategy": "Idle Operator session → send WORK_FOUND → verify wakes and processes (AC-1.6)",
-        "priority": "high",
-        "dependencies": [
-          30,
-          31
-        ],
-        "status": "pending",
-        "subtasks": []
-      },
-      {
-        "id": 42,
-        "title": "Add APScheduler Cron Jobs Configuration",
-        "description": "Morning briefing 7AM, EOD 6PM, weekly reflection (F1.4)",
-        "details": "Create .claude/cron.json: {'morning_briefing': '7 0 * * *', 'eod_summary': '0 18 * * *', 'weekly_reflect': '0 8 * * 1'}. APScheduler loads from config, spawns isolated sessions.",
-        "testStrategy": "Manual trigger each job type; Verify isolated session execution; Test job persistence across restarts (AC-1.4)",
-        "priority": "medium",
-        "dependencies": [
-          30
-        ],
-        "status": "pending",
-        "subtasks": []
-      },
-      {
-        "id": 43,
-        "title": "Implement Morning Briefing Cron Job",
-        "description": "7AM isolated session: overnight beads/PRs/pending work summary",
-        "details": "Cron job spawns isolated session: 'Summarize: bd list --since=yesterday, gh pr list --updated=\"1d\", Hindsight active goals'. Output to Google Chat + Hindsight retain.",
-        "testStrategy": "Manual 7AM trigger → verify summary content; Test Google Chat delivery (AC-1.4)",
-        "priority": "medium",
-        "dependencies": [
-          42,
-          36
-        ],
-        "status": "pending",
-        "subtasks": []
-      },
-      {
-        "id": 44,
-        "title": "Implement Stop Gate Communicator Checker",
-        "description": "Block Operator exit if s3-communicator active (F1.9)",
-        "details": "unified_stop_gate/communicator_checker.py: Check ~/.claude/teams/s3-live/config.json for active communicator → if running: exit 2 'Communicator active'; else: exit 0.",
-        "testStrategy": "Stop gate with active communicator → verify BLOCK; Without → verify PASS (AC-1.10)",
-        "priority": "high",
-        "dependencies": [
-          30
-        ],
-        "status": "pending",
-        "subtasks": []
-      },
-      {
-        "id": 45,
-        "title": "Implement Session Start Recall Hook",
-        "description": "Post-compaction: recall active goals, completion promises (F1.7)",
-        "details": "Enhance SessionStart hook: 1) Hindsight recall 'What was I working on before compaction?' 2) Restore active goals 3) Check pending completion promises by UUID 4) Within 30s.",
-        "testStrategy": "Simulate compaction → restart → verify recall restores context in 30s (AC-1.8)",
-        "priority": "medium",
-        "dependencies": [
-          26
-        ],
-        "status": "pending",
-        "subtasks": []
-      },
-      {
-        "id": 46,
-        "title": "Implement User Intermediary Pattern",
-        "description": "Operator ASK_USER → Communicator → Google Chat → response relay (F1.8)",
-        "details": "Operator: SendMessage('s3-communicator', 'ASK_USER: [2-4 options]') → idle. Communicator → Google Chat. User responds → Communicator → SendMessage('team-lead', 'USER_RESPONSE: [answer]').",
-        "testStrategy": "Full E2E: Operator asks → Google Chat receives → user responds → Operator wakes with answer (AC-1.9)",
-        "priority": "high",
-        "dependencies": [
-          30,
-          33,
-          36,
-          40,
-          41
-        ],
-        "status": "pending",
-        "subtasks": []
-      },
-      {
-        "id": 47,
-        "title": "Implement Post-Session Narrative Logging",
-        "description": "Auto-generate GEO chain after each session (F3.2)",
-        "details": "Post-session hook: Generate Goal→Experience→Outcome narrative → store in Hindsight experience network. Link beads IDs, session UUIDs. Searchable via recall().",
-        "testStrategy": "Run test session → verify GEO chain in Hindsight; Test recall queries find narrative (AC-3.2)",
-        "priority": "medium",
-        "dependencies": [],
-        "status": "pending",
-        "subtasks": []
-      },
-      {
-        "id": 48,
-        "title": "Implement Auth Failure Recovery",
-        "description": "API key rotation for auth failures (F4.2)",
-        "details": "Auth classified failures → rotate API key profile (OpenClaw pattern). Update ~/.claude/api_keys.json → retry orchestrator. Log rotation success/failure.",
-        "testStrategy": "Simulate API 401 → verify key rotation → successful retry (AC-4.2)",
-        "priority": "medium",
-        "dependencies": [
-          29
-        ],
-        "status": "pending",
-        "subtasks": []
-      },
-      {
-        "id": 49,
-        "title": "Implement Resource Failure Recovery",
-        "description": "Model downgrade + context reduction for OOM/rate limits (F4.2)",
-        "details": "Resource failures → Opus→Sonnet→Haiku downgrade; truncate context to 50%; retry. Track downgrade success rates in Hindsight.",
-        "testStrategy": "Simulate context overflow → verify downgrade → success (AC-4.3)",
-        "priority": "medium",
-        "dependencies": [
-          29
-        ],
-        "status": "pending",
-        "subtasks": []
-      },
-      {
-        "id": 50,
-        "title": "Implement Daily Session Distillation Cron",
-        "description": "End-of-day reflect(budget='mid') on session narratives (F3.3)",
-        "details": "Cron job: Query today's GEO chains → reflect(budget='mid') → promote patterns to observation network → flag anti-patterns. Depends on F1.4 cron.",
-        "testStrategy": "Manual trigger → verify synthesizes multiple narratives; Test pattern promotion (AC-3.3)",
-        "priority": "medium",
-        "dependencies": [
-          42,
-          47
-        ],
-        "status": "pending",
-        "subtasks": []
-      },
-      {
-        "id": 51,
-        "title": "Implement Session Transcript Indexing",
-        "description": "Chunk transcripts (400t/80t overlap) for Hindsight search (F3.5)",
-        "details": "Post-session: chunk main session transcripts → index in Hindsight. Enable queries: 'What did I do last Tuesday?'. Main sessions only (privacy).",
-        "testStrategy": "Index test transcripts → recall 'yesterday' → verify relevant chunks returned (AC-3.5)",
-        "priority": "medium",
-        "dependencies": [
-          47
-        ],
-        "status": "pending",
-        "subtasks": []
-      },
-      {
-        "id": 52,
-        "title": "Create Capability Self-Model Tracking",
-        "description": "Track success rates/confidence per capability domain (F5.1)",
-        "details": "Post-session: Update ~/.claude/capability_model.json: {backend_orch: {confidence: 0.85, success_rate: 92%}, ...}. Use in goal selection: prefer high-confidence domains.",
-        "testStrategy": "Run sessions across domains → verify metrics update; Test goal selection bias (AC-5.1)",
-        "priority": "medium",
-        "dependencies": [
-          47
-        ],
-        "status": "pending",
-        "subtasks": []
-      },
-      {
-        "id": 53,
-        "title": "Implement Command Queue Lanes",
-        "description": "Separate heartbeat vs user command execution (F1.5, Phase 5)",
-        "details": "Team-level queue management: heartbeat_lane (low priority), user_lane (high priority). If heartbeat running → queue completion, prioritize user commands.",
-        "testStrategy": "Simultaneous heartbeat + user command → verify user priority (AC-1.5)",
+        "id": 63,
+        "title": "Update ZEROREPO.md documentation with new workflow",
+        "description": "Document the new zerorepo-pipeline workflow and attractor integration in the orchestrator documentation",
+        "details": "Update `.claude/skills/orchestrator-multiagent/ZEROREPO.md` to include documentation for the new zerorepo-pipeline.sh workflow, attractor format export, and integration points with the DOT lifecycle.",
+        "testStrategy": "Documentation review, ensure examples are accurate and workflow steps are clear.",
         "priority": "low",
         "dependencies": [
-          30,
-          31
+          60
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 54,
-        "title": "Implement Google Chat Command Reception",
-        "description": "status/bd ready/start/approve commands via natural language (F2.5)",
-        "details": "'What's the status?' → execute status check → reply same thread. Supported: status, bd ready, start [initiative], approve, reject.",
-        "testStrategy": "Send natural language commands → verify execution + threaded reply (AC-2.6)",
+        "id": 64,
+        "title": "Update System 3 DOT Navigation section",
+        "description": "Modify the System 3 meta-orchestrator output style to integrate ZeroRepo-generated pipeline navigation",
+        "details": "Update `.claude/output-styles/system3-meta-orchestrator.md` DOT Navigation section to reference ZeroRepo-generated pipelines, include automatic pipeline reading from `.claude/attractor/pipelines/<INITIATIVE>.dot`, and document the integration workflow.",
+        "testStrategy": "Review updated output style, verify integration points are documented, test System 3 workflow with generated pipelines.",
+        "priority": "high",
+        "dependencies": [
+          60
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 65,
+        "title": "Enhance attractor status.py with dependency filtering",
+        "description": "Add --deps-met filter to attractor status command to identify dispatchable nodes",
+        "details": "Modify `.claude/scripts/attractor/status.py` to add `--deps-met` filter that identifies nodes with pending status where all upstream dependencies are validated. Implement dependency graph traversal to check upstream completion status.",
+        "testStrategy": "Test dependency filtering logic, verify only truly dispatchable nodes are returned, test with complex dependency graphs.",
+        "priority": "high",
+        "dependencies": [
+          64
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 66,
+        "title": "Update System 3 orchestrator spawn workflow",
+        "description": "Modify the System 3 orchestrator skill to inject DOT node attributes into spawned orchestrator prompts",
+        "details": "Update `.claude/skills/system3-orchestrator/SKILL.md` spawn workflow to inject node's acceptance criteria, worker_type, file paths from RPG enrichment, and prd_ref into orchestrator mission briefs. Implement automatic transition to impl_complete upon orchestrator completion.",
+        "testStrategy": "Test orchestrator spawn with DOT node attributes, verify mission brief injection, test automatic state transitions.",
+        "priority": "high",
+        "dependencies": [
+          65
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 67,
+        "title": "Enhance attractor transition.py with validation gate activation",
+        "description": "Modify the transition script to handle validation gate activation when codergen nodes reach impl_complete",
+        "details": "Update `.claude/scripts/attractor/transition.py` to automatically activate paired hexagon nodes when codergen nodes transition to impl_complete, implement decision diamond routing logic for pass/fail scenarios, and handle retry transitions back to active state.",
+        "testStrategy": "Test validation gate activation logic, verify decision routing, test retry scenarios and state transitions.",
+        "priority": "high",
+        "dependencies": [
+          66
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 68,
+        "title": "Update s3-guardian for DOT node-based validation",
+        "description": "Modify the s3-guardian skill to integrate with DOT validation gates and evidence linking",
+        "details": "Update `.claude/skills/s3-guardian/SKILL.md` Phase 4 integration to receive acceptance criteria from hexagon nodes, implement dual-pass validation (technical → business), store evidence at `.claude/evidence/<node-id>/`, and auto-infer validation_method from file paths.",
+        "testStrategy": "Test node-based validation scope, verify dual-pass execution, test evidence storage and validation method inference.",
+        "priority": "high",
+        "dependencies": [
+          67
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 69,
+        "title": "Update validation-test-agent for node-based scope",
+        "description": "Modify the validation test agent to work with DOT node-based validation scope",
+        "details": "Update `.claude/agents/validation-test-agent.md` to receive validation scope from DOT node attributes, implement file path-based validation boundaries, and integrate with the evidence storage system.",
+        "testStrategy": "Test node-based validation scope, verify file path boundary enforcement, test evidence generation and storage.",
         "priority": "medium",
         "dependencies": [
-          40
+          68
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 55,
-        "title": "Create IDENTITY.md Self-Model",
-        "description": "System 3 self-description, disposition traits (F5.4)",
-        "details": ".claude/IDENTITY.md: confidence: high, risk_tolerance: medium, comm_style: concise. Evolves via user feedback + outcomes. Used by reflect().",
-        "testStrategy": "Load IDENTITY.md in session → verify influences responses (AC-5.4)",
+        "id": 70,
+        "title": "Create attractor dashboard.py for progress tracking",
+        "description": "Implement a comprehensive dashboard command for pipeline progress visualization",
+        "details": "Create `.claude/scripts/attractor/dashboard.py` that produces combined progress views including pipeline stage, node status distribution, per-node detail table, completion promise progress, and estimated completion. Support both human-readable and JSON output modes.",
+        "testStrategy": "Test dashboard output formats, verify progress calculations, test with various pipeline states and node distributions.",
+        "priority": "medium",
+        "dependencies": [
+          67
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 71,
+        "title": "Integrate dashboard with attractor CLI",
+        "description": "Add the dashboard subcommand to the main attractor CLI interface",
+        "details": "Modify `.claude/scripts/attractor/cli.py` to add dashboard subcommand, implement argument parsing for pipeline DOT files and output format options, and integrate with the dashboard module.",
+        "testStrategy": "Test CLI integration, verify argument parsing, test dashboard command execution through CLI.",
+        "priority": "medium",
+        "dependencies": [
+          70
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 72,
+        "title": "Update s3-heartbeat for pipeline scanning",
+        "description": "Integrate pipeline status monitoring into the s3-heartbeat skill",
+        "details": "Update `.claude/skills/s3-heartbeat/SKILL.md` to include pipeline DOT scanning during its 600s cycle, integrate with dashboard functionality for status reporting, and store progress to Hindsight for cross-session awareness.",
+        "testStrategy": "Test heartbeat pipeline scanning, verify integration with dashboard, test Hindsight storage and retrieval.",
         "priority": "low",
         "dependencies": [
-          52
+          70
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 73,
+        "title": "Implement regression detection with baseline comparison",
+        "description": "Create regression detection functionality using ZeroRepo baseline comparison",
+        "details": "Create `src/zerorepo/commands/diff.py` for baseline comparison, implement `.claude/scripts/zerorepo-regression-check.sh` for post-finalize regression detection, generate regression-check.dot graphs for unexpected changes, and integrate with Guardian final validation.",
+        "testStrategy": "Test baseline comparison accuracy, verify regression detection for unexpected changes, test false positive filtering, validate integration with Guardian workflow.",
+        "priority": "medium",
+        "dependencies": [
+          56
         ],
         "status": "pending",
         "subtasks": []
@@ -395,7 +236,7 @@
     ],
     "metadata": {
       "created": "2026-02-15T01:51:38.443Z",
-      "updated": "2026-02-15T01:51:38.443Z",
+      "updated": "2026-02-22T10:35:48.194Z",
       "description": "Tasks for master context"
     }
   }
