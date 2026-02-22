@@ -227,36 +227,24 @@ Wait for the reply via the GChat round-trip poller, then try stopping again."
             exit 0
         fi
     else
-        # First stop attempt — check if there's available work via beads
-        HAS_WORK=false
-        if command -v bd &>/dev/null; then
-            BD_READY=$(bd ready 2>/dev/null || echo "")
-            if [ -n "$BD_READY" ] && ! echo "$BD_READY" | grep -qi "no.*ready\|no.*issues\|nothing"; then
-                HAS_WORK=true
-            fi
-        fi
+        # First stop attempt — ALWAYS block. S3 must ask user before stopping.
+        mkdir -p "$(dirname "$STOP_BLOCK_FILE")"
+        python3 -c "import time; print(time.time())" > "$STOP_BLOCK_FILE"
 
-        if [ "$HAS_WORK" = true ]; then
-            # Work available → BLOCK and force S3 to ask user
-            mkdir -p "$(dirname "$STOP_BLOCK_FILE")"
-            python3 -c "import time; print(time.time())" > "$STOP_BLOCK_FILE"
+        output_json "block" "reason" "🚫 NO USER QUESTION BEFORE EXIT
 
-            output_json "block" "reason" "🚫 NO USER QUESTION BEFORE EXIT
-
-System 3 sessions MUST ask the user a question before stopping when work
-is available. Beads shows ready tasks.
+System 3 sessions MUST ask the user a question before stopping. No exceptions.
 
 Before stopping, you MUST:
-1. Review available work: bd ready
+1. Check for available work: bd ready
 2. Propose next steps via AskUserQuestion (which forwards to GChat)
+   - If work is available: propose which tasks to tackle
+   - If no work: ask the user what they'd like you to work on
 3. Wait for the user's reply via the GChat round-trip poller
 4. Then you may stop (the stop gate will pass on the next attempt)
 
-This ensures the user is ALWAYS notified about session activity."
-            exit 0
-        fi
-        # No work available → allow stop without asking
-        # Fall through to remaining checks
+This ensures the user is ALWAYS notified before a session ends."
+        exit 0
     fi
 fi
 
