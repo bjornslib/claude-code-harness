@@ -169,69 +169,94 @@ Marker directory: $GCHAT_ASK_DIR"
     fi
 fi
 
-# --- Step 1.8: Recent AskUserQuestion Check (system3-* sessions) ---
-# S3 sessions MUST have asked the user a question recently (via AskUserQuestion,
-# which forwards to GChat) before stopping. This prevents silent exits where the
-# user is away from the terminal.
+# --- Step 1.8: Mandatory AskUserQuestion Before Exit (system3-* sessions) ---
+# S3 sessions MUST ask the user a question (via AskUserQuestion → GChat) as
+# the LAST thing before stopping. There is NO exception — every stop attempt
+# requires a fresh question asked SINCE the previous stop attempt.
 #
-# "Recently" = a GChat marker for this session less than 30 minutes old.
-# Old resolved markers from earlier in the session don't count — S3 must
-# present fresh "what next?" options as its last action before stopping.
+# Mechanism: timestamp-based state machine.
+#   1. Stop gate blocks → writes "last-stop-block" timestamp file
+#   2. S3 asks question → GChat marker created (timestamp > last-stop-block)
+#   3. Stop gate runs again → finds marker after last block → PASS
 #
-# Exception: sessions with an active completion promise (work is defined).
+# This ensures the user is ALWAYS notified before a session ends, even when
+# away from the terminal. Old questions from earlier don't count.
 
 if [[ "$SESSION_ID" == system3-* ]] && [ "$PROMISE_PASSED" = true ]; then
-    # Check if this session owns any active promises
-    HAS_PROMISES=false
-    CS_PROMISE="$PROJECT_ROOT/.claude/scripts/completion-state/cs-promise"
-    if [ -x "$CS_PROMISE" ]; then
-        PROMISE_LIST=$("$CS_PROMISE" --mine 2>/dev/null || echo "")
-        if echo "$PROMISE_LIST" | grep -q "in_progress\|verified\|pending"; then
-            HAS_PROMISES=true
-        fi
-    fi
+    GCHAT_ASK_DIR="$PROJECT_ROOT/.claude/state/gchat-forwarded-ask"
+    STOP_BLOCK_FILE="$PROJECT_ROOT/.claude/state/last-stop-block-${SESSION_ID}"
 
-    if [ "$HAS_PROMISES" = false ]; then
-        # No promises → require a RECENT AskUserQuestion (marker < 30 min old)
-        GCHAT_ASK_DIR="$PROJECT_ROOT/.claude/state/gchat-forwarded-ask"
-        HAS_RECENT_ASK=false
-        MAX_AGE_SECONDS=1800  # 30 minutes
+    if [ -f "$STOP_BLOCK_FILE" ]; then
+        # Subsequent stop attempt — check if a question was asked SINCE the last block
+        LAST_BLOCK_TS=$(cat "$STOP_BLOCK_FILE" 2>/dev/null || echo "0")
+        ASKED_SINCE_BLOCK=false
 
         if [ -d "$GCHAT_ASK_DIR" ]; then
             for marker in "$GCHAT_ASK_DIR"/*.json; do
                 [ -f "$marker" ] || continue
                 if python3 -c "
-import json, sys, os, time
+import json, sys, os
 m = json.load(open('$marker'))
 if m.get('session_id') != os.environ.get('CLAUDE_SESSION_ID', ''):
     sys.exit(1)
-# Check marker age
-age = time.time() - os.path.getmtime('$marker')
-if age < $MAX_AGE_SECONDS:
+marker_ts = os.path.getmtime('$marker')
+if marker_ts > float('$LAST_BLOCK_TS'):
     sys.exit(0)
 sys.exit(1)
 " 2>/dev/null; then
-                    HAS_RECENT_ASK=true
+                    ASKED_SINCE_BLOCK=true
                     break
                 fi
             done
         fi
 
-        if [ "$HAS_RECENT_ASK" = false ]; then
-            output_json "block" "reason" "🚫 NO RECENT USER QUESTION BEFORE EXIT
+        if [ "$ASKED_SINCE_BLOCK" = true ]; then
+            # Question asked since last block → allow stop
+            rm -f "$STOP_BLOCK_FILE"  # Clean up for next cycle
+            # Fall through to remaining checks
+            :
+        else
+            # Still no question since block → block again (update timestamp)
+            python3 -c "import time; print(time.time())" > "$STOP_BLOCK_FILE"
 
-This System 3 session has no completion promise and has not asked the user
-a question recently (within the last 30 minutes via AskUserQuestion → GChat).
+            output_json "block" "reason" "🚫 NO USER QUESTION BEFORE EXIT
 
-Before stopping, you MUST:
-1. Check for available work: bd ready
-2. Propose next steps via AskUserQuestion (which forwards to GChat)
-3. Wait for the user's reply via the GChat round-trip poller
-
-This ensures the user is always notified about session activity, even when away.
-Old questions from earlier in the session do not count — ask a fresh one."
+You were already told to ask the user a question before stopping.
+Use AskUserQuestion to propose next steps (it will forward to GChat).
+Wait for the reply via the GChat round-trip poller, then try stopping again."
             exit 0
         fi
+    else
+        # First stop attempt — check if there's available work via beads
+        HAS_WORK=false
+        if command -v bd &>/dev/null; then
+            BD_READY=$(bd ready 2>/dev/null || echo "")
+            if [ -n "$BD_READY" ] && ! echo "$BD_READY" | grep -qi "no.*ready\|no.*issues\|nothing"; then
+                HAS_WORK=true
+            fi
+        fi
+
+        if [ "$HAS_WORK" = true ]; then
+            # Work available → BLOCK and force S3 to ask user
+            mkdir -p "$(dirname "$STOP_BLOCK_FILE")"
+            python3 -c "import time; print(time.time())" > "$STOP_BLOCK_FILE"
+
+            output_json "block" "reason" "🚫 NO USER QUESTION BEFORE EXIT
+
+System 3 sessions MUST ask the user a question before stopping when work
+is available. Beads shows ready tasks.
+
+Before stopping, you MUST:
+1. Review available work: bd ready
+2. Propose next steps via AskUserQuestion (which forwards to GChat)
+3. Wait for the user's reply via the GChat round-trip poller
+4. Then you may stop (the stop gate will pass on the next attempt)
+
+This ensures the user is ALWAYS notified about session activity."
+            exit 0
+        fi
+        # No work available → allow stop without asking
+        # Fall through to remaining checks
     fi
 fi
 
