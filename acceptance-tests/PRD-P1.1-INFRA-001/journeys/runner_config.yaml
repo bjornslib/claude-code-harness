@@ -1,0 +1,17 @@
+services:
+  api_url: "http://localhost:8000"
+  db_dsn: "postgresql://agencheck:agencheck@localhost:5434/agencheck"
+  prefect_api: "http://localhost:4200/api"
+  redis_url: "redis://localhost:6380"
+
+polling:
+  interval_seconds: 5
+  max_wait_seconds: 60
+
+auth:
+  # No Clerk auth needed for token validation endpoint (public)
+  test_api_key: "${TEST_API_KEY}"
+
+env_overrides:
+  PREFECT_DISPATCH_MODE: "local_mock"
+  SENDGRID_API_KEY: "mock-key-not-needed-in-mock-mode"

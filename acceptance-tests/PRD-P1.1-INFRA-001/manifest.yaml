@@ -1,0 +1,56 @@
+prd_id: PRD-P1.1-INFRA-001
+prd_title: "SendGrid Email Infrastructure + Railway Prefect Deployment"
+prd_source: "/Users/theb/Documents/Windsurf/zenagent2/zenagent/agencheck/documentation/prds/phase-1.1/PRD-P1.1-INFRA-001.md"
+generated: "2026-02-22T22:30:00+11:00"
+mode: guardian
+
+thresholds:
+  accept: 0.60
+  investigate: 0.40
+
+features:
+  - name: "F1 — SendGrid Email Client + Mock Mode"
+    weight: 0.20
+    validation_method: code-analysis
+    scenarios:
+      - "sendgrid_client_class"
+      - "mock_mode_dispatch"
+
+  - name: "F2 — JWT Token System (Generator + Validator + Endpoint)"
+    weight: 0.25
+    validation_method: api-required
+    scenarios:
+      - "token_generation"
+      - "token_validation_happy_path"
+      - "token_validation_error_paths"
+      - "validation_endpoint"
+
+  - name: "F3 — Database Migrations (043 + 044)"
+    weight: 0.15
+    validation_method: api-required
+    scenarios:
+      - "migration_043_verification_tokens"
+      - "migration_044_email_events"
+
+  - name: "F4 — SendGrid Webhook Handler"
+    weight: 0.15
+    validation_method: api-required
+    scenarios:
+      - "webhook_event_processing"
+      - "webhook_signature_verification"
+
+  - name: "F5 — Email Outreach Flow + Channel Dispatch Wiring"
+    weight: 0.15
+    validation_method: code-analysis
+    scenarios:
+      - "email_outreach_flow_structure"
+      - "channel_dispatch_wiring"
+      - "return_shape_parity"
+
+  - name: "F6 — Railway Prefect Deployment"
+    weight: 0.10
+    validation_method: hybrid
+    scenarios:
+      - "railway_prefect_server"
+      - "railway_worker_dockerfile"
+      - "railway_env_config"
