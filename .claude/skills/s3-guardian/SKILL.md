@@ -279,6 +279,298 @@ cd /path/to/impl-repo && pytest --tb=short 2>&1 | tail -20
 
 See [references/validation-scoring.md](references/validation-scoring.md) for the scoring methodology and evidence mapping.
 
+### DOT Pipeline Integration
+
+When the initiative uses a `.dot` attractor pipeline, Phase 4 validation is node-driven. Each hexagon node in the pipeline graph represents a single validation gate. The guardian reads node attributes directly rather than inferring scope from PRD text.
+
+#### Reading Validation Scope from Hexagon Nodes
+
+```bash
+# Extract node attributes from the pipeline DOT file
+# Hexagon nodes (shape=hexagon) represent validation gates
+grep -A 20 'shape=hexagon' .claude/attractor/<pipeline>.dot
+```
+
+A hexagon node exposes these attributes:
+
+| Attribute | Value | Purpose |
+|-----------|-------|---------|
+| `gate` | `technical` / `business` / `e2e` | Which validation mode to run |
+| `mode` | `technical` / `business` | Maps directly to `--mode` parameter |
+| `acceptance` | criteria text | What must be true for the gate to pass |
+| `files` | comma-separated paths | Exact files to examine — no guessing |
+| `bead_id` | e.g., `AT-10-TECH` | Beads task ID for recording results |
+| `promise_ac` | e.g., `AC-1` | Completion promise criterion to meet |
+
+**Example hexagon node:**
+```dot
+validate_backend_tech [
+    shape=hexagon
+    label="Backend\nTechnical\nValidation"
+    gate="technical"
+    mode="technical"
+    bead_id="AT-10-TECH"
+    acceptance="POST /auth/login returns JWT; POST /auth/refresh rotates token"
+    files="src/auth/routes.py,src/auth/jwt.py,src/auth/models.py"
+    promise_ac="AC-1"
+    status="pending"
+];
+```
+
+#### Validation Method Inference
+
+The `files` attribute determines which validation technique the guardian uses:
+
+```python
+def infer_validation_method(files: list[str]) -> str:
+    """Map file paths to the appropriate validation method."""
+    for f in files:
+        # Browser-required: frontend pages, components, stores
+        if any(p in f for p in ["page.tsx", "component", "components/", "stores/", ".tsx", ".vue"]):
+            return "browser-required"
+        # API-required: route handlers, API modules, controllers
+        if any(p in f for p in ["routes.py", "api/", "controllers/", "handlers/", "views.py"]):
+            return "api-required"
+    # Default: static code analysis is sufficient
+    return "code-analysis"
+```
+
+| Files pattern | Validation method | Tools |
+|--------------|-------------------|-------|
+| `*.tsx`, `page.tsx`, `components/` | `browser-required` | chrome-devtools MCP, screenshot capture |
+| `routes.py`, `api/`, `handlers/` | `api-required` | HTTP calls against real endpoints |
+| `*.py`, `*.ts` (non-route) | `code-analysis` | Read file, check implementation, run pytest |
+
+#### Evidence Storage
+
+All evidence from DOT-based validation is stored under `.claude/evidence/<node-id>/`:
+
+```
+.claude/evidence/
+└── <node-id>/                        # e.g., validate_backend_tech/
+    ├── technical-validation.md       # Technical gate findings
+    ├── business-validation.md        # Business gate findings (if mode=business)
+    └── validation-summary.json       # Machine-readable summary
+```
+
+**validation-summary.json schema:**
+```json
+{
+    "node_id": "validate_backend_tech",
+    "bead_id": "AT-10-TECH",
+    "gate": "technical",
+    "mode": "technical",
+    "verdict": "PASS",
+    "confidence": 0.92,
+    "files_examined": ["src/auth/routes.py", "src/auth/jwt.py"],
+    "acceptance_criteria": "POST /auth/login returns JWT; POST /auth/refresh rotates token",
+    "evidence": "pytest: 18/18 passing. routes.py: login endpoint at line 24. jwt.py: token rotation confirmed.",
+    "timestamp": "2026-02-22T10:30:00Z"
+}
+```
+
+**technical-validation.md template:**
+```markdown
+# Technical Validation: <node-id>
+
+**Gate**: technical
+**Bead**: <bead_id>
+**Acceptance**: <acceptance text from node>
+
+## Files Examined
+- <file_path> — <summary of what was found>
+
+## Checklist
+- [ ] Unit tests pass (pytest/jest output)
+- [ ] Build clean (no compile errors)
+- [ ] Imports resolve
+- [ ] TODO/FIXME count: 0
+- [ ] Linter clean
+
+## Verdict
+**PASS** | **FAIL** (confidence: 0.XX)
+
+## Evidence
+<exact test output, file excerpts, or error messages>
+```
+
+#### Advancing the Pipeline After Validation
+
+When a node passes, advance its status using the attractor CLI:
+
+```bash
+# Transition node to 'passed' status
+python3 transition.py .claude/attractor/<pipeline>.dot <node_id> passed
+
+# If validation fails, transition to 'failed'
+python3 transition.py .claude/attractor/<pipeline>.dot <node_id> failed
+```
+
+**Guardian workflow for DOT pipelines:**
+```python
+def validate_dot_pipeline_node(node_id: str, node_attrs: dict):
+    # 1. Extract scope from node attributes
+    gate = node_attrs["gate"]       # technical / business / e2e
+    mode = node_attrs["mode"]       # maps to --mode parameter
+    files = node_attrs["files"].split(",")
+    acceptance = node_attrs["acceptance"]
+    bead_id = node_attrs["bead_id"]
+
+    # 2. Infer validation method from files
+    method = infer_validation_method(files)
+
+    # 3. Execute appropriate validation
+    if mode == "technical":
+        result = run_technical_validation(files, acceptance)
+    elif mode == "business":
+        result = run_business_validation(files, acceptance, method)
+
+    # 4. Store evidence
+    evidence_dir = f".claude/evidence/{node_id}/"
+    write_evidence(evidence_dir, result, gate, mode, bead_id, acceptance)
+
+    # 5. Advance pipeline status
+    status = "passed" if result.verdict == "PASS" else "failed"
+    run(f"python3 transition.py .claude/attractor/<pipeline>.dot {node_id} {status}")
+
+    # 6. Meet completion promise AC
+    if result.verdict == "PASS":
+        run(f"cs-promise --meet <id> --ac-id {node_attrs['promise_ac']} "
+            f"--evidence 'Evidence at .claude/evidence/{node_id}/'")
+
+    return result
+```
+
+---
+
+## Phase 4.5: Regression Detection
+
+After the meta-orchestrator completes implementation but **before** running journey tests, run an
+automated regression check to detect components that were previously stable (`delta_status=existing`)
+but have been unexpectedly modified or re-flagged as new in the updated graph.
+
+This phase uses the `regression-check.sh` workflow script and the `zerorepo diff` CLI command.
+
+### When to Run Phase 4.5
+
+Run regression detection when:
+- The initiative uses a ZeroRepo baseline (``.zerorepo/baseline.json`` exists in the impl repo)
+- The meta-orchestrator has completed at least one implementation cycle (some nodes have been marked as modified/new)
+- You suspect scope creep or unexpected side-effects from implementation work
+
+Skip Phase 4.5 if:
+- No ``.zerorepo/`` directory exists in the implementation repo (no baseline tracking)
+- The initiative is in its first generation (no "before" baseline to compare against)
+
+### Running the Regression Check
+
+```bash
+# Basic regression check (compares current baseline to post-update baseline)
+./regression-check.sh --project-path /path/to/impl-repo
+
+# With pipeline in-scope filter (only checks nodes referenced in the DOT pipeline)
+./regression-check.sh \
+    --project-path /path/to/impl-repo \
+    --pipeline /path/to/impl-repo/.zerorepo/pipeline.dot \
+    --output-dir /path/to/impl-repo/.zerorepo/
+
+# Direct zerorepo diff (when you already have before/after baselines)
+zerorepo diff \
+    /path/to/impl-repo/.zerorepo/baseline.before.json \
+    /path/to/impl-repo/.zerorepo/baseline.json \
+    --pipeline /path/to/impl-repo/.zerorepo/pipeline.dot \
+    --output /path/to/impl-repo/.zerorepo/regression-check.dot
+```
+
+### Interpreting regression-check.dot
+
+The output ``.dot`` file contains one red-filled box per regressed node:
+
+| Node attribute | Meaning |
+|----------------|---------|
+| `regression_type="status_change"` | Node was `existing` in baseline, now `modified`/`new` — unexpected change |
+| `regression_type="unexpected_new"` | Node exists in updated graph but was absent from baseline entirely |
+| `delta_status="modified"` or `"new"` | The status assigned to this node in the updated graph |
+| `file_path="..."` | File associated with the regressed node |
+
+```bash
+# Quick scan: count regressions
+grep 'regression_type=' /path/to/impl-repo/.zerorepo/regression-check.dot | wc -l
+
+# List regressed node names
+grep -oP 'label="\K[^\\]+' /path/to/impl-repo/.zerorepo/regression-check.dot
+```
+
+A `no_regressions` node with green fill means the check passed cleanly.
+
+### Guardian Response Protocol
+
+| Regression Check Result | Guardian Action |
+|------------------------|-----------------|
+| Exit 0 — no regressions | Log PASS, proceed to Phase 5 (journey tests) |
+| Exit 1 — regressions detected | Send findings to meta-orchestrator with specific node names and file paths |
+| Exit 3 — update step failed | Check runner script path; verify `.zerorepo/` is properly initialized |
+
+**When regressions are found**, send structured guidance to the meta-orchestrator:
+
+```
+tmux send-keys -t "s3-{initiative}" \
+  "REGRESSION ALERT: zerorepo diff found {N} regressed nodes. Review .zerorepo/regression-check.dot.
+   Affected nodes: {node_names}
+   These nodes were previously stable (delta_status=existing) and are now marked as modified/new.
+   Investigate whether these changes are intentional or are side-effects of recent implementation work.
+   If intentional, update the baseline. If unintentional, revert the affecting changes." Enter
+```
+
+### Evidence Storage for Regression Phase
+
+```
+.claude/evidence/PRD-{ID}-epic6/
+├── regression-check.dot          # DOT output from zerorepo diff
+├── baseline.before.json          # The "before" snapshot (copy)
+└── regression-summary.md         # Human-readable summary
+```
+
+**regression-summary.md template:**
+```markdown
+# Regression Check: PRD-{ID}
+
+**Date**: {timestamp}
+**Before baseline**: .zerorepo/baseline.before.json
+**After baseline**: .zerorepo/baseline.json
+**Pipeline filter**: {pipeline_path or "none"}
+
+## Result: PASS | FAIL ({N} regressions)
+
+### Regressions Found
+- {node_name} ({file_path}): was existing → now {delta_status}
+- ...
+
+### Unexpected New Nodes
+- {node_name} ({file_path}): appears in updated graph but not in baseline
+- ...
+
+## Disposition
+{CLEARED: All regressions are intentional (implementation of planned changes) OR
+ESCALATED: N regressions are unintentional side-effects, sent to meta-orchestrator}
+```
+
+### Meeting the Completion Promise AC
+
+```bash
+# When regression check passes
+cs-promise --meet <id> --ac-id AC-4.5 \
+    --evidence "regression-check.dot: 0 regressions detected. Baseline updated." \
+    --type manual
+
+# When regressions found but cleared (intentional)
+cs-promise --meet <id> --ac-id AC-4.5 \
+    --evidence "regression-check.dot: 3 regressions — all intentional (confirmed with meta-orch)" \
+    --type manual
+```
+
+---
+
 ### Step 6: Execute Journey Tests
 
 After computing the per-feature weighted score, execute the journey tests in `journeys/`.

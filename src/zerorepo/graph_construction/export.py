@@ -63,6 +63,7 @@ class ExportFormat(str, Enum):
     DOT = "dot"
     YAML = "yaml"
     SUMMARY = "summary"
+    ATTRACTOR = "attractor"
 
 
 class ExportConfig(BaseModel):
@@ -198,6 +199,8 @@ class GraphExporter:
                 content = self._export_yaml(graph)
             elif fmt == ExportFormat.SUMMARY:
                 content = self._export_summary(graph)
+            elif fmt == ExportFormat.ATTRACTOR:
+                content = self._export_attractor_from_func(graph)
             else:
                 return ExportResult(
                     success=False,
@@ -258,6 +261,9 @@ class GraphExporter:
             ExportFormat.DOT: ".dot",
             ExportFormat.YAML: ".yaml",
             ExportFormat.SUMMARY: ".txt",
+            # ATTRACTOR format requires an RPGGraph input (not FunctionalityGraph)
+            # — excluded from export_all() to avoid a type mismatch.
+            # Use export_rpg_attractor() directly instead.
         }
 
         for fmt, ext in format_ext.items():
@@ -450,6 +456,31 @@ class GraphExporter:
 
         return "\n".join(lines)
 
+    def _export_attractor_from_func(self, graph: FunctionalityGraph) -> str:
+        """Export to Attractor DOT format from a FunctionalityGraph.
+
+        Converts the graph to an RPGGraph first (via :meth:`to_rpg_graph`),
+        then marks every module-level node as ``delta_status="modified"`` so
+        that all modules appear in the generated pipeline.
+
+        For proper delta-aware export (EXISTING / MODIFIED / NEW), prefer
+        :meth:`export_rpg_attractor` with an RPGGraph that already carries
+        ``metadata["delta_status"]``.
+        """
+        from zerorepo.graph_construction.attractor_exporter import AttractorExporter  # noqa: PLC0415
+
+        rpg = self.to_rpg_graph(graph)
+        # Mark module-level nodes as MODIFIED so they appear in the pipeline.
+        # Feature/sub-nodes remain without delta_status (skipped by exporter).
+        from zerorepo.models.enums import NodeLevel  # noqa: PLC0415
+
+        for node in rpg.nodes.values():
+            if node.level == NodeLevel.MODULE:
+                node.metadata["delta_status"] = "modified"
+
+        exporter = AttractorExporter()
+        return exporter.export(rpg)
+
     def _export_summary(self, graph: FunctionalityGraph) -> str:
         """Export a human-readable text summary."""
         lines: list[str] = []
@@ -615,6 +646,93 @@ class GraphExporter:
         )
 
         return rpg
+
+    # -------------------------------------------------------------------
+    # Attractor DOT pipeline export (RPGGraph → Attractor .dot)
+    # -------------------------------------------------------------------
+
+    def export_rpg_attractor(
+        self,
+        rpg: RPGGraph,
+        prd_ref: str = "",
+        promise_id: str = "",
+        label: str = "",
+        filepath: str | Path | None = None,
+    ) -> ExportResult:
+        """Export an RPGGraph as an Attractor-compatible pipeline DOT file.
+
+        Unlike the other :meth:`export` formats which consume a
+        :class:`~zerorepo.graph_construction.builder.FunctionalityGraph`,
+        this method accepts an :class:`~zerorepo.models.graph.RPGGraph` whose
+        nodes carry ``metadata["delta_status"]`` (``"new"`` / ``"modified"`` /
+        ``"existing"``).
+
+        Internally delegates to
+        :class:`~zerorepo.graph_construction.attractor_exporter.AttractorExporter`.
+
+        Args:
+            rpg: An RPGGraph with delta-status annotations.
+            prd_ref: PRD reference string (e.g. ``"PRD-S3-DOT-LIFECYCLE-001"``).
+            promise_id: Completion promise ID (populated later by
+                ``attractor init-promise``).
+            label: Human-readable graph title.
+            filepath: Optional file path to write the ``.dot`` output.
+
+        Returns:
+            :class:`ExportResult` with ``content`` containing the DOT string.
+        """
+        from zerorepo.graph_construction.attractor_exporter import AttractorExporter  # noqa: PLC0415
+
+        try:
+            exporter = AttractorExporter(
+                prd_ref=prd_ref,
+                promise_id=promise_id,
+                label=label,
+            )
+            content = exporter.export(rpg)
+
+            out_path = ""
+            if filepath:
+                path = Path(filepath)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content, encoding="utf-8")
+                out_path = str(path)
+                logger.info(
+                    "Exported RPGGraph as Attractor DOT: %s", path
+                )
+
+            # Count actionable nodes (MODIFIED + NEW)
+            from zerorepo.models.enums import DeltaStatus  # noqa: PLC0415 (already imported at module level as side-effect)
+
+            actionable_statuses = {
+                DeltaStatus.MODIFIED.value,
+                DeltaStatus.NEW.value,
+                "modified",
+                "new",
+            }
+            node_count = sum(
+                1
+                for n in rpg.nodes.values()
+                if n.metadata.get("delta_status") in actionable_statuses
+            )
+
+            return ExportResult(
+                success=True,
+                format=ExportFormat.ATTRACTOR,
+                filepath=out_path,
+                content=content,
+                size_bytes=len(content.encode("utf-8")),
+                module_count=node_count,
+                dependency_count=rpg.edge_count,
+            )
+
+        except Exception as exc:
+            logger.error("Attractor export failed: %s", exc)
+            return ExportResult(
+                success=False,
+                format=ExportFormat.ATTRACTOR,
+                error=str(exc),
+            )
 
     # -------------------------------------------------------------------
     # Loading (round-trip)

@@ -425,6 +425,62 @@ Teammate(
 
 ---
 
+## Node-Driven Spawn (Pipeline Integration)
+
+When dispatching an orchestrator for a specific pipeline node, extract node attributes and inject them into the wisdom file:
+
+```bash
+# Extract node attributes from pipeline DOT
+NODE_INFO=$(python3 .claude/scripts/attractor/cli.py status \
+    .claude/attractor/pipelines/${INITIATIVE}.dot --json | \
+    python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+node = next((n for n in data['nodes'] if n['node_id'] == '${NODE_ID}'), None)
+if node:
+    print(json.dumps(node, indent=2))
+")
+```
+
+Include this in the wisdom injection file:
+
+```markdown
+## Your Target Node
+- Node ID: ${NODE_ID}
+- Worker Type: ${WORKER_TYPE}  (from node worker_type attribute)
+- Acceptance: "${ACCEPTANCE}"  (from node acceptance attribute)
+- File Paths: ${FILE_PATHS}    (from node file_path/folder_path attributes)
+- PRD Reference: ${PRD_REF}    (from graph prd_ref attribute)
+```
+
+### Automatic Transition to impl_complete
+
+When an orchestrator completes its node's work, System 3 transitions the node:
+
+```bash
+python3 .claude/scripts/attractor/cli.py transition \
+    .claude/attractor/pipelines/${INITIATIVE}.dot ${NODE_ID} impl_complete
+python3 .claude/scripts/attractor/cli.py checkpoint save \
+    .claude/attractor/pipelines/${INITIATIVE}.dot
+```
+
+This connects to the existing validation cycle — the node then waits for the validation gate before advancing to `validated`.
+
+### Parallel Dispatch of Independent Nodes
+
+Two independent nodes (nodes with no shared upstream pending deps) can be dispatched to separate orchestrators simultaneously:
+
+1. Run `--filter=pending --deps-met` to find all ready nodes:
+   ```bash
+   python3 .claude/scripts/attractor/cli.py status \
+       .claude/attractor/pipelines/${INITIATIVE}.dot --filter=pending --deps-met
+   ```
+2. Spawn a separate orchestrator for each ready node
+3. Each orchestrator gets its own tmux session, wisdom injection (with Target Node section above), and target node
+4. System 3 monitors all active orchestrators concurrently and transitions each independently
+
+---
+
 ## VALIDATION MONITOR INTEGRATION (NEW)
 
 When spawning an orchestrator, launch a validation-test-agent monitor to enable wake-up notifications.

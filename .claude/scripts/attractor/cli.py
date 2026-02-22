@@ -2,8 +2,9 @@
 """Attractor CLI — Main entry point for pipeline management tools.
 
 Dispatches subcommands for parsing, validating, querying status,
-transitioning states, checkpointing, generating, annotating, and
-initializing completion promises for Attractor DOT pipelines.
+transitioning states, checkpointing, generating, annotating,
+initializing completion promises, and displaying lifecycle dashboards
+for Attractor DOT pipelines.
 
 Usage:
     python3 cli.py parse <file.dot> [--output json]
@@ -15,6 +16,7 @@ Usage:
     python3 cli.py generate --prd <PRD-REF> [--output pipeline.dot]
     python3 cli.py annotate <file.dot> [--output annotated.dot]
     python3 cli.py init-promise <file.dot> [--json]
+    python3 cli.py dashboard <file.dot> [--output json] [--checkpoint <path>]
     python3 cli.py lint [--verbose] [--json] [--fix]
     python3 cli.py gardener [--execute] [--report] [--json]
     python3 cli.py install-hooks
@@ -50,6 +52,7 @@ def main() -> None:
         print("  generate      Generate pipeline.dot from beads task data")
         print("  annotate      Cross-reference pipeline.dot with beads")
         print("  init-promise  Generate cs-promise commands from pipeline.dot")
+        print("  dashboard     Show unified lifecycle dashboard (stage, progress, nodes)")
         print("  lint          Lint .claude/ documentation (delegates to doc-gardener)")
         print("  gardener      Run doc-gardener remediation (delegates to doc-gardener)")
         print("  install-hooks Install pre-push git hook for doc-gardener")
@@ -85,6 +88,9 @@ def main() -> None:
     elif command in ("init-promise", "init_promise"):
         from init_promise import main as init_promise_main
         init_promise_main()
+    elif command == "dashboard":
+        from dashboard import main as dashboard_main
+        dashboard_main()
     elif command == "lint":
         lint_script = os.path.join(DOC_GARDENER_DIR, "lint.py")
         result = subprocess.run(

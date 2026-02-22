@@ -208,6 +208,66 @@ The wrapper scripts delegate to `scripts/zerorepo-run-pipeline.py`. For direct r
 
 ---
 
+## Definition Pipeline (Single Command Workflow)
+
+A single command chains the complete definition pipeline from PRD to executable .dot graph. This is Stage 1 of PRD-S3-DOT-LIFECYCLE-001.
+
+### Usage
+
+```bash
+.claude/skills/orchestrator-multiagent/scripts/zerorepo-pipeline.sh \
+  --prd .taskmaster/docs/PRD-XXX.md --format attractor
+```
+
+### Pipeline Steps
+
+| Step | Action | Tool |
+|------|--------|------|
+| 1 | Initialize baseline (if missing) | `zerorepo init` |
+| 2 | Generate delta + export .dot | `zerorepo generate --format attractor-pipeline` |
+| 3 | Validate structure | `attractor validate` (automatic in step 2) |
+| 4 | Copy to pipelines directory | `.claude/attractor/pipelines/<PRD-ID>.dot` |
+| 5 | Cross-reference with beads | `attractor annotate` |
+| 6 | Create completion promise | `attractor init-promise --execute` |
+| 7 | Save checkpoint | `attractor checkpoint save` |
+| 8 | Print summary report | Node counts, worker distribution |
+
+### Arguments
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--prd <path>` | (required) | Path to PRD markdown file |
+| `--format <fmt>` | `attractor` | Output format |
+| `--baseline <path>` | `.zerorepo/baseline.json` | Path to baseline JSON |
+| `--model <model>` | `claude-sonnet-4-5-20250929` | LLM model for analysis |
+| `--output-dir <dir>` | `.zerorepo/output` | ZeroRepo output directory |
+| `--skip-annotate` | — | Skip beads cross-reference step |
+| `--skip-promise` | — | Skip completion promise creation |
+| `--dry-run` | — | Print commands without executing |
+
+### Output Paths
+
+| Artifact | Path |
+|----------|------|
+| Pipeline DOT | `.claude/attractor/pipelines/<PRD-ID>.dot` |
+| Checkpoint | `.claude/attractor/checkpoints/<PRD-ID>-definition.json` |
+| ZeroRepo output | `.zerorepo/output/` (intermediate artifacts) |
+
+### Example
+
+```bash
+# Full pipeline for a lifecycle PRD
+zerorepo-pipeline.sh --prd .taskmaster/docs/PRD-S3-DOT-LIFECYCLE-001.md
+
+# Dry-run to preview steps
+zerorepo-pipeline.sh --prd .taskmaster/docs/PRD-S3-DOT-LIFECYCLE-001.md --dry-run
+
+# Skip beads annotation (no beads DB available)
+zerorepo-pipeline.sh --prd .taskmaster/docs/PRD-S3-DOT-LIFECYCLE-001.md --skip-annotate --skip-promise
+```
+
+---
+
 ## Enriching Beads with RPG Graph Context
 
 After creating beads via Task Master sync, use the RPG graph (04-rpg.json) to inject precise technical context into each bead's design field. This transforms generic task descriptions into implementation-ready specifications.
@@ -293,7 +353,7 @@ Dependencies: None (can start immediately, independent of other epics)
 | Phase | ZeroRepo Role |
 |-------|---------------|
 | **Phase 0: Ideation** | Not used -- focus on design and research |
-| **Phase 1: Planning (Step 2.5a)** | Run init + generate. Validate PRD against 01-spec.json + 03-graph.json. Enrich PRD with identified gaps |
+| **Phase 1: Planning (Step 2.5a)** | Run `zerorepo-pipeline.sh --prd <prd>` (single command). Validates PRD against 01-spec.json + 03-graph.json, exports .dot graph, creates completion promise and checkpoint |
 | **Phase 1: Planning (Step 2.5b)** | After Task Master sync, enrich beads with 04-rpg.json context (file paths, interfaces, delta status) |
 | **Phase 2: Execution** | Workers reference enriched bead design fields for precise implementation scope |
 | **Phase 3: Validation** | Not directly used -- validation focuses on test results |
@@ -301,6 +361,6 @@ Dependencies: None (can start immediately, independent of other epics)
 
 ---
 
-**Reference Version**: 2.1
+**Reference Version**: 2.2
 **Created**: 2026-02-08
 **CLI Source**: `src/zerorepo/cli/` (in trees/rpg-improve worktree)
