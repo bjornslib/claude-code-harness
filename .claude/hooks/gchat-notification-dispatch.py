@@ -92,6 +92,18 @@ def main() -> None:
         # Nothing to send
         sys.exit(0)
 
+    # ── Suppress generic "waiting for input" notifications ──
+    # These are fired by Claude Code when AskUserQuestion is shown interactively
+    # (non-S3 sessions). They carry no question content — just noise.
+    # S3 sessions forward the full question via gchat-ask-user-forward.py instead.
+    lower_msg = message.lower()
+    if any(phrase in lower_msg for phrase in (
+        "waiting for your input",
+        "waiting for input",
+        "is waiting for",
+    )):
+        sys.exit(0)
+
     # Detect type for appropriate formatting
     msg_type = detect_message_type(message)
 

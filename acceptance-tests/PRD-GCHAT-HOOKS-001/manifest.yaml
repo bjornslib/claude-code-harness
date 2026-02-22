@@ -1,0 +1,92 @@
+# Blind Acceptance Test Manifest: PRD-GCHAT-HOOKS-001
+# Programmatic GChat Integration via Hooks
+#
+# Created by: S3 Guardian
+# Date: 2026-02-22
+# PRD Source: .taskmaster/docs/PRD-GCHAT-HOOKS-001.md
+# Note: Epic 3 (F3.1, F3.2) is pre-validated — excluded from scoring.
+
+prd_id: PRD-GCHAT-HOOKS-001
+title: "Programmatic GChat Integration via Hooks"
+created: "2026-02-22"
+guardian_session: "system3-guardian-20260222"
+
+thresholds:
+  accept: 0.60
+  investigate: 0.40
+  reject: 0.00
+
+features:
+  # === EPIC 1: AskUserQuestion -> GChat -> Response Delivery ===
+
+  - id: F1.1
+    title: "PreToolUse Hook — Block & Forward AskUserQuestion"
+    weight: 0.20
+    epic: "E1"
+    rationale: "Core mechanism — entire PRD hinges on this hook correctly denying, formatting, and forwarding"
+
+  - id: F1.2
+    title: "One-Shot Background Haiku Task — GChat Response Poller"
+    weight: 0.15
+    epic: "E1"
+    rationale: "Response delivery path — without this, questions are one-way"
+
+  - id: F1.3
+    title: "Multi-Session Response Correlation"
+    weight: 0.08
+    epic: "E1"
+    rationale: "Important but secondary — concurrent sessions need isolation"
+
+  - id: F1.4
+    title: "Stop Gate Marker Integration"
+    weight: 0.12
+    epic: "E1"
+    rationale: "Critical — without this, stop gate creates infinite denial loop"
+
+  # === EPIC 2: Outbound Event Hooks ===
+
+  - id: F2.1
+    title: "gchat-send CLI Utility"
+    weight: 0.10
+    epic: "E2"
+    rationale: "Central outbound utility — all hooks route through this"
+
+  - id: F2.2
+    title: "Notification Hook for GChat Dispatch"
+    weight: 0.05
+    epic: "E2"
+    rationale: "Nice-to-have notification forwarding"
+
+  - id: F2.3
+    title: "Stop Hook GChat Integration"
+    weight: 0.05
+    epic: "E2"
+    rationale: "Session end notification — supporting feature"
+
+  - id: F2.4
+    title: "Direct gchat-send Usage in System 3"
+    weight: 0.05
+    epic: "E2"
+    rationale: "Output style migration — documentation change"
+
+  # === EPIC 4: s3-communicator Removal + Migration ===
+
+  - id: F4.1
+    title: "Update System 3 Output Style"
+    weight: 0.08
+    epic: "E4"
+    rationale: "Migration path — removes old communicator patterns"
+
+  - id: F4.2
+    title: "Update Stop Gate"
+    weight: 0.07
+    epic: "E4"
+    rationale: "Critical for backward compatibility — stop gate must work without communicator"
+
+  - id: F4.3
+    title: "Archive s3-communicator Skill"
+    weight: 0.05
+    epic: "E4"
+    rationale: "Cleanup — preserves history while removing active references"
+
+# Weight verification: 0.20 + 0.15 + 0.08 + 0.12 + 0.10 + 0.05 + 0.05 + 0.05 + 0.08 + 0.07 + 0.05 = 1.00

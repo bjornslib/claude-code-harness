@@ -17,8 +17,10 @@ from typing import Optional
 from .config import CheckResult, EnvironmentConfig, Priority
 
 
-# Default team name where the S3 communicator lives
-S3_LIVE_TEAM_NAME = "s3-live"
+# Session-scoped team name prefix where the S3 communicator lives.
+# Full team name: s3-live-{CLAUDE_SESSION_ID[-8:]}
+# Example: s3-live-7fe01d4c for session system3-20260222T103045Z-7fe01d4c
+S3_LIVE_TEAM_PREFIX = "s3-live"
 
 # Member name to look for in the team config
 S3_COMMUNICATOR_MEMBER_NAME = "s3-communicator"
@@ -35,7 +37,7 @@ class CommunicatorActiveChecker:
     Only applies to System 3 sessions. All other session types pass immediately.
 
     Detection logic:
-        1. Read ~/.claude/teams/s3-live/config.json
+        1. Read ~/.claude/teams/s3-live-{hash}/config.json (session-scoped)
         2. Search members array for name == 's3-communicator'
         3. Check if isActive == true
         4. If active → BLOCK (must shut down communicator first)
@@ -50,13 +52,25 @@ class CommunicatorActiveChecker:
         """
         self.config = config
 
-    def _get_team_config_path(self) -> Path:
-        """Get the path to the s3-live team config file.
+    def _get_team_name(self) -> str:
+        """Get the session-scoped team name.
 
         Returns:
-            Path to ~/.claude/teams/s3-live/config.json
+            Team name like 's3-live-7fe01d4c' based on session ID,
+            or 's3-live' as fallback if no session ID.
         """
-        return Path.home() / ".claude" / "teams" / S3_LIVE_TEAM_NAME / "config.json"
+        session_id = self.config.session_id or ""
+        if session_id.startswith("system3-") and len(session_id) >= 8:
+            return f"{S3_LIVE_TEAM_PREFIX}-{session_id[-8:]}"
+        return S3_LIVE_TEAM_PREFIX
+
+    def _get_team_config_path(self) -> Path:
+        """Get the path to the session-scoped s3-live team config file.
+
+        Returns:
+            Path to ~/.claude/teams/s3-live-{hash}/config.json
+        """
+        return Path.home() / ".claude" / "teams" / self._get_team_name() / "config.json"
 
     def _find_communicator_member(self, team_config: dict) -> Optional[dict]:
         """Find the s3-communicator member in the team config.
@@ -98,7 +112,7 @@ An active S3 Communicator teammate is running:
   - Member: {S3_COMMUNICATOR_MEMBER_NAME}
   - Agent ID: {agent_id}
   - Type: {agent_type}
-  - Team: {S3_LIVE_TEAM_NAME}
+  - Team: {self._get_team_name()}
 
 The communicator runs a heartbeat loop monitoring orchestrators.
 Stopping System 3 without shutting it down leaves a zombie agent.

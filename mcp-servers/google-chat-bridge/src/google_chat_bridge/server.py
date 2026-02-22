@@ -121,9 +121,13 @@ def _get_client() -> ChatClient:
     if _client is None:
         creds_file = os.environ.get("GOOGLE_CHAT_CREDENTIALS_FILE", "")
         default_space = os.environ.get("GOOGLE_CHAT_SPACE_ID", "")
+        oauth_client = os.environ.get("GOOGLE_CHAT_OAUTH_CLIENT_FILE", "")
+        token_file = os.environ.get("GOOGLE_CHAT_TOKEN_FILE", "")
         _client = ChatClient(
             credentials_file=creds_file,
             default_space_id=default_space,
+            oauth_client_file=oauth_client,
+            token_file=token_file,
         )
     return _client
 
