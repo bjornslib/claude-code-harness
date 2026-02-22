@@ -209,6 +209,7 @@ features:
   - name: "{Feature 1 Name}"
     description: "{One-line description}"
     weight: 0.30
+    validation_method: hybrid  # code-analysis | browser-required | api-required | hybrid
     scenarios:
       - "scenario_1_name"
       - "scenario_2_name"
@@ -242,6 +243,19 @@ features:
 total_weight: 1.00
 ```
 
+### Feature `validation_method` Field
+
+Each feature MAY include a `validation_method` field that classifies how the feature should be validated:
+
+| Value | Meaning | When to Use |
+|-------|---------|-------------|
+| `code-analysis` | Static code reading only | Database schemas, migrations, code structure, config files |
+| `browser-required` | Must use Claude in Chrome | UI rendering, page navigation, user interactions, visual elements |
+| `api-required` | Must make actual HTTP requests | API endpoints, REST responses, webhook triggers |
+| `hybrid` | Mixed or unclear | Default when absent; no special enforcement |
+
+If `validation_method` is omitted, it defaults to `hybrid` (backward-compatible, no enforcement).
+
 ### Manifest Validation Rules
 
 1. `total_weight` MUST equal the sum of all feature weights
@@ -250,6 +264,7 @@ total_weight: 1.00
 4. Every scenario name MUST appear in the corresponding `.feature` file
 5. `thresholds.reject` MUST equal `thresholds.investigate` (no gap between ranges)
 6. `thresholds.accept` MUST be greater than `thresholds.investigate`
+7. If present, `validation_method` MUST be one of: `code-analysis`, `browser-required`, `api-required`, `hybrid`
 
 ---
 

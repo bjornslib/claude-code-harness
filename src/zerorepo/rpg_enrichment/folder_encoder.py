@@ -94,16 +94,15 @@ class FolderEncoder(RPGEncoder):
                 bnode = baseline_lookup.get(node.name.lower())
                 if bnode:
                     if bnode.folder_path is not None:
-                        # Normalize filesystem hyphens to Python identifier underscores
-                        bp = bnode.folder_path.replace("-", "_")
+                        # Preserve original filesystem path (hyphens are valid directory names)
+                        bp = bnode.folder_path
                         if bp and not bp.endswith('/'):
                             bp = f"{bp}/"
                         node.folder_path = bp
                         node.metadata["baseline_folder_used"] = True
                     if bnode.file_path is not None and node.file_path is None:
-                        # Normalize hyphens in directory components to match folder_path convention
-                        fp = bnode.file_path.replace("-", "_")
-                        node.file_path = fp
+                        # Preserve original filesystem path from baseline
+                        node.file_path = bnode.file_path
                         node.metadata["baseline_file_path_used"] = True
 
         # Build parent→children adjacency from HIERARCHY edges
@@ -198,13 +197,15 @@ class FolderEncoder(RPGEncoder):
                 continue
 
             # Validate folder name components are valid identifiers
-            parts = [p for p in node.folder_path.split("/") if p]
-            for part in parts:
-                if not part.isidentifier():
-                    errors.append(
-                        f"Node {nid} ({node.name}): folder component '{part}' "
-                        f"is not a valid Python identifier"
-                    )
+            # Skip for baseline-sourced paths — real filesystem names may contain hyphens
+            if not node.metadata.get("baseline_folder_used"):
+                parts = [p for p in node.folder_path.split("/") if p]
+                for part in parts:
+                    if not part.isidentifier():
+                        errors.append(
+                            f"Node {nid} ({node.name}): folder component '{part}' "
+                            f"is not a valid Python identifier"
+                        )
 
             # Check for oversized folders
             if node.metadata.get("folder_oversized"):

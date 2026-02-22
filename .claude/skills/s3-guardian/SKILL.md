@@ -571,6 +571,60 @@ cs-promise --meet <id> --ac-id AC-4.5 \
 
 ---
 
+### Step 5a: Validation Method-Specific Prompt Construction
+
+Before dispatching scoring agents for each feature, read `validation_method` from the manifest and prepend mandatory instructions to the scoring agent's prompt:
+
+**For `browser-required` features:**
+```
+MANDATORY: YOU MUST use Claude in Chrome (mcp__claude-in-chrome__*) to validate this feature.
+Static code analysis alone (Read/Grep) = automatic 0.0 score.
+Required tool sequence: tabs_context_mcp → navigate → read_page → screenshot → interact with elements.
+If the frontend is not running, report "BLOCKED: frontend not running" — do NOT fall back to code analysis.
+```
+
+**For `api-required` features:**
+```
+MANDATORY: YOU MUST make actual HTTP requests (curl/httpx) to validate this feature.
+Reading router/endpoint code alone = automatic 0.0 score.
+Required: Make real requests, capture response status codes and bodies as evidence.
+If the API server is not running, report "BLOCKED: API server not running" — do NOT fall back to code analysis.
+```
+
+**For `code-analysis` features:**
+No special prepend. Current behavior (Read/Grep/file examination) is appropriate.
+
+**For `hybrid` features (or absent field):**
+No special prepend. Scoring agent uses its best judgment on which tools to employ.
+
+**Implementation**: When constructing the scoring agent prompt in Phase 4, read each feature's `validation_method` from the manifest. If the field is present and not `hybrid`, prepend the corresponding instruction block above to the agent's prompt BEFORE the scenario text.
+
+### Step 5b: Evidence Gate Enforcement
+
+After scoring agents return results but BEFORE computing the weighted total, scan each feature's evidence for method-appropriate keywords. This is the strongest enforcement — it catches agents that ignore the prompt prepend.
+
+**Evidence keyword requirements:**
+
+| `validation_method` | Required keywords (at least 2) | What they prove |
+|---------------------|-------------------------------|-----------------|
+| `browser-required` | "screenshot", "navigate", "tabs_context", "read_page", "Chrome", "localhost:3000" | Agent actually used the browser |
+| `api-required` | "curl", "HTTP 200", "HTTP 201", "HTTP 202", "response body", "localhost:8000", actual JSON snippets | Agent actually made HTTP requests |
+| `code-analysis` | No keyword requirement | Static analysis is the expected method |
+| `hybrid` | No keyword requirement | Agent discretion |
+
+**Enforcement logic:**
+1. For each feature with `validation_method` = `browser-required` or `api-required`:
+2. Scan the scoring agent's evidence text for the required keywords
+3. If fewer than 2 required keywords are found:
+   - **Override the feature score to 0.0**
+   - Set reason: `"EVIDENCE GATE: {validation_method} feature scored without {validation_method} evidence. Agent used static analysis instead of required tooling."`
+   - Log the override in the validation worksheet
+4. Proceed with weighted total computation using the overridden score
+
+**Why 2 keywords minimum?** A single keyword match could be coincidental (e.g., mentioning "Chrome" in a description without using it). Two keywords indicate actual tool usage.
+
+This gate ensures that even if a scoring agent ignores the prompt prepend, its score is corrected to 0.0 — making it impossible to score well on a browser-required feature without actually opening a browser.
+
 ### Step 6: Execute Journey Tests
 
 After computing the per-feature weighted score, execute the journey tests in `journeys/`.

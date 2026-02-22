@@ -428,5 +428,55 @@ Store calibration notes in Hindsight for future guardian sessions to reference.
 
 ---
 
+## 10. Validation Method Enforcement
+
+Features in the manifest may specify a `validation_method` field that dictates which tools the scoring agent MUST use. This prevents agents from taking the path of least resistance (static code analysis) for features that require live interaction.
+
+### Method-Specific Minimum Evidence
+
+| `validation_method` | Minimum Evidence Required | Score Cap Without Evidence |
+|---------------------|--------------------------|---------------------------|
+| `browser-required` | At least 2 of: screenshot artifact, navigate call, tabs_context usage, read_page output, Chrome interaction log | 0.0 (automatic override) |
+| `api-required` | At least 2 of: curl/httpx command, HTTP status code, response body JSON, actual endpoint URL called | 0.0 (automatic override) |
+| `code-analysis` | Standard code reading evidence (file contents, grep results, import traces) | No cap (current behavior) |
+| `hybrid` (default) | No specific requirement — agent discretion | No cap (current behavior) |
+
+### How This Works in Practice
+
+**Phase 4 (Scoring Agent Dispatch)**:
+1. Guardian reads `validation_method` from manifest for each feature
+2. Guardian prepends mandatory tool instructions to the scoring agent prompt (see SKILL.md Step 5a)
+3. Scoring agent executes with the prepended instructions
+
+**Post-Scoring (Evidence Gate)**:
+1. Guardian scans scoring agent output for method-appropriate keywords
+2. If `browser-required` or `api-required` evidence is missing → score overridden to 0.0
+3. Override reason logged in validation worksheet
+
+### Evidence Gate Keyword Reference
+
+**`browser-required` — must find at least 2:**
+- `screenshot` — proves visual capture
+- `navigate` — proves page navigation
+- `tabs_context` — proves Chrome tab awareness
+- `read_page` — proves DOM reading
+- `Chrome` — proves browser tool usage
+- `localhost:3000` — proves frontend interaction
+
+**`api-required` — must find at least 2:**
+- `curl` — proves HTTP request tool
+- `HTTP 200` / `HTTP 201` / `HTTP 202` — proves actual response received
+- `response body` — proves response examination
+- `localhost:8000` — proves API server interaction
+- Actual JSON (e.g., `{"id":`, `"status":`) — proves real response data
+
+### Why This Matters
+
+Without validation method enforcement, scoring agents consistently default to static code analysis because it's faster and easier. A frontend UI feature can score 0.8 based purely on reading React source files — without ever rendering the page in a browser. This fundamentally undermines the guardian pattern's purpose of independent, reality-based validation.
+
+The evidence gate is the last line of defense: even if the prompt instruction is ignored, the score is corrected post-hoc.
+
+---
+
 **Reference Version**: 0.1.0
 **Parent Skill**: s3-guardian

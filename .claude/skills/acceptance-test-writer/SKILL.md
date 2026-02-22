@@ -283,6 +283,23 @@ Read the PRD. Identify every testable feature. Assign weights based on business 
 
 Weights across all features MUST sum to 1.0.
 
+**Step G1b: Classify Validation Method Per Feature**
+
+For each feature extracted in G1, classify the `validation_method` based on PRD language signals:
+
+| PRD Signal | Maps To |
+|------------|---------|
+| "page renders", "UI shows", "user clicks", "frontend", "navigate to", "dashboard displays", "form submits", "button", "modal", "toast" | `browser-required` |
+| "API returns", "endpoint responds", "HTTP status", "POST /api", "GET /api", "webhook fires", "REST" | `api-required` |
+| "database schema", "migration", "code structure", "config file", "import graph", "type definitions" | `code-analysis` |
+| Mixed signals or unclear | `hybrid` |
+
+**Classification rules:**
+1. If ANY scenario in the feature requires browser interaction, the entire feature is `browser-required`
+2. If the feature is purely backend/API but requires live requests (not just reading router code), it is `api-required`
+3. Only use `code-analysis` when the feature can be fully validated by reading source files
+4. When in doubt, default to `hybrid`
+
 **Step G2: Write Gherkin Scenarios with Confidence Scoring Guides**
 For each feature, write one or more Gherkin scenarios. Each scenario MUST include:
 - `Given` / `When` / `Then` clauses
@@ -325,9 +342,20 @@ does X" — name the tool.
 **Step G3: Generate Manifest**
 Create `manifest.yaml` with:
 - PRD metadata (id, title, source)
-- Feature list with weights
+- Feature list with weights and `validation_method` (from Step G1b)
 - Decision thresholds (default: accept=0.60, investigate=0.40)
 - Links to each scenario file
+
+Each feature entry in the manifest MUST include the `validation_method` field:
+```yaml
+features:
+  - name: "Epic A4 — Frontend UI"
+    weight: 0.25
+    validation_method: browser-required   # From Step G1b classification
+    scenarios:
+      - "frontend_rendering"
+      - "user_interaction"
+```
 
 **Step G4: Write Files**
 Output to `acceptance-tests/PRD-{ID}/`:

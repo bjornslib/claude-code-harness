@@ -398,7 +398,7 @@ For each Gherkin scenario, assign a confidence score using the scenario's scorin
 ```
 Scoring Worksheet:
 ---
-Feature: F1 — {name} (weight: 0.30)
+Feature: F1 — {name} (weight: 0.30, validation_method: browser-required)
   Scenario 1: {name}
     Evidence found: {what was actually observed}
     Red flags detected: {any red flags from the guide}
@@ -414,11 +414,40 @@ Feature: F1 — {name} (weight: 0.30)
   Feature Score: average(scenario scores) = 0.XX
   Weighted Contribution: 0.XX * 0.30 = 0.XXX
 
-Feature: F2 — {name} (weight: 0.20)
+Feature: F2 — {name} (weight: 0.20, validation_method: api-required)
   ...
 
 TOTAL WEIGHTED SCORE: sum(weighted contributions) = 0.XXX
 ```
+
+### 5.3b Evidence Gate Check
+
+After scoring all features but BEFORE computing the weighted total, apply the evidence gate for features with `validation_method` = `browser-required` or `api-required`:
+
+```
+Evidence Gate:
+---
+Feature: F1 — {name} (validation_method: browser-required)
+  Evidence keywords found: ["screenshot", "navigate", "localhost:3000"]
+  Minimum required: 2
+  Keywords found: 3
+  Gate result: PASS (score unchanged)
+
+Feature: F3 — {name} (validation_method: browser-required)
+  Evidence keywords found: ["Read file", "grep"]
+  Minimum required: 2
+  Browser keywords found: 0
+  Gate result: FAIL — Score overridden from 0.80 to 0.00
+  Reason: EVIDENCE GATE: browser-required feature scored without browser evidence
+
+Feature: F2 — {name} (validation_method: api-required)
+  Evidence keywords found: ["curl", "HTTP 200", "localhost:8000"]
+  Minimum required: 2
+  Keywords found: 3
+  Gate result: PASS (score unchanged)
+```
+
+See [validation-scoring.md](validation-scoring.md) Section 10 for the complete keyword reference.
 
 ### 5.4 Make Decision
 

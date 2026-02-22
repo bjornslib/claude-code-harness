@@ -392,8 +392,8 @@ class TestFolderEncoderBaselineIntegration:
         assert child.file_path == "metrics/accuracy.py"
 
 
-    def test_baseline_folder_path_hyphens_normalized(self) -> None:
-        """Baseline folder_path with hyphens should be normalized to underscores."""
+    def test_baseline_folder_path_hyphens_preserved(self) -> None:
+        """Baseline folder_path with hyphens should be preserved (real filesystem paths)."""
         graph = RPGGraph()
         baseline = RPGGraph()
 
@@ -409,12 +409,12 @@ class TestFolderEncoderBaselineIntegration:
         enc = FolderEncoder()
         enc.encode(graph, baseline=baseline)
 
-        # Hyphens should be normalized to underscores
-        assert node.folder_path == "agencheck_communication_agent/helpers/"
-        assert "_" in node.folder_path
-        assert "-" not in node.folder_path
+        # Original filesystem hyphens should be preserved
+        assert node.folder_path == "agencheck-communication-agent/helpers/"
+        assert "-" in node.folder_path
+        assert node.metadata.get("baseline_folder_used") is True
 
-        # Validation should pass (valid Python identifiers)
+        # Validation should pass (baseline paths skip identifier check)
         result = enc.validate(graph)
         assert result.passed is True
 
