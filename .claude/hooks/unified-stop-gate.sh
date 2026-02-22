@@ -169,6 +169,72 @@ Marker directory: $GCHAT_ASK_DIR"
     fi
 fi
 
+# --- Step 1.8: Recent AskUserQuestion Check (system3-* sessions) ---
+# S3 sessions MUST have asked the user a question recently (via AskUserQuestion,
+# which forwards to GChat) before stopping. This prevents silent exits where the
+# user is away from the terminal.
+#
+# "Recently" = a GChat marker for this session less than 30 minutes old.
+# Old resolved markers from earlier in the session don't count — S3 must
+# present fresh "what next?" options as its last action before stopping.
+#
+# Exception: sessions with an active completion promise (work is defined).
+
+if [[ "$SESSION_ID" == system3-* ]] && [ "$PROMISE_PASSED" = true ]; then
+    # Check if this session owns any active promises
+    HAS_PROMISES=false
+    CS_PROMISE="$PROJECT_ROOT/.claude/scripts/completion-state/cs-promise"
+    if [ -x "$CS_PROMISE" ]; then
+        PROMISE_LIST=$("$CS_PROMISE" --mine 2>/dev/null || echo "")
+        if echo "$PROMISE_LIST" | grep -q "in_progress\|verified\|pending"; then
+            HAS_PROMISES=true
+        fi
+    fi
+
+    if [ "$HAS_PROMISES" = false ]; then
+        # No promises → require a RECENT AskUserQuestion (marker < 30 min old)
+        GCHAT_ASK_DIR="$PROJECT_ROOT/.claude/state/gchat-forwarded-ask"
+        HAS_RECENT_ASK=false
+        MAX_AGE_SECONDS=1800  # 30 minutes
+
+        if [ -d "$GCHAT_ASK_DIR" ]; then
+            for marker in "$GCHAT_ASK_DIR"/*.json; do
+                [ -f "$marker" ] || continue
+                if python3 -c "
+import json, sys, os, time
+m = json.load(open('$marker'))
+if m.get('session_id') != os.environ.get('CLAUDE_SESSION_ID', ''):
+    sys.exit(1)
+# Check marker age
+age = time.time() - os.path.getmtime('$marker')
+if age < $MAX_AGE_SECONDS:
+    sys.exit(0)
+sys.exit(1)
+" 2>/dev/null; then
+                    HAS_RECENT_ASK=true
+                    break
+                fi
+            done
+        fi
+
+        if [ "$HAS_RECENT_ASK" = false ]; then
+            output_json "block" "reason" "🚫 NO RECENT USER QUESTION BEFORE EXIT
+
+This System 3 session has no completion promise and has not asked the user
+a question recently (within the last 30 minutes via AskUserQuestion → GChat).
+
+Before stopping, you MUST:
+1. Check for available work: bd ready
+2. Propose next steps via AskUserQuestion (which forwards to GChat)
+3. Wait for the user's reply via the GChat round-trip poller
+
+This ensures the user is always notified about session activity, even when away.
+Old questions from earlier in the session do not count — ask a fresh one."
+            exit 0
+        fi
+    fi
+fi
+
 # --- Step 2: Orchestrator Guidance Check (orch-* sessions only) ---
 
 if [[ "$SESSION_ID" == orch-* ]]; then
