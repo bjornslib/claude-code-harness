@@ -1,0 +1,123 @@
+# Journey Test Runner Configuration
+# PRD: UE-A Workflow Config & SLA Engine (PRD-UEA-001)
+# Updated: 2026-02-22
+#
+# These journey tests validate cross-layer business outcomes:
+#   Frontend SLA Config UI → Backend API → PostgreSQL → Prefect Flows → /verify endpoint
+#
+# BLIND: Stored in config repo (claude-harness-setup), not implementation repo.
+
+prd_id: "PRD-UEA-001"
+impl_repo: "/Users/theb/Documents/Windsurf/zenagent2/zenagent/agencheck"
+impl_branch: "feature/ue-a-workflow-config-sla"
+
+# ─────────────────────────────────────────────────────────────────
+# EXECUTION ENVIRONMENT (explicit)
+# ─────────────────────────────────────────────────────────────────
+#
+# Backend:
+#   The Docker Compose stack (agencheck-support-agent) must be running
+#   FROM THE FEATURE BRANCH. This means:
+#     1. Check out feature/ue-a-workflow-config-sla in the impl repo
+#     2. docker compose up -d (rebuilds app-server with feature code)
+#     3. Run migration 035 against the LOCAL app-postgres container
+#   The app-server container serves FastAPI on port 8000.
+#
+# Frontend:
+#   Run `npm run dev` from agencheck-support-frontend/ on the feature branch.
+#   This starts Next.js dev server on http://localhost:5002.
+#   DO NOT use a Docker container for the frontend — dev mode enables HMR
+#   and matches the developer workflow.
+#
+# Browser Automation:
+#   ALL frontend-to-backend tests use "Claude in Chrome" (chrome-devtools MCP).
+#   NOT Jest. NOT Playwright. Claude in Chrome navigates the real browser,
+#   clicks real UI elements, and observes real network responses.
+#   This is the ONLY way to validate the full frontend → API → DB chain.
+#
+# Database:
+#   PostgreSQL runs in Docker (app-postgres container, port 5434).
+#   Migration 035 MUST be applied BEFORE running journey tests.
+#   Connection: postgresql://agencheck:agencheck@localhost:5434/agencheck
+#
+# Prefect:
+#   Prefect server runs in Docker (port 4200).
+#   PREFECT_DISPATCH_MODE=local_mock for safe testing (no LiveKit/S3).
+
+services:
+  frontend:
+    url: "http://localhost:5002"
+    health: "http://localhost:5002/api/health"
+    description: "Next.js dev server (npm run dev from feature branch)"
+    how_to_start: "cd agencheck-support-frontend && npm run dev"
+
+  backend_api:
+    url: "http://localhost:8000"
+    health: "http://localhost:8000/health"
+    description: "FastAPI app-server (Docker container from feature branch)"
+    how_to_start: "docker compose up -d (from feature branch checkout)"
+
+  prefect_server:
+    url: "http://localhost:4200"
+    health: "http://localhost:4200/api/health"
+    description: "Prefect 3.x self-hosted server (Docker)"
+
+  postgres:
+    dsn: "postgresql://agencheck:agencheck@localhost:5434/agencheck"
+    docker_container: "agencheck-support-agent-app-postgres-1"
+    description: "Application PostgreSQL (Docker, port 5434). Migration 035 required."
+
+  redis:
+    url: "redis://localhost:6379/0"
+    description: "Redis DB 0 (application streams), DB 1 (Prefect broker)"
+
+# Auth tokens for test execution
+auth:
+  clerk_admin_token: "${CLERK_ADMIN_TEST_TOKEN}"    # manager+ role
+  clerk_staff_token: "${CLERK_STAFF_TEST_TOKEN}"    # staff role (read-only)
+  api_key: "${AGENCHECK_API_KEY}"                   # X-API-Key header
+
+# Polling configuration for async steps
+polling:
+  interval_seconds: 5
+  max_wait_seconds: 120
+
+# Feature flags
+feature_flags:
+  USE_PREFECT_ORCHESTRATION: "true"
+  PREFECT_DISPATCH_MODE: "local_mock"    # Safe for testing without LiveKit/S3
+  PREFECT_ROLLOUT_CUSTOMERS: "1,2,3"
+
+# Pre-flight checklist (MUST be true before running ANY journey test)
+preflight:
+  - "feature/ue-a-workflow-config-sla branch checked out in impl repo"
+  - "docker compose up -d (app-server rebuilt from feature branch)"
+  - "migration 035 applied to app-postgres"
+  - "npm run dev running on port 5002 (from feature branch frontend)"
+  - "check_types and background_check_sequence tables exist in DB"
+  - "background_tasks has sequence_id, sequence_version, attempt_timestamp columns"
+
+# Browser automation tool
+browser_tool: "claude-in-chrome"    # NOT playwright, NOT jest
+
+# Journey test files
+journeys:
+  - file: "J1.feature"
+    tags: ["@journey", "@prd-uea-001", "@J1", "@frontend", "@api", "@db", "@claude-in-chrome"]
+    description: "Admin configures SLA via frontend → saves to PSQL via API"
+
+  - file: "J2.feature"
+    tags: ["@journey", "@prd-uea-001", "@J2", "@api", "@prefect", "@db"]
+    description: "Work history check triggers Prefect flow with DB-backed config resolution"
+
+  - file: "J3.feature"
+    tags: ["@journey", "@prd-uea-001", "@J3", "@api", "@db", "@resolution"]
+    description: "Client-specific override takes precedence in 3-tier resolution"
+
+  - file: "J4.feature"
+    tags: ["@journey", "@prd-uea-001", "@J4", "@prefect", "@db", "@audit"]
+    description: "Retry sequence uses dynamic intervals and writes audit trail"
+
+  - file: "J5.feature"
+    tags: ["@journey", "@prd-uea-001", "@J5", "@e2e", "@verify", "@claude-in-chrome"]
+    description: "E2E: Submit work history verification via /verify and observe full pipeline"

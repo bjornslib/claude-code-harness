@@ -1,0 +1,39 @@
+# Blind Acceptance Test Manifest: TMUX-SPAWN-BUG
+# Fix tmux orchestrator spawn pattern: exec zsh + unset CLAUDECODE
+#
+# Created by: S3 Guardian
+# Date: 2026-02-22
+# Bead: claude-harness-setup-2h4n
+
+prd_id: TMUX-SPAWN-BUG
+title: "Fix tmux orchestrator spawn pattern"
+created: "2026-02-22"
+guardian_session: "system3-guardian-20260222"
+
+thresholds:
+  accept: 0.60
+  investigate: 0.40
+  reject: 0.00
+
+features:
+  - id: SPAWN-1
+    title: "exec zsh added to spawn sequence"
+    weight: 0.40
+    rationale: "Root cause fix — tmux defaults to bash, ccorch is a zsh function"
+
+  - id: SPAWN-2
+    title: "unset CLAUDECODE before ccorch"
+    weight: 0.25
+    rationale: "Prevents nested session error"
+
+  - id: SPAWN-3
+    title: "Wisdom injection via file reference"
+    weight: 0.20
+    rationale: "Markdown breaks tmux paste — file reference is the reliable pattern"
+
+  - id: SPAWN-4
+    title: "Complete 10-step sequence documented"
+    weight: 0.15
+    rationale: "All steps must be in correct order for reliable spawning"
+
+# Weight verification: 0.40 + 0.25 + 0.20 + 0.15 = 1.00

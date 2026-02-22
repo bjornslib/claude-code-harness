@@ -1,0 +1,246 @@
+{
+  "version": "1.0.0",
+  "created_at": "2026-02-19T09:20:31.248289+00:00",
+  "source_file": "/Users/theb/Documents/Windsurf/claude-harness-setup/.claude/attractor/pipelines/PRD-S3-ATTRACTOR-001.dot",
+  "graph_name": "PRD-S3-ATTRACTOR-001",
+  "graph_attrs": {
+    "label": "Initiative: PRD-S3-ATTRACTOR-001",
+    "labelloc": "t",
+    "fontsize": "16",
+    "rankdir": "TB",
+    "prd_ref": "PRD-S3-ATTRACTOR-001",
+    "promise_id": ""
+  },
+  "defaults": {
+    "node": {
+      "fontname": "Helvetica",
+      "fontsize": "11"
+    },
+    "edge": {
+      "fontname": "Helvetica",
+      "fontsize": "9"
+    }
+  },
+  "nodes": [
+    {
+      "id": "start",
+      "handler": "start",
+      "status": "validated",
+      "shape": "Mdiamond",
+      "label": "PARSE\\nPRD-S3-ATTRACTOR-001",
+      "bead_id": "",
+      "worker_type": "",
+      "promise_ac": "",
+      "all_attrs": {
+        "shape": "Mdiamond",
+        "label": "PARSE\\nPRD-S3-ATTRACTOR-001",
+        "handler": "start",
+        "status": "validated",
+        "style": "filled",
+        "fillcolor": "lightgreen"
+      }
+    },
+    {
+      "id": "validate_graph",
+      "handler": "tool",
+      "status": "pending",
+      "shape": "box",
+      "label": "Validate Graph\\nStructure",
+      "bead_id": "",
+      "worker_type": "",
+      "promise_ac": "",
+      "all_attrs": {
+        "shape": "box",
+        "label": "Validate Graph\\nStructure",
+        "handler": "tool",
+        "command": "attractor validate pipeline.dot",
+        "status": "pending",
+        "style": "filled",
+        "fillcolor": "lightyellow"
+      }
+    },
+    {
+      "id": "init_env",
+      "handler": "tool",
+      "status": "pending",
+      "shape": "box",
+      "label": "Initialize\\nEnvironment",
+      "bead_id": "",
+      "worker_type": "",
+      "promise_ac": "",
+      "all_attrs": {
+        "shape": "box",
+        "label": "Initialize\\nEnvironment",
+        "handler": "tool",
+        "command": "launchorchestrator prd-s3-attractor-001",
+        "status": "pending",
+        "style": "filled",
+        "fillcolor": "lightyellow"
+      }
+    },
+    {
+      "id": "impl_extend_zerorepo_for_dot_pipeline_generation",
+      "handler": "codergen",
+      "status": "pending",
+      "shape": "box",
+      "label": "Extend ZeroRepo for DOT Pipeline\\nGeneration",
+      "bead_id": "claude-harness-setup-k5x0",
+      "worker_type": "backend-solutions-engineer",
+      "promise_ac": "AC-1",
+      "all_attrs": {
+        "shape": "box",
+        "label": "Extend ZeroRepo for DOT Pipeline\\nGeneration",
+        "handler": "codergen",
+        "bead_id": "claude-harness-setup-k5x0",
+        "worker_type": "backend-solutions-engineer",
+        "acceptance": "ZeroRepo generate produces pipeline.dot; attractor annotate adds bead_id; init_promise creates cs-promise; validate pass",
+        "promise_ac": "AC-1",
+        "prd_ref": "PRD-S3-ATTRACTOR-001",
+        "status": "pending",
+        "style": "filled",
+        "fillcolor": "lightyellow"
+      }
+    },
+    {
+      "id": "validate_extend_zerorepo_for_dot_pipeline_generation_tech",
+      "handler": "wait.human",
+      "status": "pending",
+      "shape": "hexagon",
+      "label": "Extend ZeroRepo\\nfor DOT\\nPipeline\\nTechnical\\nValidation",
+      "bead_id": "AT-k5x0-TECH",
+      "worker_type": "",
+      "promise_ac": "AC-1",
+      "all_attrs": {
+        "shape": "hexagon",
+        "label": "Extend ZeroRepo\\nfor DOT\\nPipeline\\nTechnical\\nValidation",
+        "handler": "wait.human",
+        "gate": "technical",
+        "mode": "technical",
+        "bead_id": "AT-k5x0-TECH",
+        "promise_ac": "AC-1",
+        "status": "pending",
+        "style": "filled",
+        "fillcolor": "lightyellow"
+      }
+    },
+    {
+      "id": "validate_extend_zerorepo_for_dot_pipeline_generation_biz",
+      "handler": "wait.human",
+      "status": "pending",
+      "shape": "hexagon",
+      "label": "Extend ZeroRepo\\nfor DOT\\nPipeline\\nBusiness\\nValidation",
+      "bead_id": "AT-k5x0-BIZ",
+      "worker_type": "",
+      "promise_ac": "AC-1",
+      "all_attrs": {
+        "shape": "hexagon",
+        "label": "Extend ZeroRepo\\nfor DOT\\nPipeline\\nBusiness\\nValidation",
+        "handler": "wait.human",
+        "gate": "business",
+        "mode": "business",
+        "bead_id": "AT-k5x0-BIZ",
+        "promise_ac": "AC-1",
+        "status": "pending",
+        "style": "filled",
+        "fillcolor": "lightyellow"
+      }
+    },
+    {
+      "id": "decision_extend_zerorepo_for_dot_pipeline_generation",
+      "handler": "conditional",
+      "status": "pending",
+      "shape": "diamond",
+      "label": "Extend ZeroRepo\\nfor DOT\\nPipeline\\nResult?",
+      "bead_id": "",
+      "worker_type": "",
+      "promise_ac": "",
+      "all_attrs": {
+        "shape": "diamond",
+        "label": "Extend ZeroRepo\\nfor DOT\\nPipeline\\nResult?",
+        "handler": "conditional"
+      }
+    },
+    {
+      "id": "finalize",
+      "handler": "exit",
+      "status": "pending",
+      "shape": "Msquare",
+      "label": "FINALIZE\\nTriple Gate\\ncs-verify",
+      "bead_id": "",
+      "worker_type": "",
+      "promise_ac": "AC-1",
+      "all_attrs": {
+        "shape": "Msquare",
+        "label": "FINALIZE\\nTriple Gate\\ncs-verify",
+        "handler": "exit",
+        "promise_id": "",
+        "promise_ac": "AC-1",
+        "status": "pending",
+        "style": "filled",
+        "fillcolor": "lightyellow"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "src": "start",
+      "dst": "validate_graph",
+      "attrs": {
+        "label": "parse complete"
+      }
+    },
+    {
+      "src": "validate_graph",
+      "dst": "init_env",
+      "attrs": {
+        "label": "graph valid"
+      }
+    },
+    {
+      "src": "init_env",
+      "dst": "impl_extend_zerorepo_for_dot_pipeline_generation",
+      "attrs": {
+        "label": "env ready"
+      }
+    },
+    {
+      "src": "impl_extend_zerorepo_for_dot_pipeline_generation",
+      "dst": "validate_extend_zerorepo_for_dot_pipeline_generation_tech",
+      "attrs": {
+        "label": "impl_complete"
+      }
+    },
+    {
+      "src": "validate_extend_zerorepo_for_dot_pipeline_generation_tech",
+      "dst": "validate_extend_zerorepo_for_dot_pipeline_generation_biz",
+      "attrs": {
+        "label": "tech pass"
+      }
+    },
+    {
+      "src": "validate_extend_zerorepo_for_dot_pipeline_generation_biz",
+      "dst": "decision_extend_zerorepo_for_dot_pipeline_generation",
+      "attrs": {}
+    },
+    {
+      "src": "decision_extend_zerorepo_for_dot_pipeline_generation",
+      "dst": "impl_extend_zerorepo_for_dot_pipeline_generation",
+      "attrs": {
+        "label": "fail\\nretry",
+        "condition": "fail",
+        "color": "red",
+        "style": "dashed"
+      }
+    },
+    {
+      "src": "decision_extend_zerorepo_for_dot_pipeline_generation",
+      "dst": "finalize",
+      "attrs": {
+        "label": "pass",
+        "condition": "pass",
+        "color": "green"
+      }
+    }
+  ],
+  "content_hash": "27be3d5fcd2e33df"
+}
