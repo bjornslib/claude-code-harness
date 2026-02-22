@@ -171,7 +171,7 @@ Then populate the generated `manifest.yaml` with:
 
 ### 2.5 Verification of Test Quality
 
-Before proceeding to operator spawning, verify acceptance test quality:
+Before proceeding to meta-orchestrator spawning, verify acceptance test quality:
 
 1. **Coverage check**: Every PRD feature has at least one scenario
 2. **Weight sum**: Exactly 1.00
@@ -181,26 +181,26 @@ Before proceeding to operator spawning, verify acceptance test quality:
 
 ---
 
-## 3. Operator Spawning Sequence
+## 3. Meta-Orchestrator Spawning Sequence
 
 ### 3.1 Create Guardian Session Promise
 
-Before spawning the operator, create the guardian's own session promise:
+Before spawning the meta-orchestrator, create the guardian's own session promise:
 
 ```bash
 cs-init
 
 cs-promise --create "Guardian: Validate PRD-{ID} implementation" \
     --ac "Acceptance tests created and stored in config repo" \
-    --ac "S3 operator spawned and verified running" \
-    --ac "Operator progress monitored through completion" \
+    --ac "S3 meta-orchestrator spawned and verified running" \
+    --ac "Meta-orchestrator progress monitored through completion" \
     --ac "Independent validation scored against rubric" \
     --ac "Final verdict delivered with evidence"
 
 cs-promise --start <promise-id>
 ```
 
-### 3.2 Spawn Operator
+### 3.2 Spawn Meta-Orchestrator
 
 Execute the spawn sequence with proper error handling:
 
@@ -224,9 +224,14 @@ tmux send-keys -t "s3-{initiative}" Enter
 # Step 4: Wait for initialization
 sleep 15
 
-# Step 5: Verify output style
-PANE_OUTPUT=$(tmux capture-pane -t "s3-{initiative}" -p -S -50)
-echo "$PANE_OUTPUT" | grep -iE "system3|meta-orchestrator|output.style"
+# Step 5: Set output style for System 3 meta-orchestrator
+tmux send-keys -t "s3-{initiative}" "/output-style system3-meta-orchestrator"
+tmux send-keys -t "s3-{initiative}" Enter
+sleep 3
+
+# Step 6: Verify output style loaded
+PANE_OUTPUT=$(tmux capture-pane -t "s3-{initiative}" -p -S -30)
+echo "$PANE_OUTPUT" | grep -iE "system3-meta-orchestrator"
 if [ $? -ne 0 ]; then
     echo "WARNING: Output style may not have loaded. Check manually."
 fi
@@ -234,11 +239,11 @@ fi
 
 ### 3.3 Send Initial Instructions
 
-After verification, send the operator its mission:
+After verification, send the meta-orchestrator its mission:
 
 ```bash
 # Construct the instruction payload
-INSTRUCTION="Implement PRD-{ID}. Read the PRD at .taskmaster/docs/PRD-{ID}.md. Parse tasks with Task Master. Spawn orchestrators as needed. Report when all epics are complete."
+INSTRUCTION="You are the System 3 meta-orchestrator. Invoke Skill('system3-orchestrator') first. Then read PRD-{ID} at .taskmaster/docs/PRD-{ID}.md. Parse tasks with Task Master. Spawn orchestrators as needed. Report when all epics are complete."
 
 # Send via tmux (text first, then Enter separately)
 tmux send-keys -t "s3-{initiative}" "$INSTRUCTION"
@@ -248,7 +253,7 @@ tmux send-keys -t "s3-{initiative}" Enter
 
 ### 3.4 Session Resume (Alternative)
 
-If resuming a previous operator session:
+If resuming a previous meta-orchestrator session:
 
 ```bash
 # Check if the session supports resume
@@ -275,7 +280,7 @@ cs-promise --meet <id> --ac-id AC-2 --evidence "tmux session s3-{initiative} cre
 
 ### 4.1 Enter Monitoring State
 
-Once the operator is confirmed running, enter the monitoring loop:
+Once the meta-orchestrator is confirmed running, enter the monitoring loop:
 
 ```
 MONITORING LOOP:
@@ -301,10 +306,10 @@ MONITORING LOOP:
 
 ### 4.2 Cadence Adaptation
 
-Adjust monitoring frequency based on what the operator is doing:
+Adjust monitoring frequency based on what the meta-orchestrator is doing:
 
 ```bash
-# Check operator activity
+# Check meta-orchestrator activity
 OUTPUT=$(tmux capture-pane -t "s3-{initiative}" -p -S -30)
 
 # Determine cadence
@@ -337,8 +342,8 @@ When intervention is needed, follow this decision tree:
 
 3. **Scope Creep**:
    - Compare current work against PRD scope
-   - If operator is working on unrelated features: send correction
-   - If operator is over-engineering: remind of scope boundaries
+   - If meta-orchestrator is working on unrelated features: send correction
+   - If meta-orchestrator is over-engineering: remind of scope boundaries
 
 4. **Time Limits**:
    - Typical initiative: 1-3 hours for implementation
@@ -347,7 +352,7 @@ When intervention is needed, follow this decision tree:
 
 ### 4.4 Meet Monitoring Acceptance Criteria
 
-When the operator signals completion (or time limit is reached):
+When the meta-orchestrator signals completion (or time limit is reached):
 
 ```bash
 cs-promise --meet <id> --ac-id AC-3 --evidence "Monitored s3-{initiative} for {duration}, {intervention_count} interventions performed" --type manual
@@ -484,7 +489,7 @@ cs-verify --check --verbose
 ```bash
 # Identify specific gaps that need attention
 # Create a targeted follow-up plan
-# Optionally spawn a new operator session focused on gaps
+# Optionally spawn a new meta-orchestrator session focused on gaps
 
 # Do NOT meet AC-4 yet — investigation is not acceptance
 # Log the gaps for tracking
@@ -503,12 +508,12 @@ cs-verify --log --action "REJECT verdict for PRD-{ID}" --outcome "failed" \
     --learning "Critical failures in: {feature_list}. Score: {0.XX}"
 ```
 
-### 6.4 Operator Cleanup
+### 6.4 Meta-Orchestrator Cleanup
 
 After validation is complete (regardless of verdict):
 
 ```bash
-# Check if operator session is still running
+# Check if meta-orchestrator session is still running
 tmux has-session -t "s3-{initiative}" 2>/dev/null
 
 # If running and verdict is ACCEPT — let it finish naturally or send shutdown
@@ -532,7 +537,7 @@ Typical guardian session timeline for a medium-complexity PRD:
 |-------|----------|------------|
 | Pre-flight | 5 min | Environment checks, Hindsight queries |
 | Acceptance test creation | 15-30 min | PRD analysis, Gherkin writing, manifest creation |
-| Operator spawning | 2-5 min | tmux setup, ccsystem3 launch, verification |
+| Meta-orchestrator spawning | 2-5 min | tmux setup, ccsystem3 launch, verification |
 | Monitoring | 1-3 hours | Continuous oversight, periodic interventions |
 | Independent validation | 15-30 min | Evidence gathering, scoring, report generation |
 | Post-validation | 5-10 min | Hindsight storage, cleanup, promise completion |

@@ -1,6 +1,6 @@
 ---
 name: s3-guardian
-description: This skill should be used when System 3 needs to act as an independent guardian angel — spawning System 3 operators in tmux, creating blind Gherkin acceptance tests from PRDs, monitoring operator progress, independently validating claims against acceptance criteria using gradient confidence scoring (0.0-1.0), and setting session promises. Use when asked to "spawn and monitor a system3 operator", "create acceptance tests for a PRD", "validate orchestrator claims", "act as guardian angel", or "independently verify implementation work".
+description: This skill should be used when System 3 needs to act as an independent guardian angel — spawning System 3 meta-orchestrators in tmux, creating blind Gherkin acceptance tests from PRDs, monitoring meta-orchestrator progress, independently validating claims against acceptance criteria using gradient confidence scoring (0.0-1.0), and setting session promises. Use when asked to "spawn and monitor a system3 meta-orchestrator", "create acceptance tests for a PRD", "validate orchestrator claims", "act as guardian angel", or "independently verify implementation work".
 version: 0.1.0
 title: "S3 Guardian"
 status: active
@@ -8,25 +8,25 @@ status: active
 
 # S3 Guardian — Independent Validation Pattern
 
-The guardian angel pattern provides independent, blind validation of System 3 operator work. A guardian session creates acceptance tests from PRDs, stores them outside the implementation repo where operators cannot see them, spawns and monitors S3 operators in tmux, and independently validates claims against a gradient confidence rubric.
+The guardian angel pattern provides independent, blind validation of System 3 meta-orchestrator work. A guardian session creates acceptance tests from PRDs, stores them outside the implementation repo where meta-orchestrators cannot see them, spawns and monitors S3 meta-orchestrators in tmux, and independently validates claims against a gradient confidence rubric.
 
 ```
 Guardian (this session, config repo)
     |
     |-- Creates blind Gherkin acceptance tests (stored here, NOT in impl repo)
-    |-- Spawns S3 Operator in tmux (at impl repo)
+    |-- Spawns S3 Meta-Orchestrator in tmux (at impl repo)
     |       |
-    |       +-- Orchestrators (spawned by operator)
+    |       +-- Orchestrators (spawned by meta-orchestrator)
     |       |       +-- Workers
     |       |
     |       +-- s3-communicator (heartbeat)
     |
-    |-- Monitors operator progress via tmux capture-pane
+    |-- Monitors meta-orchestrator progress via tmux capture-pane
     |-- Independently validates claims against rubric
     |-- Reports to oversight team with gradient scores
 ```
 
-**Key Innovation**: Acceptance tests live in `claude-harness-setup/acceptance-tests/PRD-{ID}/`, NOT in the implementation repository. Operators and their workers never see the rubric. This enables truly independent validation — the guardian reads actual code and scores it against criteria the implementers did not have access to.
+**Key Innovation**: Acceptance tests live in `claude-harness-setup/acceptance-tests/PRD-{ID}/`, NOT in the implementation repository. Meta-orchestrators and their workers never see the rubric. This enables truly independent validation — the guardian reads actual code and scores it against criteria the implementers did not have access to.
 
 ---
 
@@ -36,8 +36,8 @@ The guardian operates with a specific mindset that distinguishes it from passive
 
 ### Be Skeptical
 
-- **Never trust self-reported success.** Operators and orchestrators naturally over-report progress. Read the actual code, run the actual tests, check the actual logs.
-- **Question surface-level explanations.** When an operator says "X is blocked by Y," independently verify that Y is truly the blocker — and that Y cannot be resolved.
+- **Never trust self-reported success.** Meta-orchestrators and orchestrators naturally over-report progress. Read the actual code, run the actual tests, check the actual logs.
+- **Question surface-level explanations.** When a meta-orchestrator says "X is blocked by Y," independently verify that Y is truly the blocker — and that Y cannot be resolved.
 - **Assume incompleteness until proven otherwise.** A task marked "done" is "claimed done" until the guardian scores it against the blind rubric.
 - **Watch for rationalization patterns.** "It's a pre-existing issue" may be true, but ask: Is it solvable? Would solving it advance the goal? If yes, push for resolution.
 
@@ -50,14 +50,14 @@ The guardian operates with a specific mindset that distinguishes it from passive
 
 ### Push for Completion
 
-- **Reject premature fallbacks.** When an operator says "let's skip the E2E test and merge as-is," challenge that. Is the E2E blocker actually hard to fix? Often a 1-line Dockerfile fix unblocks the entire test.
-- **Advocate for the user's actual goal.** The user didn't ask for "most of the pipeline" — they asked for the pipeline. Push operators toward full completion.
-- **Guide, don't just observe.** When the guardian identifies a root cause (e.g., missing COPY in Dockerfile), send that finding to the operator as actionable guidance rather than noting it passively.
+- **Reject premature fallbacks.** When a meta-orchestrator says "let's skip the E2E test and merge as-is," challenge that. Is the E2E blocker actually hard to fix? Often a 1-line Dockerfile fix unblocks the entire test.
+- **Advocate for the user's actual goal.** The user didn't ask for "most of the pipeline" — they asked for the pipeline. Push meta-orchestrators toward full completion.
+- **Guide, don't just observe.** When the guardian identifies a root cause (e.g., missing COPY in Dockerfile), send that finding to the meta-orchestrator as actionable guidance rather than noting it passively.
 - **Set higher bars progressively.** As the team demonstrates capability, raise expectations. Don't accept the same quality level that was acceptable in sprint 1.
 
-### Injecting Disposition Into Operators
+### Injecting Disposition Into Meta-Orchestrators
 
-When spawning or guiding S3 operators, include disposition guidance in prompts:
+When spawning or guiding S3 meta-orchestrators, include disposition guidance in prompts:
 
 ```
 Be curious about failures — trace root causes, don't accept surface explanations.
@@ -65,71 +65,65 @@ When something is "blocked," investigate whether the blocker is solvable.
 Push for complete solutions over workarounds. The user wants the real thing.
 ```
 
-This disposition transfers from guardian to operator to orchestrator to worker, creating a culture of thoroughness throughout the agent hierarchy.
+This disposition transfers from guardian to meta-orchestrator to orchestrator to worker, creating a culture of thoroughness throughout the agent hierarchy.
 
 ---
 
 ## Phase 1: Acceptance Test Creation
 
-Generate blind Gherkin-style acceptance tests from PRDs before any implementation begins.
+Generate blind acceptance tests from PRDs before any implementation begins. This phase uses
+the `acceptance-test-writer` skill in two modes: `--mode=guardian` for per-epic Gherkin scenarios,
+and `--mode=journey` for cross-layer business journey scenarios.
 
-### Step 1: Read the PRD
+### Step 1: Generate Per-Epic Gherkin Tests (Guardian Mode)
 
-Locate and read the PRD document from the implementation repository. Extract:
-- Feature list with descriptions
-- Acceptance criteria (if specified)
-- Scope boundaries (IN/OUT)
-- Technical constraints
-- Dependencies
+Invoke the acceptance-test-writer skill in guardian mode. This generates the per-epic Gherkin
+scenarios with confidence scoring guides that will be used for Phase 4 validation.
 
-```bash
-# Read PRD from the implementation repo
-cat /path/to/impl-repo/.taskmaster/docs/PRD-{ID}.md
+```python
+Skill("acceptance-test-writer", args="--source=/path/to/impl-repo/.taskmaster/docs/PRD-{ID}.md --mode=guardian")
 ```
 
-### Step 2: Extract Weighted Features
+This creates:
+- `acceptance-tests/PRD-{ID}/manifest.yaml` — feature weights and decision thresholds
+- `acceptance-tests/PRD-{ID}/scenarios.feature` — Gherkin scenarios with confidence scoring guides
 
-Identify every testable feature. Assign weights based on business criticality:
+**Verify the output:**
+- [ ] All PRD features represented with weights summing to 1.0
+- [ ] Each scenario has a confidence scoring guide (0.0 / 0.5 / 1.0 anchors)
+- [ ] Evidence references are specific (file names, function names, test names)
+- [ ] Red flags section present for each scenario
+- [ ] manifest.yaml has valid thresholds (default: accept=0.60, investigate=0.40)
 
-| Weight | Meaning | Example |
-|--------|---------|---------|
-| 0.30+ | Core feature, initiative fails without it | Pipeline execution engine |
-| 0.15-0.29 | Important feature, degrades experience | Error handling, retry logic |
-| 0.05-0.14 | Supporting feature, nice to have | Logging, configuration |
-| < 0.05 | Polish, documentation | README, inline comments |
+If the acceptance-test-writer cannot find a Goals section, derive objectives from the uber-epic
+Acceptance Criteria — what the user ultimately wanted to achieve.
 
-Weights across all features MUST sum to 1.0.
+### Step 2: Generate Journey Tests (Journey Mode)
 
-### Step 3: Write Gherkin Scenarios
+After generating per-epic Gherkin, generate blind journey tests from the PRD's Goals section.
 
-For each feature, write one or more Gherkin scenarios with confidence scoring guides. Each scenario includes:
-- `Given` / `When` / `Then` clauses
-- Confidence scoring guide (what 0.0 vs 0.5 vs 1.0 looks like)
-- Evidence to check (specific files, functions, tests)
-- Red flags (indicators of incomplete or false claims)
-
-See [references/gherkin-test-patterns.md](references/gherkin-test-patterns.md) for syntax, calibration, and a complete example.
-
-### Step 4: Generate Manifest
-
-Create the directory structure and manifest:
-
-```bash
-# Use the template generator
-.claude/skills/s3-guardian/scripts/generate-manifest.sh PRD-{ID} "PRD Title"
+```python
+Skill("acceptance-test-writer", args="--source=/path/to/impl-repo/.taskmaster/docs/PRD-{ID}.md --mode=journey")
 ```
 
-Then populate `manifest.yaml` with features, weights, and thresholds. Populate `scenarios.feature` with the Gherkin scenarios.
+This creates `acceptance-tests/PRD-{ID}/journeys/` in the config repo (where meta-orchestrators cannot see it).
+Journey tests are generated BEFORE the meta-orchestrator is spawned — they stay blind throughout.
 
-**Storage location**: `acceptance-tests/PRD-{ID}/` in the config repo (claude-harness-setup), never in the implementation repo.
+**Verify the output:**
+- [ ] At least one `J{N}.feature` file exists per PRD business objective
+- [ ] `runner_config.yaml` is present with sensible service URLs
+- [ ] Each scenario crosses at least 2 system layers and ends with a business outcome assertion
+- [ ] Tags include `@journey @prd-{ID} @J{N}`
 
-See [references/gherkin-test-patterns.md](references/gherkin-test-patterns.md) for the manifest schema and scoring thresholds.
+**Storage location**: Both per-epic and journey tests live in `acceptance-tests/PRD-{ID}/` in the config
+repo (claude-harness-setup), never in the implementation repo. Meta-orchestrators and their workers never see
+the rubric or the journeys. This enables truly independent validation.
 
 ---
 
-## Phase 2: S3 Operator Spawning
+## Phase 2: S3 Meta-Orchestrator Spawning
 
-Spawn a System 3 operator in a tmux session pointed at the implementation repository.
+Spawn a System 3 meta-orchestrator in a tmux session pointed at the implementation repository.
 
 ### Pre-flight Checks
 
@@ -157,7 +151,12 @@ tmux send-keys -t "s3-{initiative}" Enter
 # 4. Wait for initialization (15 seconds minimum)
 sleep 15
 
-# 5. Verify output style loaded
+# 5. Set output style for System 3 meta-orchestrator
+tmux send-keys -t "s3-{initiative}" "/output-style system3-meta-orchestrator"
+tmux send-keys -t "s3-{initiative}" Enter
+sleep 3
+
+# 6. Verify output style loaded
 tmux capture-pane -t "s3-{initiative}" -p -S -50 | grep -i "system3\|meta-orchestrator\|output.style"
 ```
 
@@ -169,7 +168,7 @@ tmux send-keys -t "s3-{initiative}" "/resume"
 tmux send-keys -t "s3-{initiative}" Enter
 
 # Option B: Fresh instructions
-tmux send-keys -t "s3-{initiative}" "Your mission: implement PRD-{ID}. Read the PRD at .taskmaster/docs/PRD-{ID}.md and begin."
+tmux send-keys -t "s3-{initiative}" "You are the System 3 meta-orchestrator. Your output style is already set. Read the PRD at .taskmaster/docs/PRD-{ID}.md and begin. Invoke Skill('system3-orchestrator') as your first action."
 sleep 2
 tmux send-keys -t "s3-{initiative}" Enter
 ```
@@ -180,14 +179,14 @@ See [references/guardian-workflow.md](references/guardian-workflow.md) for the c
 
 ## Phase 3: Monitoring
 
-Continuously monitor operator progress via tmux. Monitoring cadence adapts to activity level.
+Continuously monitor meta-orchestrator progress via tmux. Monitoring cadence adapts to activity level.
 
 ### Monitoring Cadence
 
 | Phase | Interval | Rationale |
 |-------|----------|-----------|
 | Active implementation | 30s | Catch errors early, detect AskUserQuestion blocks |
-| Investigation/planning | 60s | Operator is reading/thinking, less likely to block |
+| Investigation/planning | 60s | Meta-orchestrator is reading/thinking, less likely to block |
 | Idle / waiting for workers | 120s | Nothing to intervene on |
 
 ### Core Monitoring Loop
@@ -213,30 +212,30 @@ tmux capture-pane -t "s3-{initiative}" -p -S -100 | grep -iE "error|stuck|comple
 
 ### Communication Hierarchy (CRITICAL)
 
-The Guardian monitors BOTH the S3 operator AND its orchestrators, but MUST route corrections through the S3 operator:
+The Guardian monitors BOTH the S3 meta-orchestrator AND its orchestrators, but MUST route corrections through the S3 meta-orchestrator:
 
 ```
-Guardian ──monitors──► S3 Operator ──delegates──► Orchestrator ──delegates──► Workers
-   │                       ▲                          ▲
-   │                       │                          │
-   └──── sends guidance ───┘                          │
-   └──── monitors (read-only) ────────────────────────┘
+Guardian ──monitors──► S3 Meta-Orchestrator ──delegates──► Orchestrator ──delegates──► Workers
+   │                       ▲                                    ▲
+   │                       │                                    │
+   └──── sends guidance ───┘                                    │
+   └──── monitors (read-only) ──────────────────────────────────┘
 ```
 
 | Action | Target | When |
 |--------|--------|------|
-| Send guidance/corrections | S3 Operator session | Always (primary communication channel) |
+| Send guidance/corrections | S3 Meta-Orchestrator session | Always (primary communication channel) |
 | Monitor output (read-only) | Both S3 + Orchestrator | Continuous (for awareness) |
-| Direct orchestrator injection | Orchestrator session | **Last resort only** — when S3 operator is compacting/stuck |
+| Direct orchestrator injection | Orchestrator session | **Last resort only** — when S3 meta-orchestrator is compacting/stuck |
 | Answer AskUserQuestion | Whichever session shows the dialog | Immediately (blocks are time-critical) |
 
-**Anti-pattern**: Sending implementation guidance directly to the orchestrator bypasses the S3 operator's context and coordination. The S3 operator needs to know what guidance was given to maintain coherent oversight.
+**Anti-pattern**: Sending implementation guidance directly to the orchestrator bypasses the S3 meta-orchestrator's context and coordination. The S3 meta-orchestrator needs to know what guidance was given to maintain coherent oversight.
 
-**Exception**: When the S3 operator is at <5% context and actively compacting, the Guardian may inject time-critical corrections directly into the orchestrator to prevent wrong work from being committed.
+**Exception**: When the S3 meta-orchestrator is at <5% context and actively compacting, the Guardian may inject time-critical corrections directly into the orchestrator to prevent wrong work from being committed.
 
 ### AskUserQuestion Handling
 
-When the operator or a worker hits an AskUserQuestion dialog:
+When the meta-orchestrator or a worker hits an AskUserQuestion dialog:
 
 ```bash
 # Navigate to the appropriate option and confirm
@@ -250,7 +249,7 @@ See [references/monitoring-patterns.md](references/monitoring-patterns.md) for t
 
 ## Phase 4: Independent Validation
 
-After the operator claims completion, independently validate all work against the blind acceptance rubric.
+After the meta-orchestrator claims completion, independently validate all work against the blind acceptance rubric.
 
 ### Validation Protocol
 
@@ -259,16 +258,6 @@ After the operator claims completion, independently validate all work against th
 3. **Score each scenario**: Assign a confidence score (0.0 to 1.0) per Gherkin scenario
 4. **Compute weighted total**: Multiply each scenario score by its feature weight, sum across all features
 5. **Decide**: Compare the weighted total against the manifest thresholds
-
-### Decision Thresholds
-
-| Weighted Score | Decision | Action |
-|----------------|----------|--------|
-| >= 0.60 | ACCEPT | Report to oversight team, proceed to merge |
-| 0.40 - 0.59 | INVESTIGATE | Identify gaps, plan targeted follow-up session |
-| < 0.40 | REJECT | Document failures, restart implementation cycle |
-
-Thresholds are configurable per initiative in `manifest.yaml`.
 
 ### Evidence Gathering
 
@@ -290,6 +279,76 @@ cd /path/to/impl-repo && pytest --tb=short 2>&1 | tail -20
 
 See [references/validation-scoring.md](references/validation-scoring.md) for the scoring methodology and evidence mapping.
 
+### Step 6: Execute Journey Tests
+
+After computing the per-feature weighted score, execute the journey tests in `journeys/`.
+
+**Execution approach** — spawn a tdd-test-engineer sub-agent:
+
+```python
+Task(
+    subagent_type="tdd-test-engineer",
+    description="Execute journey tests for PRD-{ID}",
+    prompt="""
+    Execute the journey test scenarios at: acceptance-tests/PRD-{ID}/journeys/
+
+    For each J{N}.feature file:
+    1. Read the scenario
+    2. Execute each step in sequence:
+       - @browser steps: use chrome-devtools MCP (navigate, click, assert_visible, etc.)
+       - @api steps: make actual API calls and assert responses
+       - @db steps: query the DB directly using runner_config.yaml dsn
+       - "eventually" steps: poll the specified condition every interval_seconds, up to max_wait_seconds
+       - Pass artifacts forward: contact_id extracted in step 3 → used in step 5 DB query
+    3. Report pass/fail per step, plus the artifact values at each step
+    4. Return journey-results.json: {J1: {status: PASS/FAIL, steps: [...]}, J2: ...}
+
+    Services are defined in runner_config.yaml.
+    If services are not running, mark all @async and @browser steps as SKIP (not FAIL)
+    and note "requires live services". Mark @smoke steps as runnable anyway.
+
+    Return journey-results.json to the guardian session.
+    """
+)
+```
+
+**If services not running** (structural-only mode):
+- Guardian reads the journey `.feature` files manually
+- Checks that each layer mentioned in the scenario has corresponding code
+- Marks as `STRUCTURAL_PASS` / `STRUCTURAL_FAIL`
+- Does not block the per-feature verdict (only live execution can apply the override)
+
+**Override Rule (MANDATORY when live execution runs)**:
+```
+If ANY journey test returns FAIL (not SKIP):
+  → Final verdict = REJECT regardless of per-feature weighted score
+  → Reason: "Journey J{N} failed at step: {step_description} — business outcome not achieved"
+```
+
+Example: per-feature score = 0.92 (would be ACCEPT) + J1 FAILS at "Prefect flow Completed"
+  → Final verdict: **REJECT**
+  → Reason: "Prefect trigger not firing; contact_id xxx never appeared in flow runs"
+
+Include `journey-results.json` in the evidence package alongside per-feature scores.
+
+### Deliver Verdict
+
+Combine results:
+- Per-feature weighted score (0.0–1.0)
+- Journey test results (PASS / FAIL / SKIP per J{N}, or STRUCTURAL_PASS/FAIL)
+
+Final decision matrix:
+
+| Per-feature score | Journey results     | Final verdict                                   |
+|-------------------|---------------------|-------------------------------------------------|
+| >= 0.60           | All PASS            | ACCEPT                                          |
+| >= 0.60           | Any FAIL            | REJECT (journey override)                       |
+| >= 0.60           | All SKIP            | ACCEPT (note: live validation pending)          |
+| 0.40–0.59         | Any                 | INVESTIGATE                                     |
+| < 0.40            | Any                 | REJECT                                          |
+
+Thresholds are configurable per initiative in `manifest.yaml`.
+
 ---
 
 ## Session Promise Integration
@@ -305,8 +364,8 @@ cs-init
 # Create guardian promise
 cs-promise --create "Guardian: Validate PRD-{ID} implementation" \
     --ac "Acceptance tests created and stored in config repo" \
-    --ac "S3 operator spawned and verified running" \
-    --ac "Operator progress monitored through completion" \
+    --ac "S3 meta-orchestrator spawned and verified running" \
+    --ac "Meta-orchestrator progress monitored through completion" \
     --ac "Independent validation scored against rubric" \
     --ac "Final verdict delivered with evidence"
 ```
@@ -364,9 +423,9 @@ mcp__hindsight__retain(
 ## Recursive Guardian Pattern
 
 The guardian pattern is recursive. A guardian can watch:
-- An S3 operator who spawns orchestrators who spawn workers (standard)
-- Another guardian who is watching an S3 operator (meta-guardian)
-- Multiple S3 operators in parallel (multi-initiative guardian)
+- An S3 meta-orchestrator who spawns orchestrators who spawn workers (standard)
+- Another guardian who is watching an S3 meta-orchestrator (meta-guardian)
+- Multiple S3 meta-orchestrators in parallel (multi-initiative guardian)
 
 Each level adds independent verification. The key constraint: each guardian stores its acceptance tests where the entity being watched cannot access them.
 
@@ -377,7 +436,7 @@ Each level adds independent verification. The key constraint: each guardian stor
 | Phase | Key Action | Reference |
 |-------|------------|-----------|
 | 1. Acceptance Tests | Read PRD, write Gherkin, create manifest | [gherkin-test-patterns.md](references/gherkin-test-patterns.md) |
-| 2. Operator Spawn | tmux create, unset CLAUDECODE, ccsystem3 | [guardian-workflow.md](references/guardian-workflow.md) |
+| 2. Meta-Orchestrator Spawn | tmux create, unset CLAUDECODE, ccsystem3, set output style | [guardian-workflow.md](references/guardian-workflow.md) |
 | 3. Monitoring | capture-pane loop, intervention triggers | [monitoring-patterns.md](references/monitoring-patterns.md) |
 | 4. Validation | Read code, score scenarios, weighted total | [validation-scoring.md](references/validation-scoring.md) |
 
@@ -393,7 +452,7 @@ Each level adds independent verification. The key constraint: each guardian stor
 
 | Anti-Pattern | Why It Fails | Correct Approach |
 |--------------|-------------|------------------|
-| Storing tests in impl repo | Operators can read and game the rubric | Store in config repo only |
+| Storing tests in impl repo | Meta-orchestrators can read and game the rubric | Store in config repo only |
 | Boolean pass/fail scoring | Misses partial implementations | Use 0.0-1.0 gradient scoring |
 | Trusting orchestrator reports | Self-reported status is biased | Read code independently |
 | Skipping monitoring | AskUserQuestion blocks go undetected | Monitor continuously |
