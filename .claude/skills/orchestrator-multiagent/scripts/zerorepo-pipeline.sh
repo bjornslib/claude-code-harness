@@ -204,6 +204,14 @@ run_cmd cp "${ZEROREPO_DOT}" "${PIPELINE_DOT}"
 echo "[INFO] Pipeline saved: ${PIPELINE_DOT}"
 
 # ---------------------------------------------------------------------------
+# Step 4a: Validate pipeline.dot schema
+# ---------------------------------------------------------------------------
+echo ""
+echo "--- Step 4a: Validate pipeline.dot schema ---"
+run_cmd python3 "${ATTRACTOR_CLI}" validate "${PIPELINE_DOT}"
+echo "[INFO] Validation complete."
+
+# ---------------------------------------------------------------------------
 # Step 5: Annotate (cross-reference with beads)
 # ---------------------------------------------------------------------------
 if [[ "${SKIP_ANNOTATE}" != true ]]; then
