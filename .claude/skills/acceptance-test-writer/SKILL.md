@@ -29,6 +29,65 @@ Invoke this skill:
 - Before starting implementation of a new feature
 - When acceptance tests don't exist for a PRD (`acceptance-tests/PRD-XXX/` missing)
 
+## Service Prerequisites (MANDATORY Before Test Execution)
+
+Before writing or executing ANY test scenarios, verify the full service stack is running
+on the **feature branch**. Test results from the default branch are not valid.
+
+### Required Stack
+
+| Service | How to Start | Verify |
+|---------|-------------|--------|
+| Backend API server | Docker container updated to feature branch, OR `uvicorn main:app --reload` | `curl http://localhost:8000/health` → 200 |
+| Database | Local PostgreSQL with **all migrations applied** for the feature branch | `psql $DATABASE_URL -c "\dt"` lists expected tables |
+| Frontend | `npm run dev` from the feature branch checkout | Browser opens at `http://localhost:3000` |
+
+### Migration Check (Critical)
+
+Before any DB-layer test step, confirm feature branch migrations are applied:
+
+```bash
+# Check tables exist (adapt to actual migration contents)
+psql $DATABASE_URL -c "\dt" | grep -E "check_types|background_check_sequence|background_tasks"
+
+# If tables missing — apply migrations:
+# alembic upgrade head   (or project-specific migration command)
+```
+
+**A missing migration is a FAIL, not a SKIP.** If the tables don't exist, the test fails at the DB layer even if unit tests pass.
+
+### Browser Test Tool: Claude in Chrome (NOT Jest or Playwright)
+
+For all `@browser` / `@claude-in-chrome` steps, use **Claude in Chrome** (`mcp__claude-in-chrome__*`):
+- `mcp__claude-in-chrome__navigate` — navigate to a URL
+- `mcp__claude-in-chrome__find` — find elements on the page
+- `mcp__claude-in-chrome__form_input` — fill forms
+- `mcp__claude-in-chrome__javascript_tool` — execute JS assertions
+- `mcp__claude-in-chrome__get_page_text` — read page content
+- `mcp__claude-in-chrome__read_page` — get full DOM state
+
+Jest and Playwright specs that already exist are supplementary and may be run, but they do NOT
+substitute for Claude in Chrome browser validation. Claude in Chrome runs against the **live**
+`npm run dev` frontend — it cannot run if the frontend is not started.
+
+In Gherkin scenarios, annotate browser steps like this:
+```gherkin
+# TOOL: Claude in Chrome
+When Claude in Chrome navigates to http://localhost:3000/some-page
+And Claude in Chrome clicks the "Submit" button
+```
+
+### Pre-Execution Checklist
+
+Before running any scenarios:
+- [ ] Feature branch checked out in impl repo
+- [ ] Docker container rebuilt/updated to feature branch (or server started directly)
+- [ ] Database migrations applied (`alembic upgrade head` or equivalent)
+- [ ] Feature branch tables exist in local PostgreSQL
+- [ ] Frontend running: `npm run dev` accessible at `http://localhost:3000`
+- [ ] Backend running: `GET /health` returns 200
+- [ ] Auth tokens available for test accounts
+
 ## Input Requirements
 
 | Parameter | Required | Description |
@@ -180,6 +239,234 @@ Create all files in `acceptance-tests/PRD-XXX/`:
 1. Write `manifest.yaml` first
 2. Write one `AC-{name}.yaml` per criterion
 3. Verify all files are valid YAML
+
+## Guardian Mode (--mode=guardian)
+
+Generates per-epic Gherkin acceptance test scenarios with confidence scoring guides, for use by
+the s3-guardian skill. Output goes in `acceptance-tests/PRD-{ID}/` (same as standard mode but
+Gherkin `.feature` format instead of YAML).
+
+### When to Use
+- Invoked by s3-guardian in Phase 1 to create the blind acceptance rubric
+- Replaces the guardian's manual Steps 1-4 (read PRD, extract features, write Gherkin, create manifest)
+
+### Invocation
+```
+Skill("acceptance-test-writer", args="--source=/path/to/impl-repo/.taskmaster/docs/PRD-{ID}.md --mode=guardian")
+```
+
+### Workflow
+
+### Step G0: Verify Service Prerequisites
+
+Before generating scenarios, note the service requirements in the manifest so the executor
+knows exactly what must be running. During test execution (Phase 4), verify these
+prerequisites before scoring any scenario.
+
+The executor (tdd-test-engineer or guardian Phase 4) MUST confirm before running scenarios:
+- [ ] Feature branch is deployed/running (not main/default branch)
+- [ ] Migrations applied — expected tables exist in local PostgreSQL
+- [ ] Frontend running on `http://localhost:3000` via `npm run dev` (feature branch)
+- [ ] Backend running on `http://localhost:8000`
+
+A missing service or unapplied migration is a **FAIL**, not a SKIP. Surface the gap explicitly.
+
+**Step G1: Read PRD and Extract Weighted Features**
+Read the PRD. Identify every testable feature. Assign weights based on business criticality:
+
+| Weight | Meaning | Example |
+|--------|---------|---------|
+| 0.30+ | Core feature — initiative fails without it | Pipeline execution engine |
+| 0.15-0.29 | Important feature — degrades experience | Error handling, retry logic |
+| 0.05-0.14 | Supporting feature — nice to have | Logging, configuration |
+| < 0.05 | Polish, documentation | README, inline comments |
+
+Weights across all features MUST sum to 1.0.
+
+**Step G2: Write Gherkin Scenarios with Confidence Scoring Guides**
+For each feature, write one or more Gherkin scenarios. Each scenario MUST include:
+- `Given` / `When` / `Then` clauses
+- A confidence scoring guide (what 0.0 vs 0.5 vs 1.0 looks like for that scenario)
+- Evidence to check (specific files, functions, tests to examine)
+- Red flags (indicators of incomplete or falsely-claimed implementation)
+
+Example scenario format:
+```gherkin
+@feature-F001 @weight-0.30
+Feature: Pipeline Execution Engine
+
+  Scenario: Pipeline executes all stages in sequence
+    Given a valid pipeline configuration exists
+    When the pipeline runner is invoked
+    Then stages are executed in topological order
+    And each stage produces expected output artifacts
+
+    # Confidence scoring guide:
+    # 1.0 — All 4 stages run, artifacts verified in tests
+    # 0.5 — Stages run but no artifact verification
+    # 0.0 — Pipeline fails or only 1-2 stages execute
+
+    # Evidence to check:
+    # - pipeline_runner.py execute() method
+    # - tests/test_pipeline_runner.py stage_sequence tests
+    # - .beads/ notes for any skipped stages
+
+    # Red flags:
+    # - TODO comments in execute()
+    # - Tests that mock stage execution (hollow tests)
+    # - Missing artifact assertions
+```
+
+**Browser step annotation**: For `@browser` or `@claude-in-chrome` steps, prefix each step with
+`# TOOL: Claude in Chrome` and write steps as "Claude in Chrome navigates to...", "Claude in Chrome
+clicks...", etc. This makes the tooling explicit. Do NOT write browser steps as abstract "the user
+does X" — name the tool.
+
+**Step G3: Generate Manifest**
+Create `manifest.yaml` with:
+- PRD metadata (id, title, source)
+- Feature list with weights
+- Decision thresholds (default: accept=0.60, investigate=0.40)
+- Links to each scenario file
+
+**Step G4: Write Files**
+Output to `acceptance-tests/PRD-{ID}/`:
+- `manifest.yaml` — metadata, weights, thresholds
+- `scenarios.feature` — all Gherkin scenarios in one file (or one per feature)
+
+### Guardian Mode Output Checklist
+- [ ] All PRD features represented with weights summing to 1.0
+- [ ] Each scenario has a confidence scoring guide
+- [ ] Evidence references are specific (file names, function names, test names)
+- [ ] Red flags call out hollow test patterns explicitly
+- [ ] manifest.yaml is valid YAML with correct threshold structure
+
+## Journey Mode (--mode=journey)
+
+Generates Gherkin journey scenarios from the PRD's **Goals / Business Objectives** section
+(not the feature list). Output goes in `acceptance-tests/PRD-{ID}/journeys/`.
+
+### When to Use
+- After generating per-epic tests (run `--mode=guardian` first)
+- Invoked by s3-guardian in Phase 1 to create blind journey tests
+- Invoked by system3-orchestrator's post-completion smoke gate
+
+### Invocation
+```
+Skill("acceptance-test-writer", args="--source=.taskmaster/docs/PRD-{ID}.md --mode=journey")
+```
+
+### Workflow
+
+**Step J1: Extract Business Objectives**
+Read the PRD's Goals, Success Criteria, or "Business Objectives" sections (not the feature list).
+Each distinct objective maps to one journey scenario J1, J2, J3...
+
+Examples of business objectives in PRDs:
+  - "Employer contact submission triggers validation workflow"
+  - "User signs up via OAuth and lands on correct dashboard"
+  - "Failed check triggers retry sequence in Prefect"
+
+**Step J2: Identify the Causal Chain**
+For each objective, trace which layers are crossed:
+  - @browser — scenario starts with a user action in the UI
+  - @api    — scenario involves direct API assertion
+  - @db     — scenario requires checking DB state
+  - @async  — scenario has downstream async effects (Prefect, Celery, queue job)
+
+A journey scenario typically crosses 3-5 layers. If it only crosses one layer, it belongs in
+per-epic Gherkin tests, not a journey.
+
+**Layer execution rules for journey runners:**
+- `@browser` / `@claude-in-chrome` steps → **Claude in Chrome** (`mcp__claude-in-chrome__*`) against `http://localhost:3000`
+  - Frontend MUST be running via `npm run dev` on the feature branch
+  - Annotate each step with `# TOOL: Claude in Chrome` prefix and write as "Claude in Chrome navigates/clicks/fills..."
+  - Do NOT use Jest or Playwright as a substitute for these steps
+- `@api` steps → direct HTTP calls (`curl` or `httpx`) against `http://localhost:8000` — annotate `# TOOL: curl`
+- `@db` steps → `psql $DATABASE_URL` queries directly — annotate `# TOOL: direct psql query`
+- `@async` + "eventually" steps → poll with `sleep` + repeated query, per `runner_config.yaml` intervals
+- `@smoke` steps → can run without browser (API + DB only)
+
+**Step J3: Write Gherkin Scenarios**
+Naming: `J{N}-{slug}.feature`, e.g. `J1-contact-validation-chain.feature`
+Tags: `@journey @prd-{ID} @J{N}` plus any of `@browser @async @db @api @smoke`
+
+Standard journey Gherkin pattern:
+```gherkin
+@journey @prd-UEA-001 @J1 @browser @async @db
+Scenario J1: Employer contact submission triggers full validation chain
+  # Browser layer
+  Given I am logged in as an employer
+  When I submit a university contact via the UI (or API)
+  # API layer
+  Then the API returns HTTP 201
+  And the response contains a contact_id
+  # DB layer (immediate)
+  And the contacts table has a row with that contact_id and status="queued"
+  # Async layer (Prefect / downstream)
+  And eventually a Prefect flow run for that contact_id reaches state "Completed"
+  # Final business outcome
+  And the contacts table row has status="validated"
+  And the employer dashboard shows the contact as "Verified"
+```
+
+"Eventually" steps imply polling: use `runner_config.yaml` for intervals/timeout.
+
+### Canonical Work History /verify E2E Pattern
+
+For projects with a `/verify` endpoint, the primary E2E journey MUST include submitting
+a real check request and verifying the full downstream chain:
+
+```gherkin
+@journey @prd-{ID} @J1 @api @db @async @smoke
+Scenario J1: Work history check submitted via /verify triggers full verification chain
+  # Submit the check (TOOL: curl or httpx)
+  Given I have a valid API key for the test employer account
+  When I POST to /api/v1/verify with a valid work history payload
+  Then the API returns HTTP 200 or 202
+  And the response body contains a check_id (or task_id)
+  # Immediate DB state (TOOL: direct psql query)
+  And the background_tasks table has a row with that check_id and status in ("pending", "queued")
+  # Async processing (TOOL: poll psql every 5s, max 120s)
+  And eventually the background_tasks row has status="completed" or "verified"
+  # Business outcome (TOOL: curl GET)
+  And GET /api/v1/verify/{check_id} returns 200 with structured employment data
+```
+
+This journey is `@smoke` — it runs without the frontend. Run it first: if it fails, browser journeys will also fail.
+
+**Step J4: Write runner_config.yaml**
+```yaml
+services:
+  frontend_url: "http://localhost:3000"
+  api_url: "http://localhost:8000"
+  db_dsn: "${DATABASE_URL}"
+  prefect_api: "http://localhost:4200/api"
+polling:
+  interval_seconds: 5
+  max_wait_seconds: 120
+auth:
+  test_employer_email: "${TEST_EMPLOYER_EMAIL}"
+  test_employer_password: "${TEST_EMPLOYER_PASSWORD}"
+```
+
+**Step J5: Write the files**
+```
+acceptance-tests/PRD-{ID}/journeys/
+  J1-{slug}.feature         # one per business objective
+  J2-{slug}.feature
+  runner_config.yaml
+```
+
+### Journey Scenario Principles
+- One scenario per business objective (not per epic or feature)
+- Steps MUST cross at least 2 system layers (browser+API, API+DB, DB+queue, etc.)
+- Final step asserts the *business outcome*, not just data existence:
+  - BAD:  "And a row exists in the contacts table"
+  - GOOD: "And the contacts table row has status='validated' AND verified_at IS NOT NULL"
+- Use "eventually" for async steps — signals the runner to poll
+- Keep scenarios short (5-8 steps max) — if longer, split into two journeys
+- @smoke tag = can run without services up (structural checks only)
 
 ## YAML Schemas
 

@@ -22,7 +22,7 @@ For targeted, single-task validations, System 3 spawns lightweight `s3-validator
 # Single on-demand validation
 Task(
     subagent_type="validation-test-agent",
-    team_name="s3-live",
+    team_name=S3_TEAM_NAME,
     name=f"s3-validator-{task_id}",
     model="sonnet",
     prompt=f"""You are s3-validator-{task_id}. Validate task {task_id} against:
@@ -49,7 +49,7 @@ Spawn multiple validators simultaneously for independent tasks:
 for task in completed_tasks:
     Task(
         subagent_type="validation-test-agent",
-        team_name="s3-live",
+        team_name=S3_TEAM_NAME,
         name=f"s3-validator-{task.id}",
         model="sonnet",
         prompt=f"Validate {task.id}: {task.criteria}. Report to team-lead."
@@ -71,7 +71,7 @@ for task in completed_tasks:
 
 ### Overview
 
-For pre-closure validation, System 3 maintains a **persistent s3-validator** as a long-lived member of the `s3-live` team. Unlike on-demand validators that spawn per-task and exit, the persistent validator handles the full dual-pass sequence (technical then business) and remains available for subsequent validations.
+For pre-closure validation, System 3 maintains a **persistent s3-validator** as a long-lived member of the session-scoped team (`S3_TEAM_NAME`). Unlike on-demand validators that spawn per-task and exit, the persistent validator handles the full dual-pass sequence (technical then business) and remains available for subsequent validations.
 
 ### Spawn Pattern (Persistent)
 
@@ -79,10 +79,10 @@ For pre-closure validation, System 3 maintains a **persistent s3-validator** as 
 # Spawned ONCE during System 3 PREFLIGHT, persists for the session
 Task(
     subagent_type="validation-test-agent",
-    team_name="s3-live",
+    team_name=S3_TEAM_NAME,
     name="s3-validator",
     model="sonnet",
-    prompt="""You are s3-validator, a persistent member of the s3-live team.
+    prompt=f"""You are s3-validator, a persistent member of the {S3_TEAM_NAME} team.
 
     Your role: Execute dual-pass validation (technical + business) for tasks
     as they are assigned via TaskList.
@@ -197,7 +197,7 @@ elif result["combined_verdict"] == "DUAL_PARTIAL":
 | **Lifetime** | Session-long (spawned at PREFLIGHT) | Single task (spawned, validates, exits) |
 | **Validation depth** | Dual-pass (technical + business) | Single mode (e2e or unit) |
 | **Use when** | Pre-closure comprehensive check | Quick incremental check during execution |
-| **Team membership** | Always present in s3-live | Ephemeral team member |
+| **Team membership** | Always present in S3_TEAM_NAME | Ephemeral team member |
 | **Task flow** | Reads from TaskList continuously | Receives criteria in initial prompt |
 | **Result storage** | Both TECHNICAL + BUSINESS files | Single validation file |
 
@@ -210,7 +210,7 @@ elif result["combined_verdict"] == "DUAL_PARTIAL":
 ```python
 Task(
     subagent_type="Explore",
-    team_name="s3-live",
+    team_name=S3_TEAM_NAME,
     name="s3-investigator",
     model="sonnet",
     prompt="""You are s3-investigator in the System 3 oversight team.
@@ -239,7 +239,7 @@ Task(
 ```python
 Task(
     subagent_type="solution-design-architect",
-    team_name="s3-live",
+    team_name=S3_TEAM_NAME,
     name="s3-prd-auditor",
     model="sonnet",
     prompt="""You are s3-prd-auditor in the System 3 oversight team.
@@ -269,7 +269,7 @@ Task(
 ```python
 Task(
     subagent_type="validation-test-agent",
-    team_name="s3-live",
+    team_name=S3_TEAM_NAME,
     name="s3-validator",
     model="sonnet",
     prompt="""You are s3-validator in the System 3 oversight team.
@@ -303,7 +303,7 @@ Task(
 ```python
 Task(
     subagent_type="general-purpose",
-    team_name="s3-live",
+    team_name=S3_TEAM_NAME,
     name="s3-evidence-clerk",
     model="haiku",
     prompt="""You are s3-evidence-clerk in the System 3 oversight team.

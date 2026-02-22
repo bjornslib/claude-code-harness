@@ -41,3 +41,7 @@ settings.local.json
 # Python cache
 __pycache__/
 *.pyc
+
+# OAuth2 credentials (sensitive)
+credentials/google-chat-token.json
+credentials/google-chat-oauth-client.json

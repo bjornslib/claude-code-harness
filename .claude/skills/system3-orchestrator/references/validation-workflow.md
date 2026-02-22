@@ -167,7 +167,7 @@ System 3 spawns `s3-validator` teammates **on-demand** — one per validation re
 # Step 1: Spawn s3-validator as a teammate
 Task(
     subagent_type="validation-test-agent",
-    team_name="s3-live",
+    team_name=S3_TEAM_NAME,
     name=f"s3-validator-{task_id}",
     model="sonnet",  # MUST be Sonnet — Haiku lacks exit discipline
     prompt=f"""You are s3-validator-{task_id} in the System 3 oversight team.
@@ -217,7 +217,7 @@ For validating multiple independent tasks simultaneously:
 for task in tasks_to_validate:
     Task(
         subagent_type="validation-test-agent",
-        team_name="s3-live",
+        team_name=S3_TEAM_NAME,
         name=f"s3-validator-{task.id}",
         model="sonnet",
         prompt=f"""You are s3-validator-{task.id} in the System 3 oversight team.
@@ -239,7 +239,7 @@ When acceptance criteria require browser/E2E verification:
 ```python
 Task(
     subagent_type="validation-test-agent",
-    team_name="s3-live",
+    team_name=S3_TEAM_NAME,
     name=f"s3-validator-{task_id}",
     model="sonnet",
     prompt=f"""You are s3-validator-{task_id} in the System 3 oversight team.
@@ -539,7 +539,7 @@ Task(subagent_type="validation-test-agent", prompt="--mode=e2e --prd=PRD-XXX --t
 # Spawn validator as teammate for independent verification
 Task(
     subagent_type="validation-test-agent",
-    team_name="s3-live",
+    team_name=S3_TEAM_NAME,
     name=f"s3-validator-{task_id}",
     model="sonnet",
     prompt="[validation request with criteria, evidence, worktree path]"

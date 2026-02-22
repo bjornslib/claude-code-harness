@@ -193,12 +193,12 @@ fi
 ### [ ] 6. Create Oversight Team
 
 ```python
-# Oversight agents are spawned into the s3-live team (created in Step 8).
-# System 3 leads exactly ONE team: s3-live. Do NOT create per-initiative teams.
+# Oversight agents are spawned into the session-scoped team (created in Step 8).
+# System 3 leads exactly ONE team: S3_TEAM_NAME. Do NOT create per-initiative teams.
 # When validation is needed, spawn specialists directly:
 ```
 
-Spawn specialist workers into the s3-live team. See [references/oversight-team.md](references/oversight-team.md) for exact spawn commands and prompts.
+Spawn specialist workers into `S3_TEAM_NAME`. See [references/oversight-team.md](references/oversight-team.md) for exact spawn commands and prompts.
 
 **On-demand validation**: For targeted single-task validations during execution (not just post-completion), spawn lightweight `s3-validator` teammates on-demand:
 
@@ -206,7 +206,7 @@ Spawn specialist workers into the s3-live team. See [references/oversight-team.m
 # On-demand validator — spawns, validates, reports, exits
 Task(
     subagent_type="validation-test-agent",
-    team_name="s3-live",
+    team_name=S3_TEAM_NAME,
     name=f"s3-validator-{task_id}",
     model="sonnet",
     prompt=f"Validate {task_id} against: {criteria}. Report to team-lead, then exit."
@@ -236,35 +236,32 @@ See `.claude/agents/validation-test-agent.md` "Post-Validation Storage" section.
 
 **Gate 3 is MANDATORY**: The `--skip-llm-gate` flag has been removed. Gate 3 cannot be bypassed.
 If the Agent SDK verification is unavailable, spawn a `validation-test-agent` teammate
-into `s3-live` for independent verification. See the cs-verify error message for exact syntax.
+into `S3_TEAM_NAME` for independent verification. See the cs-verify error message for exact syntax.
 
-### [ ] 8. Spawn s3-live Communicator (if not running)
+### [ ] 8. Create Session-Scoped Team (if not running)
 
-Check if the s3-live team exists. If not, create it and spawn the communicator:
+Compute the session-scoped team name and create it if it doesn't exist:
 
 ```python
-# Check if s3-live team exists
-team_exists = Bash("ls ~/.claude/teams/s3-live/config.json 2>/dev/null && echo 'EXISTS' || echo 'MISSING'")
+import os
+S3_TEAM_NAME = f"s3-live-{os.environ['CLAUDE_SESSION_ID'][-8:]}"
+
+# Check if session-scoped team exists
+team_exists = Bash(f"ls ~/.claude/teams/{S3_TEAM_NAME}/config.json 2>/dev/null && echo 'EXISTS' || echo 'MISSING'")
 
 if "MISSING" in team_exists:
-    # Create the s3-live team
-    TeamCreate(team_name="s3-live", description="System 3 live team — Communicator heartbeat + Operator coordination")
-
-    # Spawn communicator as background Haiku teammate
-    Task(
-        subagent_type="general-purpose",
-        model="haiku",
-        run_in_background=True,
-        team_name="s3-live",
-        name="s3-communicator",
-        prompt=Read(".claude/skills/s3-communicator/SKILL.md")
-    )
+    # Create the session-scoped team
+    TeamCreate(team_name=S3_TEAM_NAME, description="System 3 live team — Heartbeat + Operator coordination")
 ```
 
-**Why PREFLIGHT?** The communicator:
-1. Keeps the session alive (stop gate checks for active communicator)
-2. Bridges Google Chat (async user communication)
-3. Monitors for work (beads, orchestrators, git)
+**Why PREFLIGHT?** The session-scoped team:
+1. Hosts the s3-heartbeat agent (work scanning)
+2. Hosts on-demand validators
+3. Provides the team context for oversight workers
+
+**Note**: The s3-communicator agent has been replaced by GChat hooks (PRD-GCHAT-HOOKS-001).
+Outbound messaging now uses `gchat-send.sh` and inbound question forwarding uses
+`gchat-ask-user-forward.py` (PreToolUse hook). No persistent communicator agent is needed.
 
 ---
 
@@ -487,8 +484,8 @@ elif "MONITOR_HEALTHY" in result:
 ### Also Start Oversight Team
 
 After orchestrator is running:
-1. Spawn 4 oversight workers into the s3-live team (see [references/oversight-team.md](references/oversight-team.md))
-2. Oversight workers run independently in s3-live — validates `impl_complete` tasks
+1. Spawn 4 oversight workers into `S3_TEAM_NAME` (see [references/oversight-team.md](references/oversight-team.md))
+2. Oversight workers run independently in the session-scoped team — validates `impl_complete` tasks
 
 ---
 
@@ -689,11 +686,11 @@ Reading tmux output or orchestrator self-reports is NOT validation. System 3 mus
 # Step 0a: Check for impl_complete tasks
 # bd list --status=impl_complete
 
-# Step 0b: Spawn workers INTO the s3-live team (Agent Team, NOT standalone subagents)
-# s3-live already exists — no TeamCreate needed.
+# Step 0b: Spawn workers INTO the session-scoped team (Agent Team, NOT standalone subagents)
+# S3_TEAM_NAME already exists — no TeamCreate needed.
 Task(
     subagent_type="tdd-test-engineer",
-    team_name="s3-live",
+    team_name=S3_TEAM_NAME,
     name="s3-test-runner",
     model="sonnet",
     prompt=f"""You are s3-test-runner in the System 3 oversight team.
@@ -707,7 +704,7 @@ Task(
 
 Task(
     subagent_type="Explore",
-    team_name="s3-live",
+    team_name=S3_TEAM_NAME,
     name="s3-investigator",
     model="sonnet",
     prompt=f"""You are s3-investigator in the System 3 oversight team.
@@ -728,7 +725,46 @@ SendMessage(type="shutdown_request", recipient="s3-investigator", content="Valid
 ```
 
 **If validation fails**: Do NOT proceed to cleanup. Send rejection to orchestrator and restart the cycle.
-**If validation passes**: Continue to step 1.
+**If validation passes**: Continue to step 0a.
+
+### [ ] 0a. Run Journey Smoke Gate
+
+After the oversight team confirms unit/API tests pass, run the business journey tests
+before closing the initiative. This catches integration failures where all features
+individually pass but the end-to-end chain is broken.
+
+**Trigger**: All orchestrators have signalled `impl_complete` for their beads.
+
+```python
+Task(
+    subagent_type="tdd-test-engineer",
+    team_name=S3_TEAM_NAME,
+    name="s3-journey-runner",
+    model="sonnet",
+    prompt="""
+    Execute journey tests for PRD-{ID} at: acceptance-tests/PRD-{ID}/journeys/
+
+    For each J{N}.feature scenario:
+      - Execute browser/API/DB/async steps in sequence
+      - Pass artifacts between steps (store_value → reference $artifact)
+      - Poll 'eventually' steps per runner_config.yaml (interval + timeout)
+      - Capture evidence: step pass/fail, artifact values, async wait times
+
+    Return journey-evidence.json with status per J{N} and per-step detail.
+    Send results to team-lead via SendMessage when complete.
+    """
+)
+```
+
+**On PASS**: Proceed to merge, close uber-epic via guardian/validation-agent.
+
+**On FAIL**:
+- Identify which step failed (pinpoints the broken layer)
+- Route a new bead to the correct orchestrator:
+  - "API returns 201" FAIL → orchestrator owning that endpoint
+  - "Prefect flow Completed" FAIL after 120s → orchestrator owning the trigger
+  - "DB row status=validated" FAIL → backend orchestrator
+- Do NOT close the uber-epic until all journey tests pass
 
 ### [ ] 1. Collect Outcomes
 
@@ -892,7 +928,7 @@ Maintain active orchestrators in `.claude/state/active-orchestrators.json`:
 - Updated internal step references (oversight team now references Step 8)
 
 **v3.4.0 Changes**:
-- Added PREFLIGHT step 7: Spawn s3-live Communicator
+- Added PREFLIGHT step 7: Spawn session-scoped team Communicator
 - Moved 4 reference files from output-styles/references/ to system3-orchestrator/references/
 - New references: inter-instance-messaging.md, completion-promise-cli.md, memory-context-taxonomy.md, monitoring-commands.md
 
