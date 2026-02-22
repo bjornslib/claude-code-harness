@@ -231,19 +231,44 @@ Wait for the reply via the GChat round-trip poller, then try stopping again."
         mkdir -p "$(dirname "$STOP_BLOCK_FILE")"
         python3 -c "import time; print(time.time())" > "$STOP_BLOCK_FILE"
 
+        # Gather available beads work to include in the block message
+        BEADS_SUMMARY=""
+        if command -v bd &>/dev/null; then
+            BD_READY=$(bd ready 2>/dev/null || echo "")
+            BD_OPEN=$(bd list --status=open 2>/dev/null || echo "")
+            BD_PROGRESS=$(bd list --status=in_progress 2>/dev/null || echo "")
+            if [ -n "$BD_READY" ] && ! echo "$BD_READY" | grep -qi "no.*ready\|no.*issues\|nothing"; then
+                BEADS_SUMMARY="
+
+## Available Beads Work (bd ready)
+$BD_READY"
+            fi
+            if [ -n "$BD_OPEN" ] && ! echo "$BD_OPEN" | grep -qi "no.*open\|no.*issues\|nothing"; then
+                BEADS_SUMMARY="${BEADS_SUMMARY}
+
+## Open Issues (bd list --status=open)
+$BD_OPEN"
+            fi
+            if [ -n "$BD_PROGRESS" ] && ! echo "$BD_PROGRESS" | grep -qi "no.*progress\|no.*issues\|nothing"; then
+                BEADS_SUMMARY="${BEADS_SUMMARY}
+
+## In Progress (bd list --status=in_progress)
+$BD_PROGRESS"
+            fi
+        fi
+
         output_json "block" "reason" "🚫 NO USER QUESTION BEFORE EXIT
 
 System 3 sessions MUST ask the user a question before stopping. No exceptions.
 
 Before stopping, you MUST:
-1. Check for available work: bd ready
+1. Review available work (shown below if any)
 2. Propose next steps via AskUserQuestion (which forwards to GChat)
    - If work is available: propose which tasks to tackle
    - If no work: ask the user what they'd like you to work on
 3. Wait for the user's reply via the GChat round-trip poller
 4. Then you may stop (the stop gate will pass on the next attempt)
-
-This ensures the user is ALWAYS notified before a session ends."
+${BEADS_SUMMARY}"
         exit 0
     fi
 fi

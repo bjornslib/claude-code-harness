@@ -494,7 +494,7 @@ class System3ContinuationJudgeChecker:
             if gchat_markers_present:
                 prompt_parts.append(
                     "## GCHAT QUESTION STATUS\n\n"
-                    "Recent GChat-forwarded AskUserQuestion marker(s) found (written < 30 min ago). "
+                    "GChat-forwarded AskUserQuestion marker found (created after the last stop-gate block). "
                     "The gchat-ask-user-forward.py hook intercepted an AskUserQuestion call, "
                     "forwarded it to Google Chat, and wrote a marker file. "
                     "This SATISFIES the Layer 3 requirement — AskUserQuestion WAS presented to "
@@ -521,30 +521,37 @@ class System3ContinuationJudgeChecker:
         return "\n".join(prompt_parts)
 
     def _check_gchat_markers(self) -> bool:
-        """Check if there are recent GChat-forwarded AskUserQuestion marker files.
+        """Check if a GChat-forwarded AskUserQuestion marker exists after the last stop-block.
 
         Marker files at .claude/state/gchat-forwarded-ask/{question_id}.json are written
         by the gchat-ask-user-forward.py PreToolUse hook when it blocks an interactive
         AskUserQuestion and forwards the question to Google Chat instead.
 
-        A recent marker (modified within 30 minutes) counts as equivalent to a terminal
-        AskUserQuestion for Layer 3 compliance purposes, breaking the potential infinite loop:
-          AskUserQuestion denied → stop gate blocks → AskUserQuestion denied → ...
+        Uses the stop-block timestamp file (written by Step 1.8 of the stop gate) to
+        determine if a question was asked SINCE the last stop attempt. This replaces
+        the previous 30-minute window approach.
 
         Returns:
-            True if at least one recent marker file (< 30 min) exists.
-            False if no markers, or all markers are stale (> 30 min).
+            True if at least one marker for this session was created after the last stop-block.
+            False if no markers exist after the last stop-block.
         """
-        import time
+        import json as _json
 
         project_dir = os.environ.get('CLAUDE_PROJECT_DIR', os.getcwd())
+        session_id = os.environ.get('CLAUDE_SESSION_ID', '')
         marker_dir = os.path.join(project_dir, '.claude', 'state', 'gchat-forwarded-ask')
+        block_file = os.path.join(project_dir, '.claude', 'state', f'last-stop-block-{session_id}')
 
         if not os.path.exists(marker_dir):
             return False
 
-        max_age_seconds = 30 * 60  # 30 minutes
-        now = time.time()
+        # Get the last stop-block timestamp (0 if no block file = first attempt)
+        last_block_ts = 0.0
+        if os.path.isfile(block_file):
+            try:
+                last_block_ts = float(open(block_file).read().strip())
+            except (ValueError, OSError):
+                last_block_ts = 0.0
 
         try:
             for filename in os.listdir(marker_dir):
@@ -552,11 +559,16 @@ class System3ContinuationJudgeChecker:
                     continue
                 filepath = os.path.join(marker_dir, filename)
                 try:
+                    # Check session ownership
+                    with open(filepath) as f:
+                        marker_data = _json.load(f)
+                    if marker_data.get('session_id') != session_id:
+                        continue
                     mtime = os.path.getmtime(filepath)
-                    if (now - mtime) <= max_age_seconds:
+                    if mtime > last_block_ts:
                         print(
                             f"[System3Judge] GChat marker found: {filename} "
-                            f"(age {int(now - mtime)}s < 1800s)",
+                            f"(created {int(mtime - last_block_ts)}s after last stop-block)",
                             file=sys.stderr,
                         )
                         return True  # At least one recent marker — question was presented
