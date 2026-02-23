@@ -183,82 +183,236 @@ the rubric or the journeys. This enables truly independent validation.
 
 ---
 
-## Phase 2: S3 Meta-Orchestrator Spawning
+## Phase 2: Orchestrator Spawning
 
-Spawn a System 3 meta-orchestrator in a tmux session pointed at the implementation repository.
+Spawn orchestrators directly in tmux sessions — one per epic or DOT pipeline node. Under the guardian-direct model, there is no intermediate System 3 layer. Each orchestrator receives the epic scope, bead IDs, DOT node context, and Hindsight wisdom from the guardian.
+
+```
+Guardian (this session) ──spawns──► Orchestrator A (orch-epic1) ──delegates──► Workers
+                        ──spawns──► Orchestrator B (orch-epic2) ──delegates──► Workers
+```
 
 ### Pre-flight Checks
 
 Before spawning, verify:
 - [ ] Implementation repo exists and is accessible
-- [ ] PRD exists in the implementation repo
-- [ ] Acceptance tests have been created (Phase 1 complete)
+- [ ] PRD exists and acceptance tests have been created (Phase 1 complete)
+- [ ] DOT pipeline exists (or create via `cli.py generate`) with bead IDs mapped to nodes
 - [ ] No existing tmux session with the same name
-- [ ] Session promise created for the guardian session itself
+- [ ] Hindsight wisdom gathered from project bank
 
-### Spawn Sequence
+### Gather Wisdom from Hindsight
+
+Before spawning each orchestrator, query the project Hindsight bank:
+
+```python
+PROJECT_BANK = os.environ.get("CLAUDE_PROJECT_BANK", "claude-harness-setup")
+wisdom = mcp__hindsight__reflect(
+    query=f"What patterns apply to {epic_name}? Any anti-patterns or lessons for this domain?",
+    budget="mid",
+    bank_id=PROJECT_BANK
+)
+# Include the wisdom output in the orchestrator's initialization prompt
+```
+
+### DOT Pipeline-Driven Dispatch
+
+When a DOT pipeline exists, identify dispatchable nodes before spawning:
 
 ```bash
-# 1. Create tmux session at the implementation repo
-tmux new-session -d -s "s3-{initiative}" -c "/path/to/impl-repo"
+PIPELINE="/path/to/impl-repo/.claude/attractor/pipelines/${INITIATIVE}.dot"
+CLI="python3 /path/to/impl-repo/.claude/scripts/attractor/cli.py"
 
-# 2. CRITICAL: Unset CLAUDECODE to prevent nested session error
-tmux send-keys -t "s3-{initiative}" "unset CLAUDECODE"
-tmux send-keys -t "s3-{initiative}" Enter
+# Find nodes with all upstream deps validated
+$CLI status "$PIPELINE" --filter=pending --deps-met --json
 
-# 3. Launch ccsystem3
-tmux send-keys -t "s3-{initiative}" "ccsystem3"
-tmux send-keys -t "s3-{initiative}" Enter
+# Transition node to active before dispatch (one per orchestrator)
+$CLI transition "$PIPELINE" <node_id> active
+$CLI checkpoint save "$PIPELINE"
+```
 
-# 4. Wait for initialization (15 seconds minimum)
-sleep 15
+Each orchestrator targets one pipeline node. Include the node's `acceptance`, `worker_type`, `file_path/folder_path`, and `bead_id` attributes in the initialization prompt.
 
-# 5. Set output style for System 3 meta-orchestrator
-tmux send-keys -t "s3-{initiative}" "/output-style system3-meta-orchestrator"
-tmux send-keys -t "s3-{initiative}" Enter
+### Critical tmux Patterns
+
+**These patterns are mandatory. Violating them causes silent failures.**
+
+**Pattern 1 — Enter as separate send-keys call** (not appended to the command):
+```bash
+# WRONG — Enter gets silently ignored
+tmux send-keys -t "orch-epic1" "ccorch" Enter
+
+# CORRECT
+tmux send-keys -t "orch-epic1" "ccorch"
+tmux send-keys -t "orch-epic1" Enter
+```
+
+**Pattern 2 — Use `ccorch` not plain `claude`** (prevents invisible permission dialog blocks):
+```bash
+# WRONG — orchestrator blocks silently on approval dialogs
+tmux send-keys -t "orch-epic1" "claude"
+tmux send-keys -t "orch-epic1" Enter
+
+# CORRECT
+tmux send-keys -t "orch-epic1" "ccorch"
+tmux send-keys -t "orch-epic1" Enter
+```
+
+**Pattern 3 — Interactive mode is MANDATORY** (headless orchestrators cannot spawn native teams):
+```bash
+# WRONG — headless mode cannot spawn workers
+claude -p "Do the work"
+
+# CORRECT — interactive allows team spawning
+tmux send-keys -t "orch-epic1" "ccorch"
+tmux send-keys -t "orch-epic1" Enter
+```
+
+**Pattern 4 — Large pastes need `sleep 2` before Enter** (bracketed paste processing takes time):
+```bash
+tmux send-keys -t "orch-epic1" "$(cat /tmp/wisdom-epic1.md)"
+sleep 2   # Wait for bracketed paste to complete
+tmux send-keys -t "orch-epic1" Enter
+```
+
+### Spawn Sequence (One Orchestrator per Epic/Node)
+
+```bash
+EPIC_NAME="epic1"
+IMPL_REPO="/path/to/impl-repo"
+PRD_ID="PRD-XXX-001"
+
+# 1. Create worktree in impl repo (if not already created)
+cd "$IMPL_REPO"
+/create_worktree "$EPIC_NAME"
+
+# 2. Symlink .claude to the worktree (enables skills/hooks inside)
+ln -sf "$(pwd)/.claude" "trees/${EPIC_NAME}/.claude"
+
+# 3. Create tmux session
+tmux new-session -d -s "orch-${EPIC_NAME}" -c "${IMPL_REPO}/trees/${EPIC_NAME}"
+
+# 4. Switch to zsh — ccorch is a zsh function
+tmux send-keys -t "orch-${EPIC_NAME}" "exec zsh"
+tmux send-keys -t "orch-${EPIC_NAME}" Enter
+sleep 2
+
+# 5. Unset CLAUDECODE — prevents nested session error
+tmux send-keys -t "orch-${EPIC_NAME}" "unset CLAUDECODE"
+tmux send-keys -t "orch-${EPIC_NAME}" Enter
+
+# 6. Set ALL FOUR required env vars
+tmux send-keys -t "orch-${EPIC_NAME}" "export CLAUDE_SESSION_DIR=${EPIC_NAME}-$(date +%Y%m%d)"
+tmux send-keys -t "orch-${EPIC_NAME}" Enter
+tmux send-keys -t "orch-${EPIC_NAME}" "export CLAUDE_SESSION_ID=orch-${EPIC_NAME}"
+tmux send-keys -t "orch-${EPIC_NAME}" Enter
+tmux send-keys -t "orch-${EPIC_NAME}" "export CLAUDE_CODE_TASK_LIST_ID=${PRD_ID}"
+tmux send-keys -t "orch-${EPIC_NAME}" Enter
+tmux send-keys -t "orch-${EPIC_NAME}" "export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1"
+tmux send-keys -t "orch-${EPIC_NAME}" Enter
+
+# 7. Launch Claude Code (Pattern 2 + Pattern 1)
+tmux send-keys -t "orch-${EPIC_NAME}" "ccorch"
+tmux send-keys -t "orch-${EPIC_NAME}" Enter
+sleep 8   # Wait for Claude Code initialization
+
+# 8. Set output style BEFORE wisdom injection (Pattern 1)
+tmux send-keys -t "orch-${EPIC_NAME}" "/output-style orchestrator"
+tmux send-keys -t "orch-${EPIC_NAME}" Enter
 sleep 3
 
-# 6. Verify output style loaded
-tmux capture-pane -t "s3-{initiative}" -p -S -50 | grep -i "system3\|meta-orchestrator\|output.style"
+# 9. Write wisdom to temp file (avoids large paste issues — Pattern 4)
+cat > "/tmp/wisdom-${EPIC_NAME}.md" << EOF
+You are an orchestrator for initiative: ${EPIC_NAME}
+
+> Your output style was set to "orchestrator" by the guardian during spawn.
+
+## FIRST ACTIONS (Mandatory)
+1. Skill("orchestrator-multiagent")
+2. Teammate(operation="spawnTeam", team_name="${EPIC_NAME}-workers", description="Workers for ${EPIC_NAME}")
+
+## Your Mission
+${EPIC_DESCRIPTION}
+
+## DOT Node Scope (pipeline-driven)
+- Node ID: ${NODE_ID}
+- Acceptance: "${ACCEPTANCE_CRITERIA}"
+- File Scope: ${FILE_PATHS}
+- Bead ID: ${BEAD_ID}
+
+## Patterns from Hindsight
+${WISDOM_FROM_HINDSIGHT}
+
+## On Completion
+Update bead to impl_complete: bd update ${BEAD_ID} --status=impl_complete
+EOF
+
+# 10. Send initialization via file reference (Pattern 1 + Pattern 4)
+tmux send-keys -t "orch-${EPIC_NAME}" "Read the file at /tmp/wisdom-${EPIC_NAME}.md and follow those instructions."
+sleep 2
+tmux send-keys -t "orch-${EPIC_NAME}" Enter
 ```
 
-After verification, either resume a previous session or send fresh instructions:
+### Parallel Spawning (Multiple Epics)
+
+When multiple DOT nodes have no dependency relationship, spawn orchestrators in parallel:
 
 ```bash
-# Option A: Resume previous session
-tmux send-keys -t "s3-{initiative}" "/resume"
-tmux send-keys -t "s3-{initiative}" Enter
+# Check edges to confirm independence before parallel dispatch
+python3 .claude/scripts/attractor/cli.py edge "${PIPELINE}" list --output json
 
-# Option B: Fresh instructions
-tmux send-keys -t "s3-{initiative}" "You are the System 3 meta-orchestrator. Your output style is already set. Read the PRD at .taskmaster/docs/PRD-{ID}.md and begin. Invoke Skill('system3-orchestrator') as your first action."
-sleep 2
-tmux send-keys -t "s3-{initiative}" Enter
+# Spawn each independent node as a separate orchestrator
+for NODE_ID in node1 node2 node3; do
+    EPIC_NAME="${NODE_ID}"
+    # ... run spawn sequence above for each ...
+done
 ```
 
-See [references/guardian-workflow.md](references/guardian-workflow.md) for the complete spawn sequence with error handling.
+### After Spawn: Communication Hierarchy
+
+The guardian monitors orchestrators DIRECTLY:
+
+```
+Guardian ──monitors──► Orchestrator ──delegates──► Workers (native teams)
+   │                       ▲
+   └──── sends guidance ───┘
+```
+
+| Action | Target | When |
+|--------|--------|------|
+| Send guidance/corrections | Orchestrator tmux session | Primary channel |
+| Monitor output (read-only) | Orchestrator tmux session | Continuous |
+| Answer AskUserQuestion | Whichever session shows the dialog | Immediately (blocks are time-critical) |
+
+Proceed to **Phase 3: Monitoring** after all orchestrators are spawned and running.
 
 ---
 
 ## Phase 3: Monitoring
 
-Continuously monitor meta-orchestrator progress via tmux. Monitoring cadence adapts to activity level.
+Continuously monitor orchestrator progress via tmux. Monitoring cadence adapts to activity level.
 
 ### Monitoring Cadence
 
 | Phase | Interval | Rationale |
 |-------|----------|-----------|
 | Active implementation | 30s | Catch errors early, detect AskUserQuestion blocks |
-| Investigation/planning | 60s | Meta-orchestrator is reading/thinking, less likely to block |
+| Investigation/planning | 60s | Orchestrator is reading/thinking, less likely to block |
 | Idle / waiting for workers | 120s | Nothing to intervene on |
 
 ### Core Monitoring Loop
 
 ```bash
-# Capture recent output
-tmux capture-pane -t "s3-{initiative}" -p -S -100
+# Capture recent output (per orchestrator session)
+tmux capture-pane -t "orch-{epic}" -p -S -100
 
 # Check for key signals
-tmux capture-pane -t "s3-{initiative}" -p -S -100 | grep -iE "error|stuck|complete|failed|AskUser|permission"
+tmux capture-pane -t "orch-{epic}" -p -S -100 | grep -iE "error|stuck|complete|failed|AskUser|permission"
+
+# Monitor multiple orchestrators in parallel
+for SESSION in orch-epic1 orch-epic2 orch-epic3; do
+    echo "=== $SESSION ===" && tmux capture-pane -t "$SESSION" -p -S -20 2>/dev/null || echo "(not running)"
+done
 ```
 
 ### Intervention Triggers
@@ -268,41 +422,32 @@ tmux capture-pane -t "s3-{initiative}" -p -S -100 | grep -iE "error|stuck|comple
 | `AskUserQuestion` / permission dialog | Answer via `tmux send-keys` (Down, Enter) |
 | Repeated error (3+ occurrences) | Send guidance or restart |
 | No output for 5+ minutes | Check if context is exhausted |
-| Scope creep (unrelated work) | Send corrective instruction |
+| Scope creep (files outside epic scope) | Send corrective instruction |
 | `TODO` / `FIXME` markers accumulating | Flag for later cleanup |
 | Time exceeded (2+ hours) | Assess progress, consider intervention |
 
-### Communication Hierarchy (CRITICAL)
+### Sending Guidance
 
-The Guardian monitors BOTH the S3 meta-orchestrator AND its orchestrators, but MUST route corrections through the S3 meta-orchestrator:
+The guardian communicates directly with orchestrators:
 
+```bash
+# Send corrective instruction (Pattern 1: separate Enter)
+tmux send-keys -t "orch-{epic}" "GUARDIAN: Focus on {correct scope}. Do not modify {out-of-scope files}."
+tmux send-keys -t "orch-{epic}" Enter
+
+# Send unblocking guidance
+tmux send-keys -t "orch-{epic}" "GUARDIAN: The issue is {root cause}. Fix: {specific fix}."
+tmux send-keys -t "orch-{epic}" Enter
 ```
-Guardian ──monitors──► S3 Meta-Orchestrator ──delegates──► Orchestrator ──delegates──► Workers
-   │                       ▲                                    ▲
-   │                       │                                    │
-   └──── sends guidance ───┘                                    │
-   └──── monitors (read-only) ──────────────────────────────────┘
-```
-
-| Action | Target | When |
-|--------|--------|------|
-| Send guidance/corrections | S3 Meta-Orchestrator session | Always (primary communication channel) |
-| Monitor output (read-only) | Both S3 + Orchestrator | Continuous (for awareness) |
-| Direct orchestrator injection | Orchestrator session | **Last resort only** — when S3 meta-orchestrator is compacting/stuck |
-| Answer AskUserQuestion | Whichever session shows the dialog | Immediately (blocks are time-critical) |
-
-**Anti-pattern**: Sending implementation guidance directly to the orchestrator bypasses the S3 meta-orchestrator's context and coordination. The S3 meta-orchestrator needs to know what guidance was given to maintain coherent oversight.
-
-**Exception**: When the S3 meta-orchestrator is at <5% context and actively compacting, the Guardian may inject time-critical corrections directly into the orchestrator to prevent wrong work from being committed.
 
 ### AskUserQuestion Handling
 
-When the meta-orchestrator or a worker hits an AskUserQuestion dialog:
+When an orchestrator or worker hits an AskUserQuestion dialog:
 
 ```bash
 # Navigate to the appropriate option and confirm
-tmux send-keys -t "s3-{initiative}" Down
-tmux send-keys -t "s3-{initiative}" Enter
+tmux send-keys -t "orch-{epic}" Down
+tmux send-keys -t "orch-{epic}" Enter
 ```
 
 See [references/monitoring-patterns.md](references/monitoring-patterns.md) for the complete monitoring command reference and red flag patterns.
@@ -848,7 +993,7 @@ Each level adds independent verification. The key constraint: each guardian stor
 | Phase | Key Action | Reference |
 |-------|------------|-----------|
 | 1. Acceptance Tests | Read PRD, write Gherkin, create manifest | [gherkin-test-patterns.md](references/gherkin-test-patterns.md) |
-| 2. Meta-Orchestrator Spawn | tmux create, unset CLAUDECODE, ccsystem3, set output style | [guardian-workflow.md](references/guardian-workflow.md) |
+| 2. Orchestrator Spawn | DOT dispatch, tmux 4 patterns, wisdom inject, ccorch | [guardian-workflow.md](references/guardian-workflow.md) |
 | 3. Monitoring | capture-pane loop, intervention triggers | [monitoring-patterns.md](references/monitoring-patterns.md) |
 | 4. Validation | Read code, score scenarios, weighted total | [validation-scoring.md](references/validation-scoring.md) |
 

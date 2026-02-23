@@ -4,8 +4,24 @@ description: This skill should be used when spawning orchestrators, launching ne
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Task, SlashCommand
 version: 3.5.0
 title: "System3 Orchestrator"
-status: active
+status: deprecated
 ---
+
+> ## ⚠️ DEPRECATED — See s3-guardian Phase 2
+>
+> This skill has been superseded. Orchestrator spawning is now handled directly by the
+> **s3-guardian skill** Phase 2 ("Orchestrator Spawning").
+>
+> **What replaced it**: `Skill("s3-guardian")` → Phase 2 contains the complete spawn sequence,
+> tmux patterns, wisdom injection, and DOT pipeline dispatch.
+>
+> **What's still useful**: The reference files in this directory (`references/tmux-commands.md`,
+> `references/spawn-workflow.md`, `references/monitoring-commands.md`) remain valid supplementary
+> material for the guardian's Phase 2 and Phase 3.
+>
+> See `.claude/skills/system3-orchestrator/ARCHIVED.md` for the full migration notes.
+>
+> ---
 
 # System 3 Orchestrator Skill
 
