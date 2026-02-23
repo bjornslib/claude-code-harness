@@ -85,6 +85,7 @@ Rules:
 8. If no actions are possible and pipeline is not at exit: report blocked_nodes with reasons.
 9. A node with status "validated" is COMPLETE — do not propose actions for it.
 10. Nodes with status "active" or "impl_complete" are in progress — propose validation.
+11. When proposing "signal_finalize" for an exit node (all predecessors validated), set "pipeline_complete": true in the plan.
 
 Produce a JSON RunnerPlan with this exact structure:
 {
@@ -111,7 +112,7 @@ Produce a JSON RunnerPlan with this exact structure:
     }
   ],
   "completed_nodes": ["<node_id>", ...],
-  "pipeline_complete": false
+  "pipeline_complete": false  // Set to true when proposing signal_finalize for exit node
 }
 
 When you have gathered all information needed to produce the plan, output ONLY the JSON object
