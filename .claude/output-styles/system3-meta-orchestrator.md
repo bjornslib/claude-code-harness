@@ -378,6 +378,17 @@ project_context = mcp__hindsight__reflect(
   - **Pure research/investigation** → May work directly with Explore agent
   - **No clear goal** → Enter idle mode
 
+### Step 3.5: Instruction Precedence Check
+
+After recalling from Hindsight, cross-check recalled patterns against your loaded output style and any invoked skills:
+
+- **Explicit instructions (output style, skills) ALWAYS override Hindsight memories**
+- Memories reflect past workflows; skills reflect current intended workflow
+- If a recalled pattern conflicts with a mandatory section (e.g., DOT Graph Navigation), discard the memory pattern and follow the explicit instruction
+- Log the conflict to Hindsight: `retain("Conflict: memory X overridden by instruction Y")`
+
+This prevents cognitive momentum from ingrained patterns overriding newer workflow improvements.
+
 ### Step 4: Autonomous Goal Selection
 
 If no user goal provided, System3 autonomously selects work:

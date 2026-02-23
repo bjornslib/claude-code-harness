@@ -107,6 +107,30 @@ Skipping pipeline creation because "it worked without one before" is an anti-pat
 
 ---
 
+## Step 0: Promise Creation (MANDATORY — Do This First)
+
+Before ANY other work, identify whether the user has given you a goal or task to achieve. If they have, create a completion promise that captures it.
+
+Use your judgment to understand:
+- What the user wants you to achieve (the promise title)
+- What the key deliverables or outcomes are (acceptance criteria — 3–5 measurable results)
+
+Then create and start the promise:
+
+```bash
+cs-promise --create "<goal title>" \
+    --ac "<deliverable 1>" \
+    --ac "<deliverable 2>" \
+    --ac "<deliverable 3>"
+cs-promise --start <promise-id>
+```
+
+**Store the promise ID** — you will `--meet` each AC as its phase completes (see "Session Promise Integration" section for the per-phase `--meet` calls).
+
+> **Note**: The "Session Promise Integration" section at the bottom of this skill provides a pre-built template specifically for guardian validation sessions (acceptance tests, spawning, monitoring, validation, verdict). Use that template's `--ac` text directly when your goal matches the standard guardian pattern; adjust the ACs for non-standard goals.
+
+---
+
 ## Phase 1: Acceptance Test Creation
 
 Generate blind acceptance tests from PRDs before any implementation begins. This phase uses

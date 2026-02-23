@@ -103,6 +103,77 @@ Three architectures were evaluated for the Pipeline Runner:
 - The attractor CLI tools (runner calls them as subprocess tools)
 - System 3's strategic role (runner escalates business gates and stuck nodes)
 
+### Channel Adapter Abstraction Layer
+
+While GChat is the **primary** interface, the architecture uses a pluggable adapter pattern
+inspired by OpenClaw's Channel interface. Each communication channel (GChat, WhatsApp, web,
+Slack, etc.) implements a unified `ChannelAdapter` interface:
+
+```python
+from abc import ABC, abstractmethod
+from pydantic import BaseModel
+
+class InboundMessage(BaseModel):
+    """Normalized inbound message from any channel."""
+    channel: str              # "gchat", "whatsapp", "web", "slack"
+    sender_id: str            # Channel-specific user identifier
+    text: str                 # Raw message text
+    thread_id: str | None     # Thread/conversation context
+    metadata: dict = {}       # Channel-specific extras (attachments, reactions)
+
+class OutboundMessage(BaseModel):
+    """Normalized outbound message to any channel."""
+    text: str                 # Plain text content
+    card: dict | None = None  # Rich card (channel adapts to its own card format)
+    thread_id: str | None     # Reply in thread (if supported)
+
+class ChannelAdapter(ABC):
+    """Interface that all communication channel adapters must implement."""
+
+    @abstractmethod
+    async def parse_inbound(self, raw_payload: dict) -> InboundMessage:
+        """Parse channel-specific webhook payload into normalized InboundMessage."""
+        ...
+
+    @abstractmethod
+    async def send_outbound(self, message: OutboundMessage, recipient: str) -> dict:
+        """Send a normalized OutboundMessage via channel-specific API."""
+        ...
+
+    @abstractmethod
+    async def verify_webhook(self, request: dict) -> bool:
+        """Verify incoming webhook authenticity (token, signature, etc.)."""
+        ...
+
+    @abstractmethod
+    def format_card(self, pipeline_status: dict) -> dict:
+        """Format a pipeline status dict into the channel's native card format."""
+        ...
+```
+
+**Adapter Registry** — The bridge server dynamically loads adapters based on configuration:
+
+```python
+ADAPTERS: dict[str, ChannelAdapter] = {
+    "gchat": GChatAdapter(),        # Google Chat (primary, Epic 2)
+    # Future adapters:
+    # "whatsapp": WhatsAppAdapter(),  # via Baileys/Cloud API
+    # "slack": SlackAdapter(),        # via Bolt SDK
+    # "web": WebSocketAdapter(),      # Browser-based dashboard
+    # "telegram": TelegramAdapter(),  # via grammY
+}
+```
+
+**Key Design Principles** (from OpenClaw's adapter pattern):
+1. **Adapters are thin** — only handle authentication, inbound parsing, and outbound formatting
+2. **Business logic lives in the runner** — adapters never make pipeline decisions
+3. **Cards are channel-native** — each adapter formats status cards using its platform's rich messaging
+4. **Thread affinity** — each pipeline maintains thread context per channel
+5. **Multi-channel broadcast** — runner can notify across all registered channels simultaneously
+
+This abstraction means adding WhatsApp or Slack support later requires ONLY implementing a new
+`ChannelAdapter` subclass — zero changes to the runner, guard rails, or pipeline logic.
+
 ### GChat as Primary Interface
 
 The user interacts with the pipeline runner through Google Chat, not the terminal:
@@ -249,22 +320,27 @@ class RunnerPlan(BaseModel):
 
 ---
 
-## Epic 2: GChat Pipeline Bridge (FastAPI + Webhook)
+## Epic 2: Channel Bridge with Adapter Pattern (FastAPI + Webhooks)
 
 ### Problem
-Users interact with pipelines via terminal/tmux. Need a GChat interface where users can
-start, monitor, approve, and steer pipeline execution through natural language.
+Users interact with pipelines via terminal/tmux. Need a multi-channel interface where users can
+start, monitor, approve, and steer pipeline execution through natural language. GChat is the
+primary channel, but the architecture must support adding WhatsApp, Slack, web, and other
+channels without modifying core pipeline logic.
 
 ### Requirements
 
-- R2.1: FastAPI server wrapping the Pipeline Runner Agent
-- R2.2: Google Chat webhook endpoint (POST /webhook/gchat) receives user messages
-- R2.3: Intent classification from user messages (programmatic regex/keyword, not LLM)
-- R2.4: Status formatting for GChat cards (pipeline progress, node states, blocked items)
-- R2.5: Approval flow: user says "approve" → runner advances business gate node
-- R2.6: Proactive notifications: runner sends status updates to GChat when nodes complete/fail
-- R2.7: Thread management: each pipeline gets its own GChat thread for context
-- R2.8: Authentication: verify incoming webhooks are from Google Chat (token validation)
+- R2.1: FastAPI server wrapping the Pipeline Runner Agent with pluggable channel adapters
+- R2.2: `ChannelAdapter` abstract base class with `parse_inbound`, `send_outbound`, `verify_webhook`, `format_card` methods
+- R2.3: `GChatAdapter` implementing ChannelAdapter for Google Chat webhooks (POST /webhook/gchat)
+- R2.4: Adapter registry: dynamic loading of channel adapters from configuration
+- R2.5: Intent classification from normalized `InboundMessage` (programmatic regex/keyword, not LLM)
+- R2.6: Status formatting via adapter's `format_card()` — each channel renders natively
+- R2.7: Approval flow: user says "approve" → runner advances business gate node (channel-agnostic)
+- R2.8: Proactive notifications: runner sends status updates via all registered adapters when nodes complete/fail
+- R2.9: Thread management: each pipeline gets its own thread per channel (where supported)
+- R2.10: Authentication: each adapter handles its own webhook verification (tokens, signatures, etc.)
+- R2.11: Multi-channel broadcast: runner can notify across all active channels simultaneously
 
 ### Interaction Patterns
 
@@ -280,20 +356,26 @@ start, monitor, approve, and steer pipeline execution through natural language.
 
 ### Acceptance Criteria
 
-- AC-2.1: FastAPI server starts and accepts GChat webhook POST requests
-- AC-2.2: "start PRD-XXX" message loads pipeline DOT and begins runner traversal
-- AC-2.3: "status" returns formatted card with current pipeline state
-- AC-2.4: "approve <node>" advances a business gate node
-- AC-2.5: Runner sends proactive GChat notification when a node completes or fails
-- AC-2.6: Each pipeline conversation lives in its own GChat thread
-- AC-2.7: Webhook validates incoming Google Chat tokens
-- AC-2.8: Server handles multiple concurrent pipeline runners (one per DOT file)
+- AC-2.1: FastAPI server starts and routes incoming webhooks to the correct ChannelAdapter
+- AC-2.2: GChatAdapter correctly parses Google Chat webhook payloads into InboundMessage
+- AC-2.3: GChatAdapter correctly sends OutboundMessage formatted as GChat cards
+- AC-2.4: "start PRD-XXX" message loads pipeline DOT and begins runner traversal (channel-agnostic)
+- AC-2.5: "status" returns formatted card via the originating channel's adapter
+- AC-2.6: "approve <node>" advances a business gate node (channel-agnostic)
+- AC-2.7: Runner sends proactive notifications via all registered adapters when nodes complete/fail
+- AC-2.8: Each pipeline conversation lives in its own thread per channel (where supported)
+- AC-2.9: Each adapter independently validates its incoming webhooks
+- AC-2.10: Server handles multiple concurrent pipeline runners (one per DOT file)
+- AC-2.11: Adding a new channel requires ONLY creating a new ChannelAdapter subclass + config entry (no runner/guard rail changes)
 
 ### Files
 
-- CREATE: .claude/scripts/attractor/gchat_bridge.py (FastAPI server)
-- CREATE: .claude/scripts/attractor/gchat_intents.py (Intent classification)
-- CREATE: .claude/scripts/attractor/gchat_cards.py (GChat card formatting)
+- CREATE: .claude/scripts/attractor/channel_adapter.py (ChannelAdapter ABC + InboundMessage/OutboundMessage models)
+- CREATE: .claude/scripts/attractor/adapters/gchat_adapter.py (GChat ChannelAdapter implementation)
+- CREATE: .claude/scripts/attractor/adapters/__init__.py (Adapter registry loader)
+- CREATE: .claude/scripts/attractor/channel_bridge.py (FastAPI server with adapter routing)
+- CREATE: .claude/scripts/attractor/channel_intents.py (Intent classification from normalized messages)
+- CREATE: .claude/scripts/attractor/channel_cards.py (Card templating — adapters format natively)
 - CREATE: .claude/scripts/attractor/Dockerfile (Container for deployment)
 - MODIFY: .mcp.json (add pipeline-bridge as MCP server for Claude Code access)
 
@@ -449,7 +531,7 @@ Epic 1 (Pipeline Runner)    ← Core runner with all tools
 
 ---
 
-**Version**: 1.0 (Draft)
+**Version**: 1.1 (Draft — adapter abstraction layer added)
 **Date**: 2026-02-24
 **Author**: System 3 Meta-Orchestrator
 **Design Doc**: .claude/documentation/PRD-S3-ATTRACTOR-002-design.md
