@@ -1,26 +1,16 @@
 {
   "_schema_version": "1.0.0",
   "_description": "System 3 Capability Self-Model \u2014 tracks confidence, success rates, and pitfalls per domain. Updated by hindsight-capability-update.py Stop hook after each session.",
-  "_last_updated": "2026-02-23T00:08:00.402453+00:00",
+  "_last_updated": "2026-02-23T00:11:50.977238+00:00",
   "domains": {
     "backend_orchestration": {
       "description": "Python backend work: FastAPI, PydanticAI, database ops, MCP tools",
       "confidence": 0.95,
-      "sessions_total": 472,
-      "sessions_successful": 358,
-      "success_rate": 0.758,
+      "sessions_total": 474,
+      "sessions_successful": 360,
+      "success_rate": 0.759,
       "common_pitfalls": [],
       "recent_outcomes": [
-        {
-          "timestamp": "2026-02-22T12:25:22.362462+00:00",
-          "success": true,
-          "reason": "26 uncommitted changes; 2 recent commits; beads closed"
-        },
-        {
-          "timestamp": "2026-02-22T12:25:33.815445+00:00",
-          "success": true,
-          "reason": "26 uncommitted changes; 2 recent commits; beads closed"
-        },
         {
           "timestamp": "2026-02-22T12:25:44.148252+00:00",
           "success": true,
@@ -60,6 +50,16 @@
           "timestamp": "2026-02-23T00:08:00.402453+00:00",
           "success": true,
           "reason": "2 recent commits"
+        },
+        {
+          "timestamp": "2026-02-23T00:08:26.808781+00:00",
+          "success": true,
+          "reason": "clean working tree; 3 recent commits"
+        },
+        {
+          "timestamp": "2026-02-23T00:11:50.977238+00:00",
+          "success": true,
+          "reason": "3 recent commits"
         }
       ]
     },
@@ -126,21 +126,11 @@
     "prd_writing": {
       "description": "PRD authoring, epic breakdown, acceptance criteria, task decomposition",
       "confidence": 0.95,
-      "sessions_total": 384,
-      "sessions_successful": 274,
-      "success_rate": 0.714,
+      "sessions_total": 386,
+      "sessions_successful": 276,
+      "success_rate": 0.715,
       "common_pitfalls": [],
       "recent_outcomes": [
-        {
-          "timestamp": "2026-02-22T12:25:22.362462+00:00",
-          "success": true,
-          "reason": "26 uncommitted changes; 2 recent commits; beads closed"
-        },
-        {
-          "timestamp": "2026-02-22T12:25:33.815445+00:00",
-          "success": true,
-          "reason": "26 uncommitted changes; 2 recent commits; beads closed"
-        },
         {
           "timestamp": "2026-02-22T12:25:44.148252+00:00",
           "success": true,
@@ -180,6 +170,16 @@
           "timestamp": "2026-02-23T00:08:00.402453+00:00",
           "success": true,
           "reason": "2 recent commits"
+        },
+        {
+          "timestamp": "2026-02-23T00:08:26.808781+00:00",
+          "success": true,
+          "reason": "clean working tree; 3 recent commits"
+        },
+        {
+          "timestamp": "2026-02-23T00:11:50.977238+00:00",
+          "success": true,
+          "reason": "3 recent commits"
         }
       ]
     },
@@ -320,8 +320,8 @@
     }
   },
   "aggregate": {
-    "total_sessions": 1511,
-    "total_successful": 1116,
+    "total_sessions": 1515,
+    "total_successful": 1120,
     "overall_success_rate": 0.739,
     "strongest_domain": "backend_orchestration",
     "weakest_domain": "backend_orchestration"
