@@ -714,6 +714,42 @@ if "MONITOR_STUCK" in report:
 
 ---
 
+## Two-Layer Coordination Model
+
+System 3 operates two task systems simultaneously. Understanding when to use each prevents confusion.
+
+| Layer | System | Persists | Commands | Use For |
+|-------|--------|----------|----------|---------|
+| **Project lifecycle** | Beads (`bd`) | Yes (git-backed, cross-session) | `bd ready`, `bd list`, `bd show`, `bd stats`, `bd update`, `bd close` | Epic hierarchy, impl_complete detection, validation evidence, bead lifecycle |
+| **Session oversight** | Native TaskList | No (ephemeral per S3 team) | `TaskCreate`, `TaskList`, `TaskGet`, `TaskUpdate` | Oversight team delegation, validation tasks, evidence collation |
+
+### How They Work Together
+
+1. **Monitor project** with Beads: `bd list --status=impl_complete` detects work ready for S3 review
+2. **Dispatch oversight** via Native TaskList: `TaskCreate` for s3-validator, s3-investigator, s3-prd-auditor
+3. **Oversight team reports** via SendMessage with evidence
+4. **Close or reject** via Beads: `bd close <id>` (pass) or `bd update <id> --status=s3_rejected` (fail)
+
+### Beads: Your Project Lifecycle View
+
+Beads provide the persistent task hierarchy that survives across sessions:
+
+- **Full lifecycle**: `open → in_progress → impl_complete → s3_validating → closed`
+- **Session start**: `bd ready` finds unblocked work; `bd list --status=impl_complete` finds pending reviews
+- **Progress tracking**: `bd stats` for overview; `bd list --tag=bo --status=open` for active Business Epics
+- **You close beads** (unlike orchestrators): System 3 is the validation authority with `bd close` rights
+
+### Native TaskList: Your Oversight Workbench
+
+The native TaskList is ephemeral — exists only for the current S3 team session (`s3-live-{hash}`):
+
+- **Oversight dispatch**: `TaskCreate` assignments for s3-validator, s3-investigator, s3-evidence-clerk
+- **Sequencing**: `addBlockedBy`/`addBlocks` ensure investigation completes before collation
+- **Status tracking**: `TaskList` shows which oversight agents are active right now
+- **Communication**: `SendMessage` for collecting evidence from oversight team members
+
+See the Oversight Team Management section below for full team structure and dispatch patterns.
+
 ## Oversight Team Management
 
 ### Team Structure

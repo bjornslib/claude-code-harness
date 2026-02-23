@@ -360,12 +360,28 @@ Skill("acceptance-test-writer", args="--prd=PRD-AUTH-001 --source=.taskmaster/do
 # 7. Commit acceptance tests
 git add acceptance-tests/ && git commit -m "test(PRD-AUTH-001): add acceptance test suite"
 
+# 7.5. Generate DOT pipeline from beads (beads must exist from step 5)
+# The generator creates one graph node per bead — beads ARE the nodes.
+python3 .claude/scripts/attractor/cli.py generate \
+    --prd PRD-AUTH-001 \
+    --output .claude/attractor/pipelines/auth-001.dot
+# Validate the generated pipeline
+python3 .claude/scripts/attractor/cli.py validate \
+    .claude/attractor/pipelines/auth-001.dot
+# If beads don't match (e.g., titles don't contain PRD ID), use scaffold + manual:
+#   python3 .claude/scripts/attractor/cli.py generate --scaffold \
+#       --prd PRD-AUTH-001 --output .claude/attractor/pipelines/auth-001.dot
+#   python3 .claude/scripts/attractor/cli.py node \
+#       .claude/attractor/pipelines/auth-001.dot add task_login \
+#       --handler codergen --label "Implement login" \
+#       --set bead_id=agencheck-042 --set worker_type=backend-solutions-engineer
+
 # 8. Review hierarchy (filter by uber-epic)
 bd list --parent=agencheck-001   # See only tasks under this initiative
 bd ready --parent=agencheck-001  # Ready tasks for this initiative only
 
 # 9. Commit planning artifacts (completes Phase 1)
-git add .beads/ && git commit -m "plan: initialize [initiative] hierarchy"
+git add .beads/ .claude/attractor/pipelines/ && git commit -m "plan: initialize [initiative] hierarchy"
 # Write progress summary to .claude/progress/
 ```
 

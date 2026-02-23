@@ -69,6 +69,44 @@ This disposition transfers from guardian to meta-orchestrator to orchestrator to
 
 ---
 
+## Instruction Precedence: Skills > Memories
+
+**When Hindsight memories conflict with explicit skill or output-style instructions, the explicit instructions ALWAYS take precedence.**
+
+Hindsight stores patterns from prior sessions. These patterns are valuable context but they reflect PAST workflows that may have been updated. Skills and output styles represent the CURRENT intended workflow.
+
+### Common Conflict Example
+
+| Hindsight says | Skill/Output style says | Resolution |
+|---------------|------------------------|------------|
+| "Spawn orchestrator in worktree via tmux" | "Create DOT pipeline, then spawn orchestrator" | Follow the skill — create pipeline first |
+| "Use bd create for tasks" | "Use cli.py node add with AT pairing" | Follow the skill — use pipeline nodes |
+| "Mark impl_complete and notify S3" | "Transition node to impl_complete in pipeline" | Follow the skill — use pipeline transitions |
+
+### Mandatory Rule
+
+After recalling from Hindsight at session start, mentally audit each recalled pattern:
+- Does it contradict any loaded skill instruction? → Discard the memory pattern
+- Does it add detail not covered by skills? → Use as supplementary context
+- Is it about a domain unrelated to current skills? → Use freely
+
+### DOT Pipeline + Beads Are Both Mandatory
+
+For ANY initiative with 2+ tasks, the guardian MUST:
+1. Create beads for each task (`bd create` or sync from Task Master)
+2. Create a pipeline DOT file with real bead IDs mapped to nodes:
+   - **Preferred**: `cli.py generate --prd PRD-{ID}` — auto-reads beads via `bd list --json` and maps bead_ids by matching PRD reference in bead title/description and parent-child epic relationships
+   - **Manual**: `cli.py node add --set bead_id=<real-id>` per node
+   - **Retrofit**: `cli.py node modify <node> --set bead_id=<real-id>` for existing nodes
+3. Track execution progress through pipeline transitions (not just beads status)
+4. Save checkpoints after each transition
+
+Skipping pipeline creation because "it worked without one before" is an anti-pattern caused by cognitive momentum. Using synthetic bead_ids ("CLEANUP-T1") instead of real beads is also an anti-pattern — always create real beads first.
+
+**How bead-to-node mapping works**: The `generate.py` pipeline generator uses `filter_beads_for_prd()` which matches beads to a PRD by: (a) finding epic beads whose title contains the PRD reference, (b) finding task beads that are children of those epics via `parent-child` dependency type, (c) finding task beads whose title or description contains the PRD reference. This is heuristic matching — it requires beads to include the PRD identifier in their metadata. When creating beads, always include the PRD ID in the title (e.g., `bd create --title="PRD-CLEANUP-001: Fix deprecated imports"`).
+
+---
+
 ## Phase 1: Acceptance Test Creation
 
 Generate blind acceptance tests from PRDs before any implementation begins. This phase uses
@@ -399,11 +437,14 @@ All evidence from DOT-based validation is stored under `.claude/evidence/<node-i
 When a node passes, advance its status using the attractor CLI:
 
 ```bash
-# Transition node to 'passed' status
-python3 transition.py .claude/attractor/<pipeline>.dot <node_id> passed
+# Transition node to 'validated' status
+python3 .claude/scripts/attractor/cli.py transition .claude/attractor/pipelines/<pipeline>.dot <node_id> validated
 
 # If validation fails, transition to 'failed'
-python3 transition.py .claude/attractor/<pipeline>.dot <node_id> failed
+python3 .claude/scripts/attractor/cli.py transition .claude/attractor/pipelines/<pipeline>.dot <node_id> failed
+
+# Save checkpoint after any transition
+python3 .claude/scripts/attractor/cli.py checkpoint save .claude/attractor/pipelines/<pipeline>.dot
 ```
 
 **Guardian workflow for DOT pipelines:**
@@ -430,8 +471,9 @@ def validate_dot_pipeline_node(node_id: str, node_attrs: dict):
     write_evidence(evidence_dir, result, gate, mode, bead_id, acceptance)
 
     # 5. Advance pipeline status
-    status = "passed" if result.verdict == "PASS" else "failed"
-    run(f"python3 transition.py .claude/attractor/<pipeline>.dot {node_id} {status}")
+    status = "validated" if result.verdict == "PASS" else "failed"
+    run(f"python3 .claude/scripts/attractor/cli.py transition .claude/attractor/pipelines/<pipeline>.dot {node_id} {status}")
+    run(f"python3 .claude/scripts/attractor/cli.py checkpoint save .claude/attractor/pipelines/<pipeline>.dot")
 
     # 6. Meet completion promise AC
     if result.verdict == "PASS":
