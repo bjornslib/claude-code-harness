@@ -2009,6 +2009,92 @@ python3 .claude/scripts/attractor/cli.py validate pipeline.dot
 - Use `--output json` for machine-readable output in automation
 - All mutations are logged to `<file>.ops.jsonl` for audit
 
+### Example: Slim Pipeline Graph
+
+Below is a before/after showing how a flat task list becomes a typed DOT pipeline that the attractor CLI can validate and score.
+
+**Before** (unstructured task list):
+```
+- [ ] Parse incoming PDF
+- [ ] Extract entities with LLM
+- [ ] Store results in Supabase
+- [ ] Send Slack notification
+```
+
+**After** (DOT pipeline with typed nodes and conditional edges):
+```dot
+digraph pipeline {
+    graph [rankdir=LR; prd_ref="PRD-INGEST-001"];
+
+    // Entry / exit sentinels
+    start       [shape=circle;       label="START"];
+    exit_ok     [shape=doublecircle; label="EXIT-OK"];
+    exit_fail   [shape=doublecircle; label="EXIT-FAIL"];
+
+    // Processing nodes — each maps to a bead
+    parse_pdf   [shape=box; handler=toolcall;  label="Parse PDF";
+                 status=pending; bead_id="INGEST-001"];
+    extract_ent [shape=box; handler=codergen;  label="Extract Entities";
+                 status=pending; bead_id="INGEST-002"];
+    store_db    [shape=box; handler=toolcall;  label="Store in Supabase";
+                 status=pending; bead_id="INGEST-003"];
+    notify      [shape=box; handler=toolcall;  label="Slack Notify";
+                 status=pending; bead_id="INGEST-004"];
+
+    // Happy path
+    start       -> parse_pdf   [label="begin"];
+    parse_pdf   -> extract_ent [label="pass"];
+    extract_ent -> store_db    [label="pass"];
+    store_db    -> notify      [label="pass"];
+    notify      -> exit_ok     [label="pass"];
+
+    // Failure edges
+    parse_pdf   -> exit_fail   [label="fail"; condition=fail];
+    extract_ent -> exit_fail   [label="fail"; condition=fail];
+    store_db    -> exit_fail   [label="fail"; condition=fail];
+}
+```
+
+**Building this graph with the CLI:**
+```bash
+# 1. Scaffold from PRD reference
+python3 .claude/scripts/attractor/cli.py generate --scaffold \
+    --prd PRD-INGEST-001 --output pipeline.dot
+
+# 2. Add processing nodes
+python3 .claude/scripts/attractor/cli.py node pipeline.dot add parse_pdf \
+    --handler toolcall --label "Parse PDF" --set bead_id=INGEST-001
+python3 .claude/scripts/attractor/cli.py node pipeline.dot add extract_ent \
+    --handler codergen --label "Extract Entities" --set bead_id=INGEST-002
+python3 .claude/scripts/attractor/cli.py node pipeline.dot add store_db \
+    --handler toolcall --label "Store in Supabase" --set bead_id=INGEST-003
+python3 .claude/scripts/attractor/cli.py node pipeline.dot add notify \
+    --handler toolcall --label "Slack Notify" --set bead_id=INGEST-004
+
+# 3. Wire happy-path edges
+python3 .claude/scripts/attractor/cli.py edge pipeline.dot add start parse_pdf --label "begin"
+python3 .claude/scripts/attractor/cli.py edge pipeline.dot add parse_pdf extract_ent --label "pass"
+python3 .claude/scripts/attractor/cli.py edge pipeline.dot add extract_ent store_db --label "pass"
+python3 .claude/scripts/attractor/cli.py edge pipeline.dot add store_db notify --label "pass"
+python3 .claude/scripts/attractor/cli.py edge pipeline.dot add notify exit_ok --label "pass"
+
+# 4. Wire failure edges
+python3 .claude/scripts/attractor/cli.py edge pipeline.dot add parse_pdf exit_fail \
+    --label "fail" --condition fail
+python3 .claude/scripts/attractor/cli.py edge pipeline.dot add extract_ent exit_fail \
+    --label "fail" --condition fail
+python3 .claude/scripts/attractor/cli.py edge pipeline.dot add store_db exit_fail \
+    --label "fail" --condition fail
+
+# 5. Validate the graph
+python3 .claude/scripts/attractor/cli.py validate pipeline.dot
+
+# 6. Checkpoint
+python3 .claude/scripts/attractor/cli.py checkpoint save pipeline.dot
+```
+
+> **Tip**: Run `validate` after every mutation batch to catch orphan edges, missing sentinels, or disconnected subgraphs before they propagate.
+
 ---
 
 ## Post-Session Reflection (MANDATORY)

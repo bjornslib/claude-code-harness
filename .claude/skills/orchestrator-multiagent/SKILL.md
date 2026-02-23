@@ -747,6 +747,99 @@ Orchestrators use the attractor CLI CRUD commands to build and maintain pipeline
 - `node remove` automatically removes all edges referencing the deleted node
 - All mutations append to `<file>.ops.jsonl` for audit trail
 
+### Pipeline Status & Transition Tracking
+
+After building and validating a pipeline graph, orchestrators track execution progress using the status, transition, and checkpoint commands.
+
+#### Status Commands
+
+```bash
+# Full status overview with node distribution
+python3 .claude/scripts/attractor/cli.py status pipeline.dot --json --summary
+
+# Human-readable status table
+python3 .claude/scripts/attractor/cli.py status pipeline.dot
+
+# JSON output for programmatic consumption
+python3 .claude/scripts/attractor/cli.py status pipeline.dot --json
+```
+
+#### Transition Commands
+
+Advance nodes through the lifecycle: `pending` → `active` → `impl_complete` → `validated` (or `failed` → `active` retry).
+
+```bash
+# Mark a node as active (implementation started)
+python3 .claude/scripts/attractor/cli.py transition pipeline.dot impl_auth active
+
+# Mark implementation complete (triggers paired validation gate)
+python3 .claude/scripts/attractor/cli.py transition pipeline.dot impl_auth impl_complete
+
+# Mark validated after passing acceptance criteria
+python3 .claude/scripts/attractor/cli.py transition pipeline.dot val_auth validated
+
+# Retry on failure — transition back to active
+python3 .claude/scripts/attractor/cli.py transition pipeline.dot impl_auth active
+```
+
+#### Checkpoint Commands
+
+Save and restore graph state as a safety net during complex transitions.
+
+```bash
+# Save current state before a batch of transitions
+python3 .claude/scripts/attractor/cli.py checkpoint save pipeline.dot
+
+# Checkpoint after every transition (recommended)
+python3 .claude/scripts/attractor/cli.py transition pipeline.dot node_x active && \
+python3 .claude/scripts/attractor/cli.py checkpoint save pipeline.dot
+```
+
+#### Transition Best Practices
+
+- **Always checkpoint** after transitions — enables rollback if downstream work fails
+- **Validate after transitions**: `python3 .claude/scripts/attractor/cli.py validate pipeline.dot`
+- **Check status before dispatch**: Ensure upstream dependencies are `validated` before transitioning a node to `active`
+- **Report transitions to System 3** via message bus after `impl_complete`
+
+### Pipeline Dashboard & Progress
+
+Use the dashboard for a unified view of initiative progress across all lifecycle stages.
+
+```bash
+# Human-readable progress table
+python3 .claude/scripts/attractor/cli.py status pipeline.dot --summary
+
+# JSON output for programmatic consumption
+python3 .claude/scripts/attractor/cli.py status pipeline.dot --json --summary
+```
+
+#### Dashboard Output Includes
+
+- **Pipeline stage**: Definition / Implementation / Validation / Finalized
+- **Node status distribution**: pending / active / impl_complete / validated / failed
+- **Dependency readiness**: Which nodes have all upstream dependencies met
+- **Progress percentage**: Validated nodes vs total implementation nodes
+
+#### Integration with Orchestrator Workflow
+
+1. **Before Phase 3 (Execution)**: Check dashboard to identify dispatchable nodes
+2. **During Execution**: Monitor after each worker completion to track progress
+3. **After Validation**: Verify all hexagon gates show `validated` before signaling finalization
+
+```bash
+# Check if all validation gates are validated (finalize-ready)
+python3 .claude/scripts/attractor/cli.py status pipeline.dot --json | \
+  python3 -c "import sys,json; d=json.load(sys.stdin); print('READY' if all(n['status']=='validated' for n in d.get('nodes',[]) if n.get('shape')=='hexagon') else 'NOT_READY')"
+```
+
+#### Progress Tracking Across Sessions
+
+Status is persisted in the DOT file itself. After context compaction or session restart:
+1. Re-read pipeline status: `python3 .claude/scripts/attractor/cli.py status pipeline.dot --summary`
+2. Resume from last checkpoint if needed
+3. Continue dispatching from where the previous session left off
+
 ---
 
 ## Message Bus Integration

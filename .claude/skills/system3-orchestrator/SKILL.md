@@ -263,6 +263,96 @@ if "MISSING" in team_exists:
 Outbound messaging now uses `gchat-send.sh` and inbound question forwarding uses
 `gchat-ask-user-forward.py` (PreToolUse hook). No persistent communicator agent is needed.
 
+### [ ] 9. Read DOT Pipeline State
+
+During PREFLIGHT, System 3 reads the initiative's pipeline DOT file and identifies dispatchable nodes — those with `pending` status whose upstream dependencies are all `validated`.
+
+```python
+INITIATIVE = os.environ.get("INITIATIVE_NAME", "current")
+PIPELINE_DOT = f".claude/attractor/pipelines/{INITIATIVE}.dot"
+
+# Check pipeline exists
+pipeline_exists = Bash(f"test -f {PIPELINE_DOT} && echo 'EXISTS' || echo 'MISSING'")
+
+if "EXISTS" in pipeline_exists:
+    # Get full pipeline status overview
+    Bash(f"python3 .claude/scripts/attractor/cli.py status {PIPELINE_DOT} --json --summary")
+
+    # Identify dispatchable nodes (pending + all upstream validated)
+    Bash(f"python3 .claude/scripts/attractor/cli.py status {PIPELINE_DOT} --json --summary")
+
+    # List all nodes for awareness
+    Bash(f"python3 .claude/scripts/attractor/cli.py node {PIPELINE_DOT} list --output json")
+
+    # Validate graph integrity before dispatch
+    Bash(f"python3 .claude/scripts/attractor/cli.py validate {PIPELINE_DOT}")
+```
+
+**Why in PREFLIGHT?** The pipeline DOT is the single source of truth for initiative progress. Reading it at session start ensures System 3:
+1. Knows which nodes are ready for dispatch
+2. Can resume where it left off after context compaction
+3. Detects stale nodes (pending too long) for re-evaluation
+
+### [ ] 10. DOT-Informed Orchestrator Dispatch
+
+When spawning orchestrators for pipeline nodes, inject the node's attributes into the mission brief so orchestrators receive scoped, actionable context.
+
+```python
+# For each dispatchable node, extract attributes and spawn:
+node_data = json.loads(Bash(f"python3 .claude/scripts/attractor/cli.py node {PIPELINE_DOT} list --output json"))
+
+for node in dispatchable_nodes:
+    node_id = node["id"]
+    acceptance = node.get("acceptance", "")
+    worker_type = node.get("worker_type", "general-purpose")
+    file_paths = node.get("file_path", "")
+    prd_ref = node.get("prd_ref", "")
+
+    # Transition node to active before dispatch
+    Bash(f"python3 .claude/scripts/attractor/cli.py transition {PIPELINE_DOT} {node_id} active")
+
+    # Save checkpoint after transition
+    Bash(f"python3 .claude/scripts/attractor/cli.py checkpoint save {PIPELINE_DOT}")
+
+    # Spawn orchestrator with node context
+    wisdom = f"""
+    ## Mission: {node["label"]}
+    **DOT Node**: {node_id}
+    **PRD Reference**: {prd_ref}
+    **Recommended Worker Type**: {worker_type}
+    **File Scope**: {file_paths}
+
+    ### Acceptance Criteria
+    {acceptance}
+
+    ### On Completion
+    Notify System 3 via message bus. System 3 will transition the node to impl_complete.
+    """
+
+    # Use spawn-orchestrator.sh with wisdom injection
+    Bash(f"./scripts/spawn-orchestrator.sh {node_id} /tmp/wisdom-{node_id}.md")
+```
+
+**Post-completion**: When an orchestrator reports completion, System 3 transitions the node:
+
+```bash
+# Transition to impl_complete
+python3 .claude/scripts/attractor/cli.py transition <pipeline.dot> <node_id> impl_complete
+
+# Save checkpoint
+python3 .claude/scripts/attractor/cli.py checkpoint save <pipeline.dot>
+
+# Check if paired validation gate is now activatable
+python3 .claude/scripts/attractor/cli.py status <pipeline.dot> --json --summary
+```
+
+**Parallel dispatch**: Nodes with no dependency relationship can execute simultaneously. Check edges before dispatching:
+
+```bash
+# List edges to verify independence
+python3 .claude/scripts/attractor/cli.py edge <pipeline.dot> list --output json
+```
+
 ---
 
 ## SPAWN WORKFLOW
