@@ -40,7 +40,7 @@
 | 5 | Stuck Pipeline | ✅ PASS | 15.1s | `signal_stuck` |
 | 6 | Parallel Pipeline | ✅ PASS | 13.6s | `spawn_orchestrator(impl_backend)` + `spawn_orchestrator(impl_frontend)` |
 
-**Total: 5/5 PASS** (scenario 4 uses simple-pipeline.dot which already existed)
+**Total: 6/6 PASS** (full run 2026-02-24 23:14–23:16 UTC, commit 6da557a)
 
 ---
 
