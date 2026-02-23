@@ -91,8 +91,10 @@ fi
 # Ensures System 3 sessions have spawned a session-scoped team with a heartbeat agent.
 # Team naming convention: s3-live-${CLAUDE_SESSION_ID: -8}
 # Example: system3-20260222T103045Z-7fe01d4c → s3-live-7fe01d4c
+# Guard: CLAUDE_OUTPUT_STYLE != orchestrator prevents false-positives when orchestrators
+# inherit a stale system3-* CLAUDE_SESSION_ID from a parent shell.
 
-if [[ "$SESSION_ID" == system3-* ]]; then
+if [[ "$SESSION_ID" == system3-* ]] && [[ "${CLAUDE_OUTPUT_STYLE:-}" != "orchestrator" ]]; then
     TEAM_HASH="${SESSION_ID: -8}"
     TEAM_CONFIG="$HOME/.claude/teams/s3-live-${TEAM_HASH}/config.json"
 
@@ -130,8 +132,9 @@ fi
 # --- Step 1.7: Pending GChat Questions Check (system3-* sessions only) ---
 # S3 sessions must not stop if they have unanswered GChat questions for THIS session.
 # The hook writes session_id (CLAUDE_SESSION_ID) into each marker file.
+# Guard: CLAUDE_OUTPUT_STYLE != orchestrator prevents false-positives (same as Step 1.5).
 
-if [[ "$SESSION_ID" == system3-* ]]; then
+if [[ "$SESSION_ID" == system3-* ]] && [[ "${CLAUDE_OUTPUT_STYLE:-}" != "orchestrator" ]]; then
     GCHAT_ASK_DIR="$PROJECT_ROOT/.claude/state/gchat-forwarded-ask"
     if [ -d "$GCHAT_ASK_DIR" ]; then
         GCHAT_PENDING_FOR_SESSION=0
@@ -333,10 +336,12 @@ fi
 # --- Step 5: Continuation Judge (System 3 sessions only) ---
 # Uses Haiku 4.5 API call to evaluate if System 3 session should continue
 # Non-System 3 sessions skip this step entirely (Step 4 already passes them)
+# Guard: CLAUDE_OUTPUT_STYLE != orchestrator prevents orchestrators that inherit a stale
+# system3-* CLAUDE_SESSION_ID from triggering this judge (ccorch sets CLAUDE_OUTPUT_STYLE=orchestrator).
 
 S3_MSG=""
 
-if [[ "$SESSION_ID" == system3-* ]]; then
+if [[ "$SESSION_ID" == system3-* ]] && [[ "${CLAUDE_OUTPUT_STYLE:-}" != "orchestrator" ]]; then
     TIMEOUT_CMD="timeout"
     if command -v gtimeout &> /dev/null; then
         TIMEOUT_CMD="gtimeout"

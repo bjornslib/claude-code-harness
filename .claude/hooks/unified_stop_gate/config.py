@@ -34,8 +34,20 @@ class EnvironmentConfig:
 
     @property
     def is_system3(self) -> bool:
-        """Check if this is a System 3 meta-orchestrator session (session ID starts with 'system3-')."""
-        return bool(self.session_id and self.session_id.startswith("system3-"))
+        """Check if this is a System 3 meta-orchestrator session.
+
+        Requires BOTH conditions to be true:
+        1. Session ID starts with 'system3-' (set by ccsystem3 shell function)
+        2. CLAUDE_OUTPUT_STYLE is NOT 'orchestrator' (ccorch sets this, ccsystem3 sets 'system3')
+
+        This prevents false positives when an orchestrator session inherits a stale
+        system3-* CLAUDE_SESSION_ID from a parent shell environment.
+        """
+        session_ok = bool(self.session_id and self.session_id.startswith("system3-"))
+        # If CLAUDE_OUTPUT_STYLE is explicitly 'orchestrator', this is definitively NOT system3
+        output_style = os.environ.get("CLAUDE_OUTPUT_STYLE", "")
+        not_orchestrator = output_style != "orchestrator"
+        return session_ok and not_orchestrator
 
     @classmethod
     def from_env(cls) -> 'EnvironmentConfig':
