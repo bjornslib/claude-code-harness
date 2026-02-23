@@ -108,14 +108,14 @@ SCENARIOS: list[Scenario] = [
     Scenario(
         id=4,
         name="Pipeline Complete",
-        dot_file="simple-pipeline.dot",  # Reuse existing, modify status in future
+        dot_file="poc-all-validated.dot",
         description=(
-            "All implementation nodes validated. Runner should signal finalize. "
-            "Note: simple-pipeline.dot has start=validated but impl_task=pending, "
-            "so runner should propose spawn_orchestrator for impl_task."
+            "All implementation and validation nodes are validated. Runner should "
+            "detect that all predecessors of the exit node are done and propose "
+            "signal_finalize."
         ),
-        expected_actions=["spawn_orchestrator"],
-        expect_complete=False,
+        expected_actions=["signal_finalize"],
+        expect_complete=True,
     ),
     Scenario(
         id=5,

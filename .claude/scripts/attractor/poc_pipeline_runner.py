@@ -60,7 +60,7 @@ from adapters import ChannelAdapter, create_adapter  # noqa: E402
 # ---------------------------------------------------------------------------
 
 CLI_PATH = os.path.join(_THIS_DIR, "cli.py")
-MODEL = "claude-sonnet-4-5-20250929"
+MODEL = "claude-sonnet-4-6"
 
 SYSTEM_PROMPT = """\
 You are a Pipeline Runner agent. Your job is to analyze an Attractor-style
