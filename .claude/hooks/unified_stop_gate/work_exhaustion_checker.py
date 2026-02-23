@@ -290,11 +290,25 @@ class WorkExhaustionChecker:
         return state
 
     def _gather_promise_summary(self, state: WorkState) -> None:
-        """Quick scan of promise files for context summary."""
+        """Quick scan of promise files for context summary.
+
+        Filters by CLAUDE_SESSION_ID to count only promises owned by THIS session.
+        This prevents cross-session promise bleed (orphaned/concurrent sessions)
+        from appearing in the work state and triggering false positives in the judge.
+
+        Mirrors the filtering logic in cs-verify --check (Step 1), so Step 4 and
+        Step 1 agree on what constitutes "this session's unmet promises".
+
+        Edge case: if CLAUDE_SESSION_ID is empty/unset, falls back to unfiltered
+        behavior (counts all promises) to avoid regressions in misconfigured envs.
+        """
         promises_dir = Path(self.config.project_dir) / ".claude" / "completion-state" / "promises"
 
         if not promises_dir.exists():
             return
+
+        # Filter by session ownership — mirrors cs-verify --check (Step 1)
+        session_id = os.environ.get("CLAUDE_SESSION_ID", "").strip()
 
         try:
             for promise_file in promises_dir.glob("*.json"):
@@ -303,6 +317,13 @@ class WorkExhaustionChecker:
                 try:
                     with open(promise_file, "r") as f:
                         promise = json.load(f)
+
+                    # Only count promises owned by THIS session.
+                    # If session_id is unset, fall back to counting all (old behavior).
+                    if session_id:
+                        owner = promise.get("ownership", {}).get("owned_by", "")
+                        if owner != session_id:
+                            continue  # Skip promises from other/orphaned sessions
 
                     state.has_promises = True
                     status = promise.get("status", "unknown")

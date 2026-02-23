@@ -78,6 +78,101 @@ Task(
 # Worker sends: SendMessage(type="message", recipient="team-lead", content="Task #X complete: ...")
 ```
 
+## Two-Layer Coordination Model
+
+You operate two task systems simultaneously. Understanding when to use each prevents confusion.
+
+| Layer | System | Persists | Commands | Use For |
+|-------|--------|----------|----------|---------|
+| **Project tracking** | Beads (`bd`) | Yes (git-backed, cross-session) | `bd ready`, `bd list`, `bd show`, `bd stats`, `bd create`, `bd close` | Epic hierarchy, task discovery, lifecycle tracking, validation evidence |
+| **Session coordination** | Native TaskList | No (ephemeral per team) | `TaskCreate`, `TaskList`, `TaskGet`, `TaskUpdate` | Worker delegation, dependency sequencing, real-time status |
+
+### How They Work Together
+
+1. **Discover work** with Beads: `bd ready` shows unblocked tasks across the project
+2. **Decompose** a bead into worker tasks: `TaskCreate` on the native board for each implementation unit
+3. **Workers implement** via native TaskList (claim, implement, complete)
+4. **Update bead status** when workers finish: `bd update <bd-id> --status impl_complete`
+5. **Validator closes bead** with evidence: `bd close <bd-id>` (via TASK CLOSURE GATE)
+
+### Beads: Your Project Backbone
+
+Beads provide the persistent task hierarchy that survives across sessions:
+
+- **Epic structure**: UBER-EPIC → EPIC → TASK (with paired AT epics for acceptance tests)
+- **Lifecycle**: `open → in_progress → impl_complete → [S3 validates] → closed`
+- **Session start**: Always begin with `bd ready` to find what needs doing
+- **Progress tracking**: `bd stats` for overview, `bd list --status=in_progress` for active work
+
+The orchestrator-multiagent skill (loaded via FIRST ACTION) provides the full Beads command reference, epic hierarchy patterns, and AT pairing conventions.
+
+### Native TaskList: Your Session Workbench
+
+The native TaskList is ephemeral — it exists only for the current team session:
+
+- **Worker delegation**: Break a bead into implementable units via `TaskCreate`
+- **Sequencing**: `addBlockedBy`/`addBlocks` enforce execution order
+- **Real-time status**: `TaskList` shows who is working on what right now
+- **Communication**: `SendMessage` for worker coordination
+
+See the Native Task Board section below for full details.
+
+## Native Task Board (Session Coordination)
+
+The native TaskList handles real-time worker coordination within a session. For project-level task tracking, use Beads (see above).
+
+### Board = Team TaskList
+
+When you create a team with `Teammate(spawnTeam)`, two things are created:
+- **Team config**: `~/.claude/teams/{team-name}/config.json` (members, inboxes)
+- **Task directory**: `~/.claude/tasks/{team-name}/` (one JSON file per task)
+
+This is a 1:1 relationship. One team = one task board. All teammates (including you as team-lead) share this board.
+
+### Task Lifecycle
+
+| Status | Who Sets It | How |
+|--------|-------------|-----|
+| `pending` | Orchestrator | `TaskCreate(subject=..., description=..., activeForm=...)` |
+| `in_progress` | Worker (claiming) | `TaskUpdate(taskId="3", status="in_progress", owner="worker-backend")` |
+| `completed` | Worker (done) | `TaskUpdate(taskId="3", status="completed")` |
+
+**Full CRUD**:
+- `TaskCreate` — Add a task to the board
+- `TaskList` — See all tasks with status, owner, and blocked-by info
+- `TaskGet(taskId="3")` — Read full description, dependencies, and metadata
+- `TaskUpdate(taskId="3", ...)` — Change status, owner, subject, description, or dependencies
+
+### Dependencies (Sequencing Without Polling)
+
+Use `addBlockedBy` / `addBlocks` to enforce execution order. Blocked tasks cannot be claimed.
+
+```python
+# Task 2 cannot start until Task 1 completes
+TaskCreate(subject="Build auth API", description="...", activeForm="Building auth API")  # -> id "5"
+TaskCreate(subject="Build login form (needs auth API)", description="...", activeForm="Building login form")  # -> id "6"
+TaskUpdate(taskId="6", addBlockedBy=["5"])
+
+# When worker completes task 5, task 6 auto-unblocks and becomes claimable
+```
+
+### Idle Is Normal (Not Failure)
+
+Workers go idle after every turn — this is the native Agent Teams heartbeat. An idle notification means:
+- The worker finished its current turn (sent a message, completed a task, etc.)
+- The worker is **waiting for input** — it can receive messages and will wake up
+- **Do NOT re-spawn** an idle worker. Send it a message instead.
+
+### SendMessage Types
+
+| Type | Use | Recipient Required |
+|------|-----|-------------------|
+| `message` | Direct message to one teammate | Yes (`recipient="worker-backend"`) |
+| `broadcast` | Same message to ALL teammates (expensive) | No |
+| `shutdown_request` | Ask a teammate to exit gracefully | Yes (`recipient="worker-backend"`) |
+
+Workers respond to shutdown with `shutdown_response` (approve/reject).
+
 ### Fallback: Task Subagent (When AGENT_TEAMS is not enabled)
 
 ```python
@@ -123,7 +218,7 @@ Before doing ANYTHING else, invoke:
 ```
 Skill("orchestrator-multiagent")
 ```
-This loads the execution toolkit (PREFLIGHT, worker templates, beads integration).
+This loads the execution toolkit (PREFLIGHT, worker templates, beads integration). It also loads the full worker delegation reference (WORKERS.md) which documents all TaskCreate/TaskUpdate fields, dependency patterns, and lifecycle management.
 
 ## 4-Phase Pattern
 
@@ -173,6 +268,16 @@ SendMessage(
     content="Validation task available for {feature_name}",
     summary="Validation request"
 )
+```
+
+**Checking worker evidence before validation**:
+```python
+# After worker reports completion, read the task to review what was done
+task = TaskGet(taskId="7")
+# task.description contains the original requirements
+# task.status should be "completed"
+# Worker's SendMessage content has the implementation summary
+# Now create a validation task with full context
 ```
 
 **Key Rules:**

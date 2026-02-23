@@ -84,7 +84,7 @@ Step 4 has already enforced that no pending/in_progress tasks remain. You are ev
 
 ### Layer 1: Protocol Compliance
 Before stopping, System 3 MUST have completed:
-1. **Completion Promises**: All session promises verified with proof (cs-verify), or no promises created
+1. **Completion Promises**: All session promises verified with proof (cs-verify --check passed = session-owned promises done), or no promises created. Note: WORK STATE shows only this session's promises after Step 4 filtering — foreign/orphaned promises from other sessions are excluded.
 2. **Post-Session Reflection**: Learnings stored to Hindsight (mcp__hindsight__retain)
 3. **Validation Evidence**: Business outcomes validated via validation-test-agent (not direct bd close)
 4. **Cleanup**: Message bus unregistered (if registered). NOTE: Active orchestrator tmux sessions (orch-*) are EXPECTED and are NOT a cleanup issue — they run independently and persist beyond this session.
@@ -103,7 +103,7 @@ If you see these indicators, respond with should_continue=true and explain the v
 
 ### Layer 2: Work Availability
 Check the WORK STATE for remaining actionable work:
-- Unmet promises → System 3 MUST continue
+- Unmet promises (owned by this session, not foreign/orphaned) → System 3 MUST continue
 - Ready beads (especially P0-P2) → System 3 SHOULD continue
 - Open business epics → System 3 SHOULD continue
 - If work is available, System 3 should continue unless it genuinely needs user input to decide direction
