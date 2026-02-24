@@ -45,25 +45,3 @@ __pycache__/
 # OAuth2 credentials (sensitive)
 credentials/google-chat-token.json
 credentials/google-chat-oauth-client.json
-
-# Attractor pipeline runtime artifacts
-attractor/pipelines/*-checkpoint-*.json
-attractor/pipelines/*-restored.dot
-attractor/pipelines/signals/
-attractor/runner-state/
-attractor/checkpoints/
-
-# Keep directory placeholders
-!attractor/pipelines/signals/.gitkeep
-!attractor/runner-state/.gitkeep
-!attractor/checkpoints/.gitkeep
-
-# Completion state session file
-completion-state/session-state.json
-
-# Evidence directories (keep structure)
-evidence/*
-!evidence/.gitkeep
-
-# Prototype scripts
-scripts/prototypes/
