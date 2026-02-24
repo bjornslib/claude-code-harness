@@ -160,7 +160,23 @@ if [ "$CHECK_MODE" = true ]; then
                 MY_PROMISES+=("$ID:$STATUS:$SUMMARY")
 
                 if [ "$STATUS" = "in_progress" ]; then
-                    IN_PROGRESS_COUNT=$((IN_PROGRESS_COUNT + 1))
+                    # Check if all ACs are met — if so, don't count as blocking
+                    # (promise is effectively complete, just not formally verified)
+                    _PFILE="$PROMISES_DIR/$ID.json"
+                    _ALL_ACS_MET=false
+                    if [ -f "$_PFILE" ]; then
+                        _P_HAS_AC=$(jq 'has("acceptance_criteria") and (.acceptance_criteria | length > 0)' "$_PFILE")
+                        if [ "$_P_HAS_AC" = "true" ]; then
+                            _P_TOTAL=$(jq '.acceptance_criteria | length' "$_PFILE")
+                            _P_MET=$(jq '[.acceptance_criteria[] | select(.status == "met")] | length' "$_PFILE")
+                            if [ "$_P_MET" -eq "$_P_TOTAL" ] && [ "$_P_TOTAL" -gt 0 ]; then
+                                _ALL_ACS_MET=true
+                            fi
+                        fi
+                    fi
+                    if [ "$_ALL_ACS_MET" != "true" ]; then
+                        IN_PROGRESS_COUNT=$((IN_PROGRESS_COUNT + 1))
+                    fi
                 elif [ "$STATUS" = "pending" ]; then
                     PENDING_COUNT=$((PENDING_COUNT + 1))
                 fi
@@ -199,10 +215,11 @@ if [ "$CHECK_MODE" = true ]; then
         exit 0
     fi
 
-    # All owned promises are verified/cancelled = can exit
+    # All owned promises are verified/cancelled/all-ACs-met = can exit
     if [ $IN_PROGRESS_COUNT -eq 0 ] && [ $PENDING_COUNT -eq 0 ]; then
         if [ "$VERBOSE" = true ]; then
-            echo "All owned promises are complete."
+            echo "All owned promises are complete (all acceptance criteria met)."
+            echo "Tip: Run 'cs-verify --promise <id>' to formally verify and move to history."
         fi
         exit 0
     fi

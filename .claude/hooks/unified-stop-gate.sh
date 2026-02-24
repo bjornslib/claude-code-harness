@@ -66,6 +66,8 @@ block_gate() {
     echo "$CURRENT_BLOCKS" > "$BLOCK_COUNT_FILE"
 
     if [ "$CURRENT_BLOCKS" -ge "$MAX_BLOCKS" ]; then
+        # Reset counter on override-approve so next stop attempt starts fresh
+        echo "0" > "$BLOCK_COUNT_FILE"
         output_json "approve" "systemMessage" "⚠️ STOP GATE OVERRIDE (${CURRENT_BLOCKS}/${MAX_BLOCKS} blocks reached)
 
 The gate has blocked ${CURRENT_BLOCKS} time(s) this session. Forcing approve to prevent an infinite loop.
@@ -73,7 +75,7 @@ The gate has blocked ${CURRENT_BLOCKS} time(s) this session. Forcing approve to 
 Last block reason:
 ${message}
 
-Resolve the underlying issue to re-arm the gate (counter resets when CLAUDE_SESSION_ID changes)."
+Counter has been reset. The gate is re-armed for future stop attempts."
     else
         output_json "block" "reason" "${message}
 
@@ -552,6 +554,9 @@ fi
 #         --title "Session Ending" \
 #         "$_session_summary" 2>/dev/null || true
 # fi
+
+# Reset block counter on successful approval (prevents stale counts across stop attempts)
+echo "0" > "$BLOCK_COUNT_FILE"
 
 # Always approve (blocking happens earlier or not at all)
 output_json "approve" "systemMessage" "$MSG_PARTS"
