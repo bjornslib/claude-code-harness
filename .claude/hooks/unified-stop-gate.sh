@@ -3,6 +3,7 @@
 #
 # Architecture:
 #   1. Completion Promise Check: BLOCKS if open promises owned by this session
+#   1.4 Active Background Agents: ALLOWS stop if non-lead team agents are in_progress
 #   2. Orchestrator Guidance: BLOCKS orch-* sessions with unescalated blockers
 #   3. Beads Sync Check: BLOCKS if .beads/ has uncommitted changes
 #   4. Work Exhaustion Check: BLOCKS if work available but no sensible continuation
@@ -51,8 +52,15 @@ output_json() {
 
 PROMISE_PASSED=true
 PROMISE_MESSAGE=""
+BG_AGENTS_ACTIVE=false  # set to true by Step 1.4 when background agents are found
 
-if [ -z "$SESSION_ID" ]; then
+if [[ "${CLAUDE_OUTPUT_STYLE:-}" == "orchestrator" ]]; then
+    # Orchestrators and their native teammates don't own completion promises —
+    # only System 3 creates promises. Skip check to prevent false positives when
+    # workers inherit a system3-* CLAUDE_SESSION_ID from the parent shell.
+    # (Same guard pattern as Steps 1.4, 1.5, 1.7, 5.)
+    PROMISE_MESSAGE="Orchestrator session — promise check skipped"
+elif [ -z "$SESSION_ID" ]; then
     # No session ID = no promise tracking = always OK to stop
     PROMISE_MESSAGE="No CLAUDE_SESSION_ID set - OK to stop"
 elif [ ! -x "$CS_VERIFY" ]; then
@@ -71,6 +79,51 @@ else
     else
         # Error case - allow stop but note the error
         PROMISE_MESSAGE="Promise check error (allowing stop): $CS_OUTPUT"
+    fi
+fi
+
+# --- Step 1.4: Active Background Agents Check ---
+# If promise check failed for a system3 session, check if the session's TaskList
+# has in_progress tasks owned by non-lead agents. If so, those agents will wake
+# the session via SendMessage when they complete — allow stop now.
+# Guard: CLAUDE_OUTPUT_STYLE != orchestrator (same as Steps 1.5, 1.7).
+
+if [ "$PROMISE_PASSED" = false ] && [[ "$SESSION_ID" == system3-* ]] && [[ "${CLAUDE_OUTPUT_STYLE:-}" != "orchestrator" ]]; then
+    _TASK_LIST_ID="${CLAUDE_CODE_TASK_LIST_ID:-}"
+    if [ -n "$_TASK_LIST_ID" ]; then
+        _TASK_DIR="$HOME/.claude/tasks/$_TASK_LIST_ID"
+        if [ -d "$_TASK_DIR" ]; then
+            _ACTIVE_AGENTS=$(CLAUDE_CODE_TASK_LIST_ID="$_TASK_LIST_ID" python3 - <<'ACTIVE_CHECK'
+import json, os, glob
+
+task_dir = os.path.join(
+    os.path.expanduser("~"), ".claude", "tasks",
+    os.environ.get("CLAUDE_CODE_TASK_LIST_ID", "")
+)
+active = []
+for f in glob.glob(os.path.join(task_dir, "*.json")):
+    try:
+        with open(f) as fp:
+            t = json.load(fp)
+        owner = t.get("owner", "")
+        status = t.get("status", "")
+        subject = t.get("subject", "")[:50]
+        if status == "in_progress" and owner and owner not in ("team-lead", ""):
+            active.append(f"  - {owner}: {subject}")
+    except Exception:
+        pass
+if active:
+    print("\n".join(active))
+ACTIVE_CHECK
+)
+            if [ -n "$_ACTIVE_AGENTS" ]; then
+                PROMISE_PASSED=true
+                BG_AGENTS_ACTIVE=true   # signals Step 4 to skip task exhaustion check
+                PROMISE_MESSAGE="Background team agents are actively working — session will resume via SendMessage when they complete.
+Active in_progress tasks:
+${_ACTIVE_AGENTS}"
+            fi
+        fi
     fi
 fi
 
@@ -264,7 +317,14 @@ WORK_STATE_SUMMARY=""
 
 TASK_LIST_ID="${CLAUDE_CODE_TASK_LIST_ID:-}"
 
-if [ -n "$TASK_LIST_ID" ]; then
+# Skip Step 4 task exhaustion check if Step 1.4 found active background agents.
+# The in_progress tasks in the list ARE the background agents — checking them again
+# would block exactly the scenario Step 1.4 is designed to allow.
+if [ "$BG_AGENTS_ACTIVE" = true ]; then
+    WORK_STATE_SUMMARY="Background agents active (Step 1.4) — task exhaustion check skipped"
+fi
+
+if [ -n "$TASK_LIST_ID" ] && [ "$BG_AGENTS_ACTIVE" != true ]; then
     # Use gtimeout on macOS (GNU coreutils), fallback to timeout on Linux
     TIMEOUT_CMD="timeout"
     if command -v gtimeout &> /dev/null; then
