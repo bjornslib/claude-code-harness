@@ -55,9 +55,26 @@ Thumbs.db
 # Compiled binaries
 tools/tmux-nav/tmux-nav
 
+# Serena IDE state
+.serena/
+
+# ZeroRepo analysis output (whole dir ignored)
+.zerorepo/
+
+# Worktree checkouts
+trees/
+
+# Root-level completion state
+completion-state/
+
+# Local settings override
+settings.local.json
+
+# Empty test artifact
+test
+
 # Temporary files
 *.tmp
 *.temp
 tmp/
 temp/
-.zerorepo/output/
