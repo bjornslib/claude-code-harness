@@ -13,12 +13,18 @@ Anti-gaming rules enforced:
     1. Runner never calls Edit/Write (coordinator, not implementer)
     2. Implementer-validator separation: same agent cannot validate its own work
     3. Evidence timestamping: stale evidence is rejected
-    4. Retry hard limit: 3 failures → STUCK, no further retries
-    5. Audit trail: every transition logged to append-only JSONL
+    4. Retry hard limit: configurable via ATTRACTOR_MAX_RETRIES (default 3)
+    5. Audit trail: every transition logged to append-only JSONL with chained hashes
+    6. Spot-check selection: deterministic hash(session_id + node_id) auditing
 
 Usage:
     hooks = RunnerHooks(state=runner_state, audit_path="/path/to/audit.jsonl")
     hooks.pre_tool_use("transition_node", {"node_id": "impl_auth", "status": "validated"})
+
+Environment variables:
+    ATTRACTOR_MAX_RETRIES        Maximum retries per node before STUCK (default: 3)
+    ATTRACTOR_SPOT_CHECK_RATE    Fraction of nodes selected for spot-check (default: 0.25)
+    ATTRACTOR_EVIDENCE_MAX_AGE   Max evidence age in seconds (default: 300)
 """
 
 from __future__ import annotations
@@ -29,10 +35,15 @@ import os
 import sys
 from typing import Any
 
+from anti_gaming import ChainedAuditWriter, EvidenceValidator, SpotCheckSelector
 from runner_models import AuditEntry, RunnerState
 
+# ---------------------------------------------------------------------------
+# Configurable constants (override via environment variables)
+# ---------------------------------------------------------------------------
+
 # Maximum retries per node before reporting STUCK
-MAX_RETRIES: int = 3
+MAX_RETRIES: int = int(os.environ.get("ATTRACTOR_MAX_RETRIES", "3"))
 
 # Tools the runner is allowed to call (read-only + coordination only)
 _ALLOWED_TOOLS: frozenset[str] = frozenset({
@@ -72,11 +83,21 @@ class RunnerHooks:
     Enforces anti-gaming rules programmatically. Called by the runner loop
     at pre-tool and post-tool lifecycle points.
 
+    Integrates three anti-gaming subsystems from ``anti_gaming.py``:
+
+    * ``ChainedAuditWriter`` — tamper-evident append-only audit log.
+    * ``EvidenceValidator``  — rejects stale/future-dated evidence timestamps.
+    * ``SpotCheckSelector``  — deterministic selection of nodes for ad-hoc audit.
+
     Args:
         state: The current RunnerState (mutable, updated by hooks).
         audit_path: Path to the append-only audit JSONL file.
         session_id: Unique identifier for this runner session.
         verbose: If True, print debug information to stderr.
+        spot_check_rate: Fraction of nodes selected for spot-check auditing.
+            Defaults to the ``ATTRACTOR_SPOT_CHECK_RATE`` env var or 0.25.
+        evidence_max_age: Maximum acceptable evidence age in seconds.
+            Defaults to the ``ATTRACTOR_EVIDENCE_MAX_AGE`` env var or 300.
     """
 
     def __init__(
@@ -86,11 +107,27 @@ class RunnerHooks:
         session_id: str,
         *,
         verbose: bool = False,
+        spot_check_rate: float | None = None,
+        evidence_max_age: int | None = None,
     ) -> None:
         self._state = state
         self._audit_path = audit_path
         self._session_id = session_id
         self._verbose = verbose
+
+        # Initialise anti-gaming subsystems
+        _rate = spot_check_rate if spot_check_rate is not None else float(
+            os.environ.get("ATTRACTOR_SPOT_CHECK_RATE", "0.25")
+        )
+        self._spot_check = SpotCheckSelector(rate=_rate)
+
+        _max_age = evidence_max_age if evidence_max_age is not None else int(
+            os.environ.get("ATTRACTOR_EVIDENCE_MAX_AGE", "300")
+        )
+        self._evidence_validator = EvidenceValidator(max_age_seconds=_max_age)
+
+        # ChainedAuditWriter continues an existing chain on restart
+        self._audit_writer = ChainedAuditWriter(audit_path, verbose=verbose)
 
     # ------------------------------------------------------------------
     # Primary hook interface
@@ -102,6 +139,7 @@ class RunnerHooks:
         Checks:
             - Forbidden tool guard (Edit/Write/MultiEdit blocked)
             - Retry limit enforcement for transition_node to 'active'
+            - Evidence staleness check for transition_node to 'validated'
 
         Args:
             tool_name: Name of the tool about to be called.
@@ -132,10 +170,22 @@ class RunnerHooks:
                 retry_count = self._state.retry_counts.get(node_id, 0)
                 if retry_count >= MAX_RETRIES:
                     raise RunnerHookError(
-                        f"RETRY LIMIT: Node '{node_id}' has failed {retry_count}/{MAX_RETRIES} times. "
+                        f"RETRY LIMIT: Node '{node_id}' has failed "
+                        f"{retry_count}/{MAX_RETRIES} times. "
                         f"The runner must signal STUCK instead of retrying. "
                         f"System 3 intervention is required."
                     )
+
+            # Guard 3: Evidence staleness check for validation transitions
+            if new_status in ("validated", "impl_complete"):
+                evidence_ts = tool_input.get("evidence_timestamp", "")
+                ok, msg = self._evidence_validator.validate(evidence_ts)
+                if not ok:
+                    raise RunnerHookError(
+                        f"EVIDENCE STALENESS VIOLATION for node '{node_id}': {msg}"
+                    )
+                if self._verbose and evidence_ts:
+                    print(f"[hooks.pre] Evidence check passed: {msg}", file=sys.stderr)
 
     def post_tool_use(
         self,
@@ -146,9 +196,10 @@ class RunnerHooks:
         """Called after a tool completes successfully.
 
         Actions:
-            - Writes audit trail entry for state transitions
+            - Writes chained audit trail entry for state transitions
             - Tracks implementer sessions for node spawns
             - Increments retry counters for failed transitions
+            - Logs spot-check selections for audited nodes
 
         Args:
             tool_name: Name of the tool that was called.
@@ -169,16 +220,18 @@ class RunnerHooks:
     def on_stop(self, plan: dict[str, Any] | None, reason: str = "") -> None:
         """Called when the runner is about to exit.
 
-        Validates that the pipeline is in a terminal or intentionally paused state
-        before allowing exit. Writes a final audit entry.
+        Validates that the pipeline is in a terminal or intentionally paused
+        state before allowing exit. Writes a final chained audit entry.
 
         Args:
-            plan: The most recent RunnerPlan dict (or None if runner failed early).
-            reason: Reason for stopping (e.g., "pipeline_complete", "stuck", "error").
+            plan: The most recent RunnerPlan dict (or None if runner failed
+                early).
+            reason: Reason for stopping (e.g. "pipeline_complete", "stuck",
+                "error").
 
         Raises:
-            RunnerHookError: If the runner exits with active unfinished work and
-                no checkpoint was saved.
+            RunnerHookError: If the runner exits with active unfinished work
+                and no checkpoint was saved.
         """
         self._write_audit(
             AuditEntry(
@@ -214,7 +267,7 @@ class RunnerHooks:
     def _handle_transition_audit(
         self, tool_input: dict[str, Any], result: str
     ) -> None:
-        """Write audit entry and update retry counts for a transition."""
+        """Write chained audit entry and update retry counts for a transition."""
         node_id = tool_input.get("node_id", "unknown")
         new_status = tool_input.get("new_status", "unknown")
         reason = tool_input.get("reason", "")
@@ -253,6 +306,30 @@ class RunnerHooks:
         elif new_status == "validated":
             self._state.reset_retry(node_id)
 
+        # Spot-check selection for validated nodes
+        if new_status == "validated":
+            flagged = self._spot_check.should_spot_check(self._session_id, node_id)
+            if flagged:
+                if self._verbose:
+                    print(
+                        f"[hooks] Spot-check SELECTED: node '{node_id}' "
+                        f"(session={self._session_id})",
+                        file=sys.stderr,
+                    )
+                # Write a supplementary spot-check audit entry
+                self._write_audit(
+                    AuditEntry(
+                        node_id=node_id,
+                        from_status="validated",
+                        to_status="spot_check_flagged",
+                        agent_id=self._session_id,
+                        reason=(
+                            f"Deterministic spot-check selected this node for "
+                            f"additional audit (session={self._session_id})"
+                        ),
+                    )
+                )
+
     def _handle_spawn_tracking(
         self, tool_input: dict[str, Any], result: str
     ) -> None:
@@ -276,20 +353,13 @@ class RunnerHooks:
             )
 
     def _write_audit(self, entry: AuditEntry) -> None:
-        """Append an audit entry to the JSONL audit trail.
+        """Append a chained audit entry via the ChainedAuditWriter.
 
-        The audit trail is append-only — entries are never modified or deleted.
+        Delegates to ``self._audit_writer`` which maintains the SHA-256
+        chain and handles file I/O.  Failures are logged to stderr but do
+        not crash the runner.
         """
-        try:
-            os.makedirs(os.path.dirname(self._audit_path), exist_ok=True)
-            with open(self._audit_path, "a", encoding="utf-8") as f:
-                f.write(entry.model_dump_json() + "\n")
-        except OSError as exc:
-            # Don't crash the runner on audit write failure — warn and continue
-            print(
-                f"[hooks] WARNING: Failed to write audit entry: {exc}",
-                file=sys.stderr,
-            )
+        self._audit_writer.write(entry)
 
     def check_implementer_separation(
         self,
@@ -308,6 +378,19 @@ class RunnerHooks:
                 f"implemented node '{node_id}' and cannot also validate it. "
                 f"This is a self-validation attempt."
             )
+
+    # ------------------------------------------------------------------
+    # Audit chain verification (diagnostic helper)
+    # ------------------------------------------------------------------
+
+    def verify_audit_chain(self) -> tuple[bool, str]:
+        """Verify the integrity of the audit chain for this session.
+
+        Returns:
+            ``(True, message)``  when the chain is intact.
+            ``(False, message)`` if the chain is broken or unreadable.
+        """
+        return self._audit_writer.verify_chain()
 
 
 def _hash_content(content: str, length: int = 16) -> str:

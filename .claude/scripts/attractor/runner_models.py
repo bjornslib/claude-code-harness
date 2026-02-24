@@ -202,13 +202,15 @@ class AuditEntry(BaseModel):
     for anti-gaming verification.
 
     Attributes:
-        timestamp: ISO-8601 event timestamp.
+        timestamp: ISO-8601 event timestamp (UTC).
         node_id: The node that transitioned.
         from_status: Previous node status.
         to_status: New node status.
         agent_id: Session ID of the runner or agent responsible.
         evidence_hash: SHA-256 prefix of evidence content (if applicable).
         reason: Human-readable reason for the transition.
+        prev_hash: SHA-256 prefix of the previous audit entry's serialised
+            JSON (chained checksum). Empty string for the first entry.
     """
 
     timestamp: str = Field(
@@ -220,3 +222,4 @@ class AuditEntry(BaseModel):
     agent_id: str
     evidence_hash: str = ""
     reason: str = ""
+    prev_hash: str = ""
