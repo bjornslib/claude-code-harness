@@ -56,6 +56,25 @@ if _THIS_DIR not in sys.path:
     sys.path.insert(0, _THIS_DIR)
 
 # ---------------------------------------------------------------------------
+# Optional Logfire instrumentation
+# ---------------------------------------------------------------------------
+try:
+    import logfire
+    logfire.configure()
+    _HAS_LOGFIRE = True
+except Exception:
+    _HAS_LOGFIRE = False
+
+    class _NoOpSpan:
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+
+    class _NoOpLogfire:
+        def span(self, *a, **kw): return _NoOpSpan()
+
+    logfire = _NoOpLogfire()  # type: ignore[assignment]
+
+# ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
@@ -93,7 +112,8 @@ def build_system_prompt(
     Returns:
         Formatted system prompt string.
     """
-    return f"""\
+    with logfire.span("runner.build_system_prompt", node_id=node_id, prd_ref=prd_ref):
+        return f"""\
 You are a Runner agent (Layer 2) in a 4-layer pipeline execution system.
 
 Your role: Monitor an orchestrator tmux session and signal the Guardian at decision points.
@@ -206,19 +226,20 @@ def build_initial_prompt(
     Returns:
         Formatted initial prompt string.
     """
-    return (
-        f"You are monitoring orchestrator in tmux session '{session_name}' "
-        f"implementing node '{node_id}' for {prd_ref}.\n\n"
-        f"Your assignment:\n"
-        f"- Node: {node_id}\n"
-        f"- PRD: {prd_ref}\n"
-        f"- Session: {session_name}\n"
-        f"- Acceptance criteria: {acceptance or 'See DOT file'}\n"
-        f"- Check interval: {check_interval}s\n"
-        f"- Stuck threshold: {stuck_threshold}s\n\n"
-        f"Start by checking if the orchestrator is alive, then begin the monitoring loop.\n"
-        f"Scripts directory: {scripts_dir}\n"
-    )
+    with logfire.span("runner.build_initial_prompt", node_id=node_id, prd_ref=prd_ref):
+        return (
+            f"You are monitoring orchestrator in tmux session '{session_name}' "
+            f"implementing node '{node_id}' for {prd_ref}.\n\n"
+            f"Your assignment:\n"
+            f"- Node: {node_id}\n"
+            f"- PRD: {prd_ref}\n"
+            f"- Session: {session_name}\n"
+            f"- Acceptance criteria: {acceptance or 'See DOT file'}\n"
+            f"- Check interval: {check_interval}s\n"
+            f"- Stuck threshold: {stuck_threshold}s\n\n"
+            f"Start by checking if the orchestrator is alive, then begin the monitoring loop.\n"
+            f"Scripts directory: {scripts_dir}\n"
+        )
 
 
 def build_options(
@@ -242,18 +263,19 @@ def build_options(
     Returns:
         Configured ClaudeCodeOptions instance.
     """
-    from claude_code_sdk import ClaudeCodeOptions
+    with logfire.span("runner.build_options", model=model):
+        from claude_code_sdk import ClaudeCodeOptions
 
-    return ClaudeCodeOptions(
-        allowed_tools=["Bash"],
-        system_prompt=system_prompt,
-        cwd=cwd,
-        model=model,
-        max_turns=max_turns,
-        # Suppress CLAUDECODE env var to avoid nested-session conflicts.
-        # Definitive fix (subprocess.Popen with cleaned env) is in spawn_runner.py.
-        env={"CLAUDECODE": ""},
-    )
+        return ClaudeCodeOptions(
+            allowed_tools=["Bash"],
+            system_prompt=system_prompt,
+            cwd=cwd,
+            model=model,
+            max_turns=max_turns,
+            # Suppress CLAUDECODE env var to avoid nested-session conflicts.
+            # Definitive fix (subprocess.Popen with cleaned env) is in spawn_runner.py.
+            env={"CLAUDECODE": ""},
+        )
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -355,16 +377,17 @@ async def _run_agent(initial_prompt: str, options: Any) -> None:
         ResultMessage,
     )
 
-    async for message in query(initial_prompt, options=options):
-        if isinstance(message, AssistantMessage):
-            for block in message.content:
-                if isinstance(block, TextBlock):
-                    print(f"[Runner] {block.text}", flush=True)
-                elif isinstance(block, ToolUseBlock):
-                    input_preview = json.dumps(block.input)[:200]
-                    print(f"[Runner tool] {block.name}: {input_preview}", flush=True)
-        elif isinstance(message, ResultMessage):
-            print(f"[Runner done] stop_reason={message.stop_reason}", flush=True)
+    with logfire.span("runner.run_agent"):
+        async for message in query(initial_prompt, options=options):
+            if isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if isinstance(block, TextBlock):
+                        print(f"[Runner] {block.text}", flush=True)
+                    elif isinstance(block, ToolUseBlock):
+                        input_preview = json.dumps(block.input)[:200]
+                        print(f"[Runner tool] {block.name}: {input_preview}", flush=True)
+            elif isinstance(message, ResultMessage):
+                print(f"[Runner done] stop_reason={message.stop_reason}", flush=True)
 
 
 # ---------------------------------------------------------------------------
@@ -376,69 +399,70 @@ def main(argv: list[str] | None = None) -> None:
     """Parse arguments, build prompts/options, and run the monitoring agent."""
     args = parse_args(argv)
 
-    cwd = args.target_dir
-    scripts_dir = resolve_scripts_dir()
+    with logfire.span("runner.main", node_id=args.node, prd_ref=args.prd, session=args.session, dry_run=args.dry_run):
+        cwd = args.target_dir
+        scripts_dir = resolve_scripts_dir()
 
-    system_prompt = build_system_prompt(
-        node_id=args.node,
-        prd_ref=args.prd,
-        session_name=args.session,
-        acceptance=args.acceptance or "",
-        scripts_dir=scripts_dir,
-        check_interval=args.check_interval,
-        stuck_threshold=args.stuck_threshold,
-    )
+        system_prompt = build_system_prompt(
+            node_id=args.node,
+            prd_ref=args.prd,
+            session_name=args.session,
+            acceptance=args.acceptance or "",
+            scripts_dir=scripts_dir,
+            check_interval=args.check_interval,
+            stuck_threshold=args.stuck_threshold,
+        )
 
-    initial_prompt = build_initial_prompt(
-        node_id=args.node,
-        prd_ref=args.prd,
-        session_name=args.session,
-        acceptance=args.acceptance or "",
-        scripts_dir=scripts_dir,
-        check_interval=args.check_interval,
-        stuck_threshold=args.stuck_threshold,
-    )
+        initial_prompt = build_initial_prompt(
+            node_id=args.node,
+            prd_ref=args.prd,
+            session_name=args.session,
+            acceptance=args.acceptance or "",
+            scripts_dir=scripts_dir,
+            check_interval=args.check_interval,
+            stuck_threshold=args.stuck_threshold,
+        )
 
-    options = build_options(
-        system_prompt=system_prompt,
-        cwd=cwd,
-        model=args.model,
-        max_turns=args.max_turns,
-    )
+        options = build_options(
+            system_prompt=system_prompt,
+            cwd=cwd,
+            model=args.model,
+            max_turns=args.max_turns,
+        )
 
-    # Dry-run: log config and exit without calling the SDK.
-    if args.dry_run:
-        config: dict[str, Any] = {
-            "dry_run": True,
-            "node_id": args.node,
-            "prd_ref": args.prd,
-            "session_name": args.session,
-            "dot_file": args.dot_file,
-            "solution_design": args.solution_design,
-            "acceptance": args.acceptance,
-            "target_dir": cwd,
-            "bead_id": args.bead_id,
-            "check_interval": args.check_interval,
-            "stuck_threshold": args.stuck_threshold,
-            "max_turns": args.max_turns,
-            "model": args.model,
-            "signals_dir": args.signals_dir,
-            "scripts_dir": scripts_dir,
-            "system_prompt_length": len(system_prompt),
-            "initial_prompt_length": len(initial_prompt),
-        }
-        print(json.dumps(config, indent=2))
-        sys.exit(0)
+        # Dry-run: log config and exit without calling the SDK.
+        if args.dry_run:
+            config: dict[str, Any] = {
+                "dry_run": True,
+                "node_id": args.node,
+                "prd_ref": args.prd,
+                "session_name": args.session,
+                "dot_file": args.dot_file,
+                "solution_design": args.solution_design,
+                "acceptance": args.acceptance,
+                "target_dir": cwd,
+                "bead_id": args.bead_id,
+                "check_interval": args.check_interval,
+                "stuck_threshold": args.stuck_threshold,
+                "max_turns": args.max_turns,
+                "model": args.model,
+                "signals_dir": args.signals_dir,
+                "scripts_dir": scripts_dir,
+                "system_prompt_length": len(system_prompt),
+                "initial_prompt_length": len(initial_prompt),
+            }
+            print(json.dumps(config, indent=2))
+            sys.exit(0)
 
-    # Live run: invoke the Agent SDK.
-    try:
-        asyncio.run(_run_agent(initial_prompt, options))
-    except KeyboardInterrupt:
-        print("[Runner] Interrupted by user.", flush=True)
-        sys.exit(130)
-    except Exception as exc:
-        print(f"[Runner error] {exc}", file=sys.stderr, flush=True)
-        sys.exit(1)
+        # Live run: invoke the Agent SDK.
+        try:
+            asyncio.run(_run_agent(initial_prompt, options))
+        except KeyboardInterrupt:
+            print("[Runner] Interrupted by user.", flush=True)
+            sys.exit(130)
+        except Exception as exc:
+            print(f"[Runner error] {exc}", file=sys.stderr, flush=True)
+            sys.exit(1)
 
 
 if __name__ == "__main__":

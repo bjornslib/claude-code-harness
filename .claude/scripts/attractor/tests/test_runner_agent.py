@@ -556,5 +556,38 @@ class TestResolveScriptsDir(unittest.TestCase):
         )
 
 
+# ---------------------------------------------------------------------------
+# TestLogfireInstrumentation
+# ---------------------------------------------------------------------------
+
+
+class TestLogfireInstrumentation(unittest.TestCase):
+    """Tests that logfire instrumentation is present and doesn't break functionality."""
+
+    def test_has_logfire_flag(self):
+        """runner_agent should have _HAS_LOGFIRE defined."""
+        self.assertTrue(hasattr(runner_agent, '_HAS_LOGFIRE'))
+
+    def test_logfire_noop_when_not_installed(self):
+        """When logfire is not installed, _HAS_LOGFIRE should still be defined."""
+        self.assertIsInstance(runner_agent._HAS_LOGFIRE, bool)
+
+    def test_build_system_prompt_works_with_logfire(self):
+        """build_system_prompt should work regardless of logfire availability."""
+        result = _make_system_prompt()
+        self.assertIsInstance(result, str)
+        self.assertGreater(len(result), 100)
+
+    def test_build_options_works_with_logfire(self):
+        """build_options should work regardless of logfire availability."""
+        opts = build_options(
+            system_prompt="test",
+            cwd="/tmp",
+            model=DEFAULT_MODEL,
+            max_turns=DEFAULT_MAX_TURNS,
+        )
+        self.assertEqual(opts.allowed_tools, ["Bash"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
