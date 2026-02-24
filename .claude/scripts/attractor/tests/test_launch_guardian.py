@@ -38,6 +38,7 @@ from launch_guardian import (  # noqa: E402
     build_system_prompt,
     handle_escalation,
     handle_pipeline_complete,
+    handle_validation_complete,
     monitor_guardian,
     parse_args,
     resolve_scripts_dir,
@@ -1065,6 +1066,136 @@ class TestCLIMultiMode(unittest.TestCase):
         pipeline_ids = {r["pipeline_id"] for r in data}
         self.assertIn("alpha", pipeline_ids)
         self.assertIn("beta", pipeline_ids)
+
+
+# ---------------------------------------------------------------------------
+# TestHandleValidationComplete (AC-4)
+# ---------------------------------------------------------------------------
+
+
+def _make_validation_complete_signal(**overrides) -> dict:
+    """Return a minimal valid VALIDATION_COMPLETE signal dict from a Runner."""
+    base = {
+        "source": "runner",
+        "target": "terminal",
+        "signal_type": "VALIDATION_COMPLETE",
+        "timestamp": "20260224T140000Z",
+        "payload": {
+            "node_id": "impl_auth",
+            "pipeline_id": _PIPELINE_ID,
+            "summary": "Node impl_auth validated",
+        },
+    }
+    base.update(overrides)
+    return base
+
+
+class TestHandleValidationComplete(unittest.TestCase):
+    """Tests for handle_validation_complete() — AC-4."""
+
+    def test_returns_dict(self) -> None:
+        result = handle_validation_complete(_make_validation_complete_signal(), _DOT_PATH)
+        self.assertIsInstance(result, dict)
+
+    def test_status_is_validation_complete(self) -> None:
+        result = handle_validation_complete(_make_validation_complete_signal(), _DOT_PATH)
+        self.assertEqual(result["status"], "validation_complete")
+
+    def test_node_id_extracted(self) -> None:
+        result = handle_validation_complete(_make_validation_complete_signal(), _DOT_PATH)
+        self.assertEqual(result["node_id"], "impl_auth")
+
+    def test_pipeline_id_extracted(self) -> None:
+        result = handle_validation_complete(_make_validation_complete_signal(), _DOT_PATH)
+        self.assertEqual(result["pipeline_id"], _PIPELINE_ID)
+
+    def test_dot_path_preserved(self) -> None:
+        result = handle_validation_complete(_make_validation_complete_signal(), _DOT_PATH)
+        self.assertEqual(result["dot_path"], _DOT_PATH)
+
+    def test_summary_extracted(self) -> None:
+        result = handle_validation_complete(_make_validation_complete_signal(), _DOT_PATH)
+        self.assertEqual(result["summary"], "Node impl_auth validated")
+
+    def test_timestamp_extracted(self) -> None:
+        result = handle_validation_complete(_make_validation_complete_signal(), _DOT_PATH)
+        self.assertEqual(result["timestamp"], "20260224T140000Z")
+
+    def test_source_extracted(self) -> None:
+        result = handle_validation_complete(_make_validation_complete_signal(), _DOT_PATH)
+        self.assertEqual(result["source"], "runner")
+
+    def test_raw_signal_preserved(self) -> None:
+        signal = _make_validation_complete_signal()
+        result = handle_validation_complete(signal, _DOT_PATH)
+        self.assertEqual(result["raw"], signal)
+
+    def test_missing_node_id_defaults_to_unknown(self) -> None:
+        signal = _make_validation_complete_signal()
+        signal["payload"].pop("node_id", None)
+        result = handle_validation_complete(signal, _DOT_PATH)
+        self.assertEqual(result["node_id"], "unknown")
+
+    def test_missing_pipeline_id_defaults_to_empty(self) -> None:
+        signal = _make_validation_complete_signal()
+        signal["payload"].pop("pipeline_id", None)
+        result = handle_validation_complete(signal, _DOT_PATH)
+        self.assertEqual(result["pipeline_id"], "")
+
+    def test_empty_signal_handled_gracefully(self) -> None:
+        result = handle_validation_complete({}, "/tmp/p.dot")
+        self.assertEqual(result["status"], "validation_complete")
+        self.assertEqual(result["node_id"], "unknown")
+
+    def test_custom_dot_path(self) -> None:
+        result = handle_validation_complete(
+            _make_validation_complete_signal(), "/custom/pipeline.dot"
+        )
+        self.assertEqual(result["dot_path"], "/custom/pipeline.dot")
+
+
+class TestMonitorGuardianValidationComplete(unittest.TestCase):
+    """Tests for monitor_guardian() handling VALIDATION_COMPLETE signals — AC-4."""
+
+    def _call_monitor(self, signal_data=None, **kwargs) -> dict:
+        def mock_wait_for_signal(**wait_kwargs):
+            return signal_data
+
+        with patch("launch_guardian.wait_for_signal", mock_wait_for_signal):
+            return monitor_guardian(
+                guardian_process=None,
+                dot_path="/tmp/pipeline.dot",
+                **kwargs,
+            )
+
+    def test_validation_complete_signal_returns_validation_complete_status(self) -> None:
+        """monitor_guardian must return validation_complete status for VALIDATION_COMPLETE."""
+        signal = _make_validation_complete_signal()
+        result = self._call_monitor(signal_data=signal)
+        self.assertEqual(result["status"], "validation_complete")
+
+    def test_validation_complete_has_node_id(self) -> None:
+        signal = _make_validation_complete_signal()
+        result = self._call_monitor(signal_data=signal)
+        self.assertIn("node_id", result)
+        self.assertEqual(result["node_id"], "impl_auth")
+
+    def test_validation_complete_has_dot_path(self) -> None:
+        signal = _make_validation_complete_signal()
+        result = self._call_monitor(signal_data=signal)
+        self.assertEqual(result["dot_path"], "/tmp/pipeline.dot")
+
+    def test_validation_complete_not_treated_as_escalation(self) -> None:
+        """VALIDATION_COMPLETE must NOT route through handle_escalation."""
+        signal = _make_validation_complete_signal()
+        result = self._call_monitor(signal_data=signal)
+        self.assertNotEqual(result["status"], "escalation")
+
+    def test_validation_complete_not_treated_as_pipeline_complete(self) -> None:
+        """VALIDATION_COMPLETE must NOT route through handle_pipeline_complete."""
+        signal = _make_validation_complete_signal()
+        result = self._call_monitor(signal_data=signal)
+        self.assertNotEqual(result["status"], "complete")
 
 
 if __name__ == "__main__":

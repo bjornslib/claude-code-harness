@@ -589,5 +589,89 @@ class TestLogfireInstrumentation(unittest.TestCase):
         self.assertEqual(opts.allowed_tools, ["Bash"])
 
 
+# ---------------------------------------------------------------------------
+# TestSessionNameValidation (AC-2)
+# ---------------------------------------------------------------------------
+
+
+class TestSessionNameValidation(unittest.TestCase):
+    """Tests for AC-2: Session name validation in parse_args().
+
+    The runner monitors an existing session (does not create one), so
+    an s3-live- prefixed session name triggers a warning but not an error.
+    """
+
+    def test_s3_live_prefix_triggers_warning(self) -> None:
+        """parse_args with s3-live- session name must emit a UserWarning."""
+        with self.assertWarns(UserWarning) as ctx:
+            args = parse_args([
+                "--node", "impl_auth",
+                "--prd", "PRD-AUTH-001",
+                "--session", "s3-live-workers",
+                "--target-dir", "/tmp",
+            ])
+        # The warning message should mention the reserved prefix
+        warning_msg = str(ctx.warning)
+        self.assertIn("s3-live-", warning_msg)
+
+    def test_s3_live_prefix_does_not_raise(self) -> None:
+        """parse_args with s3-live- session should NOT raise SystemExit."""
+        try:
+            args = parse_args([
+                "--node", "impl_auth",
+                "--prd", "PRD-AUTH-001",
+                "--session", "s3-live-workers",
+                "--target-dir", "/tmp",
+            ])
+        except SystemExit:
+            self.fail("parse_args raised SystemExit for s3-live- session (should only warn)")
+
+    def test_valid_orch_prefix_no_warning(self) -> None:
+        """parse_args with orch- session should not emit a warning."""
+        import warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            parse_args([
+                "--node", "impl_auth",
+                "--prd", "PRD-AUTH-001",
+                "--session", "orch-impl-auth",
+                "--target-dir", "/tmp",
+            ])
+        user_warnings = [x for x in w if issubclass(x.category, UserWarning)]
+        self.assertEqual(len(user_warnings), 0,
+                         f"Unexpected warnings for orch- session: {user_warnings}")
+
+    def test_valid_runner_prefix_no_warning(self) -> None:
+        """parse_args with runner- session should not emit a warning."""
+        import warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            parse_args([
+                "--node", "impl_auth",
+                "--prd", "PRD-AUTH-001",
+                "--session", "runner-impl-auth",
+                "--target-dir", "/tmp",
+            ])
+        user_warnings = [x for x in w if issubclass(x.category, UserWarning)]
+        self.assertEqual(len(user_warnings), 0,
+                         f"Unexpected warnings for runner- session: {user_warnings}")
+
+    def test_warning_mentions_reserved_prefix(self) -> None:
+        """Warning message should explain the reserved prefix."""
+        import warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            parse_args([
+                "--node", "impl_auth",
+                "--prd", "PRD-AUTH-001",
+                "--session", "s3-live-anything",
+                "--target-dir", "/tmp",
+            ])
+        user_warnings = [x for x in w if issubclass(x.category, UserWarning)]
+        self.assertGreater(len(user_warnings), 0)
+        msg = str(user_warnings[0].message)
+        self.assertIn("s3-live-", msg)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

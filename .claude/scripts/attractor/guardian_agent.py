@@ -347,7 +347,7 @@ Examples:
                         help=f"Max retries per node before escalating (default: {DEFAULT_MAX_RETRIES})")
     parser.add_argument("--dry-run", action="store_true", dest="dry_run",
                         help="Log config without spawning the SDK agent (for testing)")
-    parser.add_argument("--target-dir", default="", dest="target_dir",
+    parser.add_argument("--target-dir", required=True, dest="target_dir",
                         help="Target implementation repo directory")
 
     return parser.parse_args(argv)
@@ -422,14 +422,8 @@ def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
 
     with logfire.span("guardian.main", pipeline_id=args.pipeline_id, model=args.model, dry_run=args.dry_run):
-        if not args.target_dir:
-            print(json.dumps({
-                "status": "error",
-                "message": "target_dir is required: pass --target-dir",
-            }))
-            sys.exit(1)
-
         dot_path = os.path.abspath(args.dot)
+        # project_root defaults to cwd (agent process dir); target_dir is mandatory
         cwd = args.project_root or os.getcwd()
         scripts_dir = resolve_scripts_dir()
 

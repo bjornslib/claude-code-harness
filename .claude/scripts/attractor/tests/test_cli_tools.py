@@ -165,6 +165,68 @@ class TestSignalGuardianCLI:
         # argparse error: exits with code 2
         assert rc != 0
 
+    def test_target_terminal_writes_signal_with_target_terminal(self, tmp_path):
+        """AC-4: signal_guardian.py --target terminal writes signal with target=terminal."""
+        signals_dir = str(tmp_path / "signals")
+        rc, stdout, _ = _run_cli(
+            "signal_guardian.py",
+            ["VALIDATION_COMPLETE", "--node", "impl_auth",
+             "--summary", "Node impl_auth validated",
+             "--target", "terminal"],
+            env_overrides={"ATTRACTOR_SIGNALS_DIR": signals_dir},
+        )
+        assert rc == 0, f"Expected exit 0, got {rc}. stdout={stdout}"
+        data = _parse_json_output(stdout)
+        assert data["status"] == "ok"
+        assert data["signal_type"] == "VALIDATION_COMPLETE"
+
+        # Verify the signal file has target=terminal
+        with open(data["signal_file"]) as fh:
+            signal = json.load(fh)
+        assert signal["target"] == "terminal"
+        assert signal["source"] == "runner"
+        assert signal["signal_type"] == "VALIDATION_COMPLETE"
+
+    def test_target_guardian_is_default(self, tmp_path):
+        """AC-4: signal_guardian.py without --target defaults to target=guardian."""
+        signals_dir = str(tmp_path / "signals")
+        rc, stdout, _ = _run_cli(
+            "signal_guardian.py",
+            ["NEEDS_REVIEW", "--node", "impl_auth"],
+            env_overrides={"ATTRACTOR_SIGNALS_DIR": signals_dir},
+        )
+        assert rc == 0
+        data = _parse_json_output(stdout)
+
+        with open(data["signal_file"]) as fh:
+            signal = json.load(fh)
+        assert signal["target"] == "guardian"
+
+    def test_target_invalid_choice_exits_with_error(self, tmp_path):
+        """signal_guardian.py --target invalid rejects with non-zero exit."""
+        signals_dir = str(tmp_path / "signals")
+        rc, stdout, stderr = _run_cli(
+            "signal_guardian.py",
+            ["NEEDS_REVIEW", "--node", "impl_auth", "--target", "invalid_target"],
+            env_overrides={"ATTRACTOR_SIGNALS_DIR": signals_dir},
+        )
+        assert rc != 0
+
+    def test_target_guardian_explicit_writes_to_guardian(self, tmp_path):
+        """AC-4: Explicitly passing --target guardian writes signal with target=guardian."""
+        signals_dir = str(tmp_path / "signals")
+        rc, stdout, _ = _run_cli(
+            "signal_guardian.py",
+            ["NEEDS_REVIEW", "--node", "impl_auth", "--target", "guardian"],
+            env_overrides={"ATTRACTOR_SIGNALS_DIR": signals_dir},
+        )
+        assert rc == 0
+        data = _parse_json_output(stdout)
+
+        with open(data["signal_file"]) as fh:
+            signal = json.load(fh)
+        assert signal["target"] == "guardian"
+
 
 # ---------------------------------------------------------------------------
 # TestReadSignalCLI

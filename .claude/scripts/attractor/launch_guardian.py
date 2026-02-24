@@ -521,8 +521,37 @@ def monitor_guardian(
     ):
         return handle_pipeline_complete(signal_data, dot_path)
 
+    if "VALIDATION_COMPLETE" in signal_type:
+        return handle_validation_complete(signal_data, dot_path)
+
     # Any other terminal-targeted signal is treated as an escalation.
     return handle_escalation(signal_data)
+
+
+def handle_validation_complete(
+    signal_data: dict[str, Any],
+    dot_path: str,
+) -> dict[str, Any]:
+    """Handle VALIDATION_COMPLETE signal from a Runner via terminal.
+
+    Args:
+        signal_data: Parsed signal dict from the Runner.
+        dot_path: Absolute path to the pipeline DOT file.
+
+    Returns:
+        Dict with validation complete details.
+    """
+    payload = signal_data.get("payload", {})
+    return {
+        "status": "validation_complete",
+        "node_id": payload.get("node_id", "unknown"),
+        "pipeline_id": payload.get("pipeline_id", ""),
+        "dot_path": dot_path,
+        "summary": payload.get("summary", ""),
+        "timestamp": signal_data.get("timestamp"),
+        "source": signal_data.get("source"),
+        "raw": signal_data,
+    }
 
 
 def handle_escalation(signal_data: dict[str, Any]) -> dict[str, Any]:

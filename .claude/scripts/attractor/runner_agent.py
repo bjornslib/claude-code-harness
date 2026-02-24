@@ -47,7 +47,9 @@ import argparse
 import asyncio
 import json
 import os
+import re
 import sys
+import warnings
 from typing import Any
 
 # Ensure this file's directory is importable regardless of invocation CWD.
@@ -176,6 +178,10 @@ The Guardian response will have signal_type one of:
 - INPUT_RESPONSE: Guardian made a decision → relay via send_to_orchestrator
 - KILL_ORCHESTRATOR: Guardian wants to abort → exit with appropriate code
 - GUIDANCE: Guardian sending proactive guidance → relay to orchestrator
+
+After receiving VALIDATION_PASSED, also notify the terminal layer:
+  python {scripts_dir}/signal_guardian.py VALIDATION_COMPLETE --node {node_id} --target terminal --summary "Node {node_id} validated"
+  Then exit normally.
 
 ## Completion
 - Exit normally when you receive VALIDATION_PASSED or KILL_ORCHESTRATOR
@@ -328,7 +334,19 @@ Examples:
     parser.add_argument("--dry-run", action="store_true", dest="dry_run",
                         help="Log config without spawning the SDK agent (for testing)")
 
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+
+    # Warn if session name uses reserved s3-live- prefix (runner monitors an existing
+    # session, doesn't create one, so we warn but don't block).
+    if args.session and re.match(r"s3-live-", args.session):
+        warnings.warn(
+            f"Session name '{args.session}' uses reserved 's3-live-' prefix. "
+            "Expected prefix is 'orch-' for orchestrator sessions.",
+            UserWarning,
+            stacklevel=2,
+        )
+
+    return args
 
 
 def resolve_scripts_dir() -> str:

@@ -79,13 +79,19 @@ def _make_initial_prompt(**overrides) -> str:
 class TestParseArgs(unittest.TestCase):
     """Tests for parse_args()."""
 
+    # Minimum required args now include --target-dir (made required in AC-3)
+    _MIN_ARGS = ["--dot", "/p.dot", "--pipeline-id", "p1", "--target-dir", "/tmp/target"]
+
     def test_required_args_only(self) -> None:
-        args = parse_args(["--dot", "/some/pipeline.dot", "--pipeline-id", "pipe-001"])
+        args = parse_args([
+            "--dot", "/some/pipeline.dot", "--pipeline-id", "pipe-001",
+            "--target-dir", "/tmp/target",
+        ])
         self.assertEqual(args.dot, "/some/pipeline.dot")
         self.assertEqual(args.pipeline_id, "pipe-001")
 
     def test_defaults(self) -> None:
-        args = parse_args(["--dot", "/p.dot", "--pipeline-id", "p1"])
+        args = parse_args(self._MIN_ARGS)
         self.assertEqual(args.max_turns, DEFAULT_MAX_TURNS)
         self.assertEqual(args.signal_timeout, DEFAULT_SIGNAL_TIMEOUT)
         self.assertEqual(args.max_retries, DEFAULT_MAX_RETRIES)
@@ -104,6 +110,7 @@ class TestParseArgs(unittest.TestCase):
             "--signals-dir", "/tmp/signals",
             "--signal-timeout", "300.5",
             "--max-retries", "5",
+            "--target-dir", "/tmp/target",
             "--dry-run",
         ])
         self.assertEqual(args.dot, "/tmp/pipeline.dot")
@@ -118,59 +125,62 @@ class TestParseArgs(unittest.TestCase):
 
     def test_missing_required_dot_exits(self) -> None:
         with self.assertRaises(SystemExit):
-            parse_args(["--pipeline-id", "p1"])
+            parse_args(["--pipeline-id", "p1", "--target-dir", "/tmp/target"])
 
     def test_missing_required_pipeline_id_exits(self) -> None:
         with self.assertRaises(SystemExit):
-            parse_args(["--dot", "/p.dot"])
+            parse_args(["--dot", "/p.dot", "--target-dir", "/tmp/target"])
+
+    def test_missing_target_dir_exits(self) -> None:
+        """AC-3: --target-dir is now required; missing it must raise SystemExit."""
+        with self.assertRaises(SystemExit):
+            parse_args(["--dot", "/p.dot", "--pipeline-id", "p1"])
 
     def test_missing_all_required_exits(self) -> None:
         with self.assertRaises(SystemExit):
             parse_args([])
 
     def test_max_turns_type(self) -> None:
-        args = parse_args(["--dot", "/p.dot", "--pipeline-id", "p1", "--max-turns", "150"])
+        args = parse_args(self._MIN_ARGS + ["--max-turns", "150"])
         self.assertIsInstance(args.max_turns, int)
         self.assertEqual(args.max_turns, 150)
 
     def test_signal_timeout_type(self) -> None:
-        args = parse_args(["--dot", "/p.dot", "--pipeline-id", "p1", "--signal-timeout", "120.0"])
+        args = parse_args(self._MIN_ARGS + ["--signal-timeout", "120.0"])
         self.assertIsInstance(args.signal_timeout, float)
         self.assertEqual(args.signal_timeout, 120.0)
 
     def test_max_retries_type(self) -> None:
-        args = parse_args(["--dot", "/p.dot", "--pipeline-id", "p1", "--max-retries", "7"])
+        args = parse_args(self._MIN_ARGS + ["--max-retries", "7"])
         self.assertIsInstance(args.max_retries, int)
         self.assertEqual(args.max_retries, 7)
 
     def test_dry_run_default_false(self) -> None:
-        args = parse_args(["--dot", "/p.dot", "--pipeline-id", "p1"])
+        args = parse_args(self._MIN_ARGS)
         self.assertFalse(args.dry_run)
 
     def test_dry_run_flag_true(self) -> None:
-        args = parse_args(["--dot", "/p.dot", "--pipeline-id", "p1", "--dry-run"])
+        args = parse_args(self._MIN_ARGS + ["--dry-run"])
         self.assertTrue(args.dry_run)
 
     def test_project_root_optional(self) -> None:
-        args = parse_args(["--dot", "/p.dot", "--pipeline-id", "p1",
-                           "--project-root", "/my/root"])
+        args = parse_args(self._MIN_ARGS + ["--project-root", "/my/root"])
         self.assertEqual(args.project_root, "/my/root")
 
     def test_signals_dir_optional(self) -> None:
-        args = parse_args(["--dot", "/p.dot", "--pipeline-id", "p1",
-                           "--signals-dir", "/my/signals"])
+        args = parse_args(self._MIN_ARGS + ["--signals-dir", "/my/signals"])
         self.assertEqual(args.signals_dir, "/my/signals")
 
     def test_default_max_turns_is_200(self) -> None:
-        args = parse_args(["--dot", "/p.dot", "--pipeline-id", "p1"])
+        args = parse_args(self._MIN_ARGS)
         self.assertEqual(args.max_turns, 200)
 
     def test_default_signal_timeout_is_600(self) -> None:
-        args = parse_args(["--dot", "/p.dot", "--pipeline-id", "p1"])
+        args = parse_args(self._MIN_ARGS)
         self.assertEqual(args.signal_timeout, 600.0)
 
     def test_default_max_retries_is_3(self) -> None:
-        args = parse_args(["--dot", "/p.dot", "--pipeline-id", "p1"])
+        args = parse_args(self._MIN_ARGS)
         self.assertEqual(args.max_retries, 3)
 
 
@@ -507,7 +517,8 @@ class TestDryRunMode(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 with redirect_stdout(buf):
                     guardian_agent.main(
-                        ["--dot", "/tmp/p.dot", "--pipeline-id", "p", "--dry-run"]
+                        ["--dot", "/tmp/p.dot", "--pipeline-id", "p",
+                         "--target-dir", "/tmp", "--dry-run"]
                     )
             mock_run.assert_not_called()
 

@@ -5,6 +5,7 @@ Usage:
         [--evidence <path>] [--question <text>] [--options <json>]
         [--commit <hash>] [--summary <text>] [--reason <text>]
         [--last-output <text>] [--duration <seconds>]
+        [--target {guardian,terminal}]
 
 Output (stdout, JSON):
     {"status": "ok", "signal_file": "<path>", "signal_type": "<type>"}
@@ -54,6 +55,8 @@ def main() -> None:
                         help="Last output text from orchestrator")
     parser.add_argument("--duration", default=None, type=float,
                         help="Duration in seconds")
+    parser.add_argument("--target", default="guardian", choices=["guardian", "terminal"],
+                        help="Signal target (default: guardian)")
 
     args = parser.parse_args()
 
@@ -82,7 +85,7 @@ def main() -> None:
     try:
         signal_file = write_signal(
             source="runner",
-            target="guardian",
+            target=args.target,
             signal_type=args.signal_type,
             payload=payload,
         )
