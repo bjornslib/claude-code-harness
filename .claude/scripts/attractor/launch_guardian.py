@@ -1,0 +1,691 @@
+#!/usr/bin/env python3
+"""launch_guardian.py — Terminal-to-Guardian Bridge (Layer 0).
+
+Provides the interactive terminal (ccsystem3 / Layer 0) with the ability to
+launch one or more Headless Guardian agents (Layer 1) via the claude_code_sdk,
+monitor them for terminal-targeted signals, and handle escalations or
+completion events.
+
+Architecture:
+    launch_guardian.py (Layer 0 — interactive terminal process)
+        │
+        ├── parse_args()           → CLI argument parsing
+        ├── launch_guardian()      → Single guardian launch via Agent SDK query()
+        ├── launch_multiple_guardians() → Parallel launch via asyncio.gather
+        ├── monitor_guardian()     → Health-check loop watching terminal signals
+        ├── handle_escalation()    → Format + forward Guardian escalation to user
+        └── handle_pipeline_complete() → Finalize and summarise a completed pipeline
+
+CLAUDECODE environment note:
+    The Guardian may be launched from inside a Claude Code session. To avoid
+    nested-session conflicts we pass env={"CLAUDECODE": ""} as a workaround
+    to suppress the variable. The definitive fix (subprocess.Popen with a
+    cleaned env) lives in spawn_runner.py and will be implemented in a later
+    epic.
+
+Usage:
+    # Single guardian
+    python launch_guardian.py \\
+        --dot <path_to_pipeline.dot> \\
+        --pipeline-id <id> \\
+        [--project-root <path>] \\
+        [--model <model_id>] \\
+        [--max-turns <n>] \\
+        [--signal-timeout <seconds>] \\
+        [--max-retries <n>] \\
+        [--signals-dir <path>] \\
+        [--dry-run]
+
+    # Parallel launch from JSON config
+    python launch_guardian.py --multi <configs.json>
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import json
+import os
+import sys
+from typing import Any, Optional
+
+# Ensure this file's directory is importable regardless of invocation CWD.
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+if _THIS_DIR not in sys.path:
+    sys.path.insert(0, _THIS_DIR)
+
+# Import signal_protocol at module level so tests can patch
+# ``launch_guardian.wait_for_signal`` directly via unittest.mock.patch.
+from signal_protocol import wait_for_signal  # noqa: E402
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+DEFAULT_MODEL = "claude-sonnet-4-6"
+DEFAULT_MAX_TURNS = 200          # matches guardian_agent defaults
+DEFAULT_SIGNAL_TIMEOUT = 600     # 10 minutes per wait cycle
+DEFAULT_MAX_RETRIES = 3          # max retries per node before escalating
+DEFAULT_MONITOR_TIMEOUT = 3600   # 1 hour total monitor timeout
+
+
+# ---------------------------------------------------------------------------
+# Public helper functions (importable for testing)
+# ---------------------------------------------------------------------------
+
+
+def build_system_prompt(
+    dot_path: str,
+    pipeline_id: str,
+    scripts_dir: str,
+    signal_timeout: float,
+    max_retries: int,
+) -> str:
+    """Return the system prompt for the Guardian agent launched by Layer 0.
+
+    This delegates directly to guardian_agent.build_system_prompt so that
+    the prompt content stays consistent. Imported lazily to avoid circular
+    import issues when running in contexts where guardian_agent is not yet
+    on the path.
+
+    Args:
+        dot_path: Absolute path to the pipeline DOT file.
+        pipeline_id: Unique pipeline identifier string.
+        scripts_dir: Absolute path to the attractor scripts directory.
+        signal_timeout: Seconds to wait per signal wait cycle.
+        max_retries: Maximum retries allowed per node before escalation.
+
+    Returns:
+        Formatted system prompt string.
+    """
+    import guardian_agent  # noqa: PLC0415 (lazy import — intentional)
+
+    return guardian_agent.build_system_prompt(
+        dot_path=dot_path,
+        pipeline_id=pipeline_id,
+        scripts_dir=scripts_dir,
+        signal_timeout=signal_timeout,
+        max_retries=max_retries,
+    )
+
+
+def build_initial_prompt(
+    dot_path: str,
+    pipeline_id: str,
+    scripts_dir: str,
+) -> str:
+    """Return the first user message sent to the Guardian agent.
+
+    Delegates to guardian_agent.build_initial_prompt for consistency.
+
+    Args:
+        dot_path: Absolute path to the pipeline DOT file.
+        pipeline_id: Unique pipeline identifier string.
+        scripts_dir: Absolute path to the attractor scripts directory.
+
+    Returns:
+        Formatted initial prompt string.
+    """
+    import guardian_agent  # noqa: PLC0415 (lazy import — intentional)
+
+    return guardian_agent.build_initial_prompt(
+        dot_path=dot_path,
+        pipeline_id=pipeline_id,
+        scripts_dir=scripts_dir,
+    )
+
+
+def build_env_config() -> dict[str, str]:
+    """Return environment overrides that suppress the CLAUDECODE variable.
+
+    We cannot *delete* env keys via ClaudeCodeOptions.env (it only
+    adds/overrides), so we override CLAUDECODE to an empty string.  The
+    authoritative fix is in spawn_runner.py which uses subprocess.Popen
+    with a fully cleaned environment.
+
+    Returns:
+        Dict of env var overrides to pass to ClaudeCodeOptions.
+    """
+    return {"CLAUDECODE": ""}
+
+
+def resolve_scripts_dir() -> str:
+    """Return the absolute path to the attractor scripts directory.
+
+    Returns:
+        Absolute path string.
+    """
+    return _THIS_DIR
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse CLI arguments for launch_guardian.py.
+
+    Args:
+        argv: Argument list (defaults to sys.argv[1:]).
+
+    Returns:
+        Parsed namespace.
+    """
+    parser = argparse.ArgumentParser(
+        prog="launch_guardian.py",
+        description=(
+            "Layer 0 Terminal-to-Guardian bridge: launch Guardian agents and "
+            "monitor pipeline execution."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python launch_guardian.py --dot /path/to/pipeline.dot --pipeline-id my-pipeline
+
+  python launch_guardian.py --dot /path/to/pipeline.dot --pipeline-id my-pipeline \\
+      --project-root /my/project --max-turns 300 --signal-timeout 300 --dry-run
+
+  python launch_guardian.py --multi /path/to/configs.json
+        """,
+    )
+
+    # Mutually exclusive groups: single-launch vs multi-launch
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--dot", dest="dot",
+                       help="Path to pipeline .dot file (single guardian mode)")
+    group.add_argument("--multi", dest="multi",
+                       help="Path to JSON file containing a list of pipeline configs")
+
+    parser.add_argument("--pipeline-id", dest="pipeline_id", default=None,
+                        help="Unique pipeline identifier (required with --dot)")
+    parser.add_argument("--project-root", default=None, dest="project_root",
+                        help="Working directory for the agent (default: cwd)")
+    parser.add_argument("--max-turns", type=int, default=DEFAULT_MAX_TURNS,
+                        dest="max_turns",
+                        help=f"Max SDK turns (default: {DEFAULT_MAX_TURNS})")
+    parser.add_argument("--model", default=DEFAULT_MODEL,
+                        help=f"Claude model to use (default: {DEFAULT_MODEL})")
+    parser.add_argument("--signals-dir", default=None, dest="signals_dir",
+                        help="Override signals directory path")
+    parser.add_argument("--signal-timeout", type=float, default=DEFAULT_SIGNAL_TIMEOUT,
+                        dest="signal_timeout",
+                        help=f"Seconds to wait per signal wait cycle (default: {DEFAULT_SIGNAL_TIMEOUT})")
+    parser.add_argument("--max-retries", type=int, default=DEFAULT_MAX_RETRIES,
+                        dest="max_retries",
+                        help=f"Max retries per node before escalating (default: {DEFAULT_MAX_RETRIES})")
+    parser.add_argument("--dry-run", action="store_true", dest="dry_run",
+                        help="Log configuration without invoking the SDK (for testing)")
+
+    ns = parser.parse_args(argv)
+
+    # Validate --dot requires --pipeline-id
+    if ns.dot is not None and ns.pipeline_id is None:
+        parser.error("--pipeline-id is required when using --dot")
+
+    return ns
+
+
+# ---------------------------------------------------------------------------
+# Async agent runner (internal)
+# ---------------------------------------------------------------------------
+
+
+async def _run_agent(initial_prompt: str, options: Any) -> None:
+    """Stream messages from the claude_code_sdk query and log them.
+
+    Args:
+        initial_prompt: The first user message to send to Claude.
+        options: Configured ClaudeCodeOptions instance.
+    """
+    from claude_code_sdk import (  # noqa: PLC0415 (lazy import — intentional)
+        query,
+        AssistantMessage,
+        TextBlock,
+        ToolUseBlock,
+        ResultMessage,
+    )
+
+    async for message in query(initial_prompt, options=options):
+        if isinstance(message, AssistantMessage):
+            for block in message.content:
+                if isinstance(block, TextBlock):
+                    print(f"[LaunchGuardian] {block.text}", flush=True)
+                elif isinstance(block, ToolUseBlock):
+                    input_preview = json.dumps(block.input)[:200]
+                    print(f"[LaunchGuardian tool] {block.name}: {input_preview}", flush=True)
+        elif isinstance(message, ResultMessage):
+            print(f"[LaunchGuardian done] stop_reason={message.stop_reason}", flush=True)
+
+
+# ---------------------------------------------------------------------------
+# Core public API
+# ---------------------------------------------------------------------------
+
+
+async def _launch_guardian_async(
+    dot_path: str,
+    project_root: str,
+    pipeline_id: str,
+    *,
+    model: str = DEFAULT_MODEL,
+    max_turns: int = DEFAULT_MAX_TURNS,
+    signal_timeout: float = DEFAULT_SIGNAL_TIMEOUT,
+    max_retries: int = DEFAULT_MAX_RETRIES,
+    signals_dir: Optional[str] = None,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Async implementation of launch_guardian().
+
+    Args:
+        dot_path: Absolute path to the pipeline DOT file.
+        project_root: Working directory for the agent.
+        pipeline_id: Unique pipeline identifier string.
+        model: Claude model identifier.
+        max_turns: Maximum SDK turns.
+        signal_timeout: Seconds to wait per signal wait cycle.
+        max_retries: Maximum retries per node before escalation.
+        signals_dir: Override signals directory path.
+        dry_run: If True, return config dict without invoking SDK.
+
+    Returns:
+        Dict with status and pipeline metadata.
+    """
+    scripts_dir = resolve_scripts_dir()
+
+    system_prompt = build_system_prompt(
+        dot_path=dot_path,
+        pipeline_id=pipeline_id,
+        scripts_dir=scripts_dir,
+        signal_timeout=signal_timeout,
+        max_retries=max_retries,
+    )
+
+    initial_prompt = build_initial_prompt(
+        dot_path=dot_path,
+        pipeline_id=pipeline_id,
+        scripts_dir=scripts_dir,
+    )
+
+    config: dict[str, Any] = {
+        "dry_run": dry_run,
+        "dot_path": dot_path,
+        "pipeline_id": pipeline_id,
+        "model": model,
+        "max_turns": max_turns,
+        "signal_timeout": signal_timeout,
+        "max_retries": max_retries,
+        "project_root": project_root,
+        "signals_dir": signals_dir,
+        "scripts_dir": scripts_dir,
+        "system_prompt_length": len(system_prompt),
+        "initial_prompt_length": len(initial_prompt),
+    }
+
+    if dry_run:
+        return config
+
+    # Build options (imported lazily to avoid SDK import at module level).
+    import guardian_agent  # noqa: PLC0415
+
+    options = guardian_agent.build_options(
+        system_prompt=system_prompt,
+        cwd=project_root,
+        model=model,
+        max_turns=max_turns,
+    )
+
+    try:
+        await _run_agent(initial_prompt, options)
+        return {
+            "status": "ok",
+            "pipeline_id": pipeline_id,
+            "dot_path": dot_path,
+        }
+    except Exception as exc:
+        return {
+            "status": "error",
+            "pipeline_id": pipeline_id,
+            "dot_path": dot_path,
+            "error": str(exc),
+        }
+
+
+def launch_guardian(
+    dot_path: str,
+    project_root: str,
+    pipeline_id: str,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Launch a single Guardian agent via the Agent SDK.
+
+    Constructs ClaudeCodeOptions with allowed_tools=["Bash"] and
+    env={"CLAUDECODE": ""}, then streams the SDK conversation until
+    the Guardian completes or errors.
+
+    Args:
+        dot_path: Path to the pipeline .dot file.
+        project_root: Working directory for the agent.
+        pipeline_id: Unique pipeline identifier string.
+        **kwargs: Optional overrides — model, max_turns, signal_timeout,
+                  max_retries, signals_dir, dry_run.
+
+    Returns:
+        Dict with ``status`` ("ok" | "error"), ``pipeline_id``, ``dot_path``,
+        and optionally ``error`` on failure.  In dry_run mode returns the
+        full config dict with ``dry_run: True``.
+    """
+    dot_path = os.path.abspath(dot_path)
+    return asyncio.run(
+        _launch_guardian_async(
+            dot_path=dot_path,
+            project_root=project_root,
+            pipeline_id=pipeline_id,
+            **kwargs,
+        )
+    )
+
+
+async def _launch_multiple_async(
+    pipeline_configs: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Async implementation of launch_multiple_guardians().
+
+    Args:
+        pipeline_configs: List of config dicts, each with at minimum
+            dot_path, project_root, pipeline_id.
+
+    Returns:
+        List of result dicts, one per config.
+    """
+    tasks = [
+        _launch_guardian_async(
+            dot_path=os.path.abspath(cfg["dot_path"]),
+            project_root=cfg.get("project_root", os.getcwd()),
+            pipeline_id=cfg["pipeline_id"],
+            model=cfg.get("model", DEFAULT_MODEL),
+            max_turns=cfg.get("max_turns", DEFAULT_MAX_TURNS),
+            signal_timeout=cfg.get("signal_timeout", DEFAULT_SIGNAL_TIMEOUT),
+            max_retries=cfg.get("max_retries", DEFAULT_MAX_RETRIES),
+            signals_dir=cfg.get("signals_dir"),
+            dry_run=cfg.get("dry_run", False),
+        )
+        for cfg in pipeline_configs
+    ]
+
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Normalise exceptions to error dicts so callers receive a uniform type.
+    output: list[dict[str, Any]] = []
+    for i, result in enumerate(results):
+        if isinstance(result, Exception):
+            cfg = pipeline_configs[i]
+            output.append({
+                "status": "error",
+                "pipeline_id": cfg.get("pipeline_id", "unknown"),
+                "dot_path": cfg.get("dot_path", "unknown"),
+                "error": str(result),
+            })
+        else:
+            output.append(result)  # type: ignore[arg-type]
+
+    return output
+
+
+def launch_multiple_guardians(
+    pipeline_configs: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Launch multiple Guardian agents concurrently.
+
+    Uses asyncio.gather with return_exceptions=True so an individual
+    failure does not abort the remaining launches.
+
+    Args:
+        pipeline_configs: List of config dicts, each with:
+            - dot_path (str, required)
+            - project_root (str, required)
+            - pipeline_id (str, required)
+            - model, max_turns, signal_timeout, max_retries,
+              signals_dir, dry_run (all optional)
+
+    Returns:
+        List of result dicts (one per config).  Any individual failure
+        is represented as ``{"status": "error", ...}`` rather than
+        raising an exception.
+    """
+    return asyncio.run(_launch_multiple_async(pipeline_configs))
+
+
+def monitor_guardian(
+    guardian_process: Any,
+    dot_path: str,
+    signals_dir: Optional[str] = None,
+    *,
+    timeout: float = DEFAULT_MONITOR_TIMEOUT,
+    poll_interval: float = 5.0,
+) -> dict[str, Any]:
+    """Watch for terminal-targeted signals from a running Guardian.
+
+    Polls the signals directory for signals with target="terminal" until
+    either a PIPELINE_COMPLETE or terminal-escalation signal arrives, or
+    the timeout is reached.
+
+    Args:
+        guardian_process: The guardian process handle (may be None for
+            signal-only monitoring).  Currently unused but reserved for
+            future process health checks.
+        dot_path: Absolute path to the pipeline DOT file (used for
+            metadata in returned dicts).
+        signals_dir: Override the default signals directory.
+        timeout: Maximum seconds to wait for a terminal signal.
+        poll_interval: Seconds between directory polls.
+
+    Returns:
+        Dict with ``status`` ("complete" | "escalation" | "timeout") and
+        the received ``signal_data`` (if any).
+    """
+    try:
+        signal_data = wait_for_signal(
+            target_layer="terminal",
+            timeout=timeout,
+            signals_dir=signals_dir,
+            poll_interval=poll_interval,
+        )
+    except TimeoutError:
+        return {
+            "status": "timeout",
+            "dot_path": dot_path,
+            "signal_data": None,
+        }
+    except Exception as exc:
+        return {
+            "status": "error",
+            "dot_path": dot_path,
+            "error": str(exc),
+            "signal_data": None,
+        }
+
+    signal_type = signal_data.get("signal_type", "")
+
+    if "PIPELINE_COMPLETE" in signal_type or (
+        signal_data.get("payload", {}).get("issue", "").startswith("PIPELINE_COMPLETE")
+    ):
+        return handle_pipeline_complete(signal_data, dot_path)
+
+    # Any other terminal-targeted signal is treated as an escalation.
+    return handle_escalation(signal_data)
+
+
+def handle_escalation(signal_data: dict[str, Any]) -> dict[str, Any]:
+    """Forward a Guardian escalation signal to the terminal user.
+
+    Reads the escalation signal payload and formats it for terminal
+    display as a JSON dict.
+
+    Args:
+        signal_data: Parsed signal dict with fields source, target,
+            signal_type, timestamp, payload.
+
+    Returns:
+        Dict with escalation details formatted for terminal display:
+        ``{"status": "escalation", "signal_type": ..., "pipeline_id": ...,
+           "issue": ..., "options": ..., "timestamp": ..., "raw": ...}``
+    """
+    payload = signal_data.get("payload", {})
+
+    result: dict[str, Any] = {
+        "status": "escalation",
+        "signal_type": signal_data.get("signal_type", "ESCALATE"),
+        "pipeline_id": payload.get("pipeline_id", "unknown"),
+        "issue": payload.get("issue", "No issue description provided"),
+        "options": payload.get("options"),
+        "timestamp": signal_data.get("timestamp"),
+        "source": signal_data.get("source"),
+        "raw": signal_data,
+    }
+
+    return result
+
+
+def handle_pipeline_complete(
+    signal_data: dict[str, Any],
+    dot_path: str,
+) -> dict[str, Any]:
+    """Finalise a pipeline after receiving PIPELINE_COMPLETE signal.
+
+    Reads the PIPELINE_COMPLETE signal payload and produces a completion
+    summary with node statuses.
+
+    Args:
+        signal_data: Parsed signal dict from the Guardian.
+        dot_path: Absolute path to the pipeline DOT file.
+
+    Returns:
+        Dict with completion summary:
+        ``{"status": "complete", "pipeline_id": ..., "dot_path": ...,
+           "node_statuses": ..., "timestamp": ..., "raw": ...}``
+    """
+    payload = signal_data.get("payload", {})
+
+    # Extract node statuses from payload if available (Guardian may include them).
+    node_statuses = payload.get("node_statuses", {})
+
+    # Parse issue string to extract structured data if node_statuses not present.
+    issue = payload.get("issue", "")
+    if not node_statuses and issue:
+        node_statuses = {"summary": issue}
+
+    result: dict[str, Any] = {
+        "status": "complete",
+        "pipeline_id": payload.get("pipeline_id", "unknown"),
+        "dot_path": dot_path,
+        "node_statuses": node_statuses,
+        "issue": issue,
+        "timestamp": signal_data.get("timestamp"),
+        "source": signal_data.get("source"),
+        "raw": signal_data,
+    }
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Main entry point
+# ---------------------------------------------------------------------------
+
+
+def main(argv: list[str] | None = None) -> None:
+    """Parse arguments and launch one or multiple Guardian agents."""
+    args = parse_args(argv)
+
+    # -----------------------------------------------------------------------
+    # Multi-launch mode: --multi <configs.json>
+    # -----------------------------------------------------------------------
+    if args.multi is not None:
+        multi_path = os.path.abspath(args.multi)
+        try:
+            with open(multi_path, encoding="utf-8") as fh:
+                configs = json.load(fh)
+        except FileNotFoundError:
+            print(json.dumps({
+                "status": "error",
+                "message": f"Config file not found: {multi_path}",
+            }))
+            sys.exit(1)
+        except json.JSONDecodeError as exc:
+            print(json.dumps({
+                "status": "error",
+                "message": f"Invalid JSON in {multi_path}: {exc}",
+            }))
+            sys.exit(1)
+
+        if not isinstance(configs, list):
+            print(json.dumps({
+                "status": "error",
+                "message": "--multi JSON file must contain a list of config dicts",
+            }))
+            sys.exit(1)
+
+        # Propagate top-level dry_run flag to all configs that don't set it.
+        if args.dry_run:
+            for cfg in configs:
+                cfg.setdefault("dry_run", True)
+
+        results = launch_multiple_guardians(configs)
+        print(json.dumps(results, indent=2))
+        return
+
+    # -----------------------------------------------------------------------
+    # Single guardian mode: --dot + --pipeline-id
+    # -----------------------------------------------------------------------
+    dot_path = os.path.abspath(args.dot)
+    cwd = args.project_root or os.getcwd()
+    scripts_dir = resolve_scripts_dir()
+
+    system_prompt = build_system_prompt(
+        dot_path=dot_path,
+        pipeline_id=args.pipeline_id,
+        scripts_dir=scripts_dir,
+        signal_timeout=args.signal_timeout,
+        max_retries=args.max_retries,
+    )
+
+    initial_prompt = build_initial_prompt(
+        dot_path=dot_path,
+        pipeline_id=args.pipeline_id,
+        scripts_dir=scripts_dir,
+    )
+
+    # Dry-run: log config and exit without calling the SDK.
+    if args.dry_run:
+        config: dict[str, Any] = {
+            "dry_run": True,
+            "dot_path": dot_path,
+            "pipeline_id": args.pipeline_id,
+            "model": args.model,
+            "max_turns": args.max_turns,
+            "signal_timeout": args.signal_timeout,
+            "max_retries": args.max_retries,
+            "project_root": cwd,
+            "signals_dir": args.signals_dir,
+            "scripts_dir": scripts_dir,
+            "system_prompt_length": len(system_prompt),
+            "initial_prompt_length": len(initial_prompt),
+        }
+        print(json.dumps(config, indent=2))
+        sys.exit(0)
+
+    # Live run: launch the Guardian agent.
+    result = launch_guardian(
+        dot_path=dot_path,
+        project_root=cwd,
+        pipeline_id=args.pipeline_id,
+        model=args.model,
+        max_turns=args.max_turns,
+        signal_timeout=args.signal_timeout,
+        max_retries=args.max_retries,
+        signals_dir=args.signals_dir,
+    )
+    print(json.dumps(result, indent=2))
+
+    if result.get("status") != "ok":
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
