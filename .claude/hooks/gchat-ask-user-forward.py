@@ -641,6 +641,13 @@ def main() -> None:
         print(json.dumps({"decision": "approve"}))
         return
 
+    # ── Check forwarding flag — disabled by default ──
+    forwarding_enabled = os.environ.get("GCHAT_FORWARDING_ENABLED", "")
+    if forwarding_enabled.lower() not in ("true", "1"):
+        # Forwarding disabled — fall through to normal interactive ask
+        print(json.dumps({"decision": "approve"}))
+        return
+
     # ── Branch: S3 sessions → forward to GChat and wait for user reply ──
     # ── Branch: Non-S3 sessions → Haiku auto-answer + GChat FYI notification ──
 

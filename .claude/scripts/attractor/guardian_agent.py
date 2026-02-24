@@ -52,6 +52,25 @@ if _THIS_DIR not in sys.path:
     sys.path.insert(0, _THIS_DIR)
 
 # ---------------------------------------------------------------------------
+# Optional Logfire instrumentation
+# ---------------------------------------------------------------------------
+try:
+    import logfire
+    logfire.configure()
+    _HAS_LOGFIRE = True
+except Exception:
+    _HAS_LOGFIRE = False
+
+    class _NoOpSpan:
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+
+    class _NoOpLogfire:
+        def span(self, *a, **kw): return _NoOpSpan()
+
+    logfire = _NoOpLogfire()  # type: ignore[assignment]
+
+# ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
@@ -87,9 +106,10 @@ def build_system_prompt(
     Returns:
         Formatted system prompt string.
     """
-    target_dir_line = f"- Target directory: {target_dir}"
-    target_dir_flag = f" --target-dir {target_dir}"
-    return f"""\
+    with logfire.span("guardian.build_system_prompt", pipeline_id=pipeline_id):
+        target_dir_line = f"- Target directory: {target_dir}"
+        target_dir_flag = f" --target-dir {target_dir}"
+        return f"""\
 You are a Headless Guardian agent (Layer 1) in a 4-layer pipeline execution system.
 
 Your role: Drive pipeline execution autonomously by reading the DOT graph, spawning
@@ -232,20 +252,21 @@ def build_initial_prompt(
     Returns:
         Formatted initial prompt string.
     """
-    target_dir_line = f"Target directory: {target_dir}\n" if target_dir else ""
-    return (
-        f"You are the Headless Guardian for pipeline '{pipeline_id}'.\n\n"
-        f"Pipeline DOT file: {dot_path}\n"
-        f"Scripts directory: {scripts_dir}\n"
-        f"{target_dir_line}\n"
-        f"Begin by:\n"
-        f"1. Parsing the pipeline to understand the full graph\n"
-        f"2. Validating the pipeline structure\n"
-        f"3. Getting current node statuses\n\n"
-        f"Then proceed with Phase 2 (dispatch ready nodes) of the execution flow.\n\n"
-        f"If the pipeline is already partially complete (some nodes are already validated),\n"
-        f"skip those nodes and continue from the current state.\n"
-    )
+    with logfire.span("guardian.build_initial_prompt", pipeline_id=pipeline_id):
+        target_dir_line = f"Target directory: {target_dir}\n" if target_dir else ""
+        return (
+            f"You are the Headless Guardian for pipeline '{pipeline_id}'.\n\n"
+            f"Pipeline DOT file: {dot_path}\n"
+            f"Scripts directory: {scripts_dir}\n"
+            f"{target_dir_line}\n"
+            f"Begin by:\n"
+            f"1. Parsing the pipeline to understand the full graph\n"
+            f"2. Validating the pipeline structure\n"
+            f"3. Getting current node statuses\n\n"
+            f"Then proceed with Phase 2 (dispatch ready nodes) of the execution flow.\n\n"
+            f"If the pipeline is already partially complete (some nodes are already validated),\n"
+            f"skip those nodes and continue from the current state.\n"
+        )
 
 
 def build_options(
@@ -269,18 +290,19 @@ def build_options(
     Returns:
         Configured ClaudeCodeOptions instance.
     """
-    from claude_code_sdk import ClaudeCodeOptions
+    with logfire.span("guardian.build_options", model=model):
+        from claude_code_sdk import ClaudeCodeOptions
 
-    return ClaudeCodeOptions(
-        allowed_tools=["Bash"],
-        system_prompt=system_prompt,
-        cwd=cwd,
-        model=model,
-        max_turns=max_turns,
-        # Suppress CLAUDECODE env var to avoid nested-session conflicts.
-        # Definitive fix (subprocess.Popen with cleaned env) is in spawn_runner.py.
-        env={"CLAUDECODE": ""},
-    )
+        return ClaudeCodeOptions(
+            allowed_tools=["Bash"],
+            system_prompt=system_prompt,
+            cwd=cwd,
+            model=model,
+            max_turns=max_turns,
+            # Suppress CLAUDECODE env var to avoid nested-session conflicts.
+            # Definitive fix (subprocess.Popen with cleaned env) is in spawn_runner.py.
+            env={"CLAUDECODE": ""},
+        )
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -377,16 +399,17 @@ async def _run_agent(initial_prompt: str, options: Any) -> None:
         ResultMessage,
     )
 
-    async for message in query(prompt=initial_prompt, options=options):
-        if isinstance(message, AssistantMessage):
-            for block in message.content:
-                if isinstance(block, TextBlock):
-                    print(f"[Guardian] {block.text}", flush=True)
-                elif isinstance(block, ToolUseBlock):
-                    input_preview = json.dumps(block.input)[:200]
-                    print(f"[Guardian tool] {block.name}: {input_preview}", flush=True)
-        elif isinstance(message, ResultMessage):
-            print(f"[Guardian done] result={message.result}", flush=True)
+    with logfire.span("guardian.run_agent"):
+        async for message in query(prompt=initial_prompt, options=options):
+            if isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if isinstance(block, TextBlock):
+                        print(f"[Guardian] {block.text}", flush=True)
+                    elif isinstance(block, ToolUseBlock):
+                        input_preview = json.dumps(block.input)[:200]
+                        print(f"[Guardian tool] {block.name}: {input_preview}", flush=True)
+            elif isinstance(message, ResultMessage):
+                print(f"[Guardian done] result={message.result}", flush=True)
 
 
 # ---------------------------------------------------------------------------
@@ -398,69 +421,70 @@ def main(argv: list[str] | None = None) -> None:
     """Parse arguments, build prompts/options, and run the Guardian agent."""
     args = parse_args(argv)
 
-    if not args.target_dir:
-        print(json.dumps({
-            "status": "error",
-            "message": "target_dir is required: pass --target-dir",
-        }))
-        sys.exit(1)
+    with logfire.span("guardian.main", pipeline_id=args.pipeline_id, model=args.model, dry_run=args.dry_run):
+        if not args.target_dir:
+            print(json.dumps({
+                "status": "error",
+                "message": "target_dir is required: pass --target-dir",
+            }))
+            sys.exit(1)
 
-    dot_path = os.path.abspath(args.dot)
-    cwd = args.project_root or os.getcwd()
-    scripts_dir = resolve_scripts_dir()
+        dot_path = os.path.abspath(args.dot)
+        cwd = args.project_root or os.getcwd()
+        scripts_dir = resolve_scripts_dir()
 
-    system_prompt = build_system_prompt(
-        dot_path=dot_path,
-        pipeline_id=args.pipeline_id,
-        scripts_dir=scripts_dir,
-        signal_timeout=args.signal_timeout,
-        max_retries=args.max_retries,
-        target_dir=args.target_dir,
-    )
+        system_prompt = build_system_prompt(
+            dot_path=dot_path,
+            pipeline_id=args.pipeline_id,
+            scripts_dir=scripts_dir,
+            signal_timeout=args.signal_timeout,
+            max_retries=args.max_retries,
+            target_dir=args.target_dir,
+        )
 
-    initial_prompt = build_initial_prompt(
-        dot_path=dot_path,
-        pipeline_id=args.pipeline_id,
-        scripts_dir=scripts_dir,
-        target_dir=args.target_dir,
-    )
+        initial_prompt = build_initial_prompt(
+            dot_path=dot_path,
+            pipeline_id=args.pipeline_id,
+            scripts_dir=scripts_dir,
+            target_dir=args.target_dir,
+        )
 
-    options = build_options(
-        system_prompt=system_prompt,
-        cwd=cwd,
-        model=args.model,
-        max_turns=args.max_turns,
-    )
+        options = build_options(
+            system_prompt=system_prompt,
+            cwd=cwd,
+            model=args.model,
+            max_turns=args.max_turns,
+        )
 
-    # Dry-run: log config and exit without calling the SDK.
-    if args.dry_run:
-        config: dict[str, Any] = {
-            "dry_run": True,
-            "dot_path": dot_path,
-            "pipeline_id": args.pipeline_id,
-            "model": args.model,
-            "max_turns": args.max_turns,
-            "signal_timeout": args.signal_timeout,
-            "max_retries": args.max_retries,
-            "project_root": cwd,
-            "signals_dir": args.signals_dir,
-            "target_dir": args.target_dir,
-            "scripts_dir": scripts_dir,
-            "system_prompt_length": len(system_prompt),
-            "initial_prompt_length": len(initial_prompt),
-        }
-        print(json.dumps(config, indent=2))
-        sys.exit(0)
+        # Dry-run: log config and exit without calling the SDK.
+        if args.dry_run:
+            config: dict[str, Any] = {
+                "dry_run": True,
+                "dot_path": dot_path,
+                "pipeline_id": args.pipeline_id,
+                "model": args.model,
+                "max_turns": args.max_turns,
+                "signal_timeout": args.signal_timeout,
+                "max_retries": args.max_retries,
+                "project_root": cwd,
+                "signals_dir": args.signals_dir,
+                "target_dir": args.target_dir,
+                "scripts_dir": scripts_dir,
+                "system_prompt_length": len(system_prompt),
+                "initial_prompt_length": len(initial_prompt),
+            }
+            print(json.dumps(config, indent=2))
+            sys.exit(0)
 
-    # Live run: invoke the Agent SDK.
-    try:
-        asyncio.run(_run_agent(initial_prompt, options))
-    except KeyboardInterrupt:
-        print("[Guardian] Interrupted by user.", flush=True)
-        sys.exit(130)
-    except Exception as exc:
-        print(f"[Guardian error] {exc}", file=sys.stderr, flush=True)
-        sys.exit(1)
+        # Live run: invoke the Agent SDK.
+        try:
+            asyncio.run(_run_agent(initial_prompt, options))
+        except KeyboardInterrupt:
+            print("[Guardian] Interrupted by user.", flush=True)
+            sys.exit(130)
+        except Exception as exc:
+            print(f"[Guardian error] {exc}", file=sys.stderr, flush=True)
+            sys.exit(1)
 
 
 if __name__ == "__main__":
