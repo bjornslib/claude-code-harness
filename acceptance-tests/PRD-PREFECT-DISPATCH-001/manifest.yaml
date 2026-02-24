@@ -1,0 +1,41 @@
+# PRD-PREFECT-DISPATCH-001: Blind Acceptance Test Manifest
+# Generated: 2026-02-24
+# Guardian use only — NOT visible to orchestrators or workers
+
+prd_id: PRD-PREFECT-DISPATCH-001
+title: "Prefect-Only Dispatch: Remove Scheduler as Call/Email Dispatcher"
+
+thresholds:
+  accept: 0.60
+  investigate: 0.40
+
+features:
+  - name: "Epic 4: Catch-Up Poller for Orphaned call_scheduled Tasks"
+    weight: 0.30
+    validation_method: code-analysis
+    scenarios: "scenarios-epic4.feature"
+    rationale: "Highest immediate value — recovers 34 stuck tasks, zero-risk safety net"
+
+  - name: "Epic 1: Move Call Dispatch Into Prefect Flow"
+    weight: 0.30
+    validation_method: code-analysis
+    scenarios: "scenarios-epic1.feature"
+    rationale: "Core architectural change — eliminates timing mismatch root cause"
+
+  - name: "Epic 3: pg_notify LISTEN Reconnection"
+    weight: 0.15
+    validation_method: code-analysis
+    scenarios: "scenarios-epic3.feature"
+    rationale: "Transition-period resilience, prevents silent event loss"
+
+  - name: "Epic 2: Email Dispatch Audit"
+    weight: 0.10
+    validation_method: code-analysis
+    scenarios: "scenarios-epic2.feature"
+    rationale: "Verification step with minimal expected code changes"
+
+  - name: "Epic 5: Scheduler Deprecation"
+    weight: 0.15
+    validation_method: code-analysis
+    scenarios: "scenarios-epic5.feature"
+    rationale: "Clean removal once all other epics validated"

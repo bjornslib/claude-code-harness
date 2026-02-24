@@ -1,0 +1,60 @@
+prd_id: PRD-S3-DOT-LIFECYCLE-001
+prd_title: "ZeroRepo-Powered Pipeline Lifecycle"
+prd_source: ".taskmaster/docs/PRD-S3-DOT-LIFECYCLE-001.md"
+generated: "2026-02-22T21:30:00+11:00"
+depends_on: "PRD-S3-ATTRACTOR-001"
+
+thresholds:
+  accept: 0.60
+  investigate: 0.40
+  reject: 0.40
+
+features:
+  - name: "Epic 1: ZeroRepo .dot Export"
+    description: "New export mode produces Attractor-compatible pipeline DOT from delta report"
+    weight: 0.30
+    validation_method: code-analysis
+    scenarios:
+      - "attractor_pipeline_export"
+      - "delta_to_node_mapping"
+      - "at_pairing_generation"
+      - "worker_type_inference"
+
+  - name: "Epic 2: Definition Pipeline Workflow"
+    description: "Single command from PRD to validated .dot graph with promise"
+    weight: 0.20
+    validation_method: code-analysis
+    scenarios:
+      - "end_to_end_definition"
+      - "checkpoint_and_promise"
+
+  - name: "Epic 3: Implementation Navigation"
+    description: "System 3 reads .dot to dispatch orchestrators with node metadata"
+    weight: 0.15
+    validation_method: code-analysis
+    scenarios:
+      - "deps_met_filter"
+      - "orchestrator_spawn_metadata"
+
+  - name: "Epic 4: Validation Gate Integration"
+    description: "Hexagon nodes trigger real validation with evidence and pass/fail routing"
+    weight: 0.20
+    validation_method: code-analysis
+    scenarios:
+      - "hexagon_activation"
+      - "dual_pass_validation"
+      - "fail_retry_routing"
+
+  - name: "Epic 5: Lifecycle Dashboard"
+    description: "Unified progress view across all pipeline stages"
+    weight: 0.08
+    validation_method: code-analysis
+    scenarios:
+      - "dashboard_output"
+
+  - name: "Epic 6: Regression Detection"
+    description: "Post-finalize baseline comparison catches unintended changes"
+    weight: 0.07
+    validation_method: code-analysis
+    scenarios:
+      - "regression_delta"

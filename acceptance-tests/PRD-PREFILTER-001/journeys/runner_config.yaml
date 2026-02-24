@@ -1,0 +1,16 @@
+services:
+  implementation_repo: "/Users/theb/Documents/Windsurf/DSPY_PreEmploymentDirectory_PoC"
+  target_files:
+    - "newsletter-agents/cli.py"
+    - "newsletter-agents/prefilter.py"
+    - "newsletter-agents/tests/test_prefilter_integration.py"
+
+validation:
+  method: code-analysis
+  requires_running_services: false
+  requires_browser: false
+
+notes: |
+  All validation for PRD-PREFILTER-001 Epic 1 is code-analysis only.
+  No live services needed — the pre-filter is a pure Python function
+  wired into a CLI command. Validation reads source code and runs pytest.

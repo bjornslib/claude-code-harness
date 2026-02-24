@@ -1,0 +1,68 @@
+prd_id: PRD-PREFILTER-001
+prd_title: "Pre-Filter Pipeline Integration"
+prd_source: "/Users/theb/Documents/Windsurf/DSPY_PreEmploymentDirectory_PoC/.taskmaster/docs/PRD-PREFILTER-001.md"
+generated: "2026-02-24T16:00:00Z"
+scope: "Epic 1 — CLI Pipeline Integration (Phase 1 Keyword Pre-Filter)"
+implementation_repo: "/Users/theb/Documents/Windsurf/DSPY_PreEmploymentDirectory_PoC"
+
+thresholds:
+  accept: 0.60
+  investigate: 0.40
+
+features:
+  - id: F1
+    name: "Trusted Source Bypass (_split_by_trust)"
+    weight: 0.25
+    validation_method: code-analysis
+    scenarios:
+      - "trusted_source_bypass"
+    prd_references:
+      - "AC-1.1"
+      - "AC-1.6"
+
+  - id: F2
+    name: "Pre-filter Pipeline Wiring"
+    weight: 0.30
+    validation_method: code-analysis
+    scenarios:
+      - "prefilter_pipeline_wiring"
+    prd_references:
+      - "AC-1.2"
+      - "AC-1.4"
+
+  - id: F3
+    name: "Pre-filter Statistics Display"
+    weight: 0.15
+    validation_method: code-analysis
+    scenarios:
+      - "prefilter_stats_display"
+    prd_references:
+      - "AC-1.3"
+
+  - id: F4
+    name: "--no-prefilter Escape Hatch"
+    weight: 0.10
+    validation_method: code-analysis
+    scenarios:
+      - "no_prefilter_flag"
+    prd_references:
+      - "AC-1.7"
+
+  - id: F5
+    name: "Integration Tests and Zero Breakage"
+    weight: 0.10
+    validation_method: code-analysis
+    scenarios:
+      - "integration_tests"
+    prd_references:
+      - "AC-1.5"
+      - "AC-1.6"
+
+  - id: F6
+    name: "Recombine Trusted + Filtered Streams"
+    weight: 0.10
+    validation_method: code-analysis
+    scenarios:
+      - "recombine_streams"
+    prd_references:
+      - "AC-1.4"

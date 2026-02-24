@@ -1,0 +1,52 @@
+prd_id: PRD-CLEANUP-001
+title: ".claude Directory Cleanup"
+created: 2026-02-24
+thresholds:
+  accept: 0.70
+  investigate: 0.45
+
+features:
+  - id: E1
+    name: "Empty / Placeholder Files"
+    weight: 0.10
+    validation_method: code-analysis
+
+  - id: E2
+    name: "Archive Directories"
+    weight: 0.10
+    validation_method: code-analysis
+
+  - id: E3
+    name: "Build Caches"
+    weight: 0.10
+    validation_method: code-analysis
+
+  - id: E4
+    name: "Orphaned Hooks"
+    weight: 0.15
+    validation_method: code-analysis
+
+  - id: E5
+    name: "Project-Specific Content"
+    weight: 0.10
+    validation_method: code-analysis
+
+  - id: E6
+    name: "Stale Utility Scripts"
+    weight: 0.10
+    validation_method: code-analysis
+
+  - id: E7
+    name: "Stale Commands"
+    weight: 0.10
+    validation_method: code-analysis
+
+  - id: E8
+    name: "Stale Runtime State"
+    weight: 0.10
+    validation_method: code-analysis
+
+  - id: E9
+    name: "Stale Documentation"
+    weight: 0.15
+    validation_method: code-analysis

@@ -1,0 +1,15 @@
+services:
+  # No frontend/backend services required — this is a CLI tool project
+  cli_path: ".claude/scripts/attractor/cli.py"
+  test_project: "~/Documents/Windsurf/story-writer"
+
+polling:
+  # Not applicable — all operations are synchronous CLI commands
+  interval_seconds: 1
+  max_wait_seconds: 30
+
+test_data:
+  # Test PRD for scaffold generation
+  test_prd: ".taskmaster/docs/PRD-S3-DOT-LIFECYCLE-002.md"
+  # Story-writer as E2E verification target
+  story_writer_path: "~/Documents/Windsurf/story-writer"

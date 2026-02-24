@@ -1,0 +1,38 @@
+prd_id: PRD-P1.1-FIXES-001
+prd_title: "Test Collection Fixes + client_reference → client_id FK"
+prd_source: "/Users/theb/Documents/Windsurf/zenagent2/zenagent/agencheck/documentation/prds/phase-1.1/PRD-P1.1-FIXES-001.md"
+generated: "2026-02-22T22:00:00+11:00"
+mode: guardian
+
+thresholds:
+  accept: 0.60
+  investigate: 0.40
+
+features:
+  - name: "F1 — Fix 13 Test Collection Errors"
+    weight: 0.45
+    validation_method: code-analysis
+    scenarios:
+      - "test_collection_fixes"
+      - "debug_script_deletion"
+      - "import_correctness"
+
+  - name: "F2 — client_id FK Migration (Local DB)"
+    weight: 0.30
+    validation_method: api-required
+    scenarios:
+      - "migration_applied"
+      - "indexes_recreated"
+
+  - name: "F3 — Application Code Updates (client_id)"
+    weight: 0.15
+    validation_method: code-analysis
+    scenarios:
+      - "code_references_updated"
+      - "pydantic_models_updated"
+
+  - name: "F4 — Planning Document Updates"
+    weight: 0.10
+    validation_method: code-analysis
+    scenarios:
+      - "prd_documents_updated"

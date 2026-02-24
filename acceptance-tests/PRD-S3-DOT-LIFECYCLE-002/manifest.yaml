@@ -1,0 +1,54 @@
+prd_id: PRD-S3-DOT-LIFECYCLE-002
+prd_title: "LLM-Collaborative Attractor Pipeline: Graph Manipulation Foundation"
+prd_source: ".taskmaster/docs/PRD-S3-DOT-LIFECYCLE-002.md"
+generated: "2026-02-23T12:00:00Z"
+phase: "Phase 1 of 4"
+
+thresholds:
+  accept: 0.60
+  investigate: 0.40
+
+features:
+  - name: "Epic A — Node CRUD Operations"
+    weight: 0.30
+    validation_method: code-analysis
+    scenarios:
+      - "node_add"
+      - "node_add_at_pairing"
+      - "node_remove"
+      - "node_remove_cascade"
+      - "node_modify"
+      - "node_validation"
+
+  - name: "Epic B — Edge CRUD Operations"
+    weight: 0.30
+    validation_method: code-analysis
+    scenarios:
+      - "edge_add"
+      - "edge_add_cycle_detection"
+      - "edge_remove"
+      - "edge_list"
+      - "edge_validation"
+
+  - name: "Epic C — Scaffold Generation Mode"
+    weight: 0.20
+    validation_method: code-analysis
+    scenarios:
+      - "scaffold_basic"
+      - "scaffold_prd_aware"
+      - "scaffold_validation"
+
+  - name: "Epic D — Documentation Updates"
+    weight: 0.10
+    validation_method: code-analysis
+    scenarios:
+      - "s3_output_style_docs"
+      - "orchestrator_skill_docs"
+
+  - name: "Epic E — E2E Verification"
+    weight: 0.10
+    validation_method: code-analysis
+    scenarios:
+      - "story_writer_scaffold"
+      - "story_writer_refine"
+      - "story_writer_lifecycle"
