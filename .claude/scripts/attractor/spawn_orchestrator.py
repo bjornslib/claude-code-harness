@@ -2,11 +2,11 @@
 
 Usage:
     python spawn_orchestrator.py --node <node_id> --prd <prd_ref>
-        [--worktree <path>] [--session-name <name>] [--prompt <text>]
+        --worktree <path> [--session-name <name>] [--prompt <text>]
 
-Creates a tmux session named orch-<node_id> (or --session-name) and runs:
-    cd <worktree or current dir> && claude --output-style orchestrator
-Then sends the prompt via tmux send-keys.
+Creates a tmux session named orch-<node_id> (or --session-name) IN the
+worktree directory, boots Claude Code, sets the orchestrator output style
+via slash command, then sends the prompt.
 
 Output (stdout, JSON):
     {"status": "ok", "session": "<name>", "tmux_cmd": "<command run>"}
@@ -24,6 +24,20 @@ import shlex
 import subprocess
 import sys
 import os
+import time
+
+
+def _tmux_send(session: str, text: str, pause: float = 2.0) -> None:
+    """Send text to tmux with Enter as separate call (Pattern 1 from MEMORY.md)."""
+    subprocess.run(
+        ["tmux", "send-keys", "-t", session, text],
+        check=True, capture_output=True, text=True,
+    )
+    time.sleep(pause)
+    subprocess.run(
+        ["tmux", "send-keys", "-t", session, "Enter"],
+        check=True, capture_output=True, text=True,
+    )
 
 
 def main() -> None:
@@ -33,7 +47,7 @@ def main() -> None:
     )
     parser.add_argument("--node", required=True, help="Node identifier")
     parser.add_argument("--prd", required=True, help="PRD reference (e.g., PRD-AUTH-001)")
-    parser.add_argument("--worktree", default=None, help="Working directory path")
+    parser.add_argument("--worktree", required=True, help="Working directory (target repo)")
     parser.add_argument("--session-name", default=None, dest="session_name",
                         help="tmux session name (default: orch-<node>)")
     parser.add_argument("--prompt", default=None,
@@ -42,19 +56,20 @@ def main() -> None:
     args = parser.parse_args()
 
     session_name = args.session_name or f"orch-{args.node}"
-    work_dir = args.worktree or os.getcwd()
+    work_dir = args.worktree
 
-    # Build the shell command to run inside tmux
-    shell_cmd = f"cd {shlex.quote(work_dir)} && claude --output-style orchestrator"
-
-    # tmux new-session command
+    # tmux new-session — start a clean shell IN the target directory via -c.
+    # We use "exec zsh" (not "claude" directly) because:
+    # 1. CLAUDECODE env var must be unset to avoid nested-session error
+    # 2. Shell environment (PATH, etc.) must be properly initialized
     tmux_cmd = [
         "tmux", "new-session",
         "-d",               # detached
         "-s", session_name,
+        "-c", work_dir,     # tmux starts IN target dir
         "-x", "220",        # width
         "-y", "50",         # height
-        shell_cmd,
+        "exec zsh",         # clean shell (ccorch pattern from MEMORY.md)
     ]
 
     try:
@@ -81,16 +96,35 @@ def main() -> None:
         print(json.dumps({"status": "error", "message": str(exc)}))
         sys.exit(1)
 
-    # Optionally send initial prompt
+    # Wait for shell to initialize
+    time.sleep(2)
+
+    # Unset CLAUDECODE to avoid nested-session error, then launch claude
+    try:
+        _tmux_send(session_name, "unset CLAUDECODE && claude", pause=8.0)
+    except subprocess.CalledProcessError as exc:
+        error_msg = exc.stderr.strip() if exc.stderr else str(exc)
+        print(json.dumps({
+            "status": "error",
+            "message": f"Session created but failed to launch Claude: {error_msg}",
+        }))
+        sys.exit(1)
+
+    # Set output style via slash command (not CLI flag)
+    try:
+        _tmux_send(session_name, "/output-style orchestrator", pause=3.0)
+    except subprocess.CalledProcessError as exc:
+        error_msg = exc.stderr.strip() if exc.stderr else str(exc)
+        print(json.dumps({
+            "status": "error",
+            "message": f"Session created but failed to set output style: {error_msg}",
+        }))
+        sys.exit(1)
+
+    # Send initial prompt if provided
     if args.prompt:
         try:
-            send_cmd = [
-                "tmux", "send-keys",
-                "-t", session_name,
-                args.prompt,
-                "Enter",
-            ]
-            subprocess.run(send_cmd, check=True, capture_output=True, text=True)
+            _tmux_send(session_name, args.prompt, pause=2.0)
         except subprocess.CalledProcessError as exc:
             error_msg = exc.stderr.strip() if exc.stderr else str(exc)
             print(json.dumps({

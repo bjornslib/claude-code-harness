@@ -412,7 +412,8 @@ class TestDryRunMode(unittest.TestCase):
         import io
         from contextlib import redirect_stdout
 
-        base_args = ["--dot", "/tmp/pipe.dot", "--pipeline-id", "test-pipe-001", "--dry-run"]
+        base_args = ["--dot", "/tmp/pipe.dot", "--pipeline-id", "test-pipe-001",
+                     "--target-dir", "/tmp", "--dry-run"]
         if extra_args:
             base_args.extend(extra_args)
 

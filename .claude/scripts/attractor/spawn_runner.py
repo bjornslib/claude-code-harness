@@ -73,7 +73,7 @@ def main() -> None:
                         help="Path to solution design document")
     parser.add_argument("--acceptance", default=None,
                         help="Acceptance criteria text")
-    parser.add_argument("--target-dir", default=None, dest="target_dir",
+    parser.add_argument("--target-dir", required=True, dest="target_dir",
                         help="Target working directory for the runner")
     parser.add_argument("--bead-id", default=None, dest="bead_id",
                         help="Beads issue/task identifier")
@@ -85,7 +85,7 @@ def main() -> None:
         "prd_ref": args.prd,
         "solution_design": args.solution_design,
         "acceptance_criteria": args.acceptance,
-        "target_dir": args.target_dir or os.getcwd(),
+        "target_dir": args.target_dir,
         "bead_id": args.bead_id,
     }
 

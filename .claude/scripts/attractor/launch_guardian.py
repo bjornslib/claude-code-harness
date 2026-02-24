@@ -80,6 +80,7 @@ def build_system_prompt(
     scripts_dir: str,
     signal_timeout: float,
     max_retries: int,
+    target_dir: str = "",
 ) -> str:
     """Return the system prompt for the Guardian agent launched by Layer 0.
 
@@ -94,6 +95,7 @@ def build_system_prompt(
         scripts_dir: Absolute path to the attractor scripts directory.
         signal_timeout: Seconds to wait per signal wait cycle.
         max_retries: Maximum retries allowed per node before escalation.
+        target_dir: Target implementation repo directory.
 
     Returns:
         Formatted system prompt string.
@@ -106,6 +108,7 @@ def build_system_prompt(
         scripts_dir=scripts_dir,
         signal_timeout=signal_timeout,
         max_retries=max_retries,
+        target_dir=target_dir,
     )
 
 
@@ -113,6 +116,7 @@ def build_initial_prompt(
     dot_path: str,
     pipeline_id: str,
     scripts_dir: str,
+    target_dir: str = "",
 ) -> str:
     """Return the first user message sent to the Guardian agent.
 
@@ -122,6 +126,7 @@ def build_initial_prompt(
         dot_path: Absolute path to the pipeline DOT file.
         pipeline_id: Unique pipeline identifier string.
         scripts_dir: Absolute path to the attractor scripts directory.
+        target_dir: Target implementation repo directory.
 
     Returns:
         Formatted initial prompt string.
@@ -132,6 +137,7 @@ def build_initial_prompt(
         dot_path=dot_path,
         pipeline_id=pipeline_id,
         scripts_dir=scripts_dir,
+        target_dir=target_dir,
     )
 
 
@@ -196,6 +202,8 @@ Examples:
                         help="Unique pipeline identifier (required with --dot)")
     parser.add_argument("--project-root", default=None, dest="project_root",
                         help="Working directory for the agent (default: cwd)")
+    parser.add_argument("--target-dir", default=None, dest="target_dir",
+                        help="Target implementation repo directory (overrides DOT graph attr)")
     parser.add_argument("--max-turns", type=int, default=DEFAULT_MAX_TURNS,
                         dest="max_turns",
                         help=f"Max SDK turns (default: {DEFAULT_MAX_TURNS})")
@@ -241,7 +249,7 @@ async def _run_agent(initial_prompt: str, options: Any) -> None:
         ResultMessage,
     )
 
-    async for message in query(initial_prompt, options=options):
+    async for message in query(prompt=initial_prompt, options=options):
         if isinstance(message, AssistantMessage):
             for block in message.content:
                 if isinstance(block, TextBlock):
@@ -250,7 +258,7 @@ async def _run_agent(initial_prompt: str, options: Any) -> None:
                     input_preview = json.dumps(block.input)[:200]
                     print(f"[LaunchGuardian tool] {block.name}: {input_preview}", flush=True)
         elif isinstance(message, ResultMessage):
-            print(f"[LaunchGuardian done] stop_reason={message.stop_reason}", flush=True)
+            print(f"[LaunchGuardian done] result={message.result}", flush=True)
 
 
 # ---------------------------------------------------------------------------
@@ -269,6 +277,7 @@ async def _launch_guardian_async(
     max_retries: int = DEFAULT_MAX_RETRIES,
     signals_dir: Optional[str] = None,
     dry_run: bool = False,
+    target_dir: str = "",
 ) -> dict[str, Any]:
     """Async implementation of launch_guardian().
 
@@ -282,6 +291,7 @@ async def _launch_guardian_async(
         max_retries: Maximum retries per node before escalation.
         signals_dir: Override signals directory path.
         dry_run: If True, return config dict without invoking SDK.
+        target_dir: Target implementation repo directory.
 
     Returns:
         Dict with status and pipeline metadata.
@@ -294,12 +304,14 @@ async def _launch_guardian_async(
         scripts_dir=scripts_dir,
         signal_timeout=signal_timeout,
         max_retries=max_retries,
+        target_dir=target_dir,
     )
 
     initial_prompt = build_initial_prompt(
         dot_path=dot_path,
         pipeline_id=pipeline_id,
         scripts_dir=scripts_dir,
+        target_dir=target_dir,
     )
 
     config: dict[str, Any] = {
@@ -313,6 +325,7 @@ async def _launch_guardian_async(
         "project_root": project_root,
         "signals_dir": signals_dir,
         "scripts_dir": scripts_dir,
+        "target_dir": target_dir,
         "system_prompt_length": len(system_prompt),
         "initial_prompt_length": len(initial_prompt),
     }
@@ -404,6 +417,7 @@ async def _launch_multiple_async(
             max_retries=cfg.get("max_retries", DEFAULT_MAX_RETRIES),
             signals_dir=cfg.get("signals_dir"),
             dry_run=cfg.get("dry_run", False),
+            target_dir=cfg.get("target_dir", ""),
         )
         for cfg in pipeline_configs
     ]
@@ -637,18 +651,35 @@ def main(argv: list[str] | None = None) -> None:
     cwd = args.project_root or os.getcwd()
     scripts_dir = resolve_scripts_dir()
 
+    # Read target_dir from DOT graph_attrs (CLI arg overrides DOT value).
+    graph_target_dir = ""
+    if os.path.exists(dot_path):
+        from parser import parse_dot  # noqa: PLC0415 (lazy import — intentional)
+        with open(dot_path, encoding="utf-8") as _fh:
+            dot_data = parse_dot(_fh.read())
+        graph_target_dir = dot_data.get("graph_attrs", {}).get("target_dir", "")
+    target_dir = args.target_dir or graph_target_dir
+    if not target_dir:
+        print(json.dumps({
+            "status": "error",
+            "message": "target_dir is required: set in DOT graph attrs or pass --target-dir",
+        }))
+        sys.exit(1)
+
     system_prompt = build_system_prompt(
         dot_path=dot_path,
         pipeline_id=args.pipeline_id,
         scripts_dir=scripts_dir,
         signal_timeout=args.signal_timeout,
         max_retries=args.max_retries,
+        target_dir=target_dir,
     )
 
     initial_prompt = build_initial_prompt(
         dot_path=dot_path,
         pipeline_id=args.pipeline_id,
         scripts_dir=scripts_dir,
+        target_dir=target_dir,
     )
 
     # Dry-run: log config and exit without calling the SDK.
@@ -663,6 +694,7 @@ def main(argv: list[str] | None = None) -> None:
             "max_retries": args.max_retries,
             "project_root": cwd,
             "signals_dir": args.signals_dir,
+            "target_dir": target_dir,
             "scripts_dir": scripts_dir,
             "system_prompt_length": len(system_prompt),
             "initial_prompt_length": len(initial_prompt),
@@ -680,6 +712,7 @@ def main(argv: list[str] | None = None) -> None:
         signal_timeout=args.signal_timeout,
         max_retries=args.max_retries,
         signals_dir=args.signals_dir,
+        target_dir=target_dir,
     )
     print(json.dumps(result, indent=2))
 

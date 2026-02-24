@@ -216,6 +216,7 @@ def generate_pipeline_dot(
     beads: list[dict],
     label: str = "",
     promise_id: str = "",
+    target_dir: str = "",
 ) -> str:
     """Generate an Attractor-compatible DOT pipeline from beads data.
 
@@ -224,6 +225,7 @@ def generate_pipeline_dot(
         beads: List of bead dicts from bd list --json
         label: Human-readable initiative label (defaults to prd_ref)
         promise_id: Completion promise ID (empty = to be populated later)
+        target_dir: Target implementation repo directory (stored as graph attr)
 
     Returns:
         Valid DOT string.
@@ -242,6 +244,8 @@ def generate_pipeline_dot(
     lines.append('        rankdir="TB"')
     lines.append(f'        prd_ref="{prd_ref}"')
     lines.append(f'        promise_id="{promise_id}"')
+    if target_dir:
+        lines.append(f'        target_dir="{target_dir}"')
     lines.append("    ];")
     lines.append("")
     lines.append('    node [fontname="Helvetica" fontsize=11];')
@@ -537,6 +541,7 @@ def generate_scaffold_dot(
     prd_ref: str = "PRD-SCAFFOLD",
     label: str = "",
     promise_id: str = "",
+    target_dir: str = "",
 ) -> str:
     """Generate a minimal scaffold DOT pipeline with only standard structural nodes.
 
@@ -548,6 +553,7 @@ def generate_scaffold_dot(
         prd_ref:    PRD reference identifier (default: 'PRD-SCAFFOLD').
         label:      Human-readable initiative label (default: derived from prd_ref).
         promise_id: Completion promise ID (default: empty).
+        target_dir: Target implementation repo directory (stored as graph attr).
 
     Returns:
         Valid DOT string.
@@ -567,6 +573,8 @@ def generate_scaffold_dot(
     lines.append('        rankdir="TB"')
     lines.append(f'        prd_ref="{prd_ref}"')
     lines.append(f'        promise_id="{promise_id}"')
+    if target_dir:
+        lines.append(f'        target_dir="{target_dir}"')
     lines.append("    ];")
     lines.append("")
     lines.append('    node [fontname="Helvetica" fontsize=11];')
@@ -677,6 +685,12 @@ def main() -> None:
         help="Completion promise ID (default: empty, populated by init-promise)",
     )
     ap.add_argument(
+        "--target-dir",
+        default="",
+        dest="target_dir",
+        help="Target implementation repo directory (stored as graph attr in DOT)",
+    )
+    ap.add_argument(
         "--filter-prd",
         action="store_true",
         default=True,
@@ -696,6 +710,7 @@ def main() -> None:
             prd_ref=prd_ref,
             label=args.label or "",
             promise_id=args.promise_id,
+            target_dir=args.target_dir,
         )
         if args.output:
             out_dir = os.path.dirname(os.path.abspath(args.output))
@@ -743,6 +758,7 @@ def main() -> None:
         beads=beads,
         label=args.label or "",
         promise_id=args.promise_id,
+        target_dir=args.target_dir,
     )
 
     # Output

@@ -337,7 +337,8 @@ class TestSpawnRunnerCLI:
         # Use a custom git root to avoid writing to real repo
         rc, stdout, _ = _run_cli(
             "spawn_runner.py",
-            ["--node", "impl_auth", "--prd", "PRD-TEST-001"],
+            ["--node", "impl_auth", "--prd", "PRD-TEST-001",
+             "--target-dir", str(tmp_path)],
             env_overrides={
                 "ATTRACTOR_SIGNALS_DIR": str(tmp_path / "signals"),
             },
@@ -354,6 +355,7 @@ class TestSpawnRunnerCLI:
         rc, stdout, _ = _run_cli(
             "spawn_runner.py",
             ["--node", "impl_auth", "--prd", "PRD-TEST-001",
+             "--target-dir", str(tmp_path),
              "--solution-design", "/tmp/design.md",
              "--bead-id", "BEAD-42"],
             env_overrides={

@@ -801,6 +801,7 @@ class TestGuardianAgentDryRunIntegration:
                 guardian_agent.main([
                     "--dot", dot_path,
                     "--pipeline-id", "g-int-001",
+                    "--target-dir", str(tmp_path),
                     "--dry-run",
                 ])
 
@@ -827,6 +828,7 @@ class TestRunnerAgentDryRunIntegration:
                     "--prd", "PRD-TEST-001",
                     "--session", "orch-test",
                     "--acceptance", "Creates test file",
+                    "--target-dir", str(tmp_path),
                     "--dry-run",
                 ])
 

@@ -88,19 +88,21 @@ class TestParseArgs(unittest.TestCase):
     """Tests for parse_args()."""
 
     def test_required_args_only(self) -> None:
-        args = parse_args(["--node", "n1", "--prd", "PRD-X-001", "--session", "sess1"])
+        args = parse_args(["--node", "n1", "--prd", "PRD-X-001", "--session", "sess1",
+                           "--target-dir", "/tmp"])
         self.assertEqual(args.node, "n1")
         self.assertEqual(args.prd, "PRD-X-001")
         self.assertEqual(args.session, "sess1")
 
     def test_defaults(self) -> None:
-        args = parse_args(["--node", "n1", "--prd", "P", "--session", "s"])
+        args = parse_args(["--node", "n1", "--prd", "P", "--session", "s",
+                           "--target-dir", "/tmp"])
         self.assertEqual(args.check_interval, DEFAULT_CHECK_INTERVAL)
         self.assertEqual(args.stuck_threshold, DEFAULT_STUCK_THRESHOLD)
         self.assertEqual(args.max_turns, DEFAULT_MAX_TURNS)
         self.assertEqual(args.model, DEFAULT_MODEL)
         self.assertIsNone(args.acceptance)
-        self.assertIsNone(args.target_dir)
+        self.assertEqual(args.target_dir, "/tmp")
         self.assertIsNone(args.bead_id)
         self.assertIsNone(args.dot_file)
         self.assertIsNone(args.solution_design)
@@ -153,29 +155,35 @@ class TestParseArgs(unittest.TestCase):
 
     def test_check_interval_type(self) -> None:
         args = parse_args(["--node", "n", "--prd", "P", "--session", "s",
-                           "--check-interval", "45"])
+                           "--target-dir", "/tmp", "--check-interval", "45"])
         self.assertIsInstance(args.check_interval, int)
         self.assertEqual(args.check_interval, 45)
 
     def test_stuck_threshold_type(self) -> None:
         args = parse_args(["--node", "n", "--prd", "P", "--session", "s",
-                           "--stuck-threshold", "180"])
+                           "--target-dir", "/tmp", "--stuck-threshold", "180"])
         self.assertIsInstance(args.stuck_threshold, int)
         self.assertEqual(args.stuck_threshold, 180)
 
     def test_max_turns_type(self) -> None:
         args = parse_args(["--node", "n", "--prd", "P", "--session", "s",
-                           "--max-turns", "50"])
+                           "--target-dir", "/tmp", "--max-turns", "50"])
         self.assertIsInstance(args.max_turns, int)
         self.assertEqual(args.max_turns, 50)
 
     def test_dry_run_default_false(self) -> None:
-        args = parse_args(["--node", "n", "--prd", "P", "--session", "s"])
+        args = parse_args(["--node", "n", "--prd", "P", "--session", "s",
+                           "--target-dir", "/tmp"])
         self.assertFalse(args.dry_run)
 
     def test_dry_run_flag_true(self) -> None:
-        args = parse_args(["--node", "n", "--prd", "P", "--session", "s", "--dry-run"])
+        args = parse_args(["--node", "n", "--prd", "P", "--session", "s",
+                           "--target-dir", "/tmp", "--dry-run"])
         self.assertTrue(args.dry_run)
+
+    def test_missing_required_target_dir_exits(self) -> None:
+        with self.assertRaises(SystemExit):
+            parse_args(["--node", "n", "--prd", "P", "--session", "s"])
 
 
 # ---------------------------------------------------------------------------
@@ -380,7 +388,8 @@ class TestDryRunMode(unittest.TestCase):
         import io
         from contextlib import redirect_stdout
 
-        base_args = ["--node", "n1", "--prd", "PRD-X-001", "--session", "s1", "--dry-run"]
+        base_args = ["--node", "n1", "--prd", "PRD-X-001", "--session", "s1",
+                     "--target-dir", "/tmp", "--dry-run"]
         if extra_args:
             base_args.extend(extra_args)
 

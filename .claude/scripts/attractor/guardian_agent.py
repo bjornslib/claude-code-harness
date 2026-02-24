@@ -72,6 +72,7 @@ def build_system_prompt(
     scripts_dir: str,
     signal_timeout: float,
     max_retries: int,
+    target_dir: str = "",
 ) -> str:
     """Return the system prompt that instructs the Claude Guardian how to run the pipeline.
 
@@ -81,10 +82,13 @@ def build_system_prompt(
         scripts_dir: Absolute path to the attractor scripts directory.
         signal_timeout: Seconds to wait per signal wait cycle.
         max_retries: Maximum retries allowed per node before escalation.
+        target_dir: Target implementation repo directory.
 
     Returns:
         Formatted system prompt string.
     """
+    target_dir_line = f"- Target directory: {target_dir}"
+    target_dir_flag = f" --target-dir {target_dir}"
     return f"""\
 You are a Headless Guardian agent (Layer 1) in a 4-layer pipeline execution system.
 
@@ -97,6 +101,7 @@ Runners for each codergen node, handling signals, and transitioning node statuse
 - Scripts directory: {scripts_dir}
 - Signal timeout: {signal_timeout}s per wait cycle
 - Max retries per node: {max_retries}
+{target_dir_line}
 
 ## Tools Available (via Bash — use python3 to invoke)
 All scripts are in {scripts_dir}:
@@ -117,7 +122,7 @@ All scripts are in {scripts_dir}:
 - python3 {scripts_dir}/respond_to_runner.py GUIDANCE --node <id> --message <text>            # Guide
 - python3 {scripts_dir}/respond_to_runner.py KILL_ORCHESTRATOR --node <id> --reason <text>    # Abort
 - python3 {scripts_dir}/escalate_to_terminal.py --pipeline {pipeline_id} --issue <text>   # Escalate
-- python3 {scripts_dir}/spawn_runner.py --node <id> --prd <prd_ref> [--acceptance <text>] [--bead-id <id>]  # Launch runner
+- python3 {scripts_dir}/spawn_runner.py --node <id> --prd <prd_ref> [--acceptance <text>] [--bead-id <id>]{target_dir_flag}  # Launch runner
 
 ## Pipeline Execution Flow
 
@@ -138,7 +143,7 @@ All scripts are in {scripts_dir}:
    b. Save checkpoint:
       python3 {scripts_dir}/cli.py checkpoint save {dot_path}
    c. Spawn Runner:
-      python3 {scripts_dir}/spawn_runner.py --node <node_id> --prd <prd_ref> --acceptance "<ac>" --bead-id <bead_id>
+      python3 {scripts_dir}/spawn_runner.py --node <node_id> --prd <prd_ref> --acceptance "<ac>" --bead-id <bead_id>{target_dir_flag}
 6. For each ready wait.human node:
    a. Determine if you can validate autonomously (technical gate) or need human (business/manual gate)
    b. If autonomous: transition directly to validated after reviewing acceptance criteria
@@ -214,6 +219,7 @@ def build_initial_prompt(
     dot_path: str,
     pipeline_id: str,
     scripts_dir: str,
+    target_dir: str = "",
 ) -> str:
     """Return the first user message sent to Claude to start the pipeline execution loop.
 
@@ -221,14 +227,17 @@ def build_initial_prompt(
         dot_path: Absolute path to the pipeline DOT file.
         pipeline_id: Unique pipeline identifier string.
         scripts_dir: Absolute path to the attractor scripts directory.
+        target_dir: Target implementation repo directory.
 
     Returns:
         Formatted initial prompt string.
     """
+    target_dir_line = f"Target directory: {target_dir}\n" if target_dir else ""
     return (
         f"You are the Headless Guardian for pipeline '{pipeline_id}'.\n\n"
         f"Pipeline DOT file: {dot_path}\n"
-        f"Scripts directory: {scripts_dir}\n\n"
+        f"Scripts directory: {scripts_dir}\n"
+        f"{target_dir_line}\n"
         f"Begin by:\n"
         f"1. Parsing the pipeline to understand the full graph\n"
         f"2. Validating the pipeline structure\n"
@@ -316,6 +325,8 @@ Examples:
                         help=f"Max retries per node before escalating (default: {DEFAULT_MAX_RETRIES})")
     parser.add_argument("--dry-run", action="store_true", dest="dry_run",
                         help="Log config without spawning the SDK agent (for testing)")
+    parser.add_argument("--target-dir", default="", dest="target_dir",
+                        help="Target implementation repo directory")
 
     return parser.parse_args(argv)
 
@@ -366,7 +377,7 @@ async def _run_agent(initial_prompt: str, options: Any) -> None:
         ResultMessage,
     )
 
-    async for message in query(initial_prompt, options=options):
+    async for message in query(prompt=initial_prompt, options=options):
         if isinstance(message, AssistantMessage):
             for block in message.content:
                 if isinstance(block, TextBlock):
@@ -375,7 +386,7 @@ async def _run_agent(initial_prompt: str, options: Any) -> None:
                     input_preview = json.dumps(block.input)[:200]
                     print(f"[Guardian tool] {block.name}: {input_preview}", flush=True)
         elif isinstance(message, ResultMessage):
-            print(f"[Guardian done] stop_reason={message.stop_reason}", flush=True)
+            print(f"[Guardian done] result={message.result}", flush=True)
 
 
 # ---------------------------------------------------------------------------
@@ -387,6 +398,13 @@ def main(argv: list[str] | None = None) -> None:
     """Parse arguments, build prompts/options, and run the Guardian agent."""
     args = parse_args(argv)
 
+    if not args.target_dir:
+        print(json.dumps({
+            "status": "error",
+            "message": "target_dir is required: pass --target-dir",
+        }))
+        sys.exit(1)
+
     dot_path = os.path.abspath(args.dot)
     cwd = args.project_root or os.getcwd()
     scripts_dir = resolve_scripts_dir()
@@ -397,12 +415,14 @@ def main(argv: list[str] | None = None) -> None:
         scripts_dir=scripts_dir,
         signal_timeout=args.signal_timeout,
         max_retries=args.max_retries,
+        target_dir=args.target_dir,
     )
 
     initial_prompt = build_initial_prompt(
         dot_path=dot_path,
         pipeline_id=args.pipeline_id,
         scripts_dir=scripts_dir,
+        target_dir=args.target_dir,
     )
 
     options = build_options(
@@ -424,6 +444,7 @@ def main(argv: list[str] | None = None) -> None:
             "max_retries": args.max_retries,
             "project_root": cwd,
             "signals_dir": args.signals_dir,
+            "target_dir": args.target_dir,
             "scripts_dir": scripts_dir,
             "system_prompt_length": len(system_prompt),
             "initial_prompt_length": len(initial_prompt),

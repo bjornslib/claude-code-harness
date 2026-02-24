@@ -873,6 +873,7 @@ class TestCLIIntegrationDryRun(unittest.TestCase):
         base_args = [
             "--dot", "/tmp/pipe.dot",
             "--pipeline-id", "test-pipe-001",
+            "--target-dir", "/tmp",
             "--dry-run",
         ]
         if extra_args:
@@ -948,6 +949,7 @@ class TestCLIIntegrationDryRun(unittest.TestCase):
                     launch_guardian.main([
                         "--dot", "/tmp/p.dot",
                         "--pipeline-id", "p",
+                        "--target-dir", "/tmp",
                         "--dry-run",
                     ])
             mock_run.assert_not_called()

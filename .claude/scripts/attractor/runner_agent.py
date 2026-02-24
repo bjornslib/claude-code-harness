@@ -286,8 +286,8 @@ Examples:
                         help="Path to solution design document")
     parser.add_argument("--acceptance", default=None,
                         help="Acceptance criteria text")
-    parser.add_argument("--target-dir", default=None, dest="target_dir",
-                        help="Working directory for the agent (default: cwd)")
+    parser.add_argument("--target-dir", required=True, dest="target_dir",
+                        help="Working directory for the agent")
     parser.add_argument("--bead-id", default=None, dest="bead_id",
                         help="Beads issue/task identifier")
     parser.add_argument("--check-interval", type=int, default=DEFAULT_CHECK_INTERVAL,
@@ -376,7 +376,7 @@ def main(argv: list[str] | None = None) -> None:
     """Parse arguments, build prompts/options, and run the monitoring agent."""
     args = parse_args(argv)
 
-    cwd = args.target_dir or os.getcwd()
+    cwd = args.target_dir
     scripts_dir = resolve_scripts_dir()
 
     system_prompt = build_system_prompt(
