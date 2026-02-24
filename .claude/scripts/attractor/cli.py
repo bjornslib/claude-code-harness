@@ -22,6 +22,8 @@ Usage:
     python3 cli.py lint [--verbose] [--json] [--fix]
     python3 cli.py gardener [--execute] [--report] [--json]
     python3 cli.py install-hooks
+    python3 cli.py run <file.dot> [--execute] [--channel <name>] [--json]
+    python3 cli.py guardian status|list|verify-chain|audit [...]
     python3 cli.py --help
 """
 
@@ -60,6 +62,8 @@ def main() -> None:
         print("  lint          Lint .claude/ documentation (delegates to doc-gardener)")
         print("  gardener      Run doc-gardener remediation (delegates to doc-gardener)")
         print("  install-hooks Install pre-push git hook for doc-gardener")
+        print("  run           Run the production pipeline runner agent")
+        print("  guardian      System 3 read-only monitor for pipeline runner state")
         print()
         print("Run 'cli.py <command> --help' for subcommand details.")
         sys.exit(0)
@@ -115,6 +119,12 @@ def main() -> None:
         sys.exit(result.returncode)
     elif command in ("install-hooks", "install_hooks"):
         _install_hooks()
+    elif command == "run":
+        from pipeline_runner import main as pipeline_runner_main
+        pipeline_runner_main()
+    elif command == "guardian":
+        from runner_guardian import main as guardian_main
+        guardian_main()
     else:
         print(f"Unknown command: {command}", file=sys.stderr)
         print("Run 'cli.py --help' for available commands.", file=sys.stderr)
