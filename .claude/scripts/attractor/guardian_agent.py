@@ -1,0 +1,446 @@
+#!/usr/bin/env python3
+"""Guardian Agent (Layer 1) — Guardian Architecture.
+
+Invokes Claude via the claude_code_sdk to drive pipeline execution autonomously:
+reading the DOT graph, spawning Runners for each codergen node, handling signals
+from Runners, and transitioning node statuses to completion.
+
+Architecture:
+    guardian_agent.py (Python process)
+        │
+        ├── Parse CLI args
+        ├── build_system_prompt()    → pipeline execution instructions for Claude
+        ├── build_initial_prompt()   → first user message with pipeline context
+        ├── build_options()          → ClaudeCodeOptions (Bash only, max_turns, model)
+        └── asyncio.run(_run_agent())
+               │
+               └── async for message in query(initial_prompt, options=options):
+                       # Claude uses Bash to run CLI tools in scripts_dir
+                       pass
+
+CLAUDECODE environment note:
+    The Guardian may be launched from inside a Claude Code session. To avoid
+    nested-session conflicts, we pass env={"CLAUDECODE": ""} as a workaround
+    to suppress the variable. The definitive fix (subprocess.Popen with a
+    cleaned env) lives in spawn_runner.py and will be implemented in a later epic.
+
+Usage:
+    python guardian_agent.py \\
+        --dot <path_to_pipeline.dot> \\
+        --pipeline-id <id> \\
+        [--project-root <path>] \\
+        [--max-turns <n>] \\
+        [--model <model_id>] \\
+        [--signals-dir <path>] \\
+        [--signal-timeout <seconds>] \\
+        [--max-retries <n>] \\
+        [--dry-run]
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import json
+import os
+import sys
+from typing import Any
+
+# Ensure this file's directory is importable regardless of invocation CWD.
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+if _THIS_DIR not in sys.path:
+    sys.path.insert(0, _THIS_DIR)
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+DEFAULT_MODEL = "claude-sonnet-4-6"
+DEFAULT_MAX_TURNS = 200          # more turns than runner; guardian runs longer
+DEFAULT_SIGNAL_TIMEOUT = 600     # 10 minutes per wait cycle
+DEFAULT_MAX_RETRIES = 3          # max retries per node before escalating
+
+
+# ---------------------------------------------------------------------------
+# Public helper functions (importable for testing)
+# ---------------------------------------------------------------------------
+
+
+def build_system_prompt(
+    dot_path: str,
+    pipeline_id: str,
+    scripts_dir: str,
+    signal_timeout: float,
+    max_retries: int,
+) -> str:
+    """Return the system prompt that instructs the Claude Guardian how to run the pipeline.
+
+    Args:
+        dot_path: Absolute path to the pipeline DOT file.
+        pipeline_id: Unique pipeline identifier string.
+        scripts_dir: Absolute path to the attractor scripts directory.
+        signal_timeout: Seconds to wait per signal wait cycle.
+        max_retries: Maximum retries allowed per node before escalation.
+
+    Returns:
+        Formatted system prompt string.
+    """
+    return f"""\
+You are a Headless Guardian agent (Layer 1) in a 4-layer pipeline execution system.
+
+Your role: Drive pipeline execution autonomously by reading the DOT graph, spawning
+Runners for each codergen node, handling signals, and transitioning node statuses.
+
+## Your Assignment
+- Pipeline DOT: {dot_path}
+- Pipeline ID: {pipeline_id}
+- Scripts directory: {scripts_dir}
+- Signal timeout: {signal_timeout}s per wait cycle
+- Max retries per node: {max_retries}
+
+## Tools Available (via Bash — use python3 to invoke)
+All scripts are in {scripts_dir}:
+
+### Attractor CLI (pipeline management)
+- python3 {scripts_dir}/cli.py status {dot_path} --filter=pending --deps-met --json    # Find ready nodes
+- python3 {scripts_dir}/cli.py status {dot_path} --json                                  # Full status
+- python3 {scripts_dir}/cli.py parse {dot_path} --output json                            # Full graph
+- python3 {scripts_dir}/cli.py transition {dot_path} transition <node_id> <new_status>  # Advance status
+- python3 {scripts_dir}/cli.py checkpoint save {dot_path}                                # Save checkpoint
+
+### Signal Tools
+- python3 {scripts_dir}/wait_for_signal.py --target guardian --timeout {signal_timeout}  # Wait for runner
+- python3 {scripts_dir}/read_signal.py <signal_path>                                      # Read signal
+- python3 {scripts_dir}/respond_to_runner.py VALIDATION_PASSED --node <id>               # Approve
+- python3 {scripts_dir}/respond_to_runner.py VALIDATION_FAILED --node <id> --feedback <text>  # Reject
+- python3 {scripts_dir}/respond_to_runner.py INPUT_RESPONSE --node <id> --response <text>     # Decide
+- python3 {scripts_dir}/respond_to_runner.py GUIDANCE --node <id> --message <text>            # Guide
+- python3 {scripts_dir}/respond_to_runner.py KILL_ORCHESTRATOR --node <id> --reason <text>    # Abort
+- python3 {scripts_dir}/escalate_to_terminal.py --pipeline {pipeline_id} --issue <text>   # Escalate
+- python3 {scripts_dir}/spawn_runner.py --node <id> --prd <prd_ref> [--acceptance <text>] [--bead-id <id>]  # Launch runner
+
+## Pipeline Execution Flow
+
+### Phase 1: Initialize
+1. Parse the DOT file:
+   python3 {scripts_dir}/cli.py parse {dot_path} --output json
+2. Validate the pipeline:
+   python3 {scripts_dir}/cli.py validate {dot_path} --output json
+3. Get current status:
+   python3 {scripts_dir}/cli.py status {dot_path} --json
+
+### Phase 2: Dispatch Ready Nodes
+4. Find ready nodes (pending + dependencies met):
+   python3 {scripts_dir}/cli.py status {dot_path} --filter=pending --deps-met --json
+5. For each ready codergen node:
+   a. Transition to active:
+      python3 {scripts_dir}/cli.py transition {dot_path} transition <node_id> active
+   b. Save checkpoint:
+      python3 {scripts_dir}/cli.py checkpoint save {dot_path}
+   c. Spawn Runner:
+      python3 {scripts_dir}/spawn_runner.py --node <node_id> --prd <prd_ref> --acceptance "<ac>" --bead-id <bead_id>
+6. For each ready wait.human node:
+   a. Determine if you can validate autonomously (technical gate) or need human (business/manual gate)
+   b. If autonomous: transition directly to validated after reviewing acceptance criteria
+   c. If human needed: escalate to Terminal
+
+### Phase 3: Wait and Handle Signals
+7. After spawning all ready runners, wait for a signal:
+   python3 {scripts_dir}/wait_for_signal.py --target guardian --timeout {signal_timeout}
+8. Parse the signal to determine node and signal type
+9. Handle based on signal type:
+
+   NEEDS_REVIEW (node implementation complete, needs validation):
+   - Review the evidence provided in the signal
+   - Check the DOT node's acceptance criteria
+   - Make a validation decision using your intelligence
+   - If PASSING:
+     * Transition node to impl_complete
+     * Transition node to validated
+     * Save checkpoint
+     * Respond: python3 {scripts_dir}/respond_to_runner.py VALIDATION_PASSED --node <id>
+   - If FAILING:
+     * Check retry count (max {max_retries} retries per node)
+     * If retries remain: python3 {scripts_dir}/respond_to_runner.py VALIDATION_FAILED --node <id> --feedback "<specific feedback>"
+     * If max retries exceeded: escalate to Terminal
+
+   NEEDS_INPUT (orchestrator needs a decision):
+   - Read the question from the signal payload
+   - Use your judgment to make the decision (you ARE the "user" for Layer 3)
+   - Respond: python3 {scripts_dir}/respond_to_runner.py INPUT_RESPONSE --node <id> --response "<decision>"
+
+   VIOLATION (orchestrator violated guard rails):
+   - Log the violation
+   - Decide: warn (send GUIDANCE) or abort (send KILL_ORCHESTRATOR)
+   - Minor violation: python3 {scripts_dir}/respond_to_runner.py GUIDANCE --node <id> --message "Please delegate, do not implement directly"
+   - Major violation: python3 {scripts_dir}/respond_to_runner.py KILL_ORCHESTRATOR --node <id> --reason "<reason>"
+
+   ORCHESTRATOR_STUCK (no progress):
+   - Review the last output provided in signal
+   - Send targeted guidance: python3 {scripts_dir}/respond_to_runner.py GUIDANCE --node <id> --message "<specific unstick advice>"
+
+   ORCHESTRATOR_CRASHED (tmux session died):
+   - Check if retry is possible
+   - If retries remain: re-spawn runner (increment retry count)
+   - If max retries exceeded: escalate to Terminal
+
+   NODE_COMPLETE (node finished and committed):
+   - Transition node to impl_complete:
+     python3 {scripts_dir}/cli.py transition {dot_path} transition <node_id> impl_complete
+   - Save checkpoint
+   - Respond: python3 {scripts_dir}/respond_to_runner.py VALIDATION_PASSED --node <id>
+
+### Phase 4: Check Pipeline Progress
+10. After handling the signal, check for new ready nodes (go to Phase 2)
+11. If all nodes are validated:
+    - Signal completion to Layer 0: python3 {scripts_dir}/escalate_to_terminal.py --pipeline {pipeline_id} --issue "PIPELINE_COMPLETE: all nodes validated"
+12. If pipeline is stuck (no ready nodes, no active nodes):
+    - Escalate to Terminal: python3 {scripts_dir}/escalate_to_terminal.py --pipeline {pipeline_id} --issue "PIPELINE_STUCK: no progress possible"
+
+## Retry Tracking
+Track retries per node in memory (dict). When a node exceeds {max_retries} retries, do not
+spawn again — escalate to Terminal with full context.
+
+## Important Rules
+- NEVER use Edit or Write tools — you are a coordinator, not an implementer
+- NEVER guess at node status — always read from the DOT file via CLI
+- ALWAYS checkpoint after every status transition
+- When in doubt about a validation decision, err on the side of VALIDATION_FAILED with specific feedback
+- Escalate to Terminal (Layer 0) only when you cannot resolve without human input
+"""
+
+
+def build_initial_prompt(
+    dot_path: str,
+    pipeline_id: str,
+    scripts_dir: str,
+) -> str:
+    """Return the first user message sent to Claude to start the pipeline execution loop.
+
+    Args:
+        dot_path: Absolute path to the pipeline DOT file.
+        pipeline_id: Unique pipeline identifier string.
+        scripts_dir: Absolute path to the attractor scripts directory.
+
+    Returns:
+        Formatted initial prompt string.
+    """
+    return (
+        f"You are the Headless Guardian for pipeline '{pipeline_id}'.\n\n"
+        f"Pipeline DOT file: {dot_path}\n"
+        f"Scripts directory: {scripts_dir}\n\n"
+        f"Begin by:\n"
+        f"1. Parsing the pipeline to understand the full graph\n"
+        f"2. Validating the pipeline structure\n"
+        f"3. Getting current node statuses\n\n"
+        f"Then proceed with Phase 2 (dispatch ready nodes) of the execution flow.\n\n"
+        f"If the pipeline is already partially complete (some nodes are already validated),\n"
+        f"skip those nodes and continue from the current state.\n"
+    )
+
+
+def build_options(
+    system_prompt: str,
+    cwd: str,
+    model: str,
+    max_turns: int,
+) -> Any:
+    """Construct a ClaudeCodeOptions instance for the Guardian agent.
+
+    The Guardian is restricted to Bash only — it must not call Edit/Write/etc.
+    CLAUDECODE is overridden to an empty string to suppress nested session
+    warnings (the authoritative fix is in spawn_runner.py using Popen).
+
+    Args:
+        system_prompt: Pipeline execution instructions for Claude.
+        cwd: Working directory for the agent (project root).
+        model: Claude model identifier.
+        max_turns: Maximum turns before the SDK stops the conversation.
+
+    Returns:
+        Configured ClaudeCodeOptions instance.
+    """
+    from claude_code_sdk import ClaudeCodeOptions
+
+    return ClaudeCodeOptions(
+        allowed_tools=["Bash"],
+        system_prompt=system_prompt,
+        cwd=cwd,
+        model=model,
+        max_turns=max_turns,
+        # Suppress CLAUDECODE env var to avoid nested-session conflicts.
+        # Definitive fix (subprocess.Popen with cleaned env) is in spawn_runner.py.
+        env={"CLAUDECODE": ""},
+    )
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse CLI arguments for guardian_agent.py.
+
+    Args:
+        argv: Argument list (defaults to sys.argv[1:]).
+
+    Returns:
+        Parsed namespace.
+    """
+    parser = argparse.ArgumentParser(
+        prog="guardian_agent.py",
+        description="Guardian Agent (Layer 1): drives pipeline execution via claude_code_sdk.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python guardian_agent.py --dot /path/to/pipeline.dot --pipeline-id my-pipeline
+
+  python guardian_agent.py --dot /path/to/pipeline.dot --pipeline-id my-pipeline \\
+      --project-root /my/project --max-turns 300 --signal-timeout 300 --dry-run
+        """,
+    )
+    parser.add_argument("--dot", required=True,
+                        help="Path to pipeline .dot file")
+    parser.add_argument("--pipeline-id", required=True, dest="pipeline_id",
+                        help="Unique pipeline identifier")
+    parser.add_argument("--project-root", default=None, dest="project_root",
+                        help="Working directory for the agent (default: cwd)")
+    parser.add_argument("--max-turns", type=int, default=DEFAULT_MAX_TURNS,
+                        dest="max_turns",
+                        help=f"Max SDK turns (default: {DEFAULT_MAX_TURNS})")
+    parser.add_argument("--model", default=DEFAULT_MODEL,
+                        help=f"Claude model to use (default: {DEFAULT_MODEL})")
+    parser.add_argument("--signals-dir", default=None, dest="signals_dir",
+                        help="Override signals directory path")
+    parser.add_argument("--signal-timeout", type=float, default=DEFAULT_SIGNAL_TIMEOUT,
+                        dest="signal_timeout",
+                        help=f"Seconds to wait per signal wait cycle (default: {DEFAULT_SIGNAL_TIMEOUT})")
+    parser.add_argument("--max-retries", type=int, default=DEFAULT_MAX_RETRIES,
+                        dest="max_retries",
+                        help=f"Max retries per node before escalating (default: {DEFAULT_MAX_RETRIES})")
+    parser.add_argument("--dry-run", action="store_true", dest="dry_run",
+                        help="Log config without spawning the SDK agent (for testing)")
+
+    return parser.parse_args(argv)
+
+
+def resolve_scripts_dir() -> str:
+    """Return the absolute path to the attractor scripts directory.
+
+    Resolution order:
+    1. The directory containing this file (guardian_agent.py is inside attractor/).
+    2. Falls back to current working directory if for some reason _THIS_DIR is unavailable.
+
+    Returns:
+        Absolute path string.
+    """
+    return _THIS_DIR
+
+
+def build_env_config() -> dict[str, str]:
+    """Return environment overrides that suppress the CLAUDECODE variable.
+
+    We cannot *delete* env keys via ClaudeCodeOptions.env (it only adds/overrides),
+    so we override CLAUDECODE to an empty string. The authoritative fix is in
+    spawn_runner.py which uses subprocess.Popen with a fully cleaned environment.
+
+    Returns:
+        Dict of env var overrides to pass to ClaudeCodeOptions.
+    """
+    return {"CLAUDECODE": ""}
+
+
+# ---------------------------------------------------------------------------
+# Async agent runner
+# ---------------------------------------------------------------------------
+
+
+async def _run_agent(initial_prompt: str, options: Any) -> None:
+    """Stream messages from the claude_code_sdk query and log them.
+
+    Args:
+        initial_prompt: The first user message to send to Claude.
+        options: Configured ClaudeCodeOptions instance.
+    """
+    from claude_code_sdk import (
+        query,
+        AssistantMessage,
+        TextBlock,
+        ToolUseBlock,
+        ResultMessage,
+    )
+
+    async for message in query(initial_prompt, options=options):
+        if isinstance(message, AssistantMessage):
+            for block in message.content:
+                if isinstance(block, TextBlock):
+                    print(f"[Guardian] {block.text}", flush=True)
+                elif isinstance(block, ToolUseBlock):
+                    input_preview = json.dumps(block.input)[:200]
+                    print(f"[Guardian tool] {block.name}: {input_preview}", flush=True)
+        elif isinstance(message, ResultMessage):
+            print(f"[Guardian done] stop_reason={message.stop_reason}", flush=True)
+
+
+# ---------------------------------------------------------------------------
+# Main entry point
+# ---------------------------------------------------------------------------
+
+
+def main(argv: list[str] | None = None) -> None:
+    """Parse arguments, build prompts/options, and run the Guardian agent."""
+    args = parse_args(argv)
+
+    dot_path = os.path.abspath(args.dot)
+    cwd = args.project_root or os.getcwd()
+    scripts_dir = resolve_scripts_dir()
+
+    system_prompt = build_system_prompt(
+        dot_path=dot_path,
+        pipeline_id=args.pipeline_id,
+        scripts_dir=scripts_dir,
+        signal_timeout=args.signal_timeout,
+        max_retries=args.max_retries,
+    )
+
+    initial_prompt = build_initial_prompt(
+        dot_path=dot_path,
+        pipeline_id=args.pipeline_id,
+        scripts_dir=scripts_dir,
+    )
+
+    options = build_options(
+        system_prompt=system_prompt,
+        cwd=cwd,
+        model=args.model,
+        max_turns=args.max_turns,
+    )
+
+    # Dry-run: log config and exit without calling the SDK.
+    if args.dry_run:
+        config: dict[str, Any] = {
+            "dry_run": True,
+            "dot_path": dot_path,
+            "pipeline_id": args.pipeline_id,
+            "model": args.model,
+            "max_turns": args.max_turns,
+            "signal_timeout": args.signal_timeout,
+            "max_retries": args.max_retries,
+            "project_root": cwd,
+            "signals_dir": args.signals_dir,
+            "scripts_dir": scripts_dir,
+            "system_prompt_length": len(system_prompt),
+            "initial_prompt_length": len(initial_prompt),
+        }
+        print(json.dumps(config, indent=2))
+        sys.exit(0)
+
+    # Live run: invoke the Agent SDK.
+    try:
+        asyncio.run(_run_agent(initial_prompt, options))
+    except KeyboardInterrupt:
+        print("[Guardian] Interrupted by user.", flush=True)
+        sys.exit(130)
+    except Exception as exc:
+        print(f"[Guardian error] {exc}", file=sys.stderr, flush=True)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

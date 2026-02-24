@@ -25,6 +25,24 @@ def parse_dot(content: str) -> dict[str, Any]:
         - nodes: list of node dicts (id, attrs)
         - edges: list of edge dicts (src, dst, attrs)
         - defaults: dict of default node/edge attributes
+
+    The attribute parser is generic: any key=value pair in a node or graph
+    block will be extracted, including the following schema-defined attributes:
+
+    Graph-level attributes:
+        prd_ref     (str) -- PRD identifier e.g. "PRD-AUTH-001"
+        promise_id  (str) -- Completion promise ID
+        label       (str) -- Human-readable pipeline label
+
+    Node attributes (codergen handler):
+        prd_ref          (str) -- PRD identifier for this task (recommended)
+        prd_section      (str) -- Specific section within the PRD
+        solution_design  (str) -- Path to solution design document
+        target_dir       (str) -- Working directory for the orchestrator/worker
+        acceptance       (str) -- Acceptance criteria (recommended)
+        bead_id          (str) -- Beads issue ID (required)
+        worker_type      (str) -- Specialist agent type (required)
+        promise_ac       (str) -- Completion promise acceptance criterion ref
     """
     result: dict[str, Any] = {
         "graph_name": "",
