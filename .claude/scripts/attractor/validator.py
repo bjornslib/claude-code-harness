@@ -67,6 +67,12 @@ REQUIRED_ATTRS: dict[str, list[str]] = {
     "parallel": ["label", "handler"],
 }
 
+# Recommended attributes per handler type — absence emits warnings (not errors).
+# These are needed for Runner context and PRD traceability.
+WARNING_ATTRS: dict[str, list[str]] = {
+    "codergen": ["prd_ref", "acceptance"],
+}
+
 VALID_WORKER_TYPES = {
     "frontend-dev-expert",
     "backend-solutions-engineer",
@@ -266,6 +272,19 @@ def validate(data: dict[str, Any], strict: bool = False) -> list[Issue]:
                         "error",
                         8,
                         f"Missing required attribute '{attr}' for handler={handler}",
+                        n["id"],
+                    )
+                )
+
+        # Check for recommended attributes — emit warnings (backward compatible)
+        warnings_list = WARNING_ATTRS.get(handler, [])
+        for attr in warnings_list:
+            if attr not in n["attrs"]:
+                issues.append(
+                    Issue(
+                        "warning",
+                        8,
+                        f"codergen node '{n['id']}' missing recommended attribute '{attr}' (needed for Runner context)",
                         n["id"],
                     )
                 )
