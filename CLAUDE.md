@@ -305,6 +305,122 @@ When running as an orchestrator (Level 2):
 
 This separation ensures proper testing, validation, and architectural consistency.
 
+## Documentation Standards
+
+All markdown files in `.claude/` must follow these standards, enforced by the **doc-gardener** linter (`scripts/doc-gardener/lint.py`).
+
+### Documentation Directory Map
+
+Files in these directories are **linted and require frontmatter**:
+
+| Directory | Purpose | Default Grade |
+|-----------|---------|---------------|
+| `skills/` | Skill implementations (SKILL.md per skill) | `authoritative` |
+| `agents/` | Agent configuration definitions | `authoritative` |
+| `output-styles/` | Output style behavior definitions | `authoritative` |
+| `documentation/` | Architecture docs, ADRs, guides | `reference` |
+| `commands/` | Slash command definitions | `reference` |
+
+Files in these directories are **skipped** (runtime state, not documentation):
+
+| Directory | Purpose |
+|-----------|---------|
+| `state/` | Runtime state tracking |
+| `message-bus/` | Message queue database and signals |
+| `completion-state/` | Session completion tracking |
+| `evidence/` | Validation evidence artifacts |
+| `progress/` | Session progress logs |
+| `worker-assignments/` | Worker task assignments |
+| `user-input-queue/` | Queued user input |
+
+Also skipped: `documentation/gardening-report.md` (auto-generated).
+
+### Frontmatter Requirements
+
+Every `.md` file in a linted directory must have YAML frontmatter:
+
+```yaml
+---
+title: "Human-Readable Title"           # REQUIRED - string
+status: active                          # REQUIRED - active | draft | archived | deprecated
+type: skill                             # Recommended - skill | agent | output-style | hook | command | guide | architecture | reference | config
+last_verified: 2026-02-19              # Recommended - YYYY-MM-DD format
+grade: authoritative                    # Recommended - authoritative | reference | archive | draft
+---
+```
+
+**Required fields**: `title`, `status`. Missing frontmatter is auto-fixable (the gardener generates it from filename and context).
+
+### Lint Check Categories
+
+The doc-gardener checks 5 categories:
+
+| Category | What It Checks | Severity | Auto-fixable |
+|----------|---------------|----------|-------------|
+| **frontmatter** | Presence + valid field values in linted directories | error | Yes (generates missing frontmatter) |
+| **crosslinks** | All relative markdown links resolve to real files | error | No |
+| **naming** | Directory and file naming conventions (see below) | warning | No |
+| **staleness** | `last_verified` date vs current date thresholds | warning | Yes (downgrades grade) |
+| **grades-sync** | Frontmatter `grade` matches `quality-grades.json` defaults | info | Yes (updates frontmatter) |
+
+### Naming Conventions
+
+| Item | Convention | Pattern | Examples |
+|------|-----------|---------|----------|
+| Directories | `kebab-case` | `^[a-z0-9]+(-[a-z0-9]+)*$` | `orchestrator-multiagent/`, `doc-gardener/` |
+| Top-level docs | `UPPER-CASE.md` | Exact match set | `CLAUDE.md`, `SKILL.md`, `README.md`, `INDEX.md`, `CHANGELOG.md` |
+| Regular files | `kebab-case.md` | `^[a-z0-9]+(-[a-z0-9]+)*\.md$` | `message-bus-integration.md` |
+| ADR/spec prefixes | `ADR-NNN-kebab.md` | Mixed case prefix | `ADR-001-output-style-reliability.md` |
+| Version-prefixed | `vN.N-kebab.md` | Version prefix | `v3.9-migration-guide.md` |
+| Private files | `_underscore.md` | Leading underscore | `_internal-notes.md` |
+
+### Staleness Thresholds
+
+| Condition | Action |
+|-----------|--------|
+| `last_verified` > 90 days old | Grade should be `archive` (auto-fixed) |
+| `last_verified` > 60 days old | Consider downgrading from `authoritative` (warning) |
+| No `last_verified` field | Not flagged (field is optional) |
+
+### Cross-Link Integrity
+
+All relative markdown links (`[text](path)`) in `.claude/` must resolve to existing files. The linter:
+- Strips code blocks and inline code before scanning
+- Resolves paths relative to the file containing the link
+- Reports unresolvable links as errors (not auto-fixable)
+
+### Quality Grades
+
+Documents are graded by reliability and maintenance commitment:
+
+| Grade | Meaning | Review Cadence | Trust Level |
+|-------|---------|----------------|-------------|
+| `authoritative` | Source of truth, actively maintained | Continuous | High |
+| `reference` | Useful context, periodically reviewed | Quarterly | Medium |
+| `archive` | Historical record, not maintained | None | Low |
+| `draft` | Work in progress, unverified | On completion | Unverified |
+
+Default grades per directory are defined in `scripts/doc-gardener/quality-grades.json`.
+
+### Doc-Gardener Commands
+
+```bash
+# Report violations (dry-run, no changes)
+python3 .claude/scripts/doc-gardener/gardener.py --report
+
+# Apply auto-fixes and generate report
+python3 .claude/scripts/doc-gardener/gardener.py --execute
+
+# Machine-readable output
+python3 .claude/scripts/doc-gardener/lint.py --json
+
+# Lint only (exit code 0=clean, 1=violations)
+python3 .claude/scripts/doc-gardener/lint.py
+
+# Bypass on push (emergency only)
+DOC_GARDENER_SKIP=1 git push
+```
+
 ---
 
 ## Skills Library
