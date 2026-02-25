@@ -37,7 +37,7 @@ SESSION_ID="${CLAUDE_SESSION_ID:-}"
 # After MAX_BLOCKS consecutive blocks in a single session, approve unconditionally.
 # This prevents infinite stop-gate loops when the agent can't resolve the issue.
 # NOTE: MAX_BLOCKS is intentionally NOT disclosed in block messages to prevent gaming.
-MAX_BLOCKS=5
+MAX_BLOCKS=3
 _SAFE_SESSION_ID="${SESSION_ID//[^a-zA-Z0-9_-]/}"   # sanitize for filename
 BLOCK_COUNT_FILE="/tmp/stop-gate-blocks-${_SAFE_SESSION_ID:-default}.count"
 CURRENT_BLOCKS=0
