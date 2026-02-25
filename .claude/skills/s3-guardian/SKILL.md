@@ -282,26 +282,11 @@ EPIC_NAME="epic1"
 IMPL_REPO="/path/to/impl-repo"
 PRD_ID="PRD-XXX-001"
 
-# 1. Create worktree in impl repo (if not already created)
-cd "$IMPL_REPO"
-/create_worktree "$EPIC_NAME"
-
-# 2. Symlink .claude to the worktree (enables skills/hooks inside)
-ln -sf "$(pwd)/.claude" "trees/${EPIC_NAME}/.claude"
-
-# 3. Create tmux session
-tmux new-session -d -s "orch-${EPIC_NAME}" -c "${IMPL_REPO}/trees/${EPIC_NAME}"
-
-# 4. Switch to zsh — ccorch is a zsh function
-tmux send-keys -t "orch-${EPIC_NAME}" "exec zsh"
-tmux send-keys -t "orch-${EPIC_NAME}" Enter
+# 1. Create tmux session in repo root (Claude --worktree creates the worktree internally)
+tmux new-session -d -s "orch-${EPIC_NAME}" -c "${IMPL_REPO}" -x 220 -y 50 "exec zsh"
 sleep 2
 
-# 5. Unset CLAUDECODE — prevents nested session error
-tmux send-keys -t "orch-${EPIC_NAME}" "unset CLAUDECODE"
-tmux send-keys -t "orch-${EPIC_NAME}" Enter
-
-# 6. Set ALL FOUR required env vars
+# 2. Set required env vars
 tmux send-keys -t "orch-${EPIC_NAME}" "export CLAUDE_SESSION_DIR=${EPIC_NAME}-$(date +%Y%m%d)"
 tmux send-keys -t "orch-${EPIC_NAME}" Enter
 tmux send-keys -t "orch-${EPIC_NAME}" "export CLAUDE_SESSION_ID=orch-${EPIC_NAME}"
@@ -311,17 +296,19 @@ tmux send-keys -t "orch-${EPIC_NAME}" Enter
 tmux send-keys -t "orch-${EPIC_NAME}" "export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1"
 tmux send-keys -t "orch-${EPIC_NAME}" Enter
 
-# 7. Launch Claude Code (Pattern 2 + Pattern 1)
-tmux send-keys -t "orch-${EPIC_NAME}" "ccorch"
+# 3. Launch Claude Code via ccorch with --worktree (creates .claude/worktrees/<name>/)
+#    ccorch sets env vars (SESSION_ID, OUTPUT_STYLE, AGENT_TEAMS, etc.)
+#    --worktree is forwarded to claude via ccorch's "$@"
+tmux send-keys -t "orch-${EPIC_NAME}" "unset CLAUDECODE && ccorch --worktree ${EPIC_NAME}"
 tmux send-keys -t "orch-${EPIC_NAME}" Enter
 sleep 8   # Wait for Claude Code initialization
 
-# 8. Set output style BEFORE wisdom injection (Pattern 1)
+# 4. Set output style BEFORE wisdom injection (Pattern 1)
 tmux send-keys -t "orch-${EPIC_NAME}" "/output-style orchestrator"
 tmux send-keys -t "orch-${EPIC_NAME}" Enter
 sleep 3
 
-# 9. Write wisdom to temp file (avoids large paste issues — Pattern 4)
+# 5. Write wisdom to temp file (avoids large paste issues — Pattern 4)
 cat > "/tmp/wisdom-${EPIC_NAME}.md" << EOF
 You are an orchestrator for initiative: ${EPIC_NAME}
 
@@ -347,11 +334,17 @@ ${WISDOM_FROM_HINDSIGHT}
 Update bead to impl_complete: bd update ${BEAD_ID} --status=impl_complete
 EOF
 
-# 10. Send initialization via file reference (Pattern 1 + Pattern 4)
+# 6. Send initialization via file reference (Pattern 1 + Pattern 4)
 tmux send-keys -t "orch-${EPIC_NAME}" "Read the file at /tmp/wisdom-${EPIC_NAME}.md and follow those instructions."
 sleep 2
 tmux send-keys -t "orch-${EPIC_NAME}" Enter
 ```
+
+**Key changes from previous spawn sequence:**
+- Steps 1-2 (manual worktree + symlink) **removed** — `--worktree` creates `.claude/worktrees/<name>/` automatically
+- `ccorch` now receives `--worktree <name>` which forwards to `claude` via `"$@"`
+- tmux session starts in **repo root** (not worktree) — Claude handles worktree creation
+- `.claude/` is a real directory inside native worktrees (not a symlink) — skills/hooks/output-styles all present
 
 ### Parallel Spawning (Multiple Epics)
 
@@ -993,7 +986,7 @@ Each level adds independent verification. The key constraint: each guardian stor
 | Phase | Key Action | Reference |
 |-------|------------|-----------|
 | 1. Acceptance Tests | Read PRD, write Gherkin, create manifest | [gherkin-test-patterns.md](references/gherkin-test-patterns.md) |
-| 2. Orchestrator Spawn | DOT dispatch, tmux 4 patterns, wisdom inject, ccorch | [guardian-workflow.md](references/guardian-workflow.md) |
+| 2. Orchestrator Spawn | DOT dispatch, tmux patterns, wisdom inject, `ccorch --worktree` | [guardian-workflow.md](references/guardian-workflow.md) |
 | 3. Monitoring | capture-pane loop, intervention triggers | [monitoring-patterns.md](references/monitoring-patterns.md) |
 | 4. Validation | Read code, score scenarios, weighted total | [validation-scoring.md](references/validation-scoring.md) |
 

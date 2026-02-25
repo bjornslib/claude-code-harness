@@ -17,7 +17,7 @@ Tools:
         get_dispatchable_nodes — attractor status --filter=pending --deps-met --json
         transition_node        — attractor transition <file> <node> <status>
         save_checkpoint        — attractor checkpoint save <file>
-        spawn_orchestrator     — tmux new-session + launchorchestrator
+        spawn_orchestrator     — tmux new-session + ccorch --worktree
         dispatch_validation    — subprocess validation-test-agent call
         send_approval_request  — write to channel adapter (signal only in CLI mode)
         modify_node            — attractor node <file> modify <node> --set key=value
@@ -33,8 +33,10 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import subprocess
 import sys
+import time
 from typing import Any
 
 # Ensure local module imports work regardless of invocation directory
@@ -513,7 +515,7 @@ def _tool_spawn_orchestrator(
     """Tool: spawn_orchestrator — launch an orchestrator in tmux.
 
     In plan_only mode, returns a description without executing.
-    In execute mode, creates a new tmux session with launchorchestrator.
+    In execute mode, creates a new tmux session with ccorch --worktree.
     """
     session_name = f"orch-{node_id}-{os.getpid()}"
 
@@ -533,21 +535,21 @@ def _tool_spawn_orchestrator(
             ),
         })
 
-    # Build the launchorchestrator command
-    # launchorchestrator is a shell script/alias; we use tmux to run it
-    launch_cmd = "launchorchestrator"
-    if bead_id:
-        launch_cmd += f" {bead_id}"
+    # Build the Claude --worktree launch sequence:
+    # 1. tmux creates session in repo root with zsh
+    # 2. unset CLAUDECODE + launch Claude with --worktree (creates .claude/worktrees/<node>/)
+    # 3. Set output style + send prompt via _tmux_send pattern
+    repo_root = os.path.dirname(os.path.abspath(pipeline_path))
 
     try:
         cmd = [
             "tmux", "new-session",
             "-d",             # detached
             "-s", session_name,  # session name
+            "-c", repo_root,  # start in repo root
             "-x", "220",     # width
             "-y", "50",      # height
-            "/bin/zsh", "-c",
-            f"cd {os.path.dirname(os.path.abspath(pipeline_path))} && {launch_cmd}",
+            "exec zsh",       # clean shell
         ]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
 
@@ -558,6 +560,25 @@ def _tool_spawn_orchestrator(
                 "session_name": session_name,
             })
 
+        # Wait for shell to initialize, then launch Claude with --worktree
+        time.sleep(2)
+
+        # Pattern 1: text and Enter as separate send-keys calls
+        def _send(text: str, pause: float = 2.0) -> None:
+            subprocess.run(
+                ["tmux", "send-keys", "-t", session_name, text],
+                check=True, capture_output=True, text=True,
+            )
+            time.sleep(pause)
+            subprocess.run(
+                ["tmux", "send-keys", "-t", session_name, "Enter"],
+                check=True, capture_output=True, text=True,
+            )
+
+        node_quoted = shlex.quote(node_id)
+        _send(f"unset CLAUDECODE && ccorch --worktree {node_quoted}", pause=8.0)
+        _send("/output-style orchestrator", pause=3.0)
+
         return json.dumps({
             "success": True,
             "session_name": session_name,
@@ -565,7 +586,8 @@ def _tool_spawn_orchestrator(
             "node_id": node_id,
             "worker_type": worker_type or "general",
             "bead_id": bead_id,
-            "message": f"Spawned orchestrator session '{session_name}' for node '{node_id}'",
+            "worktree": f".claude/worktrees/{node_id}",
+            "message": f"Spawned orchestrator session '{session_name}' for node '{node_id}' with --worktree",
         })
     except subprocess.TimeoutExpired:
         return json.dumps({"error": "tmux spawn timed out", "node_id": node_id})

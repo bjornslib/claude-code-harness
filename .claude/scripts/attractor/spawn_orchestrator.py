@@ -2,12 +2,14 @@
 
 Usage:
     python spawn_orchestrator.py --node <node_id> --prd <prd_ref>
-        --worktree <path> [--session-name <name>] [--prompt <text>]
+        --repo-root <path> [--session-name <name>] [--prompt <text>]
         [--max-respawn <n>]
 
-Creates a tmux session named orch-<node_id> (or --session-name) IN the
-worktree directory, boots Claude Code, sets the orchestrator output style
-via slash command, then sends the prompt.
+Creates a tmux session named orch-<node_id> (or --session-name) starting
+in the repo root directory. Launches Claude Code with --worktree <node_id>
+which creates an isolated worktree at .claude/worktrees/<node_id>/ with
+branch worktree-<node_id>. Sets the orchestrator output style via slash
+command, then sends the prompt.
 
 Output (stdout, JSON):
     {"status": "ok", "session": "<name>", "tmux_cmd": "<command run>", "respawn_count": 0}
@@ -61,6 +63,7 @@ def check_orchestrator_alive(session: str) -> bool:
 def respawn_orchestrator(
     session_name: str,
     work_dir: str,
+    node_id: str,
     prompt: str | None,
     respawn_count: int,
     max_respawn: int,
@@ -69,7 +72,8 @@ def respawn_orchestrator(
 
     Args:
         session_name: tmux session name to (re)create.
-        work_dir: Working directory for the new session.
+        work_dir: Repo root directory for the new session.
+        node_id: Node identifier (used for --worktree name).
         prompt: Optional initial prompt to send after launching Claude.
         respawn_count: Current number of respawn attempts made so far.
         max_respawn: Maximum allowed respawn attempts.
@@ -103,7 +107,11 @@ def respawn_orchestrator(
     subprocess.run(tmux_cmd, check=True, capture_output=True, text=True)
 
     time.sleep(2)
-    _tmux_send(session_name, "unset CLAUDECODE && claude", pause=8.0)
+    _tmux_send(
+        session_name,
+        f"unset CLAUDECODE && ccorch --worktree {shlex.quote(node_id)}",
+        pause=8.0,
+    )
     _tmux_send(session_name, "/output-style orchestrator", pause=3.0)
     if prompt:
         _tmux_send(session_name, prompt, pause=2.0)
@@ -122,7 +130,9 @@ def main() -> None:
     )
     parser.add_argument("--node", required=True, help="Node identifier")
     parser.add_argument("--prd", required=True, help="PRD reference (e.g., PRD-AUTH-001)")
-    parser.add_argument("--worktree", required=True, help="Working directory (target repo)")
+    parser.add_argument("--worktree", required=False, help="DEPRECATED: use --repo-root instead")
+    parser.add_argument("--repo-root", required=False, dest="repo_root",
+                        help="Repo root directory (Claude creates worktree internally)")
     parser.add_argument("--session-name", default=None, dest="session_name",
                         help="tmux session name (default: orch-<node>)")
     parser.add_argument("--prompt", default=None,
@@ -133,7 +143,14 @@ def main() -> None:
     args = parser.parse_args()
 
     session_name = args.session_name or f"orch-{args.node}"
-    work_dir = args.worktree
+    # Support both --repo-root (new) and --worktree (deprecated, same meaning now)
+    work_dir = args.repo_root or args.worktree
+    if not work_dir:
+        print(json.dumps({
+            "status": "error",
+            "message": "Either --repo-root or --worktree (deprecated) is required",
+        }))
+        sys.exit(1)
 
     # Validate session name: reject reserved s3-live- prefix
     if re.match(r"s3-live-", session_name):
@@ -193,6 +210,7 @@ def main() -> None:
         respawn_result = respawn_orchestrator(
             session_name=session_name,
             work_dir=work_dir,
+            node_id=args.node,
             prompt=args.prompt,
             respawn_count=respawn_count,
             max_respawn=args.max_respawn,
@@ -210,9 +228,15 @@ def main() -> None:
         }))
         return
 
-    # Unset CLAUDECODE to avoid nested-session error, then launch claude
+    # Unset CLAUDECODE to avoid nested-session error, then launch via ccorch
+    # which sets env vars (CLAUDE_OUTPUT_STYLE, CLAUDE_SESSION_ID, etc.)
+    # --worktree is forwarded to claude via ccorch's "$@"
     try:
-        _tmux_send(session_name, "unset CLAUDECODE && claude", pause=8.0)
+        _tmux_send(
+            session_name,
+            f"unset CLAUDECODE && ccorch --worktree {shlex.quote(args.node)}",
+            pause=8.0,
+        )
     except subprocess.CalledProcessError as exc:
         error_msg = exc.stderr.strip() if exc.stderr else str(exc)
         print(json.dumps({

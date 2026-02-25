@@ -88,14 +88,14 @@ class TestRespawnOrchestrator(unittest.TestCase):
     def test_returns_already_alive_if_session_exists(self) -> None:
         """If session already exists, return already_alive without spawning."""
         with patch("spawn_orchestrator.check_orchestrator_alive", return_value=True):
-            result = respawn_orchestrator("orch-auth", "/tmp", None, 0, 3)
+            result = respawn_orchestrator("orch-auth", "/tmp", "auth", None, 0, 3)
         self.assertEqual(result["status"], "already_alive")
         self.assertEqual(result["session"], "orch-auth")
 
     def test_returns_error_when_max_respawn_reached(self) -> None:
         """If respawn_count >= max_respawn, return error."""
         with patch("spawn_orchestrator.check_orchestrator_alive", return_value=False):
-            result = respawn_orchestrator("orch-auth", "/tmp", None, 3, 3)
+            result = respawn_orchestrator("orch-auth", "/tmp", "auth", None, 3, 3)
         self.assertEqual(result["status"], "error")
         self.assertIn("Max respawn limit reached", result["message"])
         self.assertIn("3/3", result["message"])
@@ -103,7 +103,7 @@ class TestRespawnOrchestrator(unittest.TestCase):
     def test_returns_error_when_respawn_count_exceeds_max(self) -> None:
         """If respawn_count > max_respawn, return error."""
         with patch("spawn_orchestrator.check_orchestrator_alive", return_value=False):
-            result = respawn_orchestrator("orch-auth", "/tmp", None, 5, 3)
+            result = respawn_orchestrator("orch-auth", "/tmp", "auth", None, 5, 3)
         self.assertEqual(result["status"], "error")
         self.assertIn("Max respawn limit reached", result["message"])
 
@@ -114,7 +114,7 @@ class TestRespawnOrchestrator(unittest.TestCase):
              patch("spawn_orchestrator.time.sleep"), \
              patch("spawn_orchestrator._tmux_send"):
             mock_run.return_value = MagicMock(returncode=0)
-            result = respawn_orchestrator("orch-auth", "/tmp/work", None, 0, 3)
+            result = respawn_orchestrator("orch-auth", "/tmp/work", "auth", None, 0, 3)
         self.assertEqual(result["status"], "respawned")
         self.assertEqual(result["session"], "orch-auth")
         self.assertEqual(result["respawn_count"], 1)
@@ -126,7 +126,7 @@ class TestRespawnOrchestrator(unittest.TestCase):
              patch("spawn_orchestrator.time.sleep"), \
              patch("spawn_orchestrator._tmux_send"):
             mock_run.return_value = MagicMock(returncode=0)
-            result = respawn_orchestrator("orch-auth", "/tmp", None, 1, 3)
+            result = respawn_orchestrator("orch-auth", "/tmp", "auth", None, 1, 3)
         self.assertEqual(result["respawn_count"], 2)
 
     def test_sends_prompt_when_provided(self) -> None:
@@ -136,7 +136,7 @@ class TestRespawnOrchestrator(unittest.TestCase):
              patch("spawn_orchestrator.time.sleep"), \
              patch("spawn_orchestrator._tmux_send") as mock_send:
             mock_run.return_value = MagicMock(returncode=0)
-            result = respawn_orchestrator("orch-auth", "/tmp", "Hello Claude", 0, 3)
+            result = respawn_orchestrator("orch-auth", "/tmp", "auth", "Hello Claude", 0, 3)
         # Should have been called with the prompt
         send_calls = [str(c) for c in mock_send.call_args_list]
         prompt_sent = any("Hello Claude" in s for s in send_calls)
@@ -149,7 +149,7 @@ class TestRespawnOrchestrator(unittest.TestCase):
              patch("spawn_orchestrator.time.sleep"), \
              patch("spawn_orchestrator._tmux_send") as mock_send:
             mock_run.return_value = MagicMock(returncode=0)
-            respawn_orchestrator("orch-auth", "/tmp", None, 0, 3)
+            respawn_orchestrator("orch-auth", "/tmp", "auth", None, 0, 3)
         # Only 2 send calls expected: "unset CLAUDECODE && claude" + "/output-style orchestrator"
         self.assertEqual(mock_send.call_count, 2)
 
@@ -160,7 +160,7 @@ class TestRespawnOrchestrator(unittest.TestCase):
              patch("spawn_orchestrator.time.sleep"), \
              patch("spawn_orchestrator._tmux_send"):
             mock_run.return_value = MagicMock(returncode=0)
-            respawn_orchestrator("orch-auth", "/tmp/work", None, 0, 3)
+            respawn_orchestrator("orch-auth", "/tmp/work", "auth", None, 0, 3)
         # subprocess.run should have been called with tmux new-session
         calls_made = mock_run.call_args_list
         tmux_call_args = calls_made[0][0][0]
