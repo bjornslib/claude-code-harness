@@ -383,10 +383,12 @@ async def _run_agent(initial_prompt: str, options: Any) -> None:
     from claude_code_sdk import (
         query,
         AssistantMessage,
+        UserMessage,
+        ResultMessage,
         TextBlock,
+        ThinkingBlock,
         ToolUseBlock,
         ToolResultBlock,
-        ResultMessage,
     )
 
     turn_count = 0
@@ -421,23 +423,35 @@ async def _run_agent(initial_prompt: str, options: Any) -> None:
                         )
                         print(f"[Runner tool] {block.name}: {input_preview[:200]}", flush=True)
 
-                    elif isinstance(block, ToolResultBlock):
-                        content_preview = ""
-                        content_length = 0
-                        if isinstance(block.content, str):
-                            content_preview = block.content[:500]
-                            content_length = len(block.content)
-                        elif isinstance(block.content, list):
-                            content_preview = json.dumps(block.content)[:500]
-                            content_length = len(json.dumps(block.content))
+                    elif isinstance(block, ThinkingBlock):
                         logfire.info(
-                            "runner.tool_result",
-                            tool_use_id=block.tool_use_id,
-                            is_error=block.is_error or False,
-                            content_length=content_length,
-                            content_preview=content_preview,
+                            "runner.thinking",
                             turn=turn_count,
+                            thinking_length=len(block.thinking) if block.thinking else 0,
+                            thinking_preview=(block.thinking or "")[:200],
                         )
+
+            elif isinstance(message, UserMessage):
+                # UserMessage carries tool results back from tool execution
+                if isinstance(message.content, list):
+                    for block in message.content:
+                        if isinstance(block, ToolResultBlock):
+                            content_preview = ""
+                            content_length = 0
+                            if isinstance(block.content, str):
+                                content_preview = block.content[:500]
+                                content_length = len(block.content)
+                            elif isinstance(block.content, list):
+                                content_preview = json.dumps(block.content)[:500]
+                                content_length = len(json.dumps(block.content))
+                            logfire.info(
+                                "runner.tool_result",
+                                tool_use_id=block.tool_use_id,
+                                is_error=block.is_error or False,
+                                content_length=content_length,
+                                content_preview=content_preview,
+                                turn=turn_count,
+                            )
 
             elif isinstance(message, ResultMessage):
                 elapsed = _time.time() - start_time
