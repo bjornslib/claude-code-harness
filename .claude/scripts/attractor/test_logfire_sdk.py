@@ -13,7 +13,9 @@ import time
 
 import logfire
 
-logfire.configure()
+logfire.configure(
+    scrubbing=logfire.ScrubbingOptions(callback=lambda m: m.value),
+)
 
 from claude_code_sdk import (
     query,

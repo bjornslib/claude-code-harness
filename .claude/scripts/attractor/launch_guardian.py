@@ -249,7 +249,10 @@ async def _run_agent(initial_prompt: str, options: Any) -> None:
 
     import logfire
 
-    logfire.configure(inspect_arguments=False)
+    logfire.configure(
+        inspect_arguments=False,
+        scrubbing=logfire.ScrubbingOptions(callback=lambda m: m.value),
+    )
 
     from claude_code_sdk import (  # noqa: PLC0415 (lazy import — intentional)
         query,

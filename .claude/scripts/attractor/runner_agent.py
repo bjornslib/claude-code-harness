@@ -61,7 +61,10 @@ if _THIS_DIR not in sys.path:
 # Logfire instrumentation (required)
 # ---------------------------------------------------------------------------
 import logfire
-logfire.configure(inspect_arguments=False)
+logfire.configure(
+    inspect_arguments=False,
+    scrubbing=logfire.ScrubbingOptions(callback=lambda m: m.value),
+)
 
 # ---------------------------------------------------------------------------
 # Constants
