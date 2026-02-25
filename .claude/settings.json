@@ -149,6 +149,16 @@
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/message-bus-signal-check.py"
           }
         ]
+      },
+      {
+        "matcher": "Read|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $CLAUDE_PROJECT_DIR/.claude/hooks/serena_enforce_posttool.py",
+            "async": true
+          }
+        ]
       }
     ],
     "PreToolUse": [
@@ -169,6 +179,16 @@
             "type": "command",
             "command": "python3 $CLAUDE_PROJECT_DIR/.claude/hooks/gchat-ask-user-forward.py",
             "timeout": 10000
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $CLAUDE_PROJECT_DIR/.claude/hooks/serena_enforce_pretool.py",
+            "timeout": 10
           }
         ]
       }

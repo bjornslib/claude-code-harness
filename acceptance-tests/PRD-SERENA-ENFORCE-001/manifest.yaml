@@ -1,0 +1,47 @@
+prd_ref: PRD-SERENA-ENFORCE-001
+title: "Serena MCP Usage Enforcement Hooks"
+version: "1.0"
+created: "2026-02-25"
+
+thresholds:
+  accept: 0.60
+  investigate: 0.40
+
+features:
+  - id: F1
+    name: "PreToolUse blocking on source code"
+    weight: 0.35
+    validation_method: code-analysis
+    scenarios:
+      - scenarios.feature::AC-1
+      - scenarios.feature::AC-2
+
+  - id: F2
+    name: "Fast path and whitelisting"
+    weight: 0.20
+    validation_method: code-analysis
+    scenarios:
+      - scenarios.feature::AC-3
+      - scenarios.feature::AC-7
+
+  - id: F3
+    name: "Graceful degradation and bypass"
+    weight: 0.20
+    validation_method: code-analysis
+    scenarios:
+      - scenarios.feature::AC-4
+      - scenarios.feature::AC-5
+
+  - id: F4
+    name: "Async PostToolUse advisory"
+    weight: 0.15
+    validation_method: code-analysis
+    scenarios:
+      - scenarios.feature::AC-6
+
+  - id: F5
+    name: "Settings.json integration"
+    weight: 0.10
+    validation_method: code-analysis
+    scenarios:
+      - scenarios.feature::AC-8
