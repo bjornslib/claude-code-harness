@@ -8,14 +8,13 @@ The runner is agnostic about HOW it communicates — the adapter handles the
 channel-specific details. This enables the runner to work in different
 deployment contexts:
   - Native Agent Teams (SendMessage, via teammate protocol)
-  - Message bus (mb-send/mb-recv, for cross-session communication)
   - Stdout-only (for CLI/POC runs, prints to stdout)
 
 Usage:
     from adapters.base import ChannelAdapter
-    from adapters.message_bus import MessageBusAdapter
+    from adapters.stdout import StdoutAdapter
 
-    adapter = MessageBusAdapter(session_id="orch-abc123")
+    adapter = StdoutAdapter()
     adapter.send_signal("RUNNER_STUCK", payload={"node_id": "impl_backend"})
     msg = adapter.receive_message(timeout=30)
 """

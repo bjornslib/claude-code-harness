@@ -12,9 +12,8 @@ grade: authoritative
 
 **When to use this template:**
 System 3 uses this template when spawning a new orchestrator in a worktree. It ensures orchestrators:
-1. Know how to communicate with System 3 via message bus
-2. Invoke the correct skill immediately
-3. Follow proper initialization sequence
+1. Invoke the correct skill immediately
+2. Follow proper initialization sequence
 
 ---
 
@@ -39,18 +38,7 @@ Skill("orchestrator-multiagent")
 ```
 This loads your coordination patterns. Without it, you cannot properly delegate to workers.
 
-### Step 2: Register with Message Bus
-Register so System 3 can communicate with you:
-```bash
-.claude/scripts/message-bus/mb-register \
-    "${CLAUDE_SESSION_ID:-orch-[INITIATIVE_NAME]}" \
-    "$(tmux display-message -p '#S' 2>/dev/null || echo 'orch-[INITIATIVE_NAME]')" \
-    "[INITIATIVE_DESCRIPTION]" \
-    --initiative="[INITIATIVE_NAME]" \
-    --worktree="$(pwd)"
-```
-
-### Step 3: Create Worker Team
+### Step 2: Create Worker Team
 Create the team that will hold your worker teammates for this initiative:
 ```python
 Teammate(
@@ -60,37 +48,7 @@ Teammate(
 )
 ```
 
-### Step 4: Spawn Background Monitor
-This enables real-time message detection from System 3:
-```python
-Task(
-    subagent_type="general-purpose",
-    model="haiku",
-    run_in_background=True,
-    description="Message queue monitor",
-    prompt="""Monitor the message bus for incoming messages.
-
-Instance ID: ${CLAUDE_SESSION_ID:-orch-[INITIATIVE_NAME]}
-
-1. Check for messages every 10 seconds:
-   .claude/scripts/message-bus/mb-recv --peek
-
-2. If message found:
-   - Report the message content
-   - Complete this task
-
-3. Timeout after 10 minutes (respawn if needed)
-"""
-)
-```
-
-### Step 5: Check for Pending Messages
-Before starting work, check if System 3 sent any messages:
-```bash
-.claude/scripts/message-bus/mb-recv --peek
-```
-
-### Step 6: Run PREFLIGHT Checklist
+### Step 3: Run PREFLIGHT Checklist
 Now run the standard preflight from the skill.
 
 ---
@@ -156,15 +114,8 @@ Use this format:
 
 ### How to Report
 ```bash
-.claude/scripts/message-bus/mb-send "system3" "completion" '{
-    "subject": "[Epic/Task] Complete",
-    "body": "[Summary of what was done]",
-    "context": {
-        "initiative": "[INITIATIVE_NAME]",
-        "beads_closed": ["[list of closed bead IDs]"],
-        "test_results": "[summary]"
-    }
-}'
+# Mark tasks as impl_complete for System 3 to pick up
+bd update <bd-id> --status=impl_complete
 ```
 
 ---
@@ -186,10 +137,6 @@ Before ending your session:
 4. [ ] Update progress log
 5. [ ] `bd sync` - sync beads state
 6. [ ] `git commit` and `git push`
-7. [ ] Unregister from message bus:
-   ```bash
-   .claude/scripts/message-bus/mb-unregister "${CLAUDE_SESSION_ID:-orch-[INITIATIVE_NAME]}"
-   ```
 
 **Note**: Native teammates persist and must be explicitly shut down. Always send shutdown_request to each worker before cleanup.
 
@@ -199,12 +146,11 @@ Before ending your session:
 
 1. **Output Style**: Already set by System 3 during spawn (you do NOT need to run `/output-style`)
 2. **Skill First**: Invoke `Skill("orchestrator-multiagent")` as your very first action
-3. **Message Bus**: Register immediately so System 3 can reach you
-4. **Create Team**: Set up worker team with `Teammate(operation="spawnTeam", ...)` before delegating
-5. **Workers via Teams**: Use `Task(subagent_type=..., team_name=..., name=...)` for worker delegation. Workers communicate via SendMessage.
-6. **Stay in Scope**: Only work on tasks for your initiative
-7. **Report Progress**: Keep progress log updated and send completion messages
-8. **Clean Up Team**: Always shut down teammates and run `Teammate(operation="cleanup")` before session end
+3. **Create Team**: Set up worker team with `Teammate(operation="spawnTeam", ...)` before delegating
+4. **Workers via Teams**: Use `Task(subagent_type=..., team_name=..., name=...)` for worker delegation. Workers communicate via SendMessage.
+5. **Stay in Scope**: Only work on tasks for your initiative
+6. **Report Progress**: Keep progress log updated and mark tasks `impl_complete`
+7. **Clean Up Team**: Always shut down teammates and run `Teammate(operation="cleanup")` before session end
 ```
 
 ---
@@ -296,5 +242,4 @@ wisdom = f"""
 **Related Files:**
 - [SKILL.md](SKILL.md) - Main orchestrator skill
 - [WORKERS.md](WORKERS.md) - Worker delegation via native Agent Teams
-- [message-bus SKILL.md](../message-bus/SKILL.md) - Message bus operations
 - [system3-orchestrator SKILL.md](../system3-orchestrator/SKILL.md) - Spawn workflow

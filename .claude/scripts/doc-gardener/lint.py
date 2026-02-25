@@ -64,7 +64,6 @@ VALID_TYPES = {
 # Directories to skip entirely (runtime state, not documentation)
 DEFAULT_SKIP_DIRS = {
     "state",
-    "message-bus",
     "completion-state",
     "evidence",
     "progress",

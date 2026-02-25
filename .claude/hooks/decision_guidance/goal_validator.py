@@ -489,7 +489,7 @@ class GoalValidator:
         # Not complete - determine next action
         if is_stuck:
             recommendations.append("Multiple errors detected with low progress - consider asking System3 for guidance")
-            recommendations.append(f"mb-send system3 '{{\"type\": \"stuck\", \"completion\": {completion_pct:.0f}, \"errors\": {error_count}}}'")
+            recommendations.append(f"bd update <id> --status=impl_complete  # stuck: completion={completion_pct:.0f}%, errors={error_count}")
             return ValidationResult(
                 is_on_track=False,
                 completion_pct=completion_pct,

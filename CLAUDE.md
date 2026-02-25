@@ -58,21 +58,17 @@ This setup implements a sophisticated multi-agent system with three distinct lev
 │   ├── orchestrator-multiagent/  # Multi-agent orchestration patterns
 │   ├── system3-orchestrator/     # System 3 strategic planning
 │   ├── completion-promise/       # Session completion tracking
-│   ├── message-bus/              # Inter-instance messaging
 │   ├── mcp-skills/              # MCP server wrappers with progressive disclosure
 │   └── [20+ additional skills]
 ├── hooks/                        # Lifecycle event handlers
 │   ├── session-start-orchestrator-detector.py
 │   ├── user-prompt-orchestrator-reminder.py
-│   ├── message-bus-signal-check.py
 │   ├── unified-stop-gate.sh
 │   └── unified_stop_gate/        # Stop gate implementation
 ├── scripts/                      # CLI utilities
-│   ├── message-bus/              # mb-* commands for inter-instance messaging
 │   └── completion-state/         # cs-* commands for session tracking
-├── commands/                     # Slash commands (e.g., /check-messages)
+├── commands/                     # Slash commands
 ├── documentation/                # Architecture decisions and guides
-│   ├── MESSAGE_BUS_ARCHITECTURE.md
 │   ├── ADR-001-output-style-reliability.md
 │   └── SYSTEM3_CHANGELOG.md
 ├── validation/                   # Validation agent configs
@@ -94,33 +90,7 @@ This setup implements a sophisticated multi-agent system with three distinct lev
 
 **Output styles are loaded automatically at session start**. Skills must be explicitly invoked using the `Skill` tool.
 
-### 2. Message Bus (Inter-Instance Communication)
-
-Enables real-time coordination between Claude Code sessions (System 3 ↔ Orchestrators ↔ Workers).
-
-**Components**:
-- SQLite queue: `.claude/message-bus/queue.db`
-- Signal files: `.claude/message-bus/signals/*.signal`
-- CLI scripts: `.claude/scripts/message-bus/mb-*`
-
-**Key Commands**:
-```bash
-mb-init                    # Initialize message bus
-mb-register <id> <type>    # Register instance
-mb-send <target> <msg>     # Send message
-mb-recv                    # Receive pending messages
-mb-list                    # List active orchestrators
-mb-status                  # Queue status overview
-```
-
-**Detection Mechanisms**:
-1. Background monitor agent (polls every 3s)
-2. PostToolUse hook (signal file detection)
-3. tmux injection (fallback for idle agents)
-
-See `.claude/documentation/MESSAGE_BUS_ARCHITECTURE.md` for full details.
-
-### 3. Task Master Integration
+### 2. Task Master Integration
 
 Task Master is used for task decomposition and tracking through the `/project:tm/` namespace.
 
@@ -136,7 +106,7 @@ Task Master is used for task decomposition and tracking through the `/project:tm
 
 See `.claude/TM_COMMANDS_GUIDE.md` for complete command reference.
 
-### 4. MCP Server Integration
+### 3. MCP Server Integration
 
 The repository includes extensive MCP (Model Context Protocol) server integration:
 
@@ -154,7 +124,7 @@ The repository includes extensive MCP (Model Context Protocol) server integratio
 
 Available wrapped skills: `assistant-ui`, `chrome-devtools`, `github`, `livekit-docs`, `logfire`, `magicui`, `playwright`, `shadcn`, `mcp-undetected-chromedriver`
 
-### 5. Hooks System
+### 4. Hooks System
 
 Automated lifecycle event handlers configured in `.claude/settings.json`:
 
@@ -162,12 +132,11 @@ Automated lifecycle event handlers configured in `.claude/settings.json`:
 |------|---------|--------|
 | `SessionStart` | Detect orchestrator mode, load MCP skills | `session-start-orchestrator-detector.py`, `load-mcp-skills.sh` |
 | `UserPromptSubmit` | Remind orchestrator of delegation rules | `user-prompt-orchestrator-reminder.py` |
-| `PostToolUse` | Check for inter-instance messages | `message-bus-signal-check.py` |
 | `Stop` | Validate completion before session ends | `unified-stop-gate.sh` |
 | `PreCompact` | Reload MCP skills after context compression | `load-mcp-skills.sh` |
 | `Notification` | Webhook notifications | `claude_notification_webhook.sh` |
 
-### 6. Enabled Plugins
+### 5. Enabled Plugins
 
 Configured in `.claude/settings.json`:
 - `beads@beads-marketplace` - Issue tracking
@@ -218,7 +187,6 @@ Each orchestrator session should have:
 - Unique `CLAUDE_SESSION_ID` environment variable
 - `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` for native team coordination
 - Separate worktree (for code-based projects)
-- Message bus registration
 - Completion promise tracking
 - Native team created via `Teammate(operation="spawnTeam")`
 
@@ -326,7 +294,6 @@ Files in these directories are **skipped** (runtime state, not documentation):
 | Directory | Purpose |
 |-----------|---------|
 | `state/` | Runtime state tracking |
-| `message-bus/` | Message queue database and signals |
 | `completion-state/` | Session completion tracking |
 | `evidence/` | Validation evidence artifacts |
 | `progress/` | Session progress logs |
@@ -369,7 +336,7 @@ The doc-gardener checks 5 categories:
 |------|-----------|---------|----------|
 | Directories | `kebab-case` | `^[a-z0-9]+(-[a-z0-9]+)*$` | `orchestrator-multiagent/`, `doc-gardener/` |
 | Top-level docs | `UPPER-CASE.md` | Exact match set | `CLAUDE.md`, `SKILL.md`, `README.md`, `INDEX.md`, `CHANGELOG.md` |
-| Regular files | `kebab-case.md` | `^[a-z0-9]+(-[a-z0-9]+)*\.md$` | `message-bus-integration.md` |
+| Regular files | `kebab-case.md` | `^[a-z0-9]+(-[a-z0-9]+)*\.md$` | `decision-time-guidance.md` |
 | ADR/spec prefixes | `ADR-NNN-kebab.md` | Mixed case prefix | `ADR-001-output-style-reliability.md` |
 | Version-prefixed | `vN.N-kebab.md` | Version prefix | `v3.9-migration-guide.md` |
 | Private files | `_underscore.md` | Leading underscore | `_internal-notes.md` |
@@ -490,7 +457,6 @@ Skills are explicitly invoked via `Skill("skill-name")`. Use this library to kno
 | `using-tmux-for-interactive-commands` | Running interactive CLI tools (vim, git rebase -i, REPLs) that require a real terminal |
 | `dspy-development` | Building or modifying DSPy modules, optimizers, or LLM pipelines |
 | `setup-harness` | Deploying this harness configuration to a target project repository |
-| `message-bus` | Setting up or using inter-instance messaging between Claude Code sessions |
 
 ### Skill Development
 

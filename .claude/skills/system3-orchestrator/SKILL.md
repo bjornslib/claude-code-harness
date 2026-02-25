@@ -107,7 +107,7 @@ Once active, use these for all codebase exploration (no `activate_project` neede
 
 ```python
 # Read the PRD
-prd_content = Read(f".taskmaster/docs/{initiative}-prd.md")
+prd_content = Read(f"docs/prds/{initiative}-prd.md")
 
 # Retain goals to Hindsight
 mcp__hindsight__retain(
@@ -342,7 +342,7 @@ for node in dispatchable_nodes:
     {acceptance}
 
     ### On Completion
-    Notify System 3 via message bus. System 3 will transition the node to impl_complete.
+    Mark tasks `impl_complete` via `bd update <bd-id> --status=impl_complete`. System 3 will transition the node.
     """
 
     # Use spawn-orchestrator.sh with wisdom injection
@@ -476,38 +476,13 @@ You are an orchestrator for initiative: [INITIATIVE_NAME]
 ### 1. Invoke Skill (MANDATORY)
 Before ANYTHING else: `Skill("orchestrator-multiagent")`
 
-### 2. Register with Message Bus
-```bash
-.claude/scripts/message-bus/mb-register \
-    "${CLAUDE_SESSION_ID}" \
-    "orch-[name]" \
-    "[description]" \
-    --initiative="[name]"
-```
-
-### 3. Spawn Background Monitor
-```python
-Task(
-    subagent_type="general-purpose",
-    model="haiku",
-    run_in_background=True,
-    description="Message queue monitor",
-    prompt="[Monitor template from message-bus skill]"
-)
-```
-
-### 4. Create Worker Team (NEW)
+### 2. Create Worker Team
 ```python
 Teammate(
     operation="spawnTeam",
     team_name="{initiative}-workers",
     description="Workers for {initiative}"
 )
-```
-
-### 5. Check for Messages
-```bash
-.claude/scripts/message-bus/mb-recv --peek
 ```
 
 ## System 3 Wisdom Injection
@@ -526,7 +501,7 @@ Teammate(
 1. Follow PREFLIGHT checklist from orchestrator-multiagent skill
 2. Use `bd ready` to find first task
 3. Report progress to `.claude/progress/orch-[name]-log.md`
-4. Send completion messages to System 3 via `mb-send`
+4. Mark tasks `impl_complete` for System 3 to pick up
 ```
 
 ---
@@ -625,8 +600,8 @@ When monitor COMPLETES, System3 receives `<task-notification>`:
 
 ```python
 if "MONITOR_STUCK" in result:
-    # Send guidance to orchestrator
-    Bash(f"mb-send orch-{name} guidance '...'")
+    # Send guidance to orchestrator via tmux
+    Bash(f"tmux send-keys -t orch-{name} '[guidance]' Enter")
     # RE-LAUNCH monitor to continue watching
     launch_monitor(name, prd_name)
 
@@ -696,29 +671,7 @@ tmux list-sessions | grep "^orch-"
 tmux capture-pane -t "orch-[name]" -p | tail -20
 ```
 
-### Intervention via Message Bus
-
-```bash
-# Send guidance (preferred)
-.claude/scripts/message-bus/mb-send "orch-[name]" guidance '{
-    "subject": "Priority Change",
-    "body": "Focus on API endpoints first"
-}'
-
-# Urgent message
-.claude/scripts/message-bus/mb-send "orch-[name]" urgent '{
-    "subject": "Stop Work",
-    "body": "Regression detected"
-}' --urgent
-
-# Broadcast to all
-.claude/scripts/message-bus/mb-send --broadcast announcement '{
-    "subject": "Policy Update",
-    "body": "All commits require passing tests"
-}'
-```
-
-### Direct tmux Intervention (Fallback)
+### Direct tmux Intervention
 
 ```bash
 # Inject message
@@ -1074,7 +1027,6 @@ Maintain active orchestrators in `.claude/state/active-orchestrators.json`:
 | [post-orchestration.md](references/post-orchestration.md) | Post-completion workflow |
 | [troubleshooting.md](references/troubleshooting.md) | Common issues and solutions |
 | [oversight-team.md](references/oversight-team.md) | S3 oversight team spawn commands and patterns |
-| [inter-instance-messaging.md](references/inter-instance-messaging.md) | Message bus session lifecycle, tmux cleanup |
 | [memory-context-taxonomy.md](references/memory-context-taxonomy.md) | Hindsight memory bank context naming taxonomy |
 | [monitoring-commands.md](references/monitoring-commands.md) | Orchestrator monitoring patterns, Haiku watcher, tmux monitoring |
 
@@ -1091,8 +1043,8 @@ Maintain active orchestrators in `.claude/state/active-orchestrators.json`:
 
 **v3.4.0 Changes**:
 - Added PREFLIGHT step 7: Spawn session-scoped team Communicator
-- Moved 4 reference files from output-styles/references/ to system3-orchestrator/references/
-- New references: inter-instance-messaging.md, completion-promise-cli.md, memory-context-taxonomy.md, monitoring-commands.md
+- Moved reference files from output-styles/references/ to system3-orchestrator/references/
+- New references: completion-promise-cli.md, memory-context-taxonomy.md, monitoring-commands.md
 
 **v3.3.0 Changes**:
 - Added PREFLIGHT step 5: Create Oversight Team (renumbered step 5 -> 6)
@@ -1120,4 +1072,4 @@ Maintain active orchestrators in `.claude/state/active-orchestrators.json`:
 - Updated spawn-orchestrator.sh with CLAUDE_SESSION_DIR and CLAUDE_SESSION_ID
 - Added validation expectations to preflight
 - Added OKR linkage check to preflight
-- Enhanced initialization template with message bus integration
+- Enhanced initialization template

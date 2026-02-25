@@ -389,7 +389,7 @@ Production Pipeline Runner — analyzes and executes Attractor DOT pipelines usi
 
 ```
 usage: pipeline_runner.py [-h] [--execute]
-                          [--channel {stdout,message_bus,native_teams}]
+                          [--channel {stdout,native_teams}]
                           [--verbose] [--json]
                           [--max-iterations MAX_ITERATIONS]
                           [--session-id SESSION_ID] [--mb-target MB_TARGET]
@@ -401,12 +401,11 @@ usage: pipeline_runner.py [-h] [--execute]
 |----------|----------|---------|-------------|
 | `pipeline` (positional) | Yes | — | Path to .dot pipeline file |
 | `--execute` | No | false (plan-only) | Execute actions (spawn orchestrators, run validation) |
-| `--channel CHAN` | No | stdout | Communication channel: `stdout`, `message_bus`, `native_teams` |
+| `--channel CHAN` | No | stdout | Communication channel: `stdout`, `native_teams` |
 | `--verbose`, `-v` | No | false | Print tool call details to stderr |
 | `--json` | No | false | Output raw RunnerPlan JSON |
 | `--max-iterations N` | No | 20 | Maximum tool-use iterations |
 | `--session-id ID` | No | — | Session ID for state persistence |
-| `--mb-target ID` | No | — | Message bus target ID (for `message_bus` channel) |
 | `--team-name NAME` | No | — | Native teams team name (for `native_teams` channel) |
 
 **RunnerPlan JSON schema** (output with `--json`):
@@ -425,7 +424,6 @@ usage: pipeline_runner.py [-h] [--execute]
 
 **Channel adapters**:
 - `stdout` — Print actions to console (default, for plan-only mode)
-- `message_bus` — Send via `mb-send` to specified target
 - `native_teams` — Send via Agent Teams messaging
 
 ### `poc_test_scenarios.py`

@@ -87,7 +87,7 @@ Before stopping, System 3 MUST have completed:
 1. **Completion Promises**: All session promises verified with proof (cs-verify --check passed = session-owned promises done), or no promises created. Note: WORK STATE shows only this session's promises after Step 4 filtering — foreign/orphaned promises from other sessions are excluded.
 2. **Post-Session Reflection**: Learnings stored to Hindsight (mcp__hindsight__retain)
 3. **Validation Evidence**: Business outcomes validated via validation-test-agent (not direct bd close)
-4. **Cleanup**: Message bus unregistered (if registered). NOTE: Active orchestrator tmux sessions (orch-*) are EXPECTED and are NOT a cleanup issue — they run independently and persist beyond this session.
+4. **Cleanup**: NOTE: Active orchestrator tmux sessions (orch-*) are EXPECTED and are NOT a cleanup issue — they run independently and persist beyond this session.
 
 ### Layer 1.5: Validation Integrity (HARD REQUIREMENT)
 If the WORK STATE shows ANY of these indicators, ALWAYS BLOCK:

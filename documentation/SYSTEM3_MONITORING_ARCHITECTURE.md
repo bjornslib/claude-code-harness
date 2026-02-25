@@ -216,7 +216,7 @@ When System3 receives a wake-up from a monitor:
 │     - session_idle → Check if work complete                     │
 │                                                                 │
 │  2. DECIDE action                                               │
-│     - Provide guidance via message bus                          │
+│     - Provide guidance via tmux injection                       │
 │     - Inject into tmux session                                  │
 │     - Mark task for manual review                               │
 │     - Close task as failed                                      │
@@ -250,17 +250,6 @@ Examples:
 ~/.claude/tasks/{TASK_LIST_ID}/           # Task files
 /tmp/.task-monitor-{TASK_LIST_ID}.json    # Monitor state (change detection)
 /tmp/.orch-monitor-{session_name}.json    # Orchestrator monitor state
-```
-
-### Message Bus Integration
-
-Monitors can also send non-blocking updates via message bus:
-
-```bash
-# From monitor to System3 (informational, doesn't wake)
-mb-send system3 '{"type": "status", "prd": "PRD-AUTH-001", "progress": "3/5 tasks done"}'
-
-# Waking only happens via subagent completion
 ```
 
 ---

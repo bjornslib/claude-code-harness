@@ -147,12 +147,11 @@ Copies `.claude/` while excluding runtime artifacts:
 - `/completion-state/` — Session completion tracking
 - `/progress/*` — Session progress files
 - `/worker-assignments/*` — Worker task assignments
-- `/message-bus/` — Inter-instance messaging queue
 - `/logs/` — Log files
 - `*.log`, `.DS_Store`, `__pycache__/`, `*.pyc`, `node_modules/`
 - `settings.local.json` — Local overrides
 
-**Important**: `scripts/completion-state/` and `scripts/message-bus/` (CLI tools) ARE copied.
+**Important**: `scripts/completion-state/` (CLI tools) ARE copied.
 Only the top-level runtime directories are excluded.
 
 ### .claude/CLAUDE.md Handling
@@ -163,7 +162,6 @@ Only the top-level runtime directories are excluded.
 Creates excluded directories with `.gitkeep` so git tracks the structure:
 - `state/`, `progress/`, `worker-assignments/`
 - `completion-state/` (with subdirs: `default/`, `history/`, `promises/`, `sessions/`)
-- `message-bus/` (with subdirs: `signals/`)
 
 ### .gitignore Updates
 Appends Claude Code runtime exclusion entries if not already present.
@@ -181,7 +179,7 @@ Skips gracefully for non-git targets or existing non-symlink hooks.
 - `skills/` — All skill definitions
 - `hooks/` — Lifecycle hooks
 - `output-styles/` — Agent behavior definitions
-- `scripts/` — CLI utilities (includes `scripts/completion-state/` and `scripts/message-bus/`)
+- `scripts/` — CLI utilities (includes `scripts/completion-state/`)
 - `commands/` — Slash commands
 - `schemas/` — JSON schemas
 - `tests/` — Hook tests
@@ -195,7 +193,6 @@ Skips gracefully for non-git targets or existing non-symlink hooks.
 - `completion-state/*` — Subdirs created: default/, history/, promises/, sessions/
 - `progress/*` — Directory kept with .gitkeep
 - `worker-assignments/*` — Directory kept with .gitkeep
-- `message-bus/*` — Subdirs created: signals/
 - `logs/` — Log files
 - `settings.local.json` — Local overrides
 

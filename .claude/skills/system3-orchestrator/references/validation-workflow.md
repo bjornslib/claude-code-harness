@@ -281,8 +281,8 @@ if verdict == "PASS":
 elif verdict == "FAIL":
     # Do NOT close — spawn orchestrator to fix
     Bash(f"bd update {task_id} --status=in_progress")
-    # Send failure details to orchestrator via message bus
-    Bash(f"mb-send orch-{{name}} s3_rejected '{{\"task_id\": \"{task_id}\", \"failures\": \"{failure_list}\"}}'")
+    # Send failure details back to orchestrator via beads status update
+    Bash(f"bd update {task_id} --status=s3_rejected")
 ```
 
 ### Model Requirements

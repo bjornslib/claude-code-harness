@@ -141,7 +141,7 @@ Phase 2 introduces a **Pipeline Runner Agent** -- a purpose-built agent that rea
 │  │    6. If no ready nodes and not done: report STUCK to System 3 │  │
 │  │                                                                 │  │
 │  │  Tools: attractor CLI, tmux, validation-test-agent,            │  │
-│  │         message-bus, cs-promise                                 │  │
+│  │         cs-promise                                              │  │
 │  └────────────────────────────────────────────────────────────────┘  │
 │                                                                      │
 │  ┌────────────────────────────────────────────────────────────────┐  │
@@ -162,7 +162,7 @@ Phase 2 introduces a **Pipeline Runner Agent** -- a purpose-built agent that rea
 2. **Event-driven progression**
    - Node completion triggers the runner to re-evaluate the graph.
    - The runner does not poll on a timer; it reacts to orchestrator completion signals.
-   - Completion signals come via: (a) message bus (`mb-recv`), (b) tmux session exit, (c) task list changes detected by `task-list-monitor.py`.
+   - Completion signals come via: (a) bead status updates, (b) tmux session exit, (c) task list changes detected by `task-list-monitor.py`.
 
 3. **System 3 approval gates**
    - The runner advances `codergen` -> `impl_complete` -> `validated` automatically for technical validation.
@@ -270,7 +270,7 @@ Timeline:
   t0-t3: Backend impl_complete (same as above)
   t4: Technical validation -> FAIL (missing error handling)
   t5: Runner transitions backend to failed
-  t6: Runner sends feedback to orchestrator via message bus
+  t6: Runner sends feedback to orchestrator via tmux injection
   t7: Orchestrator receives rejection, fixes issue
   t8: Orchestrator signals impl_complete (second attempt)
   t9: Technical validation -> PASS
@@ -639,21 +639,17 @@ When System 3 is managing 3 concurrent initiatives (each with its own DOT file),
 
 **Current lean**: After every node state transition. The checkpoint is a single JSON file write (~1KB). The cost is negligible compared to the cost of re-running a failed node. For a 10-node pipeline, this means ~30-40 checkpoints (each node transitions 3-4 times on average).
 
-### Q4: Should the Engine Use Message Bus or Native Agent Teams?
+### Q4: How Should the Engine Communicate with System 3?
 
-**Option A: Message bus** -- Runner communicates with System 3 via `mb-send`/`mb-recv`.
-- Pro: Works across tmux sessions. Proven infrastructure.
-- Con: Polling-based. Adds latency.
-
-**Option B: Native Agent Teams** -- Runner is a teammate of System 3's s3-live team, uses SendMessage.
+**Option A: Native Agent Teams** -- Runner is a teammate of System 3's s3-live team, uses SendMessage.
 - Pro: Event-driven (SendMessage triggers immediately). No polling.
 - Con: Requires runner to be a persistent team member (conflicts with per-session invocation).
 
-**Option C: Hybrid** -- Runner uses SendMessage when operating as a team member, falls back to message bus for cross-session communication.
-- Pro: Best of both worlds.
-- Con: Two communication paths to maintain.
+**Option B: Bead status updates** -- Runner updates bead statuses; System 3 monitors bead state.
+- Pro: Uses existing infrastructure. Durable. Auditable.
+- Con: Polling-based. Adds latency.
 
-**Current lean**: Option B (Native Agent Teams) for Phase 2. The runner is spawned as a background task in the s3-live team with `run_in_background=True`. It uses SendMessage to communicate with System 3. This aligns with the existing s3-live team pattern (s3-communicator, s3-heartbeat, s3-validator are all team members).
+**Current lean**: Option A (Native Agent Teams) for Phase 2. The runner is spawned as a background task in the s3-live team with `run_in_background=True`. It uses SendMessage to communicate with System 3. This aligns with the existing s3-live team pattern (s3-communicator, s3-heartbeat, s3-validator are all team members).
 
 ### Q5: How Does the Runner Handle Context Exhaustion?
 
@@ -701,6 +697,6 @@ This keeps the runner simple and avoids race conditions between graph modificati
 | PRD-S3-ATTRACTOR-001 | `.taskmaster/docs/PRD-S3-ATTRACTOR-001.md` | Parent PRD (current phase) |
 | Attractor DOT Schema | `.claude/attractor/schema.md` | DOT vocabulary definition |
 | System 3 Output Style | `.claude/output-styles/system3-meta-orchestrator.md` | S3 navigation approach |
-| Message Bus Architecture | `.claude/documentation/MESSAGE_BUS_ARCHITECTURE.md` | Inter-instance communication |
+| Dual Closure Gate | `.claude/documentation/DUAL_CLOSURE_GATE.md` | Independent validation protocol |
 | Completion Promise CLI | `.claude/skills/system3-orchestrator/references/completion-promise-cli.md` | Promise management |
 | Monitoring Architecture | `.claude/documentation/SYSTEM3_MONITORING_ARCHITECTURE.md` | Monitor/watcher patterns |

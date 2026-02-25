@@ -64,16 +64,16 @@ Same file(s) edited multiple times without progress:
 
 {reason}
 
-**Send guidance request to System3:**
+**Escalate to System3 via beads:**
 ```bash
-mb-send system3 '{{"type": "guidance_request", "context": "{context}", "session_id": "{session_id}"}}'
+bd update <id> --status=impl_complete
 ```
 
 **Why consult?**
 - A fresh perspective from a different model often recognizes solutions the stuck agent cannot
 - System3 can provide strategic guidance without the failed attempts polluting its context
 
-*Wait for System3 response before continuing.*
+*Update the bead status and wait for System3 to pick it up.*
 """,
         },
         "delegation_reminder": {
@@ -91,7 +91,7 @@ You're about to use {tool_name} as an orchestrator.
 ```bash
 tmux new-session -d -s worker-{task_id}
 tmux send-keys -t worker-{task_id} "claude" Enter
-# Send task assignment via message bus
+# Delegate task via native Agent Teams
 ```
 
 *Orchestrators coordinate, workers implement. No exceptions.*
@@ -134,7 +134,7 @@ Worker {worker_id} failed on task {task_id}.
 
 **To consult System3:**
 ```bash
-mb-send system3 '{{"type": "worker_failure", "worker": "{worker_id}", "task": "{task_id}", "details": "..."}}'
+bd update <id> --status=impl_complete
 ```
 
 *A fresh perspective often recognizes solutions the stuck agent cannot generate.*
@@ -150,9 +150,9 @@ You have blockers that should be escalated before stopping:
 {blocker_list}
 
 **Required action:**
-1. Escalate to System3 with context:
+1. Escalate to System3 via beads:
    ```bash
-   mb-send system3 '{{"type": "blocker_escalation", "blockers": [...], "session_id": "{session_id}"}}'
+   bd update <id> --status=impl_complete
    ```
 2. Or mark as external dependency if truly external
 

@@ -177,12 +177,11 @@ if result["combined_verdict"] == "DUAL_PASS":
 elif result["combined_verdict"] == "DUAL_FAIL_TECHNICAL":
     # Technical issues — send back to orchestrator for fixes
     Bash(f"bd update {task_id} --status=in_progress")
-    Bash(f"mb-send orch-{{name}} s3_rejected '{{\"task_id\": \"{task_id}\", \"phase\": \"technical\", \"issues\": \"{result['details']}\"}}'")
+    Bash(f"bd update {task_id} --status=s3_rejected")
 
 elif result["combined_verdict"] == "DUAL_FAIL_BUSINESS":
     # Code is clean but doesn't meet PRD — send back with specifics
-    Bash(f"bd update {task_id} --status=in_progress")
-    Bash(f"mb-send orch-{{name}} s3_rejected '{{\"task_id\": \"{task_id}\", \"phase\": \"business\", \"unmet_acs\": \"{result['unmet_acs']}\"}}'")
+    Bash(f"bd update {task_id} --status=s3_rejected")
 
 elif result["combined_verdict"] == "DUAL_PARTIAL":
     # Technical OK, business partially met — create follow-up tasks
@@ -399,10 +398,8 @@ SendMessage(type="message", recipient="s3-evidence-clerk",
 # After clerk reports:
 if all_passed:
     Bash(f"bd close {task_id} --reason 'S3 validated: all checks pass'")
-    Bash(f"mb-send orch-{{name}} s3_validated '{{\"task_id\": \"{task_id}\"}}'")
 else:
-    Bash(f"bd update {task_id} --status=in_progress")
-    Bash(f"mb-send orch-{{name}} s3_rejected '{{\"task_id\": \"{task_id}\", \"issues\": \"{failure_summary}\"}}'")
+    Bash(f"bd update {task_id} --status=s3_rejected")
 ```
 
 ## Worker Lifecycle

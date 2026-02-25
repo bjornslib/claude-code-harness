@@ -240,7 +240,6 @@ deploy_to_target() {
         --exclude='/completion-state/' \
         --exclude='/progress/*' \
         --exclude='/worker-assignments/*' \
-        --exclude='/message-bus/' \
         --exclude='/logs/' \
         --exclude='*.log' \
         --exclude='.DS_Store' \
@@ -294,9 +293,6 @@ deploy_to_target() {
     mkdir -p "$target_dir/.claude/worker-assignments"
     touch "$target_dir/.claude/worker-assignments/.gitkeep"
 
-    mkdir -p "$target_dir/.claude/message-bus/signals"
-    touch "$target_dir/.claude/message-bus/.gitkeep"
-
     ok "Created runtime directories with .gitkeep files"
 
     # ── Update .gitignore ──
@@ -318,8 +314,6 @@ deploy_to_target() {
 !.claude/progress/.gitkeep
 .claude/worker-assignments/*
 !.claude/worker-assignments/.gitkeep
-.claude/message-bus/*
-!.claude/message-bus/.gitkeep
 .claude/logs/
 .claude/*.log
 .claude/settings.local.json
@@ -365,7 +359,6 @@ GITIGNORE_ENTRIES
 
     # ── Make scripts executable ──
     find "$target_dir/.claude/scripts" -type f -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
-    find "$target_dir/.claude/scripts" -type f -name "mb-*" -exec chmod +x {} \; 2>/dev/null || true
     find "$target_dir/.claude/scripts" -type f -name "cs-*" -exec chmod +x {} \; 2>/dev/null || true
     ok "Scripts marked executable"
 

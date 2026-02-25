@@ -148,7 +148,7 @@ Validation artifacts are stored in `.claude/evidence/{task-id}/`:
 ### Neutral
 - Beads status strings are free-form — no schema changes needed
 - Stop gate changes are additive (no breaking changes)
-- Message bus protocol unchanged (just new message types)
+- Beads status protocol unchanged (just new status values)
 
 ## Related Documents
 

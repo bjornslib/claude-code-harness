@@ -30,11 +30,6 @@ progress/*
 worker-assignments/*
 !worker-assignments/.gitkeep
 
-# Message bus runtime
-message-bus/queue.db
-message-bus/signals/*.signal
-message-bus/signals/*.msg
-
 # Local settings
 settings.local.json
 

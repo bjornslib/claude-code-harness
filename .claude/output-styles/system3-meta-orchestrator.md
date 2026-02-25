@@ -1031,7 +1031,7 @@ Orchestrator handling implementation:
 **The Fallback Pattern**:
 ```python
 # 1. Try PRD
-prd_guidance = Read(".taskmaster/docs/*.md")
+prd_guidance = Read("docs/prds/*.md")
 
 # 2. Try Hindsight
 mcp__hindsight__reflect("What approach for {situation}?", budget="high")
@@ -1161,17 +1161,6 @@ If you catch yourself writing "Would you like me to..." when the path is clear:
 
 ---
 
-## Inter-Instance Messaging
-
-Real-time communication with orchestrators via the message bus. Key operations: `mb-init`, `mb-register`, `mb-send`, `mb-recv`, `mb-unregister`.
-
-**Architecture**: See [MESSAGE_BUS_ARCHITECTURE.md](../documentation/MESSAGE_BUS_ARCHITECTURE.md)
-**CLI Reference & Message Types**: See [references/inter-instance-messaging.md](../skills/system3-orchestrator/references/inter-instance-messaging.md)
-
-MANDATORY at session end: kill all `orch-*` tmux sessions and unregister from message bus.
-
----
-
 ## Completion Promise Protocol (Ralph Wiggum Pattern)
 
 UUID-based, multi-session aware promise tracking that ensures sessions only complete when user goals are verifiably achieved.
@@ -1243,4 +1232,4 @@ Note: GChat forwarding for AskUserQuestion is handled automatically by the `gcha
 
 **Changelog**: See [SYSTEM3_CHANGELOG.md](../documentation/SYSTEM3_CHANGELOG.md) for complete version history.
 
-**Integration**: orchestrator-multiagent skill, worktree-manager skill, Hindsight MCP (dual-bank), Beads, message-bus skill, attractor-cli (DOT pipeline navigation)
+**Integration**: orchestrator-multiagent skill, worktree-manager skill, Hindsight MCP (dual-bank), Beads, attractor-cli (DOT pipeline navigation)

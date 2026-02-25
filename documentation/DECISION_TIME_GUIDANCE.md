@@ -232,12 +232,12 @@ def inject_consultation_guidance():
 
 Worker execution failed multiple times. Before retrying:
 
-1. **Use message bus to consult System3**:
+1. **Escalate to System3 via bead status**:
    ```bash
-   mb-send system3 '{"type": "guidance_request", "context": "worker_failure", "details": "..."}'
+   bd update <id> --status=blocked --notes="worker_failure: <details>"
    ```
 
-2. **Wait for System3 response** - use `/check-messages` or wait for PostToolUse notification
+2. **Wait for System3 response** - System3 monitors bead statuses for blocked items
 
 3. **Alternative**: Create a fresh plan from first principles instead of retrying
 
@@ -296,13 +296,9 @@ You have {len(blockers)} blocker(s) that should be escalated to System3 before s
 {format_blockers(blockers)}
 
 **Required Action**:
-1. Send guidance request to System3:
+1. Escalate blockers to System3 via bead status:
    ```bash
-   mb-send system3 '{{
-     "type": "guidance_request",
-     "blockers": {json.dumps(blockers)},
-     "session_id": "{session_id}"
-   }}'
+   bd update <id> --status=blocked --notes="blockers: ..."
    ```
 
 2. Or explicitly mark blockers as "external dependency" if truly external
@@ -337,7 +333,7 @@ consult_external:
   trigger: "Worker failure on same task 2+ times"
   message: |
     💡 Consider consulting System3 for a fresh perspective.
-    Use: mb-send system3 '{"type": "guidance_request", ...}'
+    Use: bd update <id> --status=blocked --notes="guidance needed: ..."
 
 delegation_reminder:
   trigger: "Orchestrator used Edit/Write after compaction"
@@ -486,7 +482,7 @@ class SignalTracker:
 
 5. **System3 Guidance Protocol** (`.claude/hooks/decision_guidance/system3_protocol.py`)
    - Request/response tracking
-   - Message bus integration helpers
+   - Bead status integration helpers
    - Response formatting for injection
 
 ### Setup Instructions
@@ -499,15 +495,6 @@ Add to `.claude/settings.json` in the `hooks.PostToolUse` array:
 {
   "hooks": {
     "PostToolUse": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/message-bus-signal-check.py"
-          }
-        ]
-      },
       {
         "matcher": "",
         "hooks": [
@@ -586,8 +573,8 @@ You have 2 blocker(s) that should be escalated to System3:
 - **error_pattern**: 5 errors in last 10 minutes
 - **worker_failure**: 2 worker failure(s)
 
-**Recommended Action - Send guidance request to System3:**
-mb-send system3 '{"type": "guidance_request", ...}'
+**Recommended Action - Escalate to System3:**
+bd update <id> --status=blocked --notes="guidance needed: ..."
 
 *Attempt 1/2. Stop 2 more time(s) to bypass.*
 ```
@@ -596,16 +583,9 @@ mb-send system3 '{"type": "guidance_request", ...}'
 
 From orchestrator code or CLI:
 
-```python
-from decision_guidance.system3_protocol import create_blocked_request
-
-# Generate the command
-cmd = create_blocked_request(
-    blockers=["Authentication failing", "Database timeout"],
-    attempted_solutions=["Retry 3 times", "Increased timeout"]
-)
-print(cmd)
-# Output: mb-send system3 '{"type": "guidance_request", ...}'
+```bash
+# Escalate blockers to System3 via bead status update
+bd update <id> --status=blocked --notes="blockers: Authentication failing, Database timeout. Attempted: Retry 3 times, Increased timeout"
 ```
 
 ### Monitoring & Debugging

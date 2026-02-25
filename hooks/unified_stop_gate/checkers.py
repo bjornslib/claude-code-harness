@@ -734,9 +734,9 @@ You have {len(blockers)} blocker(s) that should be escalated to System3:
 
 {self._format_blocker_list(blockers)}
 
-**Recommended Action - Send guidance request to System3:**
+**Recommended Action - Escalate to System3 via beads:**
 ```bash
-mb-send system3 '{{"type": "guidance_request", "blockers": {json.dumps([b["description"] for b in blockers])}, "session_id": "{session_id}"}}'
+bd update <id> --status=impl_complete
 ```
 
 **Why escalate?**

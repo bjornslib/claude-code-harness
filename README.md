@@ -32,8 +32,7 @@ Workers (Implementation)
 **Key Components**:
 - **Output Styles**: Auto-loaded agent behaviors (system3, orchestrator)
 - **Skills**: 20+ specialized capabilities (orchestration, testing, design, etc.)
-- **Hooks**: Lifecycle automation (session start, stop gates, messaging)
-- **Message Bus**: Inter-instance communication system
+- **Hooks**: Lifecycle automation (session start, stop gates, validation)
 - **MCP Integration**: 9+ MCP servers with progressive disclosure wrappers
 - **Task Master**: PRD → Task decomposition and tracking
 
@@ -128,7 +127,7 @@ When you symlink `.claude`, your project gets access to:
 ├── output-styles/          # Auto-loaded agent behaviors
 ├── skills/                 # 20+ capabilities (orchestration, TDD, etc.)
 ├── hooks/                  # Lifecycle automation
-├── scripts/                # CLI utilities (message-bus, completion-state)
+├── scripts/                # CLI utilities (completion-state)
 ├── commands/               # Slash commands
 ├── documentation/          # Architecture guides
 ├── settings.json           # Core configuration
@@ -328,7 +327,6 @@ pytest .claude/hooks/unified_stop_gate/tests/
 ### Additional References
 
 - [.claude/TM_COMMANDS_GUIDE.md](./.claude/TM_COMMANDS_GUIDE.md) - Task Master slash commands
-- [.claude/documentation/MESSAGE_BUS_ARCHITECTURE.md](./.claude/documentation/MESSAGE_BUS_ARCHITECTURE.md) - Inter-instance messaging
 - [.claude/documentation/ADR-001-output-style-reliability.md](./.claude/documentation/ADR-001-output-style-reliability.md) - Output styles vs skills
 
 ## 🤝 Contributing
@@ -365,9 +363,6 @@ rm .claude && ln -s ~/claude-harness/.claude .claude
 chmod +x ~/claude-harness/.claude/scripts/**/*
 chmod +x ~/claude-harness/.claude/hooks/**/*
 
-# Message bus issues
-.claude/scripts/message-bus/mb-init
-.claude/scripts/message-bus/mb-status
 ```
 
 ## 📄 License

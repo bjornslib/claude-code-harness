@@ -76,8 +76,7 @@ Orchestrators do NOT close tasks — System 3's oversight team handles validatio
 **Handoff Protocol:**
 1. Workers confirm: code committed, unit tests pass, implementation complete
 2. Orchestrator marks bead: `bd update <id> --status=impl_complete`
-3. Orchestrator notifies System 3: `mb-send system3 impl_complete '{"task_id": "<id>", "prd": "PRD-XXX"}'`
-4. Orchestrator continues to next task (does NOT wait for S3 validation)
+3. Orchestrator continues to next task (does NOT wait for S3 validation)
 
 **Custom Beads Status Lifecycle:**
 ```
@@ -304,7 +303,7 @@ bd create --title="[Initiative from Ideation]" --type=epic --priority=1
 # Note the returned ID (e.g., agencheck-001)
 
 # 2. Create PRD from design document (if not exists)
-# Location: agencheck/.taskmaster/docs/[project]-prd.md
+# Location: agencheck/docs/prds/[project]-prd.md
 
 # 2.5a. Codebase Analysis with ZeroRepo (Recommended)
 # For detailed workflow, see ZEROREPO.md
@@ -314,7 +313,7 @@ bd create --title="[Initiative from Ideation]" --type=epic --priority=1
 python .claude/skills/orchestrator-multiagent/scripts/zerorepo-run-pipeline.py \
   --operation init --project-path .  # Once per project
 python .claude/skills/orchestrator-multiagent/scripts/zerorepo-run-pipeline.py \
-  --operation generate --prd .taskmaster/docs/prd.md \
+  --operation generate --prd docs/prds/prd.md \
   --baseline .zerorepo/baseline.json --model claude-sonnet-4-5-20250929 \
   --output .zerorepo/output
 # Read delta report: .zerorepo/output/05-delta-report.md
@@ -334,7 +333,7 @@ python .claude/skills/orchestrator-multiagent/scripts/zerorepo-run-pipeline.py \
 cd agencheck && task-master list | tail -5  # e.g., last task is ID 170
 
 # 4. Parse PRD with Task Master (--append if tasks exist)
-task-master parse-prd .taskmaster/docs/prd.md --research --append
+task-master parse-prd docs/prds/prd.md --research --append
 task-master analyze-complexity --research
 task-master expand --all --research
 # Note the new ID range (e.g., 171-210)
@@ -349,7 +348,7 @@ node agencheck/.claude/skills/orchestrator-multiagent/scripts/sync-taskmaster-to
 
 # 6. Generate acceptance tests from PRD (IMMEDIATELY after sync)
 cd /Users/theb/Documents/Windsurf/zenagent/agencheck
-Skill("acceptance-test-writer", args="--prd=PRD-AUTH-001 --source=.taskmaster/docs/prd.md")
+Skill("acceptance-test-writer", args="--prd=PRD-AUTH-001 --source=docs/prds/prd.md")
 # This generates:
 # acceptance-tests/PRD-AUTH-001/
 # ├── manifest.yaml          # PRD metadata + feature list
@@ -440,9 +439,8 @@ The autonomous mode protocol provides:
    ↓
 5. Worker sends results via SendMessage (auto-delivered to you)
    ↓
-6. Mark impl_complete + notify S3
+6. Mark impl_complete
    bd update <bd-id> --status=impl_complete
-   mb-send system3 impl_complete '{"task_id": "<bd-id>", "prd": "PRD-XXX"}'
    ↓
 7. `git add . && git commit -m "feat(<bd-id>): [description]"`
 ```
@@ -586,10 +584,9 @@ result = Task(
 # Result returned directly - no monitoring, no cleanup needed
 ```
 
-In fallback mode, after implementation the orchestrator marks tasks `impl_complete` and notifies S3:
+In fallback mode, after implementation the orchestrator marks tasks `impl_complete`:
 ```bash
 bd update <bd-id> --status=impl_complete
-mb-send system3 impl_complete '{"task_id": "<bd-id>", "prd": "PRD-AUTH-001"}'
 ```
 
 **How to detect**: Check for `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` in environment. If absent, use fallback.
@@ -716,7 +713,7 @@ The orchestrator does NOT need to set up E2E infrastructure or run acceptance te
 - Ran regression check first?
 - Worker stayed within scope?
 - Validated feature works (not just tests pass)?
-- **Marked impl_complete and notified S3 via message bus?**
+- **Marked impl_complete (`bd update <bd-id> --status=impl_complete`)?**
 - Committed with message?
 - Git status clean?
 
@@ -816,7 +813,7 @@ python3 .claude/scripts/attractor/cli.py checkpoint save pipeline.dot
 - **Always checkpoint** after transitions — enables rollback if downstream work fails
 - **Validate after transitions**: `python3 .claude/scripts/attractor/cli.py validate pipeline.dot`
 - **Check status before dispatch**: Ensure upstream dependencies are `validated` before transitioning a node to `active`
-- **Report transitions to System 3** via message bus after `impl_complete`
+- **Report transitions to System 3** after `impl_complete` (via `bd update <bd-id> --status=impl_complete`)
 
 ### Pipeline Dashboard & Progress
 
@@ -858,16 +855,6 @@ Status is persisted in the DOT file itself. After context compaction or session 
 
 ---
 
-## Message Bus Integration
-
-**Scope**: Message bus handles System 3 ↔ Orchestrator communication. Worker communication uses native Agent Teams (SendMessage/TaskCreate).
-
-Essential commands: `mb-register`, `mb-recv`, `mb-send`, `mb-unregister`.
-
-**Full protocol**: See [references/message-bus-integration.md](references/message-bus-integration.md)
-
----
-
 ## Reference Guides
 
 ### When to Consult Each Guide
@@ -890,9 +877,8 @@ Essential commands: `mb-register`, `mb-recv`, `mb-send`, `mb-unregister`.
 **Session Boundaries:**
 - **[WORKFLOWS.md](WORKFLOWS.md#session-handoffs)** - Handoff checklists, summaries, learning documentation
 
-**Memory & Communication:**
+**Memory:**
 - **[references/hindsight-integration.md](references/hindsight-integration.md)** - Memory-driven decision making, learning loops, feedback patterns
-- **[references/message-bus-integration.md](references/message-bus-integration.md)** - System 3 ↔ Orchestrator messaging protocol
 
 **Legacy Support:**
 - **[LEGACY_FEATURE_LIST.md](archive/LEGACY_FEATURE_LIST.md)** - Archived feature_list.json documentation for migration
@@ -903,10 +889,10 @@ Essential commands: `mb-register`, `mb-recv`, `mb-send`, `mb-unregister`.
 **Progressive Disclosure**: 8 reference files for detailed information
 **Last Updated**: 2026-02-08
 **Latest Enhancements**:
-- v5.3: **Progressive Disclosure Streamlining** - Reduced SKILL.md from 6,473 to ~3,800 words (~41% reduction). Moved Memory-Driven Decision Making (~600 words) and Message Bus Integration (~400 words) to new reference files (references/hindsight-integration.md, references/message-bus-integration.md). Compressed Phase 0 Ideation, Sync Script, Worker Delegation, and Testing & Validation sections. Removed duplicate Acceptance Test Generation subsection (already in Phase 1 workflow). All writing converted to imperative/infinitive form (no second-person). Progressive disclosure now with 8 reference files total.
+- v5.3: **Progressive Disclosure Streamlining** - Reduced SKILL.md from 6,473 to ~3,800 words (~41% reduction). Moved Memory-Driven Decision Making (~600 words) to reference file (references/hindsight-integration.md). Compressed Phase 0 Ideation, Sync Script, Worker Delegation, and Testing & Validation sections. Removed duplicate Acceptance Test Generation subsection (already in Phase 1 workflow). All writing converted to imperative/infinitive form (no second-person).
 - v5.2: **Bead Enrichment from RPG Graph** - Added Phase 1.5 workflow to inject 04-rpg.json context into beads after Task Master sync. New "Enriching Beads with RPG Graph Context" section in ZEROREPO.md documents the enrichment pattern with real examples. Updated model from claude-sonnet-4-20250514 to claude-sonnet-4-5-20250929. Step 2.5 now split into 2.5a (generate delta) and 2.5b (enrich beads). Workers receive implementation-ready specs with file paths, interfaces, and technology stacks extracted from RPG graph.
 - v5.1: **ZeroRepo Integration** - Added codebase-aware orchestration via ZeroRepo delta analysis. New Step 2.5 in Phase 1 planning runs `zerorepo init` + `zerorepo generate` to classify PRD components as EXISTING/MODIFIED/NEW. Delta context enriches worker task assignments with precise file paths and change summaries. New ZEROREPO.md reference guide. Three wrapper scripts (`zerorepo-init.sh`, `zerorepo-generate.sh`, `zerorepo-update.sh`). Codebase-Aware Task Creation workflow added to WORKFLOWS.md.
-- v5.0: **Native Agent Teams** - Replaced Task subagent worker delegation with native Agent Teams (Teammate + TaskCreate + SendMessage). Workers are now persistent teammates that claim tasks from a shared TaskList, communicate peer-to-peer, and maintain session state across multiple assignments. Validator is a team role (not a separate Task subagent). Message bus scoped to System 3 <-> Orchestrator only; worker communication uses native team inboxes. Fallback to Task subagent mode when AGENT_TEAMS is not enabled.
+- v5.0: **Native Agent Teams** - Replaced Task subagent worker delegation with native Agent Teams (Teammate + TaskCreate + SendMessage). Workers are now persistent teammates that claim tasks from a shared TaskList, communicate peer-to-peer, and maintain session state across multiple assignments. Validator is a team role (not a separate Task subagent). Worker communication uses native team inboxes. Fallback to Task subagent mode when AGENT_TEAMS is not enabled.
 - v4.0: **Task-Based Worker Delegation** - Replaced tmux worker delegation with Task subagents. Workers now receive assignments via `Task(subagent_type="...")` and return results directly. No session management, monitoring loops, or cleanup required. Parallel workers use `run_in_background=True` with `TaskOutput()` collection. System 3 -> Orchestrator still uses tmux for session isolation; Orchestrator -> Worker now uses Task subagents.
 - v3.13: 🆕 **Sync Script Finalization** - Sync script now auto-closes Task Master tasks after sync (status=done). Removed mapping file (redundant with beads hierarchy). **IMPORTANT**: Must run from `zenagent/` root to use correct `.beads` database. Updated all docs with correct paths and `--tasks-path` usage.
 - v3.12: **ID Range Filtering** - `--from-id=<id>` and `--to-id=<id>` to filter which Task Master tasks to sync. Essential for multi-PRD projects.
@@ -914,7 +900,7 @@ Essential commands: `mb-register`, `mb-recv`, `mb-send`, `mb-unregister`.
 - v3.10: **Reference Consolidation** - Created REFERENCE.md as quick reference card. Merged BEADS_INTEGRATION.md, README.md, and ORCHESTRATOR_INITIALIZATION_TEMPLATE.md into REFERENCE.md. Reduced reference files from 6 to 5. Essential commands, patterns, and session templates now in single quick-lookup location.
 - v3.9: **Validation Consolidation** - Merged TESTING_INFRASTRUCTURE.md, TROUBLESHOOTING.md, and SERVICE_MANAGEMENT.md into unified VALIDATION.md. Reduced reference files from 8 to 6. All testing, troubleshooting, and service management now in single location.
 - v3.8: **Workflow Consolidation** - Merged AUTONOMOUS_MODE.md, ORCHESTRATOR_PROCESS_FLOW.md, FEATURE_DECOMPOSITION.md, and PROGRESS_TRACKING.md into unified WORKFLOWS.md. Reduced reference files from 11 to 8. All workflow documentation now in single location.
-- v3.7: 🆕 **Inter-Instance Messaging** - Real-time communication with System 3 and other orchestrators. SQLite message queue with orchestrator registry. Background monitor agent pattern for message detection. Session start/end registration protocol. Completion reports to System 3.
+- v3.7: Removed legacy inter-instance messaging (replaced by beads status updates).
 - v3.6: **Memory-Driven Decision Making** - Integrated Hindsight for continuous learning. Task start recall, user feedback loop (retain → reflect → retain), double-rejection analysis with Perplexity validation, hollow test prevention, session closure reflection. Creates learning loop where each task benefits from all previous experience.
 - v3.5: Clear four-phase pattern (Phase 0: Ideation → Phase 1: Planning → Phase 2: Execution → Phase 3: Validation). Consolidated Uber-Epic and AT-Epic patterns into unified "Epic Hierarchy Patterns" section with cleaner visual. Updated all phase references for consistency.
 - v3.4: Beads-only workflow - Removed ALL feature_list.json references (now in LEGACY_FEATURE_LIST.md). Added MANDATORY Ideation Phase with brainstorming + parallel-solutioning.

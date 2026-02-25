@@ -40,7 +40,6 @@ nano .claude/skills/mcp-skills/github/mcp-config.json
 ### 4. Make Scripts Executable
 
 ```bash
-chmod +x .claude/scripts/message-bus/*
 chmod +x .claude/scripts/completion-state/*
 chmod +x .claude/hooks/*.sh
 chmod +x .claude/hooks/**/*.py

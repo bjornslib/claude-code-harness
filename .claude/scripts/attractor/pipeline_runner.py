@@ -24,9 +24,6 @@ Usage:
     # Execute mode (actually spawns orchestrators, runs validation):
     python3 pipeline_runner.py pipeline.dot --execute
 
-    # With explicit channel:
-    python3 pipeline_runner.py pipeline.dot --channel message_bus
-
     # Show debug tool calls:
     python3 pipeline_runner.py pipeline.dot --verbose
 
@@ -38,7 +35,7 @@ Files:
     runner_models.py          Pydantic models (RunnerPlan, RunnerState, etc.)
     runner_tools.py           Tool definitions and implementations
     runner_hooks.py           Guard rail hooks (anti-gaming enforcement)
-    adapters/                 Channel adapters (stdout, message_bus, native_teams)
+    adapters/                 Channel adapters (stdout, native_teams)
     poc_pipeline_runner.py    Phase 2 POC (plan-only reference)
     poc_test_scenarios.py     Test scenarios (compatible with this module)
 """
@@ -500,8 +497,6 @@ Examples:
   # Verbose with JSON output:
   python3 pipeline_runner.py pipeline.dot --verbose --json
 
-  # With message bus channel:
-  python3 pipeline_runner.py pipeline.dot --channel message_bus --mb-target system3
         """,
     )
     ap.add_argument("pipeline", help="Path to the .dot pipeline file.")
@@ -513,7 +508,7 @@ Examples:
     ap.add_argument(
         "--channel",
         default="stdout",
-        choices=["stdout", "message_bus", "native_teams"],
+        choices=["stdout", "native_teams"],
         help="Communication channel adapter (default: stdout).",
     )
     ap.add_argument(
@@ -539,7 +534,6 @@ Examples:
         help="Unique session ID for state persistence and audit trail.",
     )
     # Channel-specific options
-    ap.add_argument("--mb-target", default="system3", help="Message bus target ID.")
     ap.add_argument(
         "--team-name", default="s3-live-workers", help="Native teams team name."
     )
@@ -554,9 +548,7 @@ Examples:
 
     # Create channel adapter
     channel_kwargs: dict[str, Any] = {}
-    if args.channel == "message_bus":
-        channel_kwargs = {"target": args.mb_target, "session_id": args.session_id}
-    elif args.channel == "native_teams":
+    if args.channel == "native_teams":
         channel_kwargs = {"team_name": args.team_name}
 
     adapter = create_adapter(args.channel, **channel_kwargs)

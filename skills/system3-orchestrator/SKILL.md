@@ -236,38 +236,13 @@ You are an orchestrator for initiative: [INITIATIVE_NAME]
 ### 1. Invoke Skill (MANDATORY)
 Before ANYTHING else: `Skill("orchestrator-multiagent")`
 
-### 2. Register with Message Bus
-```bash
-.claude/scripts/message-bus/mb-register \
-    "${CLAUDE_SESSION_ID}" \
-    "orch-[name]" \
-    "[description]" \
-    --initiative="[name]"
-```
-
-### 3. Spawn Background Monitor
-```python
-Task(
-    subagent_type="general-purpose",
-    model="haiku",
-    run_in_background=True,
-    description="Message queue monitor",
-    prompt="[Monitor template from message-bus skill]"
-)
-```
-
-### 4. Create Worker Team (NEW)
+### 2. Create Worker Team
 ```python
 Teammate(
     operation="spawnTeam",
     team_name="{initiative}-workers",
     description="Workers for {initiative}"
 )
-```
-
-### 5. Check for Messages
-```bash
-.claude/scripts/message-bus/mb-recv --peek
 ```
 
 ## System 3 Wisdom Injection
@@ -286,7 +261,7 @@ Teammate(
 1. Follow PREFLIGHT checklist from orchestrator-multiagent skill
 2. Use `bd ready` to find first task
 3. Report progress to `.claude/progress/orch-[name]-log.md`
-4. Send completion messages to System 3 via `mb-send`
+4. Mark tasks impl_complete via `bd update <bd-id> --status=impl_complete`
 ```
 
 ---
@@ -330,7 +305,8 @@ When monitor COMPLETES, System3 receives `<task-notification>`:
 ```python
 if "MONITOR_STUCK" in result:
     # Send guidance to orchestrator
-    Bash(f"mb-send orch-{name} guidance '...'")
+    # Send guidance via tmux direct intervention
+    Bash(f"tmux send-keys -t orch-{name} '[guidance]' Enter")
     # RE-LAUNCH monitor to continue watching
     launch_monitor(name, prd_name)
 
@@ -394,29 +370,7 @@ tmux list-sessions | grep "^orch-"
 tmux capture-pane -t "orch-[name]" -p | tail -20
 ```
 
-### Intervention via Message Bus
-
-```bash
-# Send guidance (preferred)
-.claude/scripts/message-bus/mb-send "orch-[name]" guidance '{
-    "subject": "Priority Change",
-    "body": "Focus on API endpoints first"
-}'
-
-# Urgent message
-.claude/scripts/message-bus/mb-send "orch-[name]" urgent '{
-    "subject": "Stop Work",
-    "body": "Regression detected"
-}' --urgent
-
-# Broadcast to all
-.claude/scripts/message-bus/mb-send --broadcast announcement '{
-    "subject": "Policy Update",
-    "body": "All commits require passing tests"
-}'
-```
-
-### Direct tmux Intervention (Fallback)
+### Direct tmux Intervention
 
 ```bash
 # Inject message
@@ -707,4 +661,4 @@ Maintain active orchestrators in `.claude/state/active-orchestrators.json`:
 - Updated spawn-orchestrator.sh with CLAUDE_SESSION_DIR and CLAUDE_SESSION_ID
 - Added validation expectations to preflight
 - Added OKR linkage check to preflight
-- Enhanced initialization template with message bus integration
+- Enhanced initialization template

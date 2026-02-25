@@ -6,9 +6,9 @@ This module provides:
 2. State tracking for pending requests
 3. Response processing
 
-The protocol uses the message bus for communication:
-- Orchestrator sends: mb-send system3 '{"type": "guidance_request", ...}'
-- System3 responds via: mb-send <orch-id> '{"type": "guidance_response", ...}'
+The protocol uses beads for communication:
+- Orchestrator signals: bd update <id> --status=impl_complete
+- System3 picks up impl_complete beads and provides guidance
 """
 
 import json
@@ -37,8 +37,8 @@ class GuidanceRequest:
     def from_dict(cls, data: dict) -> "GuidanceRequest":
         return cls(**data)
 
-    def to_message_bus_payload(self) -> str:
-        """Format as message bus payload."""
+    def to_json_payload(self) -> str:
+        """Format as JSON payload."""
         return json.dumps({
             "type": "guidance_request",
             "request_id": self.request_id,
@@ -126,7 +126,7 @@ class GuidanceProtocol:
             details: Additional context about the situation
 
         Returns:
-            GuidanceRequest ready to be sent via message bus.
+            GuidanceRequest ready to be persisted.
         """
         import uuid
 
@@ -191,9 +191,8 @@ class GuidanceProtocol:
         self._save_requests(requests)
 
     def generate_guidance_command(self, request: GuidanceRequest) -> str:
-        """Generate the mb-send command for a guidance request."""
-        payload = request.to_message_bus_payload()
-        return f"mb-send system3 '{payload}'"
+        """Generate the bd update command for a guidance request."""
+        return "bd update <id> --status=impl_complete"
 
     def format_response_for_injection(self, response: GuidanceResponse) -> str:
         """Format a guidance response for context injection."""
@@ -224,7 +223,7 @@ def create_worker_failure_request(
 ) -> str:
     """Helper to create a worker failure guidance request.
 
-    Returns the mb-send command to run.
+    Returns the bd update command to run.
     """
     protocol = GuidanceProtocol()
     request = protocol.create_request(
@@ -245,7 +244,7 @@ def create_error_pattern_request(
 ) -> str:
     """Helper to create an error pattern guidance request.
 
-    Returns the mb-send command to run.
+    Returns the bd update command to run.
     """
     protocol = GuidanceProtocol()
     request = protocol.create_request(
@@ -265,7 +264,7 @@ def create_blocked_request(
 ) -> str:
     """Helper to create a blocked/stuck guidance request.
 
-    Returns the mb-send command to run.
+    Returns the bd update command to run.
     """
     protocol = GuidanceProtocol()
     request = protocol.create_request(

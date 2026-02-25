@@ -154,15 +154,14 @@ fi
 # Copy with exclusions
 # NOTE: learnings/ IS copied (contains useful templates)
 # NOTE: validation/ IS copied (contains validation configs)
-# NOTE: scripts/completion-state/ and scripts/message-bus/ MUST be copied (CLI tools)
-# NOTE: Top-level message-bus/ and completion-state/ are RUNTIME dirs (excluded)
+# NOTE: scripts/completion-state/ MUST be copied (CLI tools)
+# NOTE: Top-level completion-state/ is a RUNTIME dir (excluded)
 # IMPORTANT: Use leading slash (/) to match ONLY top-level directories, not nested ones
 rsync -av --delete \
     --exclude='/state/*' \
     --exclude='/completion-state/' \
     --exclude='/progress/*' \
     --exclude='/worker-assignments/*' \
-    --exclude='/message-bus/' \
     --exclude='/logs/' \
     --exclude='*.log' \
     --exclude='.DS_Store' \
@@ -212,8 +211,6 @@ if ! grep -q "Claude Code runtime files" "$GITIGNORE" 2>/dev/null; then
 !.claude/progress/.gitkeep
 .claude/worker-assignments/*
 !.claude/worker-assignments/.gitkeep
-.claude/message-bus/*
-!.claude/message-bus/.gitkeep
 .claude/logs/
 .claude/*.log
 .claude/settings.local.json
@@ -276,9 +273,6 @@ touch "$TARGET_DIR/.claude/progress/.gitkeep"
 mkdir -p "$TARGET_DIR/.claude/worker-assignments"
 touch "$TARGET_DIR/.claude/worker-assignments/.gitkeep"
 
-mkdir -p "$TARGET_DIR/.claude/message-bus/signals"
-touch "$TARGET_DIR/.claude/message-bus/.gitkeep"
-
 echo "✓ Created runtime directories with .gitkeep files"
 ```
 
@@ -295,12 +289,12 @@ echo "=== Verification ==="
 [ -d "$TARGET_DIR/.claude/output-styles" ] && echo "✓ output-styles/" || echo "✗ output-styles/ missing"
 
 # Check scripts are executable
-if [ -x "$TARGET_DIR/.claude/scripts/message-bus/mb-init" 2>/dev/null ]; then
+if [ -x "$TARGET_DIR/.claude/scripts/completion-state/cs-verify" 2>/dev/null ]; then
     echo "✓ Scripts are executable"
 else
     echo "⚠ Making scripts executable..."
     find "$TARGET_DIR/.claude/scripts" -type f -name "*.sh" -exec chmod +x {} \;
-    find "$TARGET_DIR/.claude/scripts" -type f -name "mb-*" -exec chmod +x {} \;
+    find "$TARGET_DIR/.claude/scripts" -type f -name "cs-*" -exec chmod +x {} \;
 fi
 ```
 
@@ -316,13 +310,11 @@ What was copied:
   - skills/ (21 skills including orchestrator-multiagent)
   - hooks/ (lifecycle automation)
   - output-styles/ (orchestrator, system3)
-  - scripts/ (message-bus, utilities)
+  - scripts/ (completion-state, utilities)
 
 Runtime directories created (gitignored, with .gitkeep):
   - state/, progress/, worker-assignments/
   - completion-state/ (with subdirs: default/, history/, promises/, sessions/)
-  - message-bus/ (with subdirs: signals/)
-
 Next steps:
 1. Review .claude/CLAUDE.md (harness docs — updated each deploy)
 2. Review .mcp.json API keys
@@ -343,7 +335,7 @@ To update harness later:
 - `skills/` - All skill definitions
 - `hooks/` - Lifecycle hooks
 - `output-styles/` - Agent behavior definitions
-- `scripts/` - CLI utilities (includes `scripts/completion-state/` and `scripts/message-bus/`)
+- `scripts/` - CLI utilities (includes `scripts/completion-state/`)
 - `commands/` - Slash commands
 - `schemas/` - JSON schemas
 - `tests/` - Hook tests
@@ -354,14 +346,13 @@ To update harness later:
 - `learnings/` - Multi-agent coordination guides (coordination.md, decomposition.md, failures.md)
 - `TM_COMMANDS_GUIDE.md` - Task Master reference
 
-**Note**: `scripts/completion-state/` (cs-* CLI tools) and `scripts/message-bus/` (mb-* CLI tools) are COPIED because they are CLI utilities, not runtime data. The TOP-LEVEL `completion-state/` and `message-bus/` directories are excluded because those contain runtime state.
+**Note**: `scripts/completion-state/` (cs-* CLI tools) are COPIED because they are CLI utilities, not runtime data. The TOP-LEVEL `completion-state/` directory is excluded because it contains runtime state.
 
 ### Excluded (runtime, gitignored)
 - `state/*` - Runtime state files (directory kept with .gitkeep)
 - `completion-state/*` - Session completion tracking (subdirs created: default/, history/, promises/, sessions/)
 - `progress/*` - Session progress files (directory kept with .gitkeep)
 - `worker-assignments/*` - Worker task assignments (directory kept with .gitkeep)
-- `message-bus/*` - Inter-instance messaging (subdirs created: signals/)
 - `logs/` - Log files
 - `settings.local.json` - Local overrides
 

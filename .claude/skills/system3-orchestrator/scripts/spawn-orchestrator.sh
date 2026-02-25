@@ -92,7 +92,7 @@ tmux send-keys -t "$SESSION_NAME" Enter
 
 # CRITICAL: Set environment variables BEFORE launching Claude Code
 # CLAUDE_SESSION_DIR enables session isolation for completion state tracking
-# CLAUDE_SESSION_ID enables message bus detection
+# CLAUDE_SESSION_ID enables session isolation
 SESSION_DATE=$(date +%Y%m%d)
 log_info "Setting CLAUDE_SESSION_DIR=${INITIATIVE}-${SESSION_DATE}"
 tmux send-keys -t "$SESSION_NAME" "export CLAUDE_SESSION_DIR=${INITIATIVE}-${SESSION_DATE}"
@@ -148,17 +148,11 @@ else
 ### 1. Invoke Skill (MANDATORY)
 Before ANYTHING else: Skill(\"orchestrator-multiagent\")
 
-### 2. Register with Message Bus
-.claude/scripts/message-bus/mb-register \"\${CLAUDE_SESSION_ID}\" \"$SESSION_NAME\" \"$INITIATIVE orchestrator\" --initiative=\"$INITIATIVE\"
-
-### 3. Check for Messages from System 3
-.claude/scripts/message-bus/mb-recv --peek
-
 ## Starting Point
 1. Follow PREFLIGHT checklist from the skill
 2. Use \`bd ready\` to find your first task
 3. Report progress to \`.claude/progress/orch-${INITIATIVE}-log.md\`
-4. Send completion messages to System 3 via mb-send
+4. Mark tasks impl_complete via \`bd update <bd-id> --status=impl_complete\`
 
 Begin work now."
     tmux send-keys -t "$SESSION_NAME" "$DEFAULT_PROMPT"

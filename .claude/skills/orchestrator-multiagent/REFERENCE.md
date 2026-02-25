@@ -166,7 +166,7 @@ lsof -i :5001 -i :8000 -i :5184 -i :5185 | grep LISTEN
 
 | Variable | Purpose |
 |----------|---------|
-| `CLAUDE_SESSION_ID` | Session isolation for message bus |
+| `CLAUDE_SESSION_ID` | Session isolation |
 | `CLAUDE_OUTPUT_STYLE` | Active output style |
 | `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` | Set to `1` to enable native Agent Teams (required for Teammate/SendMessage) |
 
@@ -201,18 +201,6 @@ Run this at the start of every orchestrator session:
 - [ ] If fail: `bd reopen <id>` and fix BEFORE new work
 ```
 
-### Message Bus Registration
-
-```bash
-# Register with message bus
-.claude/scripts/message-bus/mb-register \
-    "${CLAUDE_SESSION_ID:-orch-$(basename $(pwd))}" \
-    "$(tmux display-message -p '#S' 2>/dev/null || echo 'unknown')" \
-    "[Initiative description]" \
-    --initiative="[epic-name]" \
-    --worktree="$(pwd)"
-```
-
 ### Session End Checklist
 
 ```markdown
@@ -222,7 +210,6 @@ Run this at the start of every orchestrator session:
 - [ ] `bd sync` - Sync beads state
 - [ ] Update `.claude/progress/` with summary
 - [ ] `git status` clean, changes committed and pushed
-- [ ] `mb-unregister "${CLAUDE_SESSION_ID}"` - Unregister from message bus
 - [ ] Hindsight: Store learnings with `mcp__hindsight__retain(...)`
 ```
 

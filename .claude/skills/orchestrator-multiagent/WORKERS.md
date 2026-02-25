@@ -584,7 +584,7 @@ Workers report results via SendMessage. Look for these signals:
 
 | Signal in Message | Meaning | Action |
 |-------------------|---------|--------|
-| "COMPLETE" | Worker finished successfully | Mark task impl_complete and notify S3 via message bus |
+| "COMPLETE" | Worker finished successfully | Mark task impl_complete (`bd update <bd-id> --status=impl_complete`) |
 | "BLOCKED" | Worker needs help | Read blocker, provide guidance via SendMessage |
 | "FAIL" after test run | Tests failed | Review failure, send fix instructions or re-assign |
 | "PASS" after test run | Tests passed | Proceed to validation |

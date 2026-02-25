@@ -498,8 +498,8 @@ report = Task(
 )
 
 if "MONITOR_STUCK" in report:
-    # Send guidance via message bus
-    Bash(f"mb-send {orch_session_id} '{{\"type\": \"guidance\", \"message\": \"...\"}}'")
+    # Update bead status and provide guidance via tmux injection
+    Bash(f"bd update <id> --status=impl_complete")
 ```
 
 ---
@@ -684,7 +684,7 @@ tmux send-keys -t orch-epic4 Enter
 tmux send-keys -t "orch-[name]" "export CLAUDE_SESSION_DIR=[initiative]-$(date +%Y%m%d)"
 tmux send-keys -t "orch-[name]" Enter
 
-# 2. Message bus detection
+# 2. Session identification
 tmux send-keys -t "orch-[name]" "export CLAUDE_SESSION_ID=orch-[name]"
 tmux send-keys -t "orch-[name]" Enter
 
@@ -712,8 +712,7 @@ tmux send-keys -t "orch-[name]" Enter
 4. **THEN send wisdom injection prompt** — orchestrator is now in the correct output style
 5. **Skill("orchestrator-multiagent")** must be invoked by orchestrator (first action in wisdom prompt)
 6. **Create worker team**: `Teammate(operation="spawnTeam", team_name="{initiative}-workers", description="Workers for {initiative}")` — establishes native team for worker coordination
-7. **Message bus registration** must happen after skill invocation
-8. **Background monitor** should be spawned for real-time message detection
+7. **Background monitor** should be spawned for real-time progress detection
 
 **Why System 3 selects the output style**: Orchestrators start in "default" output style. Embedding `/output-style orchestrator` as a text instruction in the wisdom prompt is unreliable — the orchestrator in default mode may not follow it. System 3 physically typing the slash command via tmux guarantees the correct style is active before any work begins.
 
@@ -974,7 +973,7 @@ tmux list-sessions | grep "^orch-"
 
 ### 🚨 MANDATORY: Cleanup After Orchestrator Completes
 
-**When an orchestrator reports COMPLETION** (via blocking monitor or message bus):
+**When an orchestrator reports COMPLETION** (via blocking monitor or bead status):
 
 ```bash
 # Kill the orchestrator's tmux session
@@ -1870,104 +1869,6 @@ If you catch yourself writing "Would you like me to..." when the path is clear:
 
 ---
 
-## Inter-Instance Messaging
-
-Real-time communication with orchestrators via the message bus.
-
-**Architecture Reference**: See [MESSAGE_BUS_ARCHITECTURE.md](.claude/documentation/MESSAGE_BUS_ARCHITECTURE.md) for the complete architecture overview including message flow diagrams and failure modes.
-
-### Initialization
-
-At session start, initialize and register:
-
-```bash
-# Initialize message bus (if needed)
-.claude/scripts/message-bus/mb-init
-
-# Register System 3
-.claude/scripts/message-bus/mb-register "system3" "main" "System 3 Meta-Orchestrator"
-
-# Check current status
-.claude/scripts/message-bus/mb-status
-```
-
-### Sending Messages to Orchestrators
-
-```bash
-# Guidance to specific orchestrator
-.claude/scripts/message-bus/mb-send "orch-epic4" "guidance" \
-    '{"subject":"Priority shift","body":"Focus on API endpoints first"}'
-
-# Broadcast to ALL active orchestrators
-.claude/scripts/message-bus/mb-send --broadcast "announcement" \
-    '{"subject":"Policy update","body":"All commits require passing tests"}'
-
-# Urgent message (triggers immediate tmux injection)
-.claude/scripts/message-bus/mb-send "orch-epic4" "urgent" \
-    '{"subject":"Stop work","body":"Regression detected in main branch"}' --urgent
-```
-
-### Message Types
-
-| Type | Direction | Purpose |
-|------|-----------|---------|
-| `guidance` | System 3 → Orch | Strategic direction, pattern reminders |
-| `completion` | Orch → System 3 | Task/epic completion report |
-| `broadcast` | System 3 → All | Announcements, policy changes |
-| `query` | Any → Any | Status request |
-| `urgent` | Any → Any | High-priority, triggers tmux inject |
-
-### Receiving Messages
-
-Messages are automatically injected via PostToolUse hook. For manual check:
-
-```bash
-/check-messages
-```
-
-### Orchestrator Registry
-
-View active orchestrators:
-
-```bash
-.claude/scripts/message-bus/mb-list
-```
-
-When spawning orchestrators, ensure they register:
-
-```bash
-# Include in orchestrator's initialization:
-.claude/scripts/message-bus/mb-register "orch-[name]" "orch-[name]" "[description]" \
-    --initiative="[epic]" --worktree="$(pwd)"
-```
-
-### Spawn Background Monitor (Recommended)
-
-For each active session, spawn a background monitor for real-time message detection:
-
-```python
-Task(
-    subagent_type="general-purpose",
-    model="haiku",
-    run_in_background=True,
-    description="Message queue monitor",
-    prompt="""[Monitor prompt from .claude/skills/message-bus/monitor-prompt-template.md]"""
-)
-```
-
-### Message Flow Architecture
-
-```
-System 3 ──mb-send──► SQLite Queue ◄──polls── Background Monitor (Haiku)
-                           │                          │
-                           │                          ▼
-                           │                   Signal File
-                           │                          │
-                           ▼                          ▼
-                    Orchestrator ◄─────────── PostToolUse Hook
-                                              (injects message)
-```
-
 ### Session End
 
 **MANDATORY cleanup before stopping:**
@@ -1982,16 +1883,13 @@ done
 # 2. Verify cleanup
 remaining=$(tmux list-sessions 2>/dev/null | grep -c "^orch-" || echo "0")
 echo "Remaining orchestrator sessions: $remaining"
-
-# 3. Unregister from message bus
-.claude/scripts/message-bus/mb-unregister "system3"
 ```
 
 **Note**: Workers are now native teammates managed by the team lead (orchestrator). Shut down workers via `SendMessage(type="shutdown_request")` and clean up teams via `Teammate(operation="cleanup")` before killing the orchestrator tmux session.
 
 **When orchestrator completes (before session end):**
 
-After an orchestrator reports completion via message bus or monitor, immediately kill its session:
+After an orchestrator reports completion via monitor or bead status update, immediately kill its session:
 
 ```bash
 # Kill specific completed orchestrator
@@ -2242,4 +2140,4 @@ If blocked, use:
 
 **Changelog**: See [SYSTEM3_CHANGELOG.md](.claude/documentation/SYSTEM3_CHANGELOG.md) for complete version history.
 
-**Integration**: orchestrator-multiagent skill, worktree-manager skill, Hindsight MCP (dual-bank), Beads, message-bus skill
+**Integration**: orchestrator-multiagent skill, worktree-manager skill, Hindsight MCP (dual-bank), Beads

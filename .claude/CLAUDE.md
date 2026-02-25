@@ -49,7 +49,7 @@ This project uses a 3-level agent hierarchy for complex multi-feature developmen
 | `hooks/` | Pre/post tool hooks for automation |
 | `documentation/` | Architecture docs, changelogs |
 | `completion-state/` | Session completion tracking |
-| `scripts/` | CLI utilities (message-bus, completion state) |
+| `scripts/` | CLI utilities (completion state) |
 
 ## System3 Monitoring Architecture (2026-01-25)
 
@@ -145,4 +145,4 @@ Tasks stored at: `~/.claude/tasks/{CLAUDE_CODE_TASK_LIST_ID}/`
 - Main CLAUDE.md: `/agencheck/CLAUDE.md` (project instructions)
 - Output Styles: `.claude/output-styles/`
 - Skills: `.claude/skills/`
-- Architecture: `.claude/documentation/`
+- Architecture: `docs/architecture/`

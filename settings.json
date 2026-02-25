@@ -94,17 +94,7 @@
         ]
       }
     ],
-    "PostToolUse": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/message-bus-signal-check.py"
-          }
-        ]
-      }
-    ]
+    "PostToolUse": []
   },
   "statusLine": {
     "type": "command",

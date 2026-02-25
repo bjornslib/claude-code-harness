@@ -46,7 +46,7 @@ Visual guide to understanding how the harness works across multiple projects.
 │  │  • Strategic planning and OKR tracking                    │  │
 │  │  • Spawns orchestrators for epics/initiatives             │  │
 │  │  • Business outcome validation                            │  │
-│  │  • Inter-instance messaging coordinator                   │  │
+│  │  • Independent validation coordinator                     │  │
 │  │                                                            │  │
 │  │  Output Style: system3-meta-orchestrator.md               │  │
 │  │  Skills: system3-orchestrator/, completion-promise        │  │
@@ -86,20 +86,6 @@ Visual guide to understanding how the harness works across multiple projects.
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│  Message Bus (Inter-Instance Communication)                      │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │  SQLite Queue + Signal Files + PostToolUse Hook            │  │
-│  │                                                             │  │
-│  │  System 3 ←→ Orchestrators ←→ Workers                      │  │
-│  │     │             │              │                          │  │
-│  │     └─── guidance ────→          │                          │  │
-│  │     ←── completion ───┘          │                          │  │
-│  │                └──── assignment ─→                          │  │
-│  │                ←──── result ─────┘                          │  │
-│  └────────────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────────────┘
-
-┌──────────────────────────────────────────────────────────────────┐
 │  Task Master (PRD → Task Decomposition)                          │
 │  ┌────────────────────────────────────────────────────────────┐  │
 │  │  1. Parse PRD ─→ Generate tasks                            │  │
@@ -133,7 +119,7 @@ SessionStart
     │
     ├─→ Detect orchestrator mode
     ├─→ Load MCP skills registry
-    └─→ Initialize message bus
+    └─→ Initialize session state
 
 UserPromptSubmit (Before each user prompt)
     │
@@ -141,8 +127,7 @@ UserPromptSubmit (Before each user prompt)
 
 PostToolUse (After each tool execution)
     │
-    ├─→ Check for inter-instance messages
-    └─→ Inject message if signal file detected
+    └─→ Decision-time guidance injection
 
 PreCompact (Before context compression)
     │
@@ -167,8 +152,6 @@ Orchestration:
 ├── system3-orchestrator      ─→ Strategic planning
 ├── orchestrator-multiagent   ─→ Worker delegation
 ├── completion-promise        ─→ Session goal tracking
-└── message-bus               ─→ Inter-instance messaging
-
 Development:
 ├── frontend-design           ─→ React/UI patterns
 ├── backend-solutions         ─→ Python/API patterns
@@ -200,7 +183,6 @@ Utilities:
         ↓
 4. System 3 spawns Orchestrator for epic
         worktree creation
-        message bus registration
         ↓
 5. Orchestrator investigates
         Read/Grep/Glob to understand codebase

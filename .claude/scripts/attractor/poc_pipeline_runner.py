@@ -534,14 +534,13 @@ Examples:
   python3 poc_pipeline_runner.py .claude/attractor/examples/simple-pipeline.dot
   python3 poc_pipeline_runner.py pipeline.dot --verbose
   python3 poc_pipeline_runner.py pipeline.dot --json
-  python3 poc_pipeline_runner.py pipeline.dot --channel message_bus
         """,
     )
     ap.add_argument("pipeline", help="Path to the .dot pipeline file.")
     ap.add_argument(
         "--channel",
         default="stdout",
-        choices=["stdout", "message_bus", "native_teams"],
+        choices=["stdout", "native_teams"],
         help="Communication channel adapter (default: stdout).",
     )
     ap.add_argument(
@@ -567,7 +566,6 @@ Examples:
         help="(Phase 2) Execute actions in addition to planning. NOT implemented in POC.",
     )
     # Channel-specific options
-    ap.add_argument("--mb-target", default="system3", help="Message bus target ID.")
     ap.add_argument(
         "--team-name", default="s3-live-workers", help="Native teams team name."
     )
@@ -589,9 +587,7 @@ Examples:
 
     # Create channel adapter
     channel_kwargs: dict[str, Any] = {}
-    if args.channel == "message_bus":
-        channel_kwargs = {"target": args.mb_target, "session_id": args.session_id}
-    elif args.channel == "native_teams":
+    if args.channel == "native_teams":
         channel_kwargs = {"team_name": args.team_name}
 
     adapter = create_adapter(args.channel, **channel_kwargs)

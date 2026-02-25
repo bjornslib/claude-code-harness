@@ -145,7 +145,7 @@ class ChannelBridge:
         gchat = GChatAdapter(
             webhook_url="https://chat.googleapis.com/v1/spaces/AAA/messages?...",
         )
-        runner = MessageBusAdapter(target="system3")
+        runner = StdoutAdapter()
         bridge = ChannelBridge(runner_adapter=runner)
         bridge.register_channel("gchat", gchat, default_recipient="spaces/AAA")
 
