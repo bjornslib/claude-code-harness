@@ -36,7 +36,8 @@ SESSION_ID="${CLAUDE_SESSION_ID:-}"
 # --- Block rate-limiter ---
 # After MAX_BLOCKS consecutive blocks in a single session, approve unconditionally.
 # This prevents infinite stop-gate loops when the agent can't resolve the issue.
-MAX_BLOCKS=3
+# NOTE: MAX_BLOCKS is intentionally NOT disclosed in block messages to prevent gaming.
+MAX_BLOCKS=5
 _SAFE_SESSION_ID="${SESSION_ID//[^a-zA-Z0-9_-]/}"   # sanitize for filename
 BLOCK_COUNT_FILE="/tmp/stop-gate-blocks-${_SAFE_SESSION_ID:-default}.count"
 CURRENT_BLOCKS=0
@@ -68,18 +69,14 @@ block_gate() {
     if [ "$CURRENT_BLOCKS" -ge "$MAX_BLOCKS" ]; then
         # Reset counter on override-approve so next stop attempt starts fresh
         echo "0" > "$BLOCK_COUNT_FILE"
-        output_json "approve" "systemMessage" "⚠️ STOP GATE OVERRIDE (${CURRENT_BLOCKS}/${MAX_BLOCKS} blocks reached)
+        output_json "approve" "systemMessage" "⚠️ STOP GATE OVERRIDE
 
-The gate has blocked ${CURRENT_BLOCKS} time(s) this session. Forcing approve to prevent an infinite loop.
+The gate has blocked multiple times this session without resolution. Forcing approve to prevent an infinite loop.
 
 Last block reason:
-${message}
-
-Counter has been reset. The gate is re-armed for future stop attempts."
+${message}"
     else
-        output_json "block" "reason" "${message}
-
-[Stop gate block ${CURRENT_BLOCKS}/${MAX_BLOCKS} — will override after ${MAX_BLOCKS} blocks]"
+        output_json "block" "reason" "${message}"
     fi
     exit 0
 }
