@@ -72,7 +72,7 @@ SYSTEM3_JUDGE_SYSTEM_PROMPT = """You are a session completion evaluator for a Sy
 Your job: Analyze the last few turns of a System 3 session, the current work state, and ALL task primitives to determine if the session should be allowed to stop.
 
 ## Core Principle
-The ONLY valid exit for a System 3 session is to have sincerely exhausted all options to continue productive work independently and to have presented option questions to the user via AskUserQuestion.
+The ONLY valid exit for a System 3 session is to have sincerely exhausted all options to continue productive work independently.
 
 ## What You Receive
 1. WORK STATE: Promises, beads, and ALL task primitives (unfinished AND completed)
@@ -109,11 +109,11 @@ Check the WORK STATE for remaining actionable work:
 - If work is available, System 3 should continue unless it genuinely needs user input to decide direction
 
 ### Layer 3: Session Exit Validation
-The conversation MUST show that System 3 presented option questions to the user:
-- Did System 3 use AskUserQuestion to present 2-4 concrete next-step options?
-- GChat-forwarded AskUserQuestion (via gchat-ask-user-forward.py hook) also counts — if the GCHAT QUESTION STATUS section above is present, the requirement is satisfied even if no terminal AskUserQuestion appears in the transcript
-- Is System 3 waiting for the user's response?
-- If no option questions were presented, the session is NOT properly complete
+Check whether the session has a clear reason to stop:
+- Has System 3 completed its assigned work or exhausted available actions?
+- Is System 3 blocked on external factors (user input needed, services unavailable)?
+- AskUserQuestion is NOT required — System 3 can stop after completing work without presenting options
+- If the user explicitly asked to stop, always allow
 
 ## Evaluating Completed Tasks
 If completed tasks exist, assess whether they represent MEANINGFUL work:
@@ -136,7 +136,7 @@ should_continue=false means ALLOW the stop (session properly completed)
 Default to ALLOW (should_continue=false) when:
 - The conversation shows the user explicitly asked to stop
 - All protocol steps are clearly completed AND work state confirms exhaustion
-- System 3 has presented option questions to the user and is awaiting response
+- System 3 has completed its assigned work and has no more actionable items
 - An orchestrator is actively running in a tmux session (this is by design — they persist independently)
 
 Default to BLOCK (should_continue=true) when:
@@ -147,8 +147,7 @@ Default to BLOCK (should_continue=true) when:
 - Tasks were closed without evidence (closure-report.md missing)
 - No s3-*-oversight team was found despite impl_complete/closed tasks
 - Work state shows available high-priority work but System 3 is stopping
-- Unfinished tasks exist (remind to continue productive work independently)
-- No AskUserQuestion was presented despite work being exhausted"""
+- Unfinished tasks exist (remind to continue productive work independently)"""
 
 
 # Light judge prompt for orchestrators and other sessions
@@ -187,7 +186,7 @@ class System3ContinuationJudgeChecker:
     has properly completed its work before stopping.
 
     Strictness tiers:
-    - System 3 (system3-*): Strict — requires promises, reflection, AskUserQuestion
+    - System 3 (system3-*): Strict — requires promises, reflection, work exhaustion
     - Orchestrators (orch-*): Light — just checks for obviously incomplete work
     - Other sessions: Light — same as orchestrators
 
@@ -508,7 +507,7 @@ class System3ContinuationJudgeChecker:
             prompt_parts.append(
                 "## KEY QUESTION\n"
                 "Has System 3 sincerely exhausted all options to continue productive work "
-                "independently, AND presented option questions to the user via AskUserQuestion?\n"
+                "independently? Is there a clear reason the session should stop?\n"
             )
         else:
             prompt_parts.append(

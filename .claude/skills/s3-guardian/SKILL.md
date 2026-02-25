@@ -1,6 +1,6 @@
 ---
 name: s3-guardian
-description: This skill should be used when System 3 needs to act as an independent guardian angel — spawning System 3 meta-orchestrators in tmux, creating blind Gherkin acceptance tests from PRDs, monitoring meta-orchestrator progress, independently validating claims against acceptance criteria using gradient confidence scoring (0.0-1.0), and setting session promises. Use when asked to "spawn and monitor a system3 meta-orchestrator", "create acceptance tests for a PRD", "validate orchestrator claims", "act as guardian angel", or "independently verify implementation work".
+description: This skill should be used when System 3 needs to act as an independent guardian angel — designing PRDs with ZeroRepo analysis, challenging designs via parallel solutioning, spawning orchestrators in tmux, creating blind Gherkin acceptance tests and executable browser test scripts from PRDs, monitoring orchestrator progress, independently validating claims against acceptance criteria using gradient confidence scoring (0.0-1.0), and setting session promises. Use when asked to "spawn and monitor an orchestrator", "create acceptance tests for a PRD", "validate orchestrator claims", "act as guardian angel", "independently verify implementation work", or "design and challenge a PRD".
 version: 0.1.0
 title: "S3 Guardian"
 status: active
@@ -13,15 +13,15 @@ The guardian angel pattern provides independent, blind validation of System 3 me
 ```
 Guardian (this session, config repo)
     |
+    |-- Designs PRDs with ZeroRepo codebase analysis (Phase 0)
+    |-- Challenges own designs via parallel-solutioning + research-first (Phase 0)
     |-- Creates blind Gherkin acceptance tests (stored here, NOT in impl repo)
-    |-- Spawns S3 Meta-Orchestrator in tmux (at impl repo)
+    |-- Generates executable browser test scripts for UX prototypes
+    |-- Spawns Orchestrators in tmux (at impl repo)
     |       |
-    |       +-- Orchestrators (spawned by meta-orchestrator)
-    |       |       +-- Workers
-    |       |
-    |       +-- s3-communicator (heartbeat)
+    |       +-- Workers (native teams)
     |
-    |-- Monitors meta-orchestrator progress via tmux capture-pane
+    |-- Monitors orchestrator progress via tmux capture-pane
     |-- Independently validates claims against rubric
     |-- Reports to oversight team with gradient scores
 ```
@@ -103,6 +103,8 @@ For ANY initiative with 2+ tasks, the guardian MUST:
 
 Skipping pipeline creation because "it worked without one before" is an anti-pattern caused by cognitive momentum. Using synthetic bead_ids ("CLEANUP-T1") instead of real beads is also an anti-pattern — always create real beads first.
 
+For new initiatives, pipeline creation is part of Phase 0 (Step 0.2). For initiatives where a pipeline already exists, verify it with `cli.py validate` before Phase 1.
+
 **How bead-to-node mapping works**: The `generate.py` pipeline generator uses `filter_beads_for_prd()` which matches beads to a PRD by: (a) finding epic beads whose title contains the PRD reference, (b) finding task beads that are children of those epics via `parent-child` dependency type, (c) finding task beads whose title or description contains the PRD reference. This is heuristic matching — it requires beads to include the PRD identifier in their metadata. When creating beads, always include the PRD ID in the title (e.g., `bd create --title="PRD-CLEANUP-001: Fix deprecated imports"`).
 
 ---
@@ -128,6 +130,183 @@ cs-promise --start <promise-id>
 **Store the promise ID** — you will `--meet` each AC as its phase completes (see "Session Promise Integration" section for the per-phase `--meet` calls).
 
 > **Note**: The "Session Promise Integration" section at the bottom of this skill provides a pre-built template specifically for guardian validation sessions (acceptance tests, spawning, monitoring, validation, verdict). Use that template's `--ac` text directly when your goal matches the standard guardian pattern; adjust the ACs for non-standard goals.
+
+---
+
+## Phase 0: PRD Design & Challenge
+
+When the guardian is initiating a new initiative (rather than validating an existing one), it must first design the PRD, create the pipeline infrastructure, and challenge its own design before proceeding to acceptance test creation.
+
+**Skip Phase 0 if**: A finalized PRD already exists at the implementation repo's `docs/prds/PRD-{ID}.md` and has been reviewed. Proceed directly to Phase 1.
+
+### Step 0.1: PRD Authoring with ZeroRepo Analysis
+
+Before writing the PRD, understand the current codebase structure:
+
+```bash
+# If impl repo has ZeroRepo baseline, run analysis
+if [ -d "/path/to/impl-repo/.zerorepo" ]; then
+    zerorepo generate --project-path /path/to/impl-repo
+    # Output: node/edge graph showing existing modules, dependencies, delta status
+fi
+
+# Also gather domain context from Hindsight
+```
+
+```python
+PROJECT_BANK = os.environ.get("CLAUDE_PROJECT_BANK", "claude-harness-setup")
+domain_context = mcp__hindsight__reflect(
+    query=f"Architecture patterns, prior PRDs, and design decisions for {initiative_domain}",
+    budget="mid",
+    bank_id=PROJECT_BANK
+)
+```
+
+Using ZeroRepo output and Hindsight context, write the PRD to `docs/prds/PRD-{ID}.md` in the impl repo. The PRD must include:
+- YAML frontmatter with `prd_id`, `title`, `status`, `created`
+- Goals section (maps to journey tests)
+- Epic breakdown with acceptance criteria per epic
+- Technical approach (informed by ZeroRepo delta analysis — what's new vs existing)
+
+### Step 0.2: Create DOT Pipeline
+
+Create the task tracking and pipeline infrastructure:
+
+```bash
+# 1. Create beads for each epic and task (include PRD ID in titles)
+bd create --title="PRD-{ID}: Epic 1 — {name}" --type=epic --priority=2
+bd create --title="PRD-{ID}: Task 1.1 — {name}" --type=task --priority=2
+bd dep add <task-bead> <epic-bead>  # Task belongs to epic
+
+# 2. Generate pipeline DOT file from beads
+CLI="python3 /path/to/impl-repo/.claude/scripts/attractor/cli.py"
+$CLI generate --prd PRD-{ID} --output /path/to/impl-repo/.claude/attractor/pipelines/${INITIATIVE}.dot
+
+# 3. Validate the pipeline
+$CLI validate /path/to/impl-repo/.claude/attractor/pipelines/${INITIATIVE}.dot
+
+# 4. Review status
+$CLI status /path/to/impl-repo/.claude/attractor/pipelines/${INITIATIVE}.dot --summary
+```
+
+If `generate` cannot auto-map beads (no PRD reference in bead metadata), build manually:
+
+```bash
+$CLI node add pipeline.dot impl_epic1 --handler codergen --label "Epic 1" --set bead_id=<real-bead-id>
+$CLI edge add pipeline.dot start impl_epic1 --label "begin"
+$CLI edge add pipeline.dot impl_epic1 validate_epic1 --label "pass"
+# ... repeat for each node
+$CLI validate pipeline.dot
+```
+
+### Step 0.3: Parse PRD with Task Master
+
+Use Task Master to decompose the PRD into structured tasks, then sync to beads:
+
+```python
+# Parse PRD into tasks
+mcp__task-master-ai__parse_prd(
+    input="docs/prds/PRD-{ID}.md",
+    project_root="/path/to/impl-repo"
+)
+
+# Verify tasks were created
+mcp__task-master-ai__get_tasks(project_root="/path/to/impl-repo")
+```
+
+```bash
+# Sync Task Master output into beads
+node /path/to/config-repo/.claude/scripts/sync-taskmaster-to-features.js \
+    --project-root /path/to/impl-repo
+
+# Verify beads are populated and DOT pipeline nodes have real bead_ids
+bd list --status=open
+$CLI status pipeline.dot --json | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for n in data.get('nodes', []):
+    bid = n.get('bead_id', 'MISSING')
+    print(f\"{n['node_id']}: bead_id={bid}\")
+"
+```
+
+**If bead_ids are missing in DOT nodes**, retrofit them:
+```bash
+$CLI node modify pipeline.dot <node_id> --set bead_id=<real-bead-id>
+$CLI checkpoint save pipeline.dot
+```
+
+### Step 0.4: Design Challenge Protocol (MANDATORY)
+
+Before proceeding to Phase 1, the guardian MUST challenge its own PRD design by spawning a solution-architect agent that independently evaluates the design.
+
+**Why this matters**: The guardian wrote the PRD — it cannot objectively evaluate its own design. Independent challenge prevents proceeding with flawed architecture, missed edge cases, or technology choices that seem reasonable but have known pitfalls.
+
+#### Launch Design Challenge Agent
+
+```python
+Task(
+    subagent_type="solution-design-architect",
+    description="Challenge PRD-{ID} design via parallel solutioning + research",
+    prompt=f"""
+    You are reviewing PRD-{prd_id} as an independent design challenger.
+
+    ## MANDATORY First Actions
+    1. Skill("parallel-solutioning") with the prompt:
+       "Review and challenge the solution design in docs/prds/PRD-{prd_id}.md.
+       Identify architectural weaknesses, missing edge cases, scalability concerns,
+       and alternative approaches."
+       - This spawns 7 architects with diverse reasoning strategies
+       - Each architect must identify weaknesses, alternatives, and risks
+
+    2. Skill("research-first") for each major technology choice in the PRD:
+       - Validate framework versions and API compatibility
+       - Check for deprecations or known issues
+       - Cross-reference with context7 docs for current best practices
+       - Validate integration patterns between chosen technologies
+
+    ## Your Deliverable
+    Write a design-challenge report to {config_repo}/acceptance-tests/PRD-{prd_id}/design-challenge.md:
+
+    ### Report Structure
+    - **Consensus Concerns**: Issues flagged by 5+ of the 7 architects
+    - **Technology Validation**: research-first findings per technology choice
+    - **Recommended PRD Amendments**: Specific changes with rationale
+    - **Risk Matrix**: severity (critical/high/medium/low) x likelihood
+    - **VERDICT**: PROCEED / AMEND / REDESIGN
+
+    Read the PRD at: {impl_repo}/docs/prds/PRD-{prd_id}.md
+    Store the report at: {config_repo}/acceptance-tests/PRD-{prd_id}/design-challenge.md
+    """
+)
+```
+
+#### Handling Challenge Results
+
+| Verdict | Guardian Action |
+|---------|----------------|
+| PROCEED | Log result to Hindsight, continue to Phase 1 |
+| AMEND | Apply recommended changes to PRD, re-run Step 0.3 (Task Master re-parse), update beads |
+| REDESIGN | Major rework needed — revisit Step 0.1 with architect feedback as input |
+
+**Anti-pattern**: Ignoring AMEND/REDESIGN verdicts because "it's probably fine" or "we already created beads." The cost of fixing a flawed design after implementation is 10x the cost of fixing the PRD.
+
+#### Evidence Storage
+
+```
+acceptance-tests/PRD-{ID}/
+├── design-challenge.md         # Architect consensus report
+└── research-validation.md      # research-first findings (if separate)
+```
+
+#### Promise Integration
+
+```bash
+# After Phase 0 completes successfully
+cs-promise --meet <id> --ac-id AC-0 \
+    --evidence "PRD written, pipeline created with N nodes, design challenge verdict: PROCEED" \
+    --type manual
+```
 
 ---
 
@@ -180,6 +359,148 @@ Journey tests are generated BEFORE the meta-orchestrator is spawned — they sta
 **Storage location**: Both per-epic and journey tests live in `acceptance-tests/PRD-{ID}/` in the config
 repo (claude-harness-setup), never in the implementation repo. Meta-orchestrators and their workers never see
 the rubric or the journeys. This enables truly independent validation.
+
+### Step 3: Generate Executable Browser Test Scripts (MANDATORY for UX PRDs)
+
+**Trigger condition**: If the manifest.yaml contains ANY feature with `validation_method: browser-required`, this step is MANDATORY. Skip for PRDs with only `code-analysis` and `api-required` features.
+
+The Gherkin scenarios from Step 1 are scoring rubrics — they guide confidence scoring but are not directly executable. This step generates companion executable test scripts that can be run by a tdd-test-engineer agent against a live frontend using claude-in-chrome MCP tools.
+
+**Why the existing scenarios.feature is NOT sufficient**: The PRD-P1.1-UNIFIED-FORM-001 experience demonstrated this gap. 17 Gherkin scenarios were written as scoring rubrics with confidence guides (0.0/0.5/1.0 anchors), but none were executable. The guardian could not automatically verify whether the voice bar was hidden in chat mode, whether the progress bar replaced the case reference, or whether field confirmation changed the background color. These checks require browser automation.
+
+#### Why Both Formats Are Needed
+
+| Format | Purpose | Used By | Executable? |
+|--------|---------|---------|-------------|
+| `scenarios.feature` | Confidence scoring rubric | Guardian Phase 4 manual scoring | No — requires judgment |
+| `executable-tests/` | Automated browser validation | tdd-test-engineer agent | Yes — deterministic pass/fail |
+
+#### Output Structure
+
+```
+acceptance-tests/PRD-{ID}/
+├── manifest.yaml              # (from Step 1)
+├── scenarios.feature          # (from Step 1) — scoring rubric
+├── journeys/                  # (from Step 2)
+└── executable-tests/          # Browser automation test scripts
+    ├── config.yaml            # Base URL, selectors, test data
+    ├── S1-layout.yaml         # Executable version of S1.x scenarios
+    ├── S2-mode-switching.yaml # Executable version of S2.x scenarios
+    └── S3-form-panel.yaml     # Executable version of S3.x scenarios
+```
+
+#### Executable Test YAML Schema
+
+Each test file maps Gherkin scenarios to claude-in-chrome MCP tool calls:
+
+```yaml
+test_group: S1-layout
+prd_id: PRD-{ID}
+base_url: "http://localhost:3000"
+prerequisites:
+  - frontend_running: true
+  - route_exists: "/verify/test-task-123?mode=chat"
+
+tests:
+  - id: S1.1
+    name: "Page header shows verification title at very top"
+    steps:
+      - tool: mcp__claude-in-chrome__navigate
+        args:
+          url: "${base_url}/verify/test-task-123?mode=chat"
+      - tool: mcp__claude-in-chrome__get_page_text
+        args: {}
+        assert:
+          contains: "Employment Verification"
+      - tool: mcp__claude-in-chrome__find
+        args:
+          query: "h1, h2"
+        assert:
+          first_element_text_contains: "Employment Verification"
+      - tool: mcp__claude-in-chrome__computer
+        args:
+          action: screenshot
+        evidence: "s1-1-header.png"
+
+  - id: S2.1
+    name: "Chat mode does NOT show voice bar"
+    steps:
+      - tool: mcp__claude-in-chrome__navigate
+        args:
+          url: "${base_url}/verify/test-task-123?mode=chat"
+      - tool: mcp__claude-in-chrome__javascript_tool
+        args:
+          javascript: |
+            const voiceBar = document.querySelector('[data-testid="voice-bar"], [class*="speaking"], [class*="voice-controls"]');
+            return { voiceBarVisible: voiceBar !== null && voiceBar.offsetHeight > 0 };
+        assert:
+          voiceBarVisible: false
+      - tool: mcp__claude-in-chrome__find
+        args:
+          query: "input[type='text'], textarea"
+        assert:
+          found: true  # Chat input should exist in chat mode
+```
+
+#### Mapping Rules: Gherkin to MCP Tools
+
+| Gherkin Pattern | MCP Tool | Assertion Type |
+|-----------------|----------|----------------|
+| "I navigate to {url}" | `navigate` | N/A |
+| "the page shows {text}" | `get_page_text` | `contains: {text}` |
+| "{element} is visible" | `find` or `javascript_tool` | `found: true` |
+| "{element} is NOT visible" | `javascript_tool` (offsetHeight check) | `visible: false` |
+| "I click {element}" | `find` + `computer` (click) | N/A |
+| "I enter {value} in {field}" | `form_input` | N/A |
+| "background changes to {color}" | `javascript_tool` (getComputedStyle) | `contains: {color}` |
+| layout/CSS assertion | `javascript_tool` (grid/flex inspection) | custom assertion |
+| screenshot capture | `computer` (screenshot) | evidence artifact |
+
+#### Generation Process
+
+For each feature group in `manifest.yaml` where `validation_method: browser-required`:
+
+1. Read the corresponding Gherkin scenarios from `scenarios.feature`
+2. Map each `Then` assertion to a specific `mcp__claude-in-chrome__*` tool call
+3. Map each `When` action to a `navigate`, `form_input`, `find`, or `javascript_tool` call
+4. Add `evidence` capture (screenshot) after each scenario's assertions
+5. Include `assert` blocks with deterministic pass/fail conditions (not confidence scores)
+
+#### Execution During Phase 4
+
+These executable tests are run by a tdd-test-engineer agent during Phase 4 validation:
+
+```python
+Task(
+    subagent_type="tdd-test-engineer",
+    description="Execute browser automation tests for PRD-{ID}",
+    prompt=f"""
+    Execute the browser automation tests at: acceptance-tests/PRD-{prd_id}/executable-tests/
+
+    For each test file:
+    1. Read config.yaml for base URL and prerequisites
+    2. Verify prerequisites (frontend running, routes accessible)
+    3. Execute each test's steps sequentially using the specified MCP tools
+    4. Evaluate assert blocks — deterministic PASS/FAIL per step
+    5. Capture evidence screenshots to .claude/evidence/PRD-{prd_id}/
+    6. Return executable-test-results.json with per-test pass/fail
+
+    If frontend is not running, mark ALL tests as BLOCKED (not FAIL).
+    """
+)
+```
+
+#### Integration with Phase 4 Confidence Scoring
+
+Executable test results serve as hard evidence for Phase 4 confidence scoring:
+
+| Test Result | Impact on Confidence Score |
+|-------------|---------------------------|
+| **PASS** | Confidence floor of 0.7 for that scenario (evidence of working implementation) |
+| **FAIL** | Confidence ceiling of 0.3 for that scenario (implementation has defects) |
+| **BLOCKED** | No constraint on scoring (manual assessment still applies) |
+
+This prevents the guardian from scoring a scenario at 0.9 based on code reading when the executable test shows the feature is actually broken in the browser.
 
 ---
 
@@ -913,9 +1234,10 @@ cs-init
 
 # Create guardian promise
 cs-promise --create "Guardian: Validate PRD-{ID} implementation" \
-    --ac "Acceptance tests created and stored in config repo" \
-    --ac "S3 meta-orchestrator spawned and verified running" \
-    --ac "Meta-orchestrator progress monitored through completion" \
+    --ac "PRD designed, pipeline created, and design challenge passed (Phase 0)" \
+    --ac "Acceptance tests and executable browser tests created in config repo" \
+    --ac "Orchestrator(s) spawned and verified running" \
+    --ac "Orchestrator progress monitored through completion" \
     --ac "Independent validation scored against rubric" \
     --ac "Final verdict delivered with evidence"
 ```
@@ -924,8 +1246,8 @@ cs-promise --create "Guardian: Validate PRD-{ID} implementation" \
 
 ```bash
 # Meet criteria as work progresses
-cs-promise --meet <id> --ac-id AC-1 --evidence "acceptance-tests/PRD-{ID}/ created with 8 scenarios" --type manual
-cs-promise --meet <id> --ac-id AC-2 --evidence "tmux session s3-{initiative} running, output style verified" --type manual
+cs-promise --meet <id> --ac-id AC-1 --evidence "acceptance-tests/PRD-{ID}/ created with N scenarios + executable browser tests" --type manual
+cs-promise --meet <id> --ac-id AC-2 --evidence "tmux session orch-{initiative} running, output style verified" --type manual
 ```
 
 ### At Validation Complete
@@ -985,10 +1307,12 @@ Each level adds independent verification. The key constraint: each guardian stor
 
 | Phase | Key Action | Reference |
 |-------|------------|-----------|
-| 1. Acceptance Tests | Read PRD, write Gherkin, create manifest | [gherkin-test-patterns.md](references/gherkin-test-patterns.md) |
+| 0. PRD Design | Write PRD, ZeroRepo analysis, pipeline, design challenge | [this skill — Phase 0] |
+| 1. Acceptance Tests | Gherkin rubrics + executable browser tests (Step 3) | [gherkin-test-patterns.md](references/gherkin-test-patterns.md) |
 | 2. Orchestrator Spawn | DOT dispatch, tmux patterns, wisdom inject, `ccorch --worktree` | [guardian-workflow.md](references/guardian-workflow.md) |
 | 3. Monitoring | capture-pane loop, intervention triggers | [monitoring-patterns.md](references/monitoring-patterns.md) |
-| 4. Validation | Read code, score scenarios, weighted total | [validation-scoring.md](references/validation-scoring.md) |
+| 4. Validation | Score scenarios, run executable tests, weighted total | [validation-scoring.md](references/validation-scoring.md) |
+| 4.5 Regression | ZeroRepo diff before journey tests | [this skill — Phase 4.5] |
 
 ### Key Files
 
@@ -996,6 +1320,8 @@ Each level adds independent verification. The key constraint: each guardian stor
 |------|---------|
 | `acceptance-tests/PRD-{ID}/manifest.yaml` | Feature weights, thresholds, metadata |
 | `acceptance-tests/PRD-{ID}/*.feature` | Gherkin scenarios with scoring guides |
+| `acceptance-tests/PRD-{ID}/executable-tests/` | Browser automation test scripts (UX PRDs) |
+| `acceptance-tests/PRD-{ID}/design-challenge.md` | Phase 0 design challenge results |
 | `scripts/generate-manifest.sh` | Template generator for new initiatives |
 
 ### Anti-Patterns
@@ -1008,10 +1334,18 @@ Each level adds independent verification. The key constraint: each guardian stor
 | Skipping monitoring | AskUserQuestion blocks go undetected | Monitor continuously |
 | Completing promise before validation | Premature closure | Meet AC-4 and AC-5 last |
 | Equal feature weights | Distorts overall score | Weight by business criticality |
+| Skipping design challenge (Phase 0) | Flawed PRDs propagate through entire pipeline | Always run Step 0.4 |
+| Ignoring AMEND verdict | Sunk cost fallacy — beads already exist | Re-parse is cheap, bad design is expensive |
+| Only writing scoring rubrics for UX PRDs | Cannot automatically verify browser behavior | Write executable-tests/ alongside scenarios.feature |
+| Scoring UX at 0.9 from code reading alone | Code may compile but render incorrectly | Executable browser tests cap/floor confidence scores |
 
 ---
 
-**Version**: 0.1.0
-**Dependencies**: cs-promise CLI, tmux, Hindsight MCP, ccsystem3 shell function
-**Integration**: system3-orchestrator skill, completion-promise skill, acceptance-test-writer skill
+**Version**: 0.2.0
+**Dependencies**: cs-promise CLI, tmux, Hindsight MCP, ccsystem3 shell function, Task Master MCP, ZeroRepo
+**Integration**: system3-orchestrator skill, completion-promise skill, acceptance-test-writer skill, parallel-solutioning skill, research-first skill
 **Theory**: Independent verification eliminates self-reporting bias in agentic systems
+
+**Changelog**:
+- v0.2.0: Added Phase 0 (PRD Design & Challenge) with ZeroRepo analysis, Task Master parsing, beads sync, and mandatory design challenge via parallel-solutioning + research-first. Added executable browser test scripts (Phase 1, Step 3) for UX PRDs with claude-in-chrome MCP tool mapping. Updated promise template with AC-0. Added 4 new anti-patterns. Lesson learned: PRD-P1.1-UNIFIED-FORM-001 had 17 Gherkin scoring rubrics but zero executable tests — the guardian could not automatically verify browser behavior.
+- v0.1.0: Initial release — blind Gherkin acceptance tests, tmux monitoring, gradient confidence scoring, DOT pipeline integration, SDK mode.
