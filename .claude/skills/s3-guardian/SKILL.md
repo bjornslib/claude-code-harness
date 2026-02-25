@@ -133,9 +133,21 @@ cs-promise --start <promise-id>
 
 ## Phase 1: Acceptance Test Creation
 
-Generate blind acceptance tests from PRDs before any implementation begins. This phase uses
-the `acceptance-test-writer` skill in two modes: `--mode=guardian` for per-epic Gherkin scenarios,
+Generate blind acceptance tests from **Solution Design (SD) documents** before any implementation begins.
+The SD is the correct input because it contains:
+- **Business Context section** — the goals and success metrics the tests should validate
+- **Section 6: Acceptance Criteria per Feature** — Gherkin-ready criteria for each feature
+
+The PRD (business artifact) provides the broader context, but the SD contains the structured,
+feature-level acceptance criteria that `acceptance-test-writer` needs to generate meaningful tests.
+
+This phase uses `acceptance-test-writer` in two modes: `--mode=guardian` for per-epic Gherkin scenarios,
 and `--mode=journey` for cross-layer business journey scenarios.
+
+**Document lookup**:
+- SD files are in the implementation repo at: `.taskmaster/docs/SD-{CATEGORY}-{NUMBER}-{epic-slug}.md`
+- PRD files are at: `.taskmaster/docs/PRD-{CATEGORY}-{DESCRIPTOR}.md`
+- Both live in `.taskmaster/docs/` — SDs can be read directly from the impl repo path
 
 ### Step 1: Generate Per-Epic Gherkin Tests (Guardian Mode)
 
@@ -143,7 +155,14 @@ Invoke the acceptance-test-writer skill in guardian mode. This generates the per
 scenarios with confidence scoring guides that will be used for Phase 4 validation.
 
 ```python
-Skill("acceptance-test-writer", args="--source=/path/to/impl-repo/docs/prds/PRD-{ID}.md --mode=guardian")
+# Source the SD document — it has the structured acceptance criteria
+# The --prd flag identifies the parent PRD for test organisation
+Skill("acceptance-test-writer", args="--source=/path/to/impl-repo/.taskmaster/docs/SD-{ID}.md --prd=PRD-{ID} --mode=guardian")
+```
+
+If no SD exists yet (legacy initiative), fall back to the PRD:
+```python
+Skill("acceptance-test-writer", args="--source=/path/to/impl-repo/.taskmaster/docs/PRD-{ID}.md --mode=guardian")
 ```
 
 This creates:
@@ -151,28 +170,28 @@ This creates:
 - `acceptance-tests/PRD-{ID}/scenarios.feature` — Gherkin scenarios with confidence scoring guides
 
 **Verify the output:**
-- [ ] All PRD features represented with weights summing to 1.0
+- [ ] All SD features (Section 4: Functional Decomposition) represented with weights summing to 1.0
 - [ ] Each scenario has a confidence scoring guide (0.0 / 0.5 / 1.0 anchors)
-- [ ] Evidence references are specific (file names, function names, test names)
+- [ ] Evidence references are specific (file names, function names, test names from SD File Scope)
 - [ ] Red flags section present for each scenario
 - [ ] manifest.yaml has valid thresholds (default: accept=0.60, investigate=0.40)
 
-If the acceptance-test-writer cannot find a Goals section, derive objectives from the uber-epic
-Acceptance Criteria — what the user ultimately wanted to achieve.
+If the acceptance-test-writer cannot find a Goals section in the SD, use the SD's Business Context
+section (Section 1) or derive objectives from the parent PRD's Goals (Section 2).
 
 ### Step 2: Generate Journey Tests (Journey Mode)
 
-After generating per-epic Gherkin, generate blind journey tests from the PRD's Goals section.
+After generating per-epic Gherkin, generate blind journey tests from the SD's Business Context section.
 
 ```python
-Skill("acceptance-test-writer", args="--source=/path/to/impl-repo/docs/prds/PRD-{ID}.md --mode=journey")
+Skill("acceptance-test-writer", args="--source=/path/to/impl-repo/.taskmaster/docs/SD-{ID}.md --prd=PRD-{ID} --mode=journey")
 ```
 
 This creates `acceptance-tests/PRD-{ID}/journeys/` in the config repo (where meta-orchestrators cannot see it).
 Journey tests are generated BEFORE the meta-orchestrator is spawned — they stay blind throughout.
 
 **Verify the output:**
-- [ ] At least one `J{N}.feature` file exists per PRD business objective
+- [ ] At least one `J{N}.feature` file exists per SD business objective (Section 1: Business Context)
 - [ ] `runner_config.yaml` is present with sensible service URLs
 - [ ] Each scenario crosses at least 2 system layers and ends with a business outcome assertion
 - [ ] Tags include `@journey @prd-{ID} @J{N}`
@@ -196,8 +215,11 @@ Guardian (this session) ──spawns──► Orchestrator A (orch-epic1) ──
 
 Before spawning, verify:
 - [ ] Implementation repo exists and is accessible
-- [ ] PRD exists and acceptance tests have been created (Phase 1 complete)
+- [ ] PRD exists in `.taskmaster/docs/PRD-{ID}.md` (business artifact)
+- [ ] SD exists per epic in `.taskmaster/docs/SD-{ID}.md` (technical spec; Task Master input)
+- [ ] Acceptance tests have been created from SD (Phase 1 complete)
 - [ ] DOT pipeline exists (or create via `cli.py generate`) with bead IDs mapped to nodes
+- [ ] DOT codergen nodes have `solution_design` attribute pointing to their SD file
 - [ ] No existing tmux session with the same name
 - [ ] Hindsight wisdom gathered from project bank
 
@@ -309,6 +331,8 @@ tmux send-keys -t "orch-${EPIC_NAME}" Enter
 sleep 3
 
 # 5. Write wisdom to temp file (avoids large paste issues — Pattern 4)
+#    SD_PATH is the solution_design attribute from the DOT node (set during planning)
+#    e.g., SD_PATH=".taskmaster/docs/SD-AUTH-001-login.md"
 cat > "/tmp/wisdom-${EPIC_NAME}.md" << EOF
 You are an orchestrator for initiative: ${EPIC_NAME}
 
@@ -321,10 +345,18 @@ You are an orchestrator for initiative: ${EPIC_NAME}
 ## Your Mission
 ${EPIC_DESCRIPTION}
 
+## Solution Design (Primary Technical Reference)
+Your full technical specification is in: ${SD_PATH}
+Read it before delegating to workers. Key sections:
+- Section 2: Technical Architecture (data models, API contracts, component design)
+- Section 4: Functional Decomposition (features with explicit dependencies)
+- Section 6: Acceptance Criteria per Feature (definition of done for each worker task)
+- Section 8: File Scope (which files workers are allowed to touch)
+
 ## DOT Node Scope (pipeline-driven)
 - Node ID: ${NODE_ID}
 - Acceptance: "${ACCEPTANCE_CRITERIA}"
-- File Scope: ${FILE_PATHS}
+- File Scope: ${FILE_PATHS} (see SD Section 8 for full scoping)
 - Bead ID: ${BEAD_ID}
 
 ## Patterns from Hindsight

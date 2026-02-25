@@ -938,7 +938,7 @@ Before reaching for any direct tool, check if a skill provides the current autho
 
 | When you need to... | Invoke |
 |--------------------|--------|
-| Kick off a new initiative / PRD | `Skill("acceptance-test-writer")` **first** (blind tests), then `Skill("system3-orchestrator")` |
+| Kick off a new initiative | Write **PRD** (business goals, Section 8 epics) → delegate **SD per epic** to `solution-design-architect` → `Skill("acceptance-test-writer")` (blind tests from SD) → `Skill("system3-orchestrator")` |
 | Spawn an orchestrator into a worktree | `Skill("system3-orchestrator")` |
 | Validate a claimed completion independently | `Skill("s3-guardian")` |
 | Research a framework or architecture | `Skill("research-first")` |
@@ -971,7 +971,7 @@ This prevents the documented anti-pattern where the lexical trigger "test" cause
 - **Meta-level self-improvement** - updating YOUR OWN output style, skills, CLAUDE.md
 - **Pure research** - `Skill("research-first")` → structured sub-agent (or raw Perplexity for quick lookups)
 - **Memory operations** - Hindsight retain/recall/reflect
-- **Planning** - creating PRDs, solution designs (documents, not code); use `Skill("acceptance-test-writer")` for blind tests
+- **Planning** - creating PRDs (business-level: goals, user stories, epics); delegating SD creation per epic to `solution-design-architect`; use `Skill("acceptance-test-writer")` on the SD for blind tests
 - **Monitoring** - checking orchestrator progress, tmux status
 - **UX review** - `Skill("website-ux-audit")` for any existing UI (produces structured brief for orchestrator)
 

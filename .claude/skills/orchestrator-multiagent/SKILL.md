@@ -225,7 +225,11 @@ The preflight includes:
 3. For complex architectures: `/parallel-solutioning` - Deploys 7 solution-architects
 4. Convert design to implementation steps via `Skill("superpowers:writing-plan")`
 
-**Outputs**: Design document, implementation plan, research notes (store in Hindsight)
+**Outputs**: **PRD** (business goals, user stories, architectural decisions, epics list)
+- PRD template: `.taskmaster/templates/prd-template.md`
+- PRD location: `.taskmaster/docs/PRD-{CATEGORY}-{DESCRIPTOR}.md`
+- PRD is the operator-facing artifact — it does NOT go into Task Master directly
+- Store research notes and decisions in Hindsight
 
 ---
 
@@ -291,38 +295,48 @@ bd dep add agencheck-004 agencheck-002 --type=parent-child             # Task un
 ### Phase 1: Planning (Uber-Epic + Task Decomposition)
 
 **Prerequisites**:
-1. ✅ Phase 0 complete (ideation, brainstorming, research done)
-2. ✅ Design document exists (from ideation)
+1. ✅ Phase 0 complete (ideation, brainstorming done)
+2. ✅ PRD exists in `.taskmaster/docs/PRD-{CATEGORY}-{DESCRIPTOR}.md` (from Phase 0)
 3. ✅ Read [WORKFLOWS.md](WORKFLOWS.md#feature-decomposition-maker) for MAKER decomposition principles
+
+**Two-Document Model**:
+- **PRD** (Phase 0 output) — business artifact: goals, user stories, architectural decisions, epics list. NOT fed into Task Master.
+- **SD** (Phase 1 creates, one per epic) — automation input: business context + technical design. This is what Task Master parses.
 
 **Planning Workflow**:
 ```bash
-# 1. Create uber-epic in zenagent/ (from validated design)
+# 1. Create uber-epic in zenagent/ (from validated PRD)
 cd /Users/theb/Documents/Windsurf/zenagent
-bd create --title="[Initiative from Ideation]" --type=epic --priority=1
+bd create --title="[Initiative from PRD]" --type=epic --priority=1
 # Note the returned ID (e.g., agencheck-001)
 
-# 2. Create PRD from design document (if not exists)
-# Location: agencheck/docs/prds/[project]-prd.md
+# 2. Create Solution Design (SD) per epic from PRD
+#    Delegate to solution-design-architect worker — do NOT write SD yourself
+#    SD template: .taskmaster/templates/solution-design-template.md
+#    SD location: .taskmaster/docs/SD-{CATEGORY}-{NUMBER}-{epic-slug}.md
+#    The SD includes:
+#      - Business Context section (summarizes relevant PRD goals for Task Master)
+#      - Technical Architecture (data models, API contracts, component design)
+#      - Functional Decomposition (capabilities → features with explicit dependencies)
+#      - Acceptance Criteria per feature (Gherkin-ready)
+#      - File Scope (new/modified/excluded files)
 
-# 2.5a. Codebase Analysis with ZeroRepo (Recommended)
+# 2.5a. Codebase Analysis with ZeroRepo (Recommended — run before writing SD)
 # For detailed workflow, see ZEROREPO.md
 #
 # Run ZeroRepo to map PRD against existing codebase:
-# Using runner script (recommended for reliable timeout handling):
 python .claude/skills/orchestrator-multiagent/scripts/zerorepo-run-pipeline.py \
   --operation init --project-path .  # Once per project
 python .claude/skills/orchestrator-multiagent/scripts/zerorepo-run-pipeline.py \
-  --operation generate --prd docs/prds/prd.md \
-  --baseline .zerorepo/baseline.json --model claude-sonnet-4-5-20250929 \
+  --operation generate --prd .taskmaster/docs/PRD-{ID}.md \
+  --baseline .zerorepo/baseline.json --model claude-sonnet-4-6 \
   --output .zerorepo/output
 # Read delta report: .zerorepo/output/05-delta-report.md
-# Read 01-spec.json + 03-graph.json to validate/enrich PRD
-# Use EXISTING/MODIFIED/NEW classification to enrich task descriptions:
-#   EXISTING → Skip (no task needed, reference only)
-#   MODIFIED → Scoped task with current file path + specific changes
-#   NEW      → Full implementation task with suggested module structure
-# Include delta context in worker TaskCreate descriptions (file paths, change summaries)
+# Use EXISTING/MODIFIED/NEW classification to populate SD File Scope section:
+#   EXISTING → Reference only (no task needed)
+#   MODIFIED → Scoped task with file path + specific changes
+#   NEW      → Full implementation task with module structure
+# Include delta context in SD Functional Decomposition and File Scope sections
 
 # 2.5b. Enrich Beads with RPG Graph Context (After sync in step 5)
 # For each bead created by sync, update --design with context from 04-rpg.json:
@@ -330,10 +344,11 @@ python .claude/skills/orchestrator-multiagent/scripts/zerorepo-run-pipeline.py \
 # See ZEROREPO.md "Enriching Beads with RPG Graph Context" for full pattern
 
 # 3. Note current highest task ID before parsing
-cd agencheck && task-master list | tail -5  # e.g., last task is ID 170
+task-master list | tail -5  # e.g., last task is ID 170
 
-# 4. Parse PRD with Task Master (--append if tasks exist)
-task-master parse-prd docs/prds/prd.md --research --append
+# 4. Parse SD with Task Master (--append if tasks exist)
+#    NOTE: Parse the SD, NOT the PRD — SD has the structured decomposition TM needs
+task-master parse-prd .taskmaster/docs/SD-{CATEGORY}-{NUMBER}-{epic-slug}.md --research --append
 task-master analyze-complexity --research
 task-master expand --all --research
 # Note the new ID range (e.g., 171-210)
@@ -346,13 +361,13 @@ node agencheck/.claude/skills/orchestrator-multiagent/scripts/sync-taskmaster-to
     --tasks-path=agencheck/.taskmaster/tasks/tasks.json
 # This also closes Task Master tasks 171-210 (status=done)
 
-# 6. Generate acceptance tests from PRD (IMMEDIATELY after sync)
-cd /Users/theb/Documents/Windsurf/zenagent/agencheck
-Skill("acceptance-test-writer", args="--prd=PRD-AUTH-001 --source=docs/prds/prd.md")
+# 6. Generate acceptance tests from SD (IMMEDIATELY after sync)
+#    Use SD as source — it contains Business Context + per-feature Acceptance Criteria
+Skill("acceptance-test-writer", args="--prd=PRD-AUTH-001 --source=.taskmaster/docs/SD-AUTH-001-login.md")
 # This generates:
 # acceptance-tests/PRD-AUTH-001/
 # ├── manifest.yaml          # PRD metadata + feature list
-# ├── AC-user-login.yaml     # Acceptance criteria
+# ├── AC-user-login.yaml     # Acceptance criteria (from SD Section 6)
 # ├── AC-invalid-credentials.yaml
 # └── ...
 
@@ -360,27 +375,24 @@ Skill("acceptance-test-writer", args="--prd=PRD-AUTH-001 --source=docs/prds/prd.
 git add acceptance-tests/ && git commit -m "test(PRD-AUTH-001): add acceptance test suite"
 
 # 7.5. Generate DOT pipeline from beads (beads must exist from step 5)
-# The generator creates one graph node per bead — beads ARE the nodes.
+# Set solution_design attribute on each codergen node to point to its SD file
 python3 .claude/scripts/attractor/cli.py generate \
     --prd PRD-AUTH-001 \
     --output .claude/attractor/pipelines/auth-001.dot
-# Validate the generated pipeline
+# Set SD reference on nodes (so Runner can brief orchestrators with full context):
+python3 .claude/scripts/attractor/cli.py node auth-001.dot modify impl_login \
+    --set solution_design=.taskmaster/docs/SD-AUTH-001-login.md
+# Validate
 python3 .claude/scripts/attractor/cli.py validate \
     .claude/attractor/pipelines/auth-001.dot
-# If beads don't match (e.g., titles don't contain PRD ID), use scaffold + manual:
-#   python3 .claude/scripts/attractor/cli.py generate --scaffold \
-#       --prd PRD-AUTH-001 --output .claude/attractor/pipelines/auth-001.dot
-#   python3 .claude/scripts/attractor/cli.py node \
-#       .claude/attractor/pipelines/auth-001.dot add task_login \
-#       --handler codergen --label "Implement login" \
-#       --set bead_id=agencheck-042 --set worker_type=backend-solutions-engineer
 
 # 8. Review hierarchy (filter by uber-epic)
 bd list --parent=agencheck-001   # See only tasks under this initiative
 bd ready --parent=agencheck-001  # Ready tasks for this initiative only
 
 # 9. Commit planning artifacts (completes Phase 1)
-git add .beads/ .claude/attractor/pipelines/ && git commit -m "plan: initialize [initiative] hierarchy"
+git add .beads/ .taskmaster/docs/ .claude/attractor/pipelines/ && \
+    git commit -m "plan: initialize [initiative] hierarchy with SD documents"
 # Write progress summary to .claude/progress/
 ```
 
