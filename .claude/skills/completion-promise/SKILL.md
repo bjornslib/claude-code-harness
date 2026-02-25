@@ -188,7 +188,7 @@ The session state is stored in `.claude/completion-state/${CLAUDE_SESSION_DIR:-d
 .claude/scripts/completion-state/cs-status --prompt "User's original prompt here..."
 
 # 3. If PRD exists, link it
-.claude/scripts/completion-state/cs-status --prd ".taskmaster/docs/epic-name-prd.md"
+.claude/scripts/completion-state/cs-status --prd "docs/prds/epic-name-prd.md"
 
 # 4. Create completion promise with structured acceptance criteria
 .claude/scripts/completion-state/cs-promise --create "Initiative title" \

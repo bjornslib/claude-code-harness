@@ -33,7 +33,7 @@ With PRD-driven tracking:
 ### Step 1: Read the PRD
 
 ```python
-prd_content = Read(f".taskmaster/docs/{epic_name}-prd.md")
+prd_content = Read(f"docs/prds/{epic_name}-prd.md")
 ```
 
 ### Step 2: Extract Key Elements
@@ -198,7 +198,7 @@ PRD goals feed into the completion promise:
 
 ```bash
 # 1. Extract from PRD
-.claude/scripts/completion-state/cs-extract --prd ".taskmaster/docs/epic-prd.md"
+.claude/scripts/completion-state/cs-extract --prd "docs/prds/epic-prd.md"
 
 # 2. Add goals from PRD
 .claude/scripts/completion-state/cs-extract \

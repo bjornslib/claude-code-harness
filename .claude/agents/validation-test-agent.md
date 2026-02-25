@@ -124,7 +124,7 @@ cs-store-validation --promise <promise-id> --ac-id TECHNICAL \
 
 2. **Load PRD Acceptance Criteria**: Parse the PRD to extract all ACs
    ```python
-   prd = load_prd(prd_id)  # from .taskmaster/docs/
+   prd = load_prd(prd_id)  # from docs/prds/
    acceptance_criteria = prd.extract_acceptance_criteria()
    ```
 
@@ -1164,7 +1164,7 @@ Evidence includes:
 ### Step 1: Epic Identification
 ```
 Identify epic being validated
-→ Locate PRD in .taskmaster/docs/
+→ Locate PRD in docs/prds/
 → Extract journey number (J{N}) for naming
 ```
 

@@ -143,7 +143,7 @@ Invoke the acceptance-test-writer skill in guardian mode. This generates the per
 scenarios with confidence scoring guides that will be used for Phase 4 validation.
 
 ```python
-Skill("acceptance-test-writer", args="--source=/path/to/impl-repo/.taskmaster/docs/PRD-{ID}.md --mode=guardian")
+Skill("acceptance-test-writer", args="--source=/path/to/impl-repo/docs/prds/PRD-{ID}.md --mode=guardian")
 ```
 
 This creates:
@@ -165,7 +165,7 @@ Acceptance Criteria — what the user ultimately wanted to achieve.
 After generating per-epic Gherkin, generate blind journey tests from the PRD's Goals section.
 
 ```python
-Skill("acceptance-test-writer", args="--source=/path/to/impl-repo/.taskmaster/docs/PRD-{ID}.md --mode=journey")
+Skill("acceptance-test-writer", args="--source=/path/to/impl-repo/docs/prds/PRD-{ID}.md --mode=journey")
 ```
 
 This creates `acceptance-tests/PRD-{ID}/journeys/` in the config repo (where meta-orchestrators cannot see it).

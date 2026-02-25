@@ -246,7 +246,7 @@ Use Markdown-based test specifications:
 1. **Generate tests from PRD**:
    ```python
    # Orchestrator invokes skill (NOT worker, NOT validation-test-agent)
-   Skill("acceptance-test-writer", args="--prd=PRD-XXX --source=.taskmaster/docs/prd.md")
+   Skill("acceptance-test-writer", args="--prd=PRD-XXX --source=docs/prds/prd.md")
    ```
 
 2. **Review generated tests**:

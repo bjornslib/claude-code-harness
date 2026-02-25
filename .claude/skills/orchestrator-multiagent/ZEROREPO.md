@@ -54,7 +54,7 @@ Analyze a PRD (or design spec) against the baseline to classify every referenced
 
 ```bash
 .claude/skills/orchestrator-multiagent/scripts/zerorepo-generate.sh \
-  .taskmaster/docs/prd.md
+  docs/prds/prd.md
 ```
 
 **Arguments**:
@@ -143,7 +143,7 @@ After generating the delta report, use the classifications to enrich PRD content
    - Mark NEW components: "Create new module at <suggested-path>"
    ↓
 4. Parse enriched PRD with Task Master
-   task-master parse-prd .taskmaster/docs/prd.md --research --append
+   task-master parse-prd docs/prds/prd.md --research --append
    ↓
 5. Sync to Beads (standard workflow)
 ```
@@ -216,7 +216,7 @@ A single command chains the complete definition pipeline from PRD to executable 
 
 ```bash
 .claude/skills/orchestrator-multiagent/scripts/zerorepo-pipeline.sh \
-  --prd .taskmaster/docs/PRD-XXX.md --format attractor
+  --prd docs/prds/PRD-XXX.md --format attractor
 ```
 
 ### Pipeline Steps
@@ -257,13 +257,13 @@ A single command chains the complete definition pipeline from PRD to executable 
 
 ```bash
 # Full pipeline for a lifecycle PRD
-zerorepo-pipeline.sh --prd .taskmaster/docs/PRD-S3-DOT-LIFECYCLE-001.md
+zerorepo-pipeline.sh --prd docs/prds/PRD-S3-DOT-LIFECYCLE-001.md
 
 # Dry-run to preview steps
-zerorepo-pipeline.sh --prd .taskmaster/docs/PRD-S3-DOT-LIFECYCLE-001.md --dry-run
+zerorepo-pipeline.sh --prd docs/prds/PRD-S3-DOT-LIFECYCLE-001.md --dry-run
 
 # Skip beads annotation (no beads DB available)
-zerorepo-pipeline.sh --prd .taskmaster/docs/PRD-S3-DOT-LIFECYCLE-001.md --skip-annotate --skip-promise
+zerorepo-pipeline.sh --prd docs/prds/PRD-S3-DOT-LIFECYCLE-001.md --skip-annotate --skip-promise
 ```
 
 ---
@@ -292,7 +292,7 @@ After creating beads via Task Master sync, use the RPG graph (04-rpg.json) to in
    - Enrich PRD with identified gaps
    ↓
 3. Parse enriched PRD with Task Master
-   task-master parse-prd .taskmaster/docs/prd.md --research --append
+   task-master parse-prd docs/prds/prd.md --research --append
    ↓
 4. Sync to Beads (standard workflow from SKILL.md)
    node scripts/sync-taskmaster-to-beads.js --uber-epic=<epic-id> ...

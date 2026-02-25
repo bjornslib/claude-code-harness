@@ -128,12 +128,12 @@ Check the evidence JSON for `pytest_returncode` field.
 |------|---------|
 | `validation-test-agent-monitor.py` | Monitor mode implementation |
 | `MONITOR_MODE_QUICK_START.md` | This quick reference |
-| `../documentation/VALIDATION_AGENT_MONITOR_MODE.md` | Full documentation |
+| `../../docs/architecture/VALIDATION_AGENT_MONITOR_MODE.md` | Full documentation |
 
 ## Documentation
 
 For complete documentation, see:
-`/Users/theb/Documents/Windsurf/claude-harness-setup/.claude/documentation/VALIDATION_AGENT_MONITOR_MODE.md`
+`/Users/theb/Documents/Windsurf/claude-harness-setup/docs/architecture/VALIDATION_AGENT_MONITOR_MODE.md`
 
 ## Testing
 

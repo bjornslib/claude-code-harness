@@ -252,7 +252,7 @@ Gherkin `.feature` format instead of YAML).
 
 ### Invocation
 ```
-Skill("acceptance-test-writer", args="--source=/path/to/impl-repo/.taskmaster/docs/PRD-{ID}.md --mode=guardian")
+Skill("acceptance-test-writer", args="--source=/path/to/impl-repo/docs/prds/PRD-{ID}.md --mode=guardian")
 ```
 
 ### Workflow
@@ -381,7 +381,7 @@ Generates Gherkin journey scenarios from the PRD's **Goals / Business Objectives
 
 ### Invocation
 ```
-Skill("acceptance-test-writer", args="--source=.taskmaster/docs/PRD-{ID}.md --mode=journey")
+Skill("acceptance-test-writer", args="--source=docs/prds/PRD-{ID}.md --mode=journey")
 ```
 
 ### Workflow

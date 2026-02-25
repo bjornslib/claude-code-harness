@@ -23,7 +23,7 @@ Before beginning a guardian session, verify all prerequisites are met.
 ls -la acceptance-tests/ 2>/dev/null || echo "Directory will be created"
 
 # Verify implementation repo is accessible
-ls -la /path/to/impl-repo/.taskmaster/docs/ 2>/dev/null || echo "ERROR: impl repo not found"
+ls -la /path/to/impl-repo/docs/prds/ 2>/dev/null || echo "ERROR: impl repo not found"
 
 # Verify tmux is available
 tmux -V
@@ -39,10 +39,10 @@ which ccsystem3 2>/dev/null || type ccsystem3 2>/dev/null
 
 ```bash
 # Check PRD exists
-cat /path/to/impl-repo/.taskmaster/docs/PRD-{ID}.md | head -50
+cat /path/to/impl-repo/docs/prds/PRD-{ID}.md | head -50
 
 # Extract PRD metadata
-grep -E "^#|^##|acceptance|criteria|epic|feature" /path/to/impl-repo/.taskmaster/docs/PRD-{ID}.md
+grep -E "^#|^##|acceptance|criteria|epic|feature" /path/to/impl-repo/docs/prds/PRD-{ID}.md
 ```
 
 ### 1.3 Conflict Checks
@@ -243,7 +243,7 @@ After verification, send the meta-orchestrator its mission:
 
 ```bash
 # Construct the instruction payload
-INSTRUCTION="You are the System 3 meta-orchestrator. Invoke Skill('system3-orchestrator') first. Then read PRD-{ID} at .taskmaster/docs/PRD-{ID}.md. Parse tasks with Task Master. Spawn orchestrators as needed. Report when all epics are complete."
+INSTRUCTION="You are the System 3 meta-orchestrator. Invoke Skill('system3-orchestrator') first. Then read PRD-{ID} at docs/prds/PRD-{ID}.md. Parse tasks with Task Master. Spawn orchestrators as needed. Report when all epics are complete."
 
 # Send via tmux (text first, then Enter separately)
 tmux send-keys -t "s3-{initiative}" "$INSTRUCTION"
