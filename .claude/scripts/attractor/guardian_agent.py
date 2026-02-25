@@ -374,29 +374,91 @@ def build_env_config() -> dict[str, str]:
 async def _run_agent(initial_prompt: str, options: Any) -> None:
     """Stream messages from the claude_code_sdk query and log them.
 
+    Each SDK message type is logged to Logfire as a structured event so that
+    tool calls, assistant text, tool results, and session completion are all
+    visible in the Logfire dashboard.
+
     Args:
         initial_prompt: The first user message to send to Claude.
         options: Configured ClaudeCodeOptions instance.
     """
+    import time as _time
+
     from claude_code_sdk import (
         query,
         AssistantMessage,
         TextBlock,
         ToolUseBlock,
+        ToolResultBlock,
         ResultMessage,
     )
 
-    with logfire.span("guardian.run_agent"):
+    turn_count = 0
+    tool_call_count = 0
+    start_time = _time.time()
+
+    with logfire.span("guardian.run_agent") as agent_span:
         async for message in query(prompt=initial_prompt, options=options):
             if isinstance(message, AssistantMessage):
+                turn_count += 1
                 for block in message.content:
                     if isinstance(block, TextBlock):
+                        text_preview = block.text[:300] if block.text else ""
+                        logfire.info(
+                            "guardian.assistant_text",
+                            turn=turn_count,
+                            text_length=len(block.text) if block.text else 0,
+                            text_preview=text_preview,
+                        )
                         print(f"[Guardian] {block.text}", flush=True)
+
                     elif isinstance(block, ToolUseBlock):
-                        input_preview = json.dumps(block.input)[:200]
-                        print(f"[Guardian tool] {block.name}: {input_preview}", flush=True)
+                        tool_call_count += 1
+                        input_preview = json.dumps(block.input)[:500]
+                        logfire.info(
+                            "guardian.tool_use",
+                            tool_name=block.name,
+                            tool_use_id=block.id,
+                            tool_input_preview=input_preview,
+                            turn=turn_count,
+                            tool_call_number=tool_call_count,
+                        )
+                        print(f"[Guardian tool] {block.name}: {input_preview[:200]}", flush=True)
+
+                    elif isinstance(block, ToolResultBlock):
+                        content_preview = ""
+                        content_length = 0
+                        if isinstance(block.content, str):
+                            content_preview = block.content[:500]
+                            content_length = len(block.content)
+                        elif isinstance(block.content, list):
+                            content_preview = json.dumps(block.content)[:500]
+                            content_length = len(json.dumps(block.content))
+                        logfire.info(
+                            "guardian.tool_result",
+                            tool_use_id=block.tool_use_id,
+                            is_error=block.is_error or False,
+                            content_length=content_length,
+                            content_preview=content_preview,
+                            turn=turn_count,
+                        )
+
             elif isinstance(message, ResultMessage):
-                print(f"[Guardian done] result={message.result}", flush=True)
+                elapsed = _time.time() - start_time
+                logfire.info(
+                    "guardian.result",
+                    session_id=message.session_id,
+                    is_error=message.is_error,
+                    num_turns=message.num_turns,
+                    duration_ms=message.duration_ms,
+                    duration_api_ms=message.duration_api_ms,
+                    total_cost_usd=message.total_cost_usd,
+                    usage=message.usage,
+                    result_preview=(message.result or "")[:300],
+                    wall_time_seconds=round(elapsed, 2),
+                    total_tool_calls=tool_call_count,
+                )
+                print(f"[Guardian done] turns={message.num_turns} cost=${message.total_cost_usd} tools={tool_call_count}", flush=True)
 
 
 # ---------------------------------------------------------------------------
