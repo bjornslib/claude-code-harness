@@ -52,23 +52,10 @@ if _THIS_DIR not in sys.path:
     sys.path.insert(0, _THIS_DIR)
 
 # ---------------------------------------------------------------------------
-# Optional Logfire instrumentation
+# Logfire instrumentation (required)
 # ---------------------------------------------------------------------------
-try:
-    import logfire
-    logfire.configure()
-    _HAS_LOGFIRE = True
-except Exception:
-    _HAS_LOGFIRE = False
-
-    class _NoOpSpan:
-        def __enter__(self): return self
-        def __exit__(self, *a): pass
-
-    class _NoOpLogfire:
-        def span(self, *a, **kw): return _NoOpSpan()
-
-    logfire = _NoOpLogfire()  # type: ignore[assignment]
+import logfire
+logfire.configure(inspect_arguments=False)
 
 # ---------------------------------------------------------------------------
 # Constants

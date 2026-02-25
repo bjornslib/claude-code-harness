@@ -564,13 +564,10 @@ class TestResolveScriptsDir(unittest.TestCase):
 class TestLogfireInstrumentation(unittest.TestCase):
     """Tests that logfire instrumentation is present and doesn't break functionality."""
 
-    def test_has_logfire_flag(self):
-        """runner_agent should have _HAS_LOGFIRE defined."""
-        self.assertTrue(hasattr(runner_agent, '_HAS_LOGFIRE'))
-
-    def test_logfire_noop_when_not_installed(self):
-        """When logfire is not installed, _HAS_LOGFIRE should still be defined."""
-        self.assertIsInstance(runner_agent._HAS_LOGFIRE, bool)
+    def test_logfire_is_imported(self):
+        """runner_agent should import logfire directly (required dependency)."""
+        import logfire as _lf
+        self.assertTrue(hasattr(_lf, 'span'))
 
     def test_build_system_prompt_works_with_logfire(self):
         """build_system_prompt should work regardless of logfire availability."""
