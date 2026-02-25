@@ -13,6 +13,8 @@ Usage:
   python .claude/scripts/doc-gardener/gardener.py --execute      # Apply fixes, generate report
   python .claude/scripts/doc-gardener/gardener.py --report       # Generate report without fixing
   python .claude/scripts/doc-gardener/gardener.py --json         # Machine-readable output
+  python .claude/scripts/doc-gardener/gardener.py --target docs/ # Scan specific directory
+  python .claude/scripts/doc-gardener/gardener.py --config docs-gardener.config.json
 
 Exit codes:
   0 = clean (no manual-fix items remaining)
@@ -43,7 +45,10 @@ REPORT_FILE = CLAUDE_DIR / "documentation" / "gardening-report.md"
 # ---------------------------------------------------------------------------
 
 def run_linter(
-    json_output: bool = True, fix: bool = False
+    json_output: bool = True,
+    fix: bool = False,
+    targets: list[str] | None = None,
+    config: str | None = None,
 ) -> dict[str, Any]:
     """Run lint.py and return parsed JSON output."""
     cmd = [sys.executable, str(LINTER_SCRIPT)]
@@ -51,6 +56,15 @@ def run_linter(
         cmd.append("--json")
     if fix:
         cmd.append("--fix")
+
+    # Forward --target flags
+    if targets:
+        for t in targets:
+            cmd.extend(["--target", t])
+
+    # Forward --config flag
+    if config:
+        cmd.extend(["--config", config])
 
     result = subprocess.run(
         cmd,
@@ -98,7 +112,15 @@ def generate_report(
     lines.append("# Harness Documentation Gardening Report")
     lines.append("")
     lines.append(f"**Generated**: {timestamp}")
-    lines.append(f"**Target**: `{before.get('target', '.claude/')}`")
+
+    # Handle both single target (str) and multiple targets (list)
+    target_val = before.get("target", ".claude/")
+    if isinstance(target_val, list):
+        target_display = ", ".join(f"`{t}`" for t in target_val)
+    else:
+        target_display = f"`{target_val}`"
+    lines.append(f"**Target**: {target_display}")
+
     mode_str = "EXECUTE (fixes applied)" if executed else "DRY-RUN (no changes)"
     lines.append(f"**Mode**: {mode_str}")
     lines.append("")
@@ -297,13 +319,38 @@ def main() -> int:
         dest="json_output",
         help="Machine-readable JSON output",
     )
+    parser.add_argument(
+        "--target",
+        action="append",
+        dest="targets",
+        metavar="DIR",
+        help=(
+            "Directory to scan (repeatable). "
+            "Passed through to lint.py. "
+            "Example: --target docs/ --target .claude/"
+        ),
+    )
+    parser.add_argument(
+        "--config",
+        metavar="FILE",
+        help=(
+            "Path to JSON config file. "
+            "Passed through to lint.py. "
+            "Example: --config docs-gardener.config.json"
+        ),
+    )
 
     args = parser.parse_args()
 
     timestamp = datetime.now().isoformat(timespec="seconds")
 
     # Step 1: Initial scan (before snapshot)
-    before = run_linter(json_output=True, fix=False)
+    before = run_linter(
+        json_output=True,
+        fix=False,
+        targets=args.targets,
+        config=args.config,
+    )
 
     if not args.execute:
         # Dry-run mode: report what would happen
@@ -343,11 +390,21 @@ def main() -> int:
         return 1 if manual else 0
 
     # Step 2: Apply fixes (execute mode)
-    run_linter(json_output=False, fix=True)
+    run_linter(
+        json_output=False,
+        fix=True,
+        targets=args.targets,
+        config=args.config,
+    )
     fixed_count = before.get("fixable", 0)
 
     # Step 3: Re-scan for remaining violations (after snapshot)
-    after = run_linter(json_output=True, fix=False)
+    after = run_linter(
+        json_output=True,
+        fix=False,
+        targets=args.targets,
+        config=args.config,
+    )
 
     # Step 4: Generate report and/or output
     if args.json_output:

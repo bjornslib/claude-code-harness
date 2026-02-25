@@ -15,6 +15,9 @@ Usage:
   python .claude/scripts/doc-gardener/lint.py --verbose        # Show all files scanned
   python .claude/scripts/doc-gardener/lint.py --json           # Machine-readable output
   python .claude/scripts/doc-gardener/lint.py --fix            # Auto-fix what's possible
+  python .claude/scripts/doc-gardener/lint.py --target docs/   # Scan specific directory
+  python .claude/scripts/doc-gardener/lint.py --target docs/ --target .claude/  # Multiple targets
+  python .claude/scripts/doc-gardener/lint.py --config docs-gardener.config.json  # Use config file
 
 Exit codes:
   0 = no violations
@@ -59,7 +62,7 @@ VALID_TYPES = {
 }
 
 # Directories to skip entirely (runtime state, not documentation)
-SKIP_DIRS = {
+DEFAULT_SKIP_DIRS = {
     "state",
     "message-bus",
     "completion-state",
@@ -69,10 +72,10 @@ SKIP_DIRS = {
     "user-input-queue",
 }
 
-# Specific files to skip (paths relative to CLAUDE_DIR)
+# Specific files to skip (paths relative to target dir)
 # gardening-report.md is auto-generated and contains markdown link syntax
 # in its violation tables, causing self-referential crosslink false positives.
-SKIP_FILES = {
+DEFAULT_SKIP_FILES = {
     "documentation/gardening-report.md",
 }
 
@@ -129,15 +132,41 @@ SEVERITY_ERROR = "error"
 SEVERITY_WARNING = "warning"
 SEVERITY_INFO = "info"
 
+# Directories within .claude/ that require frontmatter
+CLAUDE_FRONTMATTER_DIRS = {"skills", "agents", "documentation", "output-styles", "commands"}
+
 
 # ---------------------------------------------------------------------------
 # Data structures
 # ---------------------------------------------------------------------------
 
+class LintContext:
+    """Holds scanning context for a single target directory."""
+
+    def __init__(
+        self,
+        target_dir: Path,
+        skip_dirs: set[str] | None = None,
+        skip_files: set[str] | None = None,
+        frontmatter_dirs: set[str] | None = None,
+        directory_grades: dict[str, str] | None = None,
+    ):
+        self.target_dir = target_dir
+        self.skip_dirs = skip_dirs if skip_dirs is not None else set(DEFAULT_SKIP_DIRS)
+        self.skip_files = skip_files if skip_files is not None else set(DEFAULT_SKIP_FILES)
+        self.frontmatter_dirs = frontmatter_dirs  # None means use is_claude_dir logic
+        self.directory_grades = directory_grades  # None means use quality-grades.json
+
+    @property
+    def is_claude_dir(self) -> bool:
+        """True if this target is the .claude/ directory (backward-compat mode)."""
+        return self.target_dir.resolve() == CLAUDE_DIR.resolve()
+
+
 class Violation:
     """A single lint violation."""
 
-    __slots__ = ("file", "category", "severity", "message", "fixable")
+    __slots__ = ("file", "category", "severity", "message", "fixable", "target_dir")
 
     def __init__(
         self,
@@ -146,12 +175,14 @@ class Violation:
         severity: str,
         message: str,
         fixable: bool = False,
+        target_dir: Path | None = None,
     ):
         self.file = file
         self.category = category
         self.severity = severity
         self.message = message
         self.fixable = fixable
+        self.target_dir = target_dir
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -166,6 +197,41 @@ class Violation:
         icon = {"error": "E", "warning": "W", "info": "I"}.get(self.severity, "?")
         fix = " [fixable]" if self.fixable else ""
         return f"[{icon}] {self.file}: {self.message}{fix}"
+
+
+# ---------------------------------------------------------------------------
+# Config loading
+# ---------------------------------------------------------------------------
+
+def load_config(config_path: str | None) -> dict:
+    """Load and return a config dict from a JSON config file.
+
+    Config keys supported:
+      targets: list[str]                  - directories to scan
+      skip_dirs: list[str]               - dirs to skip (merged with defaults)
+      skip_files: list[str]              - files to skip (merged with defaults)
+      directory_grades: dict[str, str]   - grade overrides per subdirectory
+      frontmatter_required_dirs: list[str] - dirs that must have frontmatter
+      frontmatter_optional_dirs: list[str] - dirs where frontmatter is optional
+      claude_md_lint: bool               - whether to include .claude/ scanning
+    """
+    if config_path is None:
+        return {}
+
+    config_file = Path(config_path)
+    if not config_file.exists():
+        # Try resolving relative to cwd
+        config_file = Path.cwd() / config_path
+    if not config_file.exists():
+        print(f"Warning: Config file not found: {config_path}", file=sys.stderr)
+        return {}
+
+    with open(config_file) as f:
+        try:
+            return json.load(f)
+        except json.JSONDecodeError as e:
+            print(f"Warning: Invalid JSON in config file {config_path}: {e}", file=sys.stderr)
+            return {}
 
 
 # ---------------------------------------------------------------------------
@@ -212,18 +278,22 @@ def parse_frontmatter(content: str) -> tuple[dict[str, str] | None, str]:
     return fm, body
 
 
-def get_relative_path(filepath: Path) -> str:
-    """Get path relative to CLAUDE_DIR."""
+def get_relative_path(filepath: Path, base_dir: Path | None = None) -> str:
+    """Get path relative to base_dir (defaults to CLAUDE_DIR for backward compat)."""
+    if base_dir is None:
+        base_dir = CLAUDE_DIR
     try:
-        return str(filepath.relative_to(CLAUDE_DIR))
+        return str(filepath.relative_to(base_dir))
     except ValueError:
         return str(filepath)
 
 
-def get_directory_name(filepath: Path) -> str | None:
-    """Get the immediate subdirectory name under .claude/."""
+def get_directory_name(filepath: Path, base_dir: Path | None = None) -> str | None:
+    """Get the immediate subdirectory name under base_dir."""
+    if base_dir is None:
+        base_dir = CLAUDE_DIR
     try:
-        rel = filepath.relative_to(CLAUDE_DIR)
+        rel = filepath.relative_to(base_dir)
     except ValueError:
         return None
     parts = rel.parts
@@ -232,102 +302,114 @@ def get_directory_name(filepath: Path) -> str | None:
     return None
 
 
-def is_in_skip_dir(filepath: Path) -> bool:
+def is_in_skip_dir(filepath: Path, ctx: LintContext) -> bool:
     """Check if a file is in a directory that should be skipped."""
-    dirname = get_directory_name(filepath)
-    return dirname in SKIP_DIRS
+    dirname = get_directory_name(filepath, ctx.target_dir)
+    return dirname in ctx.skip_dirs
 
 
-def is_skill_file(filepath: Path) -> bool:
+def is_skill_file(filepath: Path, ctx: LintContext) -> bool:
     """Check if file is a SKILL.md inside skills/."""
     try:
-        rel = filepath.relative_to(CLAUDE_DIR)
+        rel = filepath.relative_to(ctx.target_dir)
     except ValueError:
         return False
     parts = rel.parts
     return len(parts) >= 2 and parts[0] == "skills" and filepath.name == "SKILL.md"
 
 
-def is_agent_file(filepath: Path) -> bool:
+def is_agent_file(filepath: Path, ctx: LintContext) -> bool:
     """Check if file is an agent definition in agents/."""
     try:
-        rel = filepath.relative_to(CLAUDE_DIR)
+        rel = filepath.relative_to(ctx.target_dir)
     except ValueError:
         return False
     parts = rel.parts
     return len(parts) >= 2 and parts[0] == "agents" and filepath.suffix == ".md"
 
 
-def is_top_level_file(filepath: Path) -> bool:
-    """Check if file is a top-level file directly in .claude/."""
+def is_top_level_file(filepath: Path, ctx: LintContext) -> bool:
+    """Check if file is a top-level file directly in the target directory."""
     try:
-        rel = filepath.relative_to(CLAUDE_DIR)
+        rel = filepath.relative_to(ctx.target_dir)
     except ValueError:
         return False
     return len(rel.parts) == 1
 
 
-def collect_md_files() -> list[Path]:
-    """Collect markdown files to lint within .claude/ directory."""
+def collect_md_files(ctx: LintContext) -> list[Path]:
+    """Collect markdown files to lint within the target directory."""
     files = []
-    for p in CLAUDE_DIR.rglob("*.md"):
+    for p in ctx.target_dir.rglob("*.md"):
         # Skip files in skip directories
-        if is_in_skip_dir(p):
+        if is_in_skip_dir(p, ctx):
             continue
         # Skip hidden directories (e.g. .claude/.claude nested)
-        rel = p.relative_to(CLAUDE_DIR)
+        try:
+            rel = p.relative_to(ctx.target_dir)
+        except ValueError:
+            continue
         if any(part.startswith(".") for part in rel.parts):
             continue
         # Skip specific files (e.g. auto-generated reports)
-        if str(rel) in SKIP_FILES:
+        if str(rel) in ctx.skip_files:
             continue
         files.append(p)
     return sorted(files)
 
 
-def should_require_frontmatter(filepath: Path) -> bool:
+def should_require_frontmatter(filepath: Path, ctx: LintContext) -> bool:
     """Determine if a file should have frontmatter.
 
-    Files that require frontmatter:
-    - SKILL.md files in skills/
-    - Agent definitions in agents/
-    - Documentation in documentation/
-    - Output styles in output-styles/
-    - Commands in commands/
+    For .claude/ target (backward-compat):
+      Files that require frontmatter:
+      - SKILL.md files in skills/
+      - Agent definitions in agents/
+      - Documentation in documentation/
+      - Output styles in output-styles/
+      - Commands in commands/
 
-    Files that do NOT require frontmatter:
-    - CLAUDE.md (top-level config, not a document)
-    - Reference files nested deep in skills (e.g. skills/foo/references/bar.md)
-    - Hook scripts documentation
+      Files that do NOT require frontmatter:
+      - CLAUDE.md (top-level config, not a document)
+      - Reference files nested deep in skills (e.g. skills/foo/references/bar.md)
+      - Hook scripts documentation
+
+    For other targets:
+      Uses ctx.frontmatter_dirs if set, otherwise all dirs with .md files.
     """
-    dirname = get_directory_name(filepath)
-
-    # Top-level CLAUDE.md and similar config files don't need frontmatter
-    if is_top_level_file(filepath):
+    # Top-level files directly in the target dir don't need frontmatter
+    if is_top_level_file(filepath, ctx):
         return False
 
-    # These directories have documentation that should have frontmatter
-    frontmatter_dirs = {"skills", "agents", "documentation", "output-styles", "commands"}
-    if dirname in frontmatter_dirs:
-        return True
+    dirname = get_directory_name(filepath, ctx.target_dir)
 
-    return False
+    if ctx.is_claude_dir:
+        # Backward-compatible logic for .claude/ directory
+        if dirname in CLAUDE_FRONTMATTER_DIRS:
+            return True
+        return False
+    else:
+        # For non-.claude/ targets, use configured frontmatter_dirs
+        if ctx.frontmatter_dirs is not None:
+            return dirname in ctx.frontmatter_dirs
+        # Default: require frontmatter in all non-root dirs if no config
+        return dirname is not None
 
 
 # ---------------------------------------------------------------------------
 # Checkers
 # ---------------------------------------------------------------------------
 
-def check_frontmatter(filepath: Path, content: str) -> list[Violation]:
+def check_frontmatter(filepath: Path, content: str, ctx: LintContext) -> list[Violation]:
     """Check frontmatter presence and validity for applicable files."""
     violations = []
-    rel = get_relative_path(filepath)
+    rel = get_relative_path(filepath, ctx.target_dir)
 
-    if not should_require_frontmatter(filepath):
+    if not should_require_frontmatter(filepath, ctx):
         # Even if not required, validate frontmatter if present
         fm, _ = parse_frontmatter(content)
         if fm is not None:
-            violations.extend(_validate_frontmatter_fields(filepath, fm, rel))
+            violations.extend(_validate_frontmatter_fields(filepath, fm, rel, ctx))
         return violations
 
     fm, _ = parse_frontmatter(content)
@@ -339,26 +421,22 @@ def check_frontmatter(filepath: Path, content: str) -> list[Violation]:
             severity=SEVERITY_WARNING,
             message="Missing YAML frontmatter block (---)",
             fixable=True,
+            target_dir=ctx.target_dir,
         ))
         return violations
 
-    violations.extend(_validate_frontmatter_fields(filepath, fm, rel))
+    violations.extend(_validate_frontmatter_fields(filepath, fm, rel, ctx))
     return violations
 
 
 def _validate_frontmatter_fields(
-    filepath: Path, fm: dict[str, str], rel: str
+    filepath: Path, fm: dict[str, str], rel: str, ctx: LintContext
 ) -> list[Violation]:
     """Validate individual frontmatter fields."""
     violations = []
 
     # Required fields depend on file type
-    if is_skill_file(filepath):
-        required_fields = ["title", "status"]
-    elif is_agent_file(filepath):
-        required_fields = ["title", "status"]
-    else:
-        required_fields = ["title", "status"]
+    required_fields = ["title", "status"]
 
     for field in required_fields:
         if field not in fm:
@@ -368,6 +446,7 @@ def _validate_frontmatter_fields(
                 severity=SEVERITY_ERROR,
                 message=f"Missing required frontmatter field: {field}",
                 fixable=False,
+                target_dir=ctx.target_dir,
             ))
 
     # Validate field values
@@ -380,6 +459,7 @@ def _validate_frontmatter_fields(
                 f"Invalid status '{fm['status']}'. "
                 f"Must be one of: {', '.join(sorted(VALID_STATUSES))}"
             ),
+            target_dir=ctx.target_dir,
         ))
 
     if "type" in fm and fm["type"] not in VALID_TYPES:
@@ -391,6 +471,7 @@ def _validate_frontmatter_fields(
                 f"Invalid type '{fm['type']}'. "
                 f"Must be one of: {', '.join(sorted(VALID_TYPES))}"
             ),
+            target_dir=ctx.target_dir,
         ))
 
     if "grade" in fm and fm["grade"] not in VALID_GRADES:
@@ -402,6 +483,7 @@ def _validate_frontmatter_fields(
                 f"Invalid grade '{fm['grade']}'. "
                 f"Must be one of: {', '.join(sorted(VALID_GRADES))}"
             ),
+            target_dir=ctx.target_dir,
         ))
 
     # Check last_verified date format
@@ -417,15 +499,16 @@ def _validate_frontmatter_fields(
                     f"Invalid last_verified date format: '{fm['last_verified']}'. "
                     f"Expected YYYY-MM-DD"
                 ),
+                target_dir=ctx.target_dir,
             ))
 
     return violations
 
 
-def check_crosslinks(filepath: Path, content: str) -> list[Violation]:
+def check_crosslinks(filepath: Path, content: str, ctx: LintContext) -> list[Violation]:
     """Check that relative markdown links resolve to real files."""
     violations = []
-    rel = get_relative_path(filepath)
+    rel = get_relative_path(filepath, ctx.target_dir)
 
     # Strip fenced code blocks to avoid false positives from code examples.
     # E.g., Python `Agent(model=model, mcp_servers=[...], system_prompt=prompt)`
@@ -463,15 +546,16 @@ def check_crosslinks(filepath: Path, content: str) -> list[Violation]:
                 category="crosslinks",
                 severity=SEVERITY_ERROR,
                 message=f"Broken link: [{match.group(1)}]({link_target})",
+                target_dir=ctx.target_dir,
             ))
 
     return violations
 
 
-def check_staleness(filepath: Path, content: str) -> list[Violation]:
+def check_staleness(filepath: Path, content: str, ctx: LintContext) -> list[Violation]:
     """Check document staleness based on last_verified date."""
     violations = []
-    rel = get_relative_path(filepath)
+    rel = get_relative_path(filepath, ctx.target_dir)
 
     fm, _ = parse_frontmatter(content)
     if fm is None or "last_verified" not in fm:
@@ -497,6 +581,7 @@ def check_staleness(filepath: Path, content: str) -> list[Violation]:
                 f"Grade should be 'archive' but is '{current_grade}'"
             ),
             fixable=True,
+            target_dir=ctx.target_dir,
         ))
     elif age_days > STALENESS_REFERENCE and current_grade == "authoritative":
         violations.append(Violation(
@@ -509,13 +594,14 @@ def check_staleness(filepath: Path, content: str) -> list[Violation]:
                 f"Consider downgrading from 'authoritative' to 'reference'"
             ),
             fixable=True,
+            target_dir=ctx.target_dir,
         ))
 
     return violations
 
 
-def check_naming(filepath: Path) -> list[Violation]:
-    """Check naming conventions for .claude/ harness files and directories.
+def check_naming(filepath: Path, ctx: LintContext) -> list[Violation]:
+    """Check naming conventions for harness files and directories.
 
     Rules:
     - Directories should be kebab-case (lowercase with hyphens)
@@ -524,7 +610,7 @@ def check_naming(filepath: Path) -> list[Violation]:
     - No spaces in any file or directory names
     """
     violations = []
-    rel = get_relative_path(filepath)
+    rel = get_relative_path(filepath, ctx.target_dir)
     name = filepath.name
 
     # Check for spaces in filename
@@ -535,11 +621,12 @@ def check_naming(filepath: Path) -> list[Violation]:
             severity=SEVERITY_ERROR,
             message=f"Filename contains spaces: '{name}'",
             fixable=False,
+            target_dir=ctx.target_dir,
         ))
 
     # Check directory naming (kebab-case)
     try:
-        rel_path = filepath.relative_to(CLAUDE_DIR)
+        rel_path = filepath.relative_to(ctx.target_dir)
     except ValueError:
         return violations
 
@@ -554,6 +641,7 @@ def check_naming(filepath: Path) -> list[Violation]:
                     f"Expected: lowercase-with-hyphens"
                 ),
                 fixable=False,
+                target_dir=ctx.target_dir,
             ))
             break  # Only report once per file path
 
@@ -569,9 +657,10 @@ def check_naming(filepath: Path) -> list[Violation]:
                     f"Expected UPPER_CASE filename for '{name}'"
                 ),
                 fixable=False,
+                target_dir=ctx.target_dir,
             ))
-    elif is_top_level_file(filepath):
-        # Top-level .claude/ files should be UPPER_CASE
+    elif is_top_level_file(filepath, ctx):
+        # Top-level target dir files should be UPPER_CASE
         if not UPPER_FILE_PATTERN.match(name) and not KEBAB_FILE_PATTERN.match(name):
             violations.append(Violation(
                 file=rel,
@@ -582,6 +671,7 @@ def check_naming(filepath: Path) -> list[Violation]:
                     f"or kebab-case.md"
                 ),
                 fixable=False,
+                target_dir=ctx.target_dir,
             ))
     else:
         # Non-top-level files: accept various naming conventions
@@ -603,31 +693,39 @@ def check_naming(filepath: Path) -> list[Violation]:
                     f"UPPER-kebab.md, v1.0-kebab.md, or _private.md"
                 ),
                 fixable=False,
+                target_dir=ctx.target_dir,
             ))
 
     return violations
 
 
 def check_grades_sync(
-    filepath: Path, content: str, grades_data: dict
+    filepath: Path, content: str, grades_data: dict, ctx: LintContext
 ) -> list[Violation]:
     """Check that frontmatter grade matches quality-grades.json directory defaults."""
     violations = []
-    rel = get_relative_path(filepath)
+    rel = get_relative_path(filepath, ctx.target_dir)
 
-    if not grades_data:
+    # Merge grades_data with ctx.directory_grades if provided
+    effective_grades = dict(grades_data)
+    if ctx.directory_grades:
+        if "directoryGrades" not in effective_grades:
+            effective_grades["directoryGrades"] = {}
+        effective_grades["directoryGrades"].update(ctx.directory_grades)
+
+    if not effective_grades:
         return violations
 
     fm, _ = parse_frontmatter(content)
     if fm is None or "grade" not in fm:
         return violations
 
-    dirname = get_directory_name(filepath)
+    dirname = get_directory_name(filepath, ctx.target_dir)
     if dirname is None:
         return violations
 
-    dir_grades = grades_data.get("directoryGrades", {})
-    file_overrides = grades_data.get("fileOverrides", {})
+    dir_grades = effective_grades.get("directoryGrades", {})
+    file_overrides = effective_grades.get("fileOverrides", {})
 
     # Check file-level overrides first
     if isinstance(file_overrides, dict):
@@ -644,6 +742,7 @@ def check_grades_sync(
                         f"but quality-grades.json override says '{val}'"
                     ),
                     fixable=True,
+                    target_dir=ctx.target_dir,
                 ))
                 return violations
 
@@ -661,6 +760,7 @@ def check_grades_sync(
                     f"'{expected}' for {dirname}/. "
                     f"Consider adding a fileOverride in quality-grades.json"
                 ),
+                target_dir=ctx.target_dir,
             ))
 
     return violations
@@ -670,9 +770,9 @@ def check_grades_sync(
 # Fix logic
 # ---------------------------------------------------------------------------
 
-def generate_frontmatter(filepath: Path, grades_data: dict) -> str:
+def generate_frontmatter(filepath: Path, grades_data: dict, ctx: LintContext) -> str:
     """Generate a frontmatter block for a file that lacks one."""
-    dirname = get_directory_name(filepath)
+    dirname = get_directory_name(filepath, ctx.target_dir)
     name = filepath.stem
 
     # Infer title from filename
@@ -699,8 +799,11 @@ def generate_frontmatter(filepath: Path, grades_data: dict) -> str:
     }
     doc_type = type_map.get(dirname, "reference")
 
-    # Infer grade from quality-grades.json
+    # Infer grade from quality-grades.json, with ctx overrides
     dir_grades = grades_data.get("directoryGrades", {})
+    if ctx.directory_grades:
+        dir_grades = dict(dir_grades)
+        dir_grades.update(ctx.directory_grades)
     grade = dir_grades.get(dirname, "draft")
 
     # Infer status from grade
@@ -725,81 +828,102 @@ def generate_frontmatter(filepath: Path, grades_data: dict) -> str:
     )
 
 
-def apply_fixes(violations: list[Violation], grades_data: dict) -> int:
+def apply_fixes(
+    violations: list[Violation],
+    grades_data: dict,
+    targets: list[Path],
+) -> int:
     """Apply automatic fixes. Returns number of files fixed."""
     fixed_count = 0
-    # Group fixable violations by file
-    fixable_files: dict[str, list[Violation]] = {}
+
+    # Build a mapping from target_dir to LintContext for fix generation
+    # We need ctx to call generate_frontmatter correctly
+    target_ctxs: dict[Path, LintContext] = {}
+    for t in targets:
+        target_ctxs[t.resolve()] = LintContext(target_dir=t)
+
+    # Group fixable violations by (target_dir, file)
+    fixable_by_target: dict[Path | None, dict[str, list[Violation]]] = {}
     for v in violations:
         if v.fixable:
-            fixable_files.setdefault(v.file, []).append(v)
+            target_key = v.target_dir.resolve() if v.target_dir else None
+            fixable_by_target.setdefault(target_key, {}).setdefault(v.file, []).append(v)
 
-    for rel_path, file_violations in fixable_files.items():
-        filepath = CLAUDE_DIR / rel_path
-        if not filepath.exists():
-            continue
+    for target_key, files_dict in fixable_by_target.items():
+        # Determine base_dir for resolving files
+        if target_key is not None:
+            base_dir = target_key
+        else:
+            base_dir = CLAUDE_DIR
 
-        content = filepath.read_text(encoding="utf-8")
-        modified = False
+        ctx = target_ctxs.get(target_key, LintContext(target_dir=Path(base_dir)))
 
-        for v in file_violations:
-            if (
-                v.category == "frontmatter"
-                and "Missing YAML frontmatter" in v.message
-            ):
-                fm_block = generate_frontmatter(filepath, grades_data)
-                content = fm_block + content
-                modified = True
+        for rel_path, file_violations in files_dict.items():
+            filepath = base_dir / rel_path
+            if not filepath.exists():
+                continue
 
-            elif (
-                v.category == "staleness"
-                and "should be 'archive'" in v.message
-            ):
-                content = re.sub(
-                    r"^(grade:\s*).*$",
-                    r"\1archive",
-                    content,
-                    count=1,
-                    flags=re.MULTILINE,
-                )
-                modified = True
+            content = filepath.read_text(encoding="utf-8")
+            modified = False
 
-            elif (
-                v.category == "staleness"
-                and "Consider downgrading" in v.message
-            ):
-                content = re.sub(
-                    r"^(grade:\s*).*$",
-                    r"\1reference",
-                    content,
-                    count=1,
-                    flags=re.MULTILINE,
-                )
-                modified = True
+            for v in file_violations:
+                if (
+                    v.category == "frontmatter"
+                    and "Missing YAML frontmatter" in v.message
+                ):
+                    fm_block = generate_frontmatter(filepath, grades_data, ctx)
+                    content = fm_block + content
+                    modified = True
 
-            elif (
-                v.category == "grades-sync"
-                and "Grade mismatch" in v.message
-            ):
-                # Extract expected grade from the file override
-                grade_match = re.search(
-                    r"quality-grades\.json override says '([^']+)'",
-                    v.message,
-                )
-                if grade_match:
-                    expected_grade = grade_match.group(1)
+                elif (
+                    v.category == "staleness"
+                    and "should be 'archive'" in v.message
+                ):
                     content = re.sub(
                         r"^(grade:\s*).*$",
-                        rf"\1{expected_grade}",
+                        r"\1archive",
                         content,
                         count=1,
                         flags=re.MULTILINE,
                     )
                     modified = True
 
-        if modified:
-            filepath.write_text(content, encoding="utf-8")
-            fixed_count += 1
+                elif (
+                    v.category == "staleness"
+                    and "Consider downgrading" in v.message
+                ):
+                    content = re.sub(
+                        r"^(grade:\s*).*$",
+                        r"\1reference",
+                        content,
+                        count=1,
+                        flags=re.MULTILINE,
+                    )
+                    modified = True
+
+                elif (
+                    v.category == "grades-sync"
+                    and "Grade mismatch" in v.message
+                ):
+                    # Extract expected grade from the file override
+                    grade_match = re.search(
+                        r"quality-grades\.json override says '([^']+)'",
+                        v.message,
+                    )
+                    if grade_match:
+                        expected_grade = grade_match.group(1)
+                        content = re.sub(
+                            r"^(grade:\s*).*$",
+                            rf"\1{expected_grade}",
+                            content,
+                            count=1,
+                            flags=re.MULTILINE,
+                        )
+                        modified = True
+
+            if modified:
+                filepath.write_text(content, encoding="utf-8")
+                fixed_count += 1
 
     return fixed_count
 
@@ -808,55 +932,129 @@ def apply_fixes(violations: list[Violation], grades_data: dict) -> int:
 # Main orchestration
 # ---------------------------------------------------------------------------
 
-def lint(fix: bool = False, verbose: bool = False) -> tuple[list[Violation], int]:
-    """Run all lint checks and return (violations, files_scanned)."""
+def lint(
+    fix: bool = False,
+    verbose: bool = False,
+    targets: list[Path] | None = None,
+    config: dict | None = None,
+) -> tuple[list[Violation], int]:
+    """Run all lint checks and return (violations, files_scanned).
+
+    Args:
+        fix: If True, apply auto-fixes where possible.
+        verbose: If True, print each file being scanned.
+        targets: List of target directories to scan. Defaults to [CLAUDE_DIR].
+        config: Parsed config dict. Overrides skip_dirs, skip_files, etc.
+    """
+    if targets is None:
+        targets = [CLAUDE_DIR]
+
     grades_data = load_quality_grades()
-    files = collect_md_files()
-    files_scanned = len(files)
 
-    if verbose:
-        print(f"Scanning {files_scanned} markdown files in {CLAUDE_DIR}")
-        for f in files:
-            print(f"  {get_relative_path(f)}")
-        print()
+    # Extract config overrides
+    config_skip_dirs: set[str] = set()
+    config_skip_files: set[str] = set()
+    config_directory_grades: dict[str, str] | None = None
+    config_frontmatter_required: set[str] | None = None
 
-    violations: list[Violation] = []
+    if config:
+        if "skip_dirs" in config:
+            config_skip_dirs = set(config["skip_dirs"])
+        if "skip_files" in config:
+            config_skip_files = set(config["skip_files"])
+        if "directory_grades" in config:
+            config_directory_grades = dict(config["directory_grades"])
+        if "frontmatter_required_dirs" in config:
+            config_frontmatter_required = set(config["frontmatter_required_dirs"])
 
-    for filepath in files:
-        try:
-            content = filepath.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
-            violations.append(Violation(
-                file=get_relative_path(filepath),
-                category="io",
-                severity=SEVERITY_ERROR,
-                message="Could not read file",
-            ))
+    all_violations: list[Violation] = []
+    total_files = 0
+
+    for target_dir in targets:
+        if not target_dir.exists():
+            print(f"Warning: Target directory does not exist: {target_dir}", file=sys.stderr)
             continue
 
-        violations.extend(check_frontmatter(filepath, content))
-        violations.extend(check_crosslinks(filepath, content))
-        violations.extend(check_staleness(filepath, content))
-        violations.extend(check_naming(filepath))
-        violations.extend(check_grades_sync(filepath, content, grades_data))
+        # Build effective skip sets (merge defaults with config)
+        effective_skip_dirs = set(DEFAULT_SKIP_DIRS) | config_skip_dirs
+        effective_skip_files = set(DEFAULT_SKIP_FILES) | config_skip_files
 
-    if fix and violations:
-        fixed = apply_fixes(violations, grades_data)
+        # Determine frontmatter_dirs for this target
+        # For .claude/ targets, use None (backward-compat logic in should_require_frontmatter)
+        frontmatter_dirs: set[str] | None = None
+        if config_frontmatter_required is not None:
+            # Config specifies which subdirs need frontmatter for all targets
+            # For .claude/ targets, still use backward-compat unless config overrides
+            ctx_test = LintContext(target_dir=target_dir)
+            if not ctx_test.is_claude_dir:
+                frontmatter_dirs = config_frontmatter_required
+
+        ctx = LintContext(
+            target_dir=target_dir,
+            skip_dirs=effective_skip_dirs,
+            skip_files=effective_skip_files,
+            frontmatter_dirs=frontmatter_dirs,
+            directory_grades=config_directory_grades,
+        )
+
+        files = collect_md_files(ctx)
+        files_scanned = len(files)
+        total_files += files_scanned
+
+        if verbose:
+            print(f"Scanning {files_scanned} markdown files in {target_dir}")
+            for f in files:
+                print(f"  {get_relative_path(f, target_dir)}")
+            print()
+
+        for filepath in files:
+            try:
+                content = filepath.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                all_violations.append(Violation(
+                    file=get_relative_path(filepath, target_dir),
+                    category="io",
+                    severity=SEVERITY_ERROR,
+                    message="Could not read file",
+                    target_dir=target_dir,
+                ))
+                continue
+
+            all_violations.extend(check_frontmatter(filepath, content, ctx))
+            all_violations.extend(check_crosslinks(filepath, content, ctx))
+            all_violations.extend(check_staleness(filepath, content, ctx))
+            all_violations.extend(check_naming(filepath, ctx))
+            all_violations.extend(check_grades_sync(filepath, content, grades_data, ctx))
+
+    if fix and all_violations:
+        fixed = apply_fixes(all_violations, grades_data, targets)
         if fixed > 0:
             # Re-run lint to get updated violations
-            return lint(fix=False, verbose=False)
+            return lint(fix=False, verbose=False, targets=targets, config=config)
 
-    return violations, files_scanned
+    return all_violations, total_files
 
 
 def format_text(
-    violations: list[Violation], files_scanned: int
+    violations: list[Violation],
+    files_scanned: int,
+    targets: list[Path] | None = None,
 ) -> str:
     """Format violations as human-readable text."""
     lines = []
     lines.append("Harness Documentation Lint Report")
     lines.append("=" * 50)
-    lines.append(f"Target: {CLAUDE_DIR}")
+
+    if targets is None:
+        targets = [CLAUDE_DIR]
+
+    if len(targets) == 1:
+        lines.append(f"Target: {targets[0]}")
+    else:
+        lines.append(f"Targets ({len(targets)}):")
+        for t in targets:
+            lines.append(f"  - {t}")
+
     lines.append(f"Files scanned: {files_scanned}")
     lines.append("")
 
@@ -893,12 +1091,19 @@ def format_text(
 
 
 def format_json(
-    violations: list[Violation], files_scanned: int
+    violations: list[Violation],
+    files_scanned: int,
+    targets: list[Path] | None = None,
 ) -> str:
     """Format violations as JSON."""
+    if targets is None:
+        targets = [CLAUDE_DIR]
+
+    target_str = str(targets[0]) if len(targets) == 1 else [str(t) for t in targets]
+
     return json.dumps(
         {
-            "target": str(CLAUDE_DIR),
+            "target": target_str,
             "files_scanned": files_scanned,
             "total_violations": len(violations),
             "errors": sum(
@@ -945,15 +1150,51 @@ def main() -> int:
         action="store_true",
         help="Auto-fix what's possible (add frontmatter, update stale grades)",
     )
+    parser.add_argument(
+        "--target",
+        action="append",
+        dest="targets",
+        metavar="DIR",
+        help=(
+            "Directory to scan (repeatable). "
+            "Default: .claude/ relative to this script. "
+            "Example: --target docs/ --target .claude/"
+        ),
+    )
+    parser.add_argument(
+        "--config",
+        metavar="FILE",
+        help=(
+            "Path to JSON config file. "
+            "Example: --config docs-gardener.config.json"
+        ),
+    )
 
     args = parser.parse_args()
 
-    violations, files_scanned = lint(fix=args.fix, verbose=args.verbose)
+    # Load config if provided
+    config = load_config(args.config)
+
+    # Determine targets: CLI > config > default
+    targets: list[Path] | None = None
+    if args.targets:
+        targets = [Path(t) for t in args.targets]
+    elif config.get("targets"):
+        targets = [Path(t) for t in config["targets"]]
+
+    violations, files_scanned = lint(
+        fix=args.fix,
+        verbose=args.verbose,
+        targets=targets,
+        config=config if config else None,
+    )
+
+    effective_targets = targets if targets is not None else [CLAUDE_DIR]
 
     if args.json_output:
-        print(format_json(violations, files_scanned))
+        print(format_json(violations, files_scanned, effective_targets))
     else:
-        print(format_text(violations, files_scanned))
+        print(format_text(violations, files_scanned, effective_targets))
 
     return 1 if violations else 0
 
