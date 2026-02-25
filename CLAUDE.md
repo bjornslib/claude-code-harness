@@ -304,3 +304,91 @@ When running as an orchestrator (Level 2):
 4. **No exceptions**: Even "simple" changes must be delegated
 
 This separation ensures proper testing, validation, and architectural consistency.
+
+---
+
+## Skills Library
+
+Skills are explicitly invoked via `Skill("skill-name")`. Use this library to know **when** to reach for each skill rather than doing the work manually. Skills contain versioned, current patterns — your memory does not.
+
+### Orchestration & Planning
+
+| Skill | Invoke When |
+|-------|------------|
+| `system3-orchestrator` | About to spawn an orchestrator into a tmux worktree |
+| `orchestrator-multiagent` | Orchestrator setting up a native Agent Team and delegating to workers |
+| `s3-guardian` | Independent validation of an orchestrator's claimed completion; blind acceptance tests needed |
+| `s3-heartbeat` | Setting up a session-scoped keep-alive agent that scans for work on a cycle |
+| `completion-promise` | Tracking session-level goals with verifiable acceptance criteria |
+| `worker-focused-execution` | A worker agent needs persistent task claiming and completion reporting patterns |
+
+### Research & Investigation
+
+| Skill | Invoke When |
+|-------|------------|
+| `research-first` | Investigating an unfamiliar framework, library, or architectural pattern before briefing an orchestrator |
+| `explore-first-navigation` | Need to find files, search a codebase, or understand structure before making a plan |
+| `mcp-skills` | Looking up which MCP-derived skill wraps a tool (github, playwright, logfire, shadcn, magicui, livekit, etc.) |
+
+### Validation & Quality
+
+| Skill | Invoke When |
+|-------|------------|
+| `acceptance-test-writer` | Kicking off a new initiative — write blind Gherkin acceptance tests from the PRD **before** briefing the orchestrator |
+| `acceptance-test-runner` | Running stored acceptance tests against a completed implementation to generate evidence |
+| `codebase-quality` | Orchestrating a quality sweep (linting, dead code, security review) across the repo |
+
+### Frontend & Design
+
+| Skill | Invoke When |
+|-------|------------|
+| `frontend-design` | Designing or reviewing a frontend interface — ensures distinctive, non-generic UI patterns |
+| `design-to-code` | Translating a design mockup or screenshot into production React components |
+| `website-ux-audit` | Any work involving an existing website or UI — run audit before forming the design brief |
+| `website-ux-design-concepts` | Generating visual mockups or HTML/CSS prototypes from audit recommendations |
+| `react-best-practices` | Briefing frontend workers — reference current React/Next.js performance rules |
+
+### Infrastructure & Deployment
+
+| Skill | Invoke When |
+|-------|------------|
+| `railway-new` | Creating a new Railway project, service, or database |
+| `railway-deploy` | Deploying code to Railway (`railway up`) |
+| `railway-deployment` | Managing existing deployments (logs, redeploy, remove) |
+| `railway-status` | Checking current Railway project health |
+| `railway-environment` | Reading or editing Railway environment variables |
+| `railway-database` | Adding a managed database service to a Railway project |
+| `railway-domain` | Adding or removing custom domains on Railway |
+| `railway-metrics` | Querying CPU/memory resource usage for a Railway service |
+| `railway-service` | Checking service status or advanced service configuration |
+| `railway-projects` | Listing or switching Railway projects |
+| `railway-templates` | Searching and deploying from the Railway template marketplace |
+| `railway-railway-docs` | Looking up Railway documentation to answer config questions accurately |
+| `railway-central-station` | Searching Railway community support threads |
+| `worktree-manager-skill` | Creating, switching, or cleaning up git worktrees for parallel development |
+
+### Development Tools
+
+| Skill | Invoke When |
+|-------|------------|
+| `using-tmux-for-interactive-commands` | Running interactive CLI tools (vim, git rebase -i, REPLs) that require a real terminal |
+| `dspy-development` | Building or modifying DSPy modules, optimizers, or LLM pipelines |
+| `setup-harness` | Deploying this harness configuration to a target project repository |
+| `message-bus` | Setting up or using inter-instance messaging between Claude Code sessions |
+
+### Skill Development
+
+| Skill | Invoke When |
+|-------|------------|
+| `skill-development` | Creating a new skill or editing an existing one |
+| `mcp-to-skill-converter` | Wrapping an MCP server as a progressive-disclosure Claude skill |
+
+### Quick Decision Guide
+
+**Before any new initiative** → `acceptance-test-writer` (blind tests first)
+**Before researching a framework** → `research-first`
+**Before spawning an orchestrator** → `system3-orchestrator`
+**Before designing UI** → `website-ux-audit` → `website-ux-design-concepts` → `frontend-design`
+**Before deploying to Railway** → `railway-status` → `railway-deploy`
+**After orchestrator claims done** → `s3-guardian` or validation-test-agent
+**When navigating unfamiliar code** → Serena MCP (`mcp__serena__find_symbol`, `mcp__serena__search_for_pattern`)

@@ -207,6 +207,17 @@ mcp__serena__switch_modes(["planning", "one-shot"])  # For System 3 sessions
 
 This enables `find_symbol`, `search_for_pattern`, and `get_symbols_overview` for all subsequent investigation. Lightweight lookups need no re-activation.
 
+**Investigation preference order** (use Serena first, fall back only if unavailable):
+```python
+# ✅ PREFERRED: Serena semantic tools
+mcp__serena__find_symbol(name_path_pattern="ClassName/method_name", include_body=True)
+mcp__serena__search_for_pattern(substring_pattern="pattern_here", restrict_search_to_code_files=True)
+mcp__serena__get_symbols_overview(relative_path="src/module.py")
+
+# ⚠️ FALLBACK: Standard tools (use when Serena is unavailable or for non-code files)
+# Grep / Read / Glob
+```
+
 ### Step 1: Query Your Private Bank (Meta-Wisdom)
 
 ```python
@@ -386,10 +397,10 @@ When no user input is received, you become **intrinsically motivated**:
    - Scan `.beads/` for blocked items that might be unblocked
    - Look for failing tests that need fixing
 
-3. **Research with MCP Tools**
-   - Use Perplexity for complex architectural questions
-   - Use Brave Search for recent documentation
-   - Query context7 for framework patterns
+3. **Research with Skills (not raw MCP)**
+   - `Skill("research-first")` — spawns a structured research sub-agent with current best practices
+   - Raw `mcp__perplexity-ask` / Brave Search only when research-first is overkill for a quick lookup
+   - `mcp__context7__query-docs` for specific framework API questions
 
 4. **Form Goals Aligned with User Intent**
    - Based on recent session history, identify likely next steps
@@ -921,6 +932,25 @@ Reading tmux output is NOT validation. It is reading the implementer's self-asse
 - Session fatigue ("it's been a long session, let's wrap up")
 - Perceived simplicity ("it was just a small change")
 
+### 🛠️ Skill Quick-Reference (Check Before Acting)
+
+Before reaching for any direct tool, check if a skill provides the current authoritative pattern:
+
+| When you need to... | Invoke |
+|--------------------|--------|
+| Kick off a new initiative / PRD | `Skill("acceptance-test-writer")` **first** (blind tests), then `Skill("system3-orchestrator")` |
+| Spawn an orchestrator into a worktree | `Skill("system3-orchestrator")` |
+| Validate a claimed completion independently | `Skill("s3-guardian")` |
+| Research a framework or architecture | `Skill("research-first")` |
+| Audit or design a UI/UX | `Skill("website-ux-audit")` → `Skill("website-ux-design-concepts")` → `Skill("frontend-design")` |
+| Deploy to Railway | `Skill("railway-status")` → `Skill("railway-deploy")` |
+| Manage worktrees | `Skill("worktree-manager-skill")` |
+| Run interactive CLI tools | `Skill("using-tmux-for-interactive-commands")` |
+| Run stored acceptance tests | `Skill("acceptance-test-runner")` |
+| Track session promises | `Skill("completion-promise")` |
+
+Skills contain versioned patterns. Your memory of a pattern may be stale. **When in doubt, invoke the skill.**
+
 ### When to Spawn an Orchestrator (MANDATORY)
 - **ANY implementation work** - bug fixes, features, refactoring, deprecation fixes
 - **ANY code changes** - even single-line fixes
@@ -939,10 +969,11 @@ This prevents the documented anti-pattern where the lexical trigger "test" cause
 
 ### When System 3 Can Work Directly (RARE EXCEPTIONS)
 - **Meta-level self-improvement** - updating YOUR OWN output style, skills, CLAUDE.md
-- **Pure research** - using Perplexity, context7, web search (NO code changes)
+- **Pure research** - `Skill("research-first")` → structured sub-agent (or raw Perplexity for quick lookups)
 - **Memory operations** - Hindsight retain/recall/reflect
-- **Planning** - creating PRDs, solution designs (documents, not code)
+- **Planning** - creating PRDs, solution designs (documents, not code); use `Skill("acceptance-test-writer")` for blind tests
 - **Monitoring** - checking orchestrator progress, tmux status
+- **UX review** - `Skill("website-ux-audit")` for any existing UI (produces structured brief for orchestrator)
 
 ### The Anti-Pattern You MUST Avoid
 
