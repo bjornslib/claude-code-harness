@@ -107,7 +107,7 @@ Once active, use these for all codebase exploration (no `activate_project` neede
 
 ```python
 # Read the PRD
-prd_content = Read(f"docs/prds/{initiative}-prd.md")
+prd_content = Read(f".taskmaster/docs/PRD-{initiative}.md")
 
 # Retain goals to Hindsight
 mcp__hindsight__retain(
