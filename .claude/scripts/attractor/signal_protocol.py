@@ -37,6 +37,32 @@ from typing import Optional
 
 
 # ---------------------------------------------------------------------------
+# Signal type constants
+# ---------------------------------------------------------------------------
+
+# Runner → Guardian signals
+NEEDS_REVIEW       = "NEEDS_REVIEW"       # payload: {node_id, commit, summary}
+NEEDS_INPUT        = "NEEDS_INPUT"        # payload: {node_id, question, options}
+VIOLATION          = "VIOLATION"          # payload: {node_id, reason}
+ORCHESTRATOR_STUCK = "ORCHESTRATOR_STUCK" # payload: {node_id, duration, last_output}
+ORCHESTRATOR_CRASHED = "ORCHESTRATOR_CRASHED"  # payload: {node_id, last_output}
+NODE_COMPLETE      = "NODE_COMPLETE"      # payload: {node_id, commit, summary}
+VALIDATION_COMPLETE = "VALIDATION_COMPLETE"  # payload: {node_id, summary}
+
+# Guardian → Runner signals
+VALIDATION_PASSED  = "VALIDATION_PASSED"  # payload: {node_id}
+VALIDATION_FAILED  = "VALIDATION_FAILED"  # payload: {node_id, feedback}
+INPUT_RESPONSE     = "INPUT_RESPONSE"     # payload: {node_id, response}
+KILL_ORCHESTRATOR  = "KILL_ORCHESTRATOR"  # payload: {node_id, reason}
+GUIDANCE           = "GUIDANCE"           # payload: {node_id, message}
+
+# Merge queue signals (Runner → Guardian, Guardian → Runner)
+MERGE_READY    = "MERGE_READY"    # payload: {node_id, branch}
+MERGE_COMPLETE = "MERGE_COMPLETE" # payload: {node_id, branch, entry_id}
+MERGE_FAILED   = "MERGE_FAILED"   # payload: {node_id, branch, error}
+
+
+# ---------------------------------------------------------------------------
 # Directory resolution
 # ---------------------------------------------------------------------------
 

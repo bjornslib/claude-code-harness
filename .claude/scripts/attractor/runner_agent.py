@@ -57,6 +57,9 @@ _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 if _THIS_DIR not in sys.path:
     sys.path.insert(0, _THIS_DIR)
 
+import identity_registry
+import hook_manager
+
 # ---------------------------------------------------------------------------
 # Logfire instrumentation (required)
 # ---------------------------------------------------------------------------
@@ -172,6 +175,33 @@ The Guardian response will have signal_type one of:
 After receiving VALIDATION_PASSED, also notify the terminal layer:
   python {scripts_dir}/signal_guardian.py VALIDATION_COMPLETE --node {node_id} --target terminal --summary "Node {node_id} validated"
   Then exit normally.
+
+## Merge Queue Integration
+When a node is marked impl_complete, enqueue it for sequential merging and signal the Guardian:
+
+```python
+import merge_queue, signal_protocol
+# Enqueue the branch for sequential merge
+merge_queue.enqueue(
+    node_id="{node_id}",
+    branch="worktree-{node_id}",
+    repo_root="<repo_root>",
+)
+# Notify Guardian that the branch is ready to merge
+signal_protocol.write_signal(
+    source="runner",
+    target="guardian",
+    signal_type="MERGE_READY",
+    payload={{"node_id": "{node_id}", "branch": "worktree-{node_id}"}},
+)
+```
+
+The Guardian will call `merge_queue.process_next()` and respond with MERGE_COMPLETE or MERGE_FAILED.
+
+## Liveness Tracking
+This runner's identity is tracked in .claude/state/identities/runner-{node_id}.json.
+Call update_liveness periodically via:
+  python {scripts_dir}/identity_registry.py --update-liveness runner {node_id}
 
 ## Completion
 - Exit normally when you receive VALIDATION_PASSED or KILL_ORCHESTRATOR
@@ -538,14 +568,39 @@ def main(argv: list[str] | None = None) -> None:
             print(json.dumps(config, indent=2))
             sys.exit(0)
 
+        # Register runner identity before starting the agent loop
+        node_id = args.node
+        identity_registry.create_identity(
+            role="runner",
+            name=node_id,
+            session_id=f"runner-{node_id}",
+            worktree="",
+        )
+
+        # Create a persistent hook for this runner
+        hook_manager.create_hook(role="runner", name=node_id)
+
         # Live run: invoke the Agent SDK.
         try:
             asyncio.run(_run_agent(initial_prompt, options))
+            # Clean shutdown
+            try:
+                identity_registry.mark_terminated(role="runner", name=node_id)
+            except Exception:
+                pass
         except KeyboardInterrupt:
             print("[Runner] Interrupted by user.", flush=True)
+            try:
+                identity_registry.mark_terminated(role="runner", name=node_id)
+            except Exception:
+                pass
             sys.exit(130)
         except Exception as exc:
             print(f"[Runner error] {exc}", file=sys.stderr, flush=True)
+            try:
+                identity_registry.mark_crashed(role="runner", name=node_id)
+            except Exception:
+                pass
             sys.exit(1)
 
 
