@@ -438,7 +438,7 @@ Skills are explicitly invoked via `Skill("skill-name")`. Use this library to kno
 | `railway-new` | Creating a new Railway project, service, or database |
 | `railway-deploy` | Deploying code to Railway (`railway up`) |
 | `railway-deployment` | Managing existing deployments (logs, redeploy, remove) |
-| `railway-status` | Checking current Railway project health |
+| `railway-stat` | Checking current Railway project health |
 | `railway-environment` | Reading or editing Railway environment variables |
 | `railway-database` | Adding a managed database service to a Railway project |
 | `railway-domain` | Adding or removing custom domains on Railway |
@@ -471,6 +471,6 @@ Skills are explicitly invoked via `Skill("skill-name")`. Use this library to kno
 **Before researching a framework** → `research-first`
 **Before spawning an orchestrator** → `system3-orchestrator`
 **Before designing UI** → `website-ux-audit` → `website-ux-design-concepts` → `frontend-design`
-**Before deploying to Railway** → `railway-status` → `railway-deploy`
+**Before deploying to Railway** → `railway-stat` → `railway-deploy`
 **After orchestrator claims done** → `s3-guardian` or validation-test-agent
 **When navigating unfamiliar code** → Serena MCP (`mcp__serena__find_symbol`, `mcp__serena__search_for_pattern`)
