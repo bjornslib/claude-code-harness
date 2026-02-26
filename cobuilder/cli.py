@@ -2,9 +2,10 @@
 
 import typer
 
+from cobuilder.repomap.cli.commands import app as repomap_app
+
 app = typer.Typer(name="cobuilder", help="CoBuilder: unified codebase intelligence")
 
-repomap_app = typer.Typer(help="RepoMap commands")
 pipeline_app = typer.Typer(help="Pipeline commands")
 agents_app = typer.Typer(help="Agent orchestration commands")
 
