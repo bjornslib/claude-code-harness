@@ -51,6 +51,14 @@ _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 if _THIS_DIR not in sys.path:
     sys.path.insert(0, _THIS_DIR)
 
+import identity_registry
+
+# Import merge_queue so it is available in the Guardian process for signal handling
+try:
+    import merge_queue  # noqa: F401  (imported for side-effects / availability)
+except ImportError:
+    pass  # merge_queue not available in test-only environments
+
 # ---------------------------------------------------------------------------
 # Logfire instrumentation (required)
 # ---------------------------------------------------------------------------
@@ -205,6 +213,32 @@ All scripts are in {scripts_dir}:
    - Save checkpoint
    - Respond: python3 {scripts_dir}/respond_to_runner.py VALIDATION_PASSED --node <id>
 
+   MERGE_READY (node branch is ready for sequential merge into main):
+   - Call the merge queue to process the next pending entry:
+     ```python
+     import merge_queue, signal_protocol
+     result = merge_queue.process_next()
+     ```
+   - If result["success"] is True and result["entry"] is not None:
+     * Write MERGE_COMPLETE signal back to runner:
+       signal_protocol.write_signal(
+           source="guardian", target="runner",
+           signal_type="MERGE_COMPLETE",
+           payload={{"node_id": result["entry"]["node_id"],
+                    "branch": result["entry"]["branch"],
+                    "entry_id": result["entry"]["entry_id"]}},
+       )
+   - If result["success"] is False:
+     * Write MERGE_FAILED signal back to runner:
+       signal_protocol.write_signal(
+           source="guardian", target="runner",
+           signal_type="MERGE_FAILED",
+           payload={{"node_id": result["entry"]["node_id"],
+                    "branch": result["entry"]["branch"],
+                    "error": result["error"]}},
+       )
+     * Log the failure and escalate if repeated failures occur
+
 ### Phase 4: Check Pipeline Progress
 10. After handling the signal, check for new ready nodes (go to Phase 2)
 11. If all nodes are validated:
@@ -215,6 +249,13 @@ All scripts are in {scripts_dir}:
 ## Retry Tracking
 Track retries per node in memory (dict). When a node exceeds {max_retries} retries, do not
 spawn again — escalate to Terminal with full context.
+
+## Identity Scanning
+Periodically scan for stale agents using:
+  python3 {scripts_dir}/identity_registry.py --find-stale --timeout 300
+
+Stale active agents may indicate crashed orchestrators or runners. Use this
+information alongside signal monitoring to decide when to escalate or respawn.
 
 ## Important Rules
 - NEVER use Edit or Write tools — you are a coordinator, not an implementer
@@ -536,14 +577,36 @@ def main(argv: list[str] | None = None) -> None:
             print(json.dumps(config, indent=2))
             sys.exit(0)
 
+        # Register guardian identity before starting the agent loop
+        guardian_name = args.pipeline_id
+        identity_registry.create_identity(
+            role="guardian",
+            name=guardian_name,
+            session_id=f"guardian-{guardian_name}",
+            worktree="",
+        )
+
         # Live run: invoke the Agent SDK.
         try:
             asyncio.run(_run_agent(initial_prompt, options))
+            # Clean shutdown
+            try:
+                identity_registry.mark_terminated(role="guardian", name=guardian_name)
+            except Exception:
+                pass
         except KeyboardInterrupt:
             print("[Guardian] Interrupted by user.", flush=True)
+            try:
+                identity_registry.mark_terminated(role="guardian", name=guardian_name)
+            except Exception:
+                pass
             sys.exit(130)
         except Exception as exc:
             print(f"[Guardian error] {exc}", file=sys.stderr, flush=True)
+            try:
+                identity_registry.mark_crashed(role="guardian", name=guardian_name)
+            except Exception:
+                pass
             sys.exit(1)
 
 
