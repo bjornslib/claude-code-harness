@@ -143,11 +143,12 @@ class TestRespawnOrchestrator(unittest.TestCase):
         self.assertTrue(prompt_sent, f"Prompt not sent. Calls: {send_calls}")
 
     def test_no_prompt_sent_when_none(self) -> None:
-        """When prompt is None, should NOT send a prompt key."""
+        """When prompt is None and no existing hook, should NOT send a prompt key."""
         with patch("spawn_orchestrator.check_orchestrator_alive", return_value=False), \
              patch("spawn_orchestrator.subprocess.run") as mock_run, \
              patch("spawn_orchestrator.time.sleep"), \
-             patch("spawn_orchestrator._tmux_send") as mock_send:
+             patch("spawn_orchestrator._tmux_send") as mock_send, \
+             patch("spawn_orchestrator.hook_manager.read_hook", return_value=None):
             mock_run.return_value = MagicMock(returncode=0)
             respawn_orchestrator("orch-auth", "/tmp", "auth", None, 0, 3)
         # Only 2 send calls expected: "unset CLAUDECODE && claude" + "/output-style orchestrator"
@@ -395,6 +396,96 @@ class TestOutputIncludesRespawnCount(unittest.TestCase):
         self.assertEqual(data.get("status"), "ok")
         self.assertIn("respawn_count", data)
         self.assertGreater(data["respawn_count"], 0)
+
+
+# ---------------------------------------------------------------------------
+# TestRespawnWisdomInjection (Epic 2 — Hook Manager Lifecycle Integration)
+# ---------------------------------------------------------------------------
+
+
+class TestRespawnWisdomInjection(unittest.TestCase):
+    """Tests for wisdom injection in respawn_orchestrator() (Epic 2)."""
+
+    def _patch_respawn(self, hook_data, prompt):
+        """Helper to run respawn_orchestrator with hook_data mocked."""
+        with patch("spawn_orchestrator.check_orchestrator_alive", return_value=False), \
+             patch("spawn_orchestrator.subprocess.run") as mock_run, \
+             patch("spawn_orchestrator.time.sleep"), \
+             patch("spawn_orchestrator._tmux_send") as mock_send, \
+             patch("spawn_orchestrator.hook_manager.read_hook", return_value=hook_data):
+            mock_run.return_value = MagicMock(returncode=0)
+            result = respawn_orchestrator("orch-auth", "/tmp", "auth", prompt, 0, 3)
+        return result, mock_send
+
+    def test_no_wisdom_when_no_existing_hook(self) -> None:
+        """When no existing hook file, no wisdom block is injected and prompt stays None."""
+        result, mock_send = self._patch_respawn(hook_data=None, prompt=None)
+        self.assertEqual(result["status"], "respawned")
+        # Only 2 sends: launch command + output-style; no prompt send
+        self.assertEqual(mock_send.call_count, 2)
+
+    def test_wisdom_injected_when_hook_exists_no_prompt(self) -> None:
+        """When existing hook but prompt=None, wisdom block is sent as prompt."""
+        hook = {
+            "phase": "executing",
+            "resumption_instructions": "Continue from login endpoint",
+            "last_committed_node": "impl_auth_db",
+        }
+        result, mock_send = self._patch_respawn(hook_data=hook, prompt=None)
+        self.assertEqual(result["status"], "respawned")
+        # 3 sends: launch + output-style + wisdom-as-prompt
+        self.assertEqual(mock_send.call_count, 3)
+        send_calls = [str(c) for c in mock_send.call_args_list]
+        # Wisdom block should mention resumption context
+        self.assertTrue(
+            any("RESUMPTION CONTEXT" in s for s in send_calls),
+            f"Expected RESUMPTION CONTEXT in send calls. Calls: {send_calls}",
+        )
+
+    def test_wisdom_prepended_to_existing_prompt(self) -> None:
+        """When hook exists and prompt provided, wisdom is prepended to prompt."""
+        hook = {
+            "phase": "impl_complete",
+            "resumption_instructions": "Resume from step 5",
+            "last_committed_node": "impl_login",
+        }
+        result, mock_send = self._patch_respawn(hook_data=hook, prompt="Continue the work")
+        self.assertEqual(result["status"], "respawned")
+        # 3 sends: launch + output-style + combined wisdom+prompt
+        self.assertEqual(mock_send.call_count, 3)
+        send_calls = [str(c) for c in mock_send.call_args_list]
+        # Both wisdom and original prompt should appear in combined send
+        combined_call = send_calls[-1]
+        self.assertIn("RESUMPTION CONTEXT", combined_call)
+        self.assertIn("Continue the work", combined_call)
+
+    def test_wisdom_block_contains_phase(self) -> None:
+        """Wisdom block should mention the previous phase."""
+        hook = {
+            "phase": "validating",
+            "resumption_instructions": "",
+            "last_committed_node": None,
+        }
+        result, mock_send = self._patch_respawn(hook_data=hook, prompt=None)
+        send_calls = [str(c) for c in mock_send.call_args_list]
+        self.assertTrue(
+            any("validating" in s for s in send_calls),
+            f"Expected phase 'validating' in send calls. Calls: {send_calls}",
+        )
+
+    def test_wisdom_block_contains_last_committed_node(self) -> None:
+        """Wisdom block should mention the last committed node when set."""
+        hook = {
+            "phase": "executing",
+            "resumption_instructions": "",
+            "last_committed_node": "impl_auth_session",
+        }
+        result, mock_send = self._patch_respawn(hook_data=hook, prompt=None)
+        send_calls = [str(c) for c in mock_send.call_args_list]
+        self.assertTrue(
+            any("impl_auth_session" in s for s in send_calls),
+            f"Expected last_committed_node in send calls. Calls: {send_calls}",
+        )
 
 
 if __name__ == "__main__":

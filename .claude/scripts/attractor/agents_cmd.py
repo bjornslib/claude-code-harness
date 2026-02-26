@@ -31,9 +31,29 @@ import identity_registry
 # Subcommand implementations
 # ---------------------------------------------------------------------------
 
-def _cmd_list() -> None:
+def _cmd_list(as_json: bool = False, stale_only: int | None = None) -> None:
     """Print a table of all agent identities."""
     agents = identity_registry.list_all()
+
+    if stale_only is not None:
+        import time
+        from datetime import datetime
+        cutoff = time.time() - stale_only
+
+        def _ts(agent: dict) -> float:
+            hb = agent.get("last_heartbeat")
+            if not hb:
+                return 0.0
+            try:
+                return datetime.fromisoformat(hb.replace("Z", "+00:00")).timestamp()
+            except Exception:
+                return 0.0
+
+        agents = [a for a in agents if _ts(a) < cutoff]
+
+    if as_json:
+        print(json.dumps(agents))
+        return
 
     if not agents:
         print("No agent identities found.")
@@ -90,10 +110,10 @@ def _cmd_mark_terminated(role: str, name: str) -> None:
 
 _USAGE = """\
 Usage:
-  agents list                           List all agent identities (table)
-  agents show <role> <name>             Show full JSON for one agent
-  agents mark-crashed <role> <name>     Mark agent as crashed
-  agents mark-terminated <role> <name>  Mark agent as terminated
+  agents list [--json] [--stale-only <N>]  List all agent identities (table or JSON)
+  agents show <role> <name>                 Show full JSON for one agent
+  agents mark-crashed <role> <name>         Mark agent as crashed
+  agents mark-terminated <role> <name>      Mark agent as terminated
 """
 
 
@@ -113,7 +133,12 @@ def main() -> None:
     rest = argv[1:]
 
     if sub == "list":
-        _cmd_list()
+        import argparse as _ap
+        lp = _ap.ArgumentParser()
+        lp.add_argument("--json", action="store_true", dest="as_json")
+        lp.add_argument("--stale-only", type=int, dest="stale_only")
+        largs = lp.parse_args(rest)
+        _cmd_list(as_json=largs.as_json, stale_only=largs.stale_only)
 
     elif sub == "show":
         if len(rest) < 2:

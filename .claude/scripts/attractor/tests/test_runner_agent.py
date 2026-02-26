@@ -670,5 +670,57 @@ class TestSessionNameValidation(unittest.TestCase):
         self.assertIn("s3-live-", msg)
 
 
+# ---------------------------------------------------------------------------
+# TestHookPhaseTracking (Epic 2 — Hook Manager Lifecycle Integration)
+# ---------------------------------------------------------------------------
+
+
+class TestHookPhaseTracking(unittest.TestCase):
+    """Tests that build_system_prompt() includes hook phase tracking instructions."""
+
+    def test_contains_hook_phase_tracking_section(self) -> None:
+        """System prompt must contain Hook Phase Tracking section header."""
+        result = _make_system_prompt()
+        self.assertIn("Hook Phase Tracking", result)
+
+    def test_contains_update_phase_executing_command(self) -> None:
+        """System prompt must instruct runner to call update-phase executing."""
+        result = _make_system_prompt()
+        self.assertIn("update-phase", result)
+        self.assertIn("executing", result)
+
+    def test_contains_update_phase_impl_complete_command(self) -> None:
+        """System prompt must instruct runner to call update-phase impl_complete."""
+        result = _make_system_prompt()
+        self.assertIn("impl_complete", result)
+
+    def test_contains_update_resumption_command(self) -> None:
+        """System prompt must instruct runner to call update-resumption."""
+        result = _make_system_prompt()
+        self.assertIn("update-resumption", result)
+
+    def test_hook_phase_uses_scripts_dir(self) -> None:
+        """Hook phase commands should reference the scripts_dir."""
+        result = _make_system_prompt(scripts_dir="/custom/scripts")
+        self.assertIn("/custom/scripts", result)
+        self.assertIn("hook_manager.py", result)
+
+    def test_hook_phase_uses_node_id(self) -> None:
+        """Hook phase commands should reference the node_id."""
+        result = _make_system_prompt(node_id="impl_payments")
+        # Hook phase section should reference the node_id for runner role
+        self.assertIn("impl_payments", result)
+
+    def test_hook_phase_section_appears_before_liveness_tracking(self) -> None:
+        """Hook Phase Tracking section should appear before Liveness Tracking section."""
+        result = _make_system_prompt()
+        hook_pos = result.find("Hook Phase Tracking")
+        liveness_pos = result.find("Liveness Tracking")
+        self.assertGreater(hook_pos, 0, "Hook Phase Tracking section not found")
+        self.assertGreater(liveness_pos, 0, "Liveness Tracking section not found")
+        self.assertLess(hook_pos, liveness_pos,
+                        "Hook Phase Tracking should appear before Liveness Tracking")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

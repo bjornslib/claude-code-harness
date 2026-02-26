@@ -323,3 +323,86 @@ def mark_merged(
     data["updated_at"] = _now_iso()
     _write_hook(data, path)
     return data
+
+
+def build_wisdom_prompt_block(hook: dict) -> str:
+    """Generate skip instructions from hook state for respawned orchestrator.
+
+    Args:
+        hook: Hook dict as returned by read_hook() or create_hook().
+
+    Returns:
+        A formatted string block suitable for injection into an orchestrator's
+        system prompt to guide it toward the correct resumption point.
+    """
+    phase = hook.get("phase", "planning")
+    instructions = hook.get("resumption_instructions", "")
+    last_node = hook.get("last_committed_node", "")
+
+    lines = ["## RESUMPTION CONTEXT (from previous session)"]
+    lines.append(f"Previous phase reached: {phase}")
+    if last_node:
+        lines.append(f"Last committed node: {last_node}")
+    if phase in ("executing", "impl_complete", "validating"):
+        lines.append(f"SKIP planning phase — go directly to {phase}")
+    if instructions:
+        lines.append(f"Resumption notes: {instructions}")
+    return "\n".join(lines)
+
+
+if __name__ == "__main__":
+    import argparse
+    import json
+    import sys
+
+    parser = argparse.ArgumentParser(description="Hook Manager CLI")
+    subparsers = parser.add_subparsers(dest="command")
+
+    # update-phase
+    p_up = subparsers.add_parser("update-phase", help="Update hook phase")
+    p_up.add_argument("role")
+    p_up.add_argument("name")
+    p_up.add_argument("phase", choices=["planning", "executing", "impl_complete", "validating", "merged"])
+
+    # read
+    p_rd = subparsers.add_parser("read", help="Read hook JSON")
+    p_rd.add_argument("role")
+    p_rd.add_argument("name")
+
+    # update-resumption
+    p_ur = subparsers.add_parser("update-resumption", help="Update resumption instructions")
+    p_ur.add_argument("role")
+    p_ur.add_argument("name")
+    p_ur.add_argument("instructions")
+
+    args = parser.parse_args()
+
+    if args.command == "update-phase":
+        try:
+            data = update_phase(args.role, args.name, args.phase)
+            print(json.dumps({"status": "ok", "phase": data["phase"]}))
+            sys.exit(0)
+        except (FileNotFoundError, ValueError) as e:
+            print(json.dumps({"status": "error", "message": str(e)}), file=sys.stderr)
+            sys.exit(1)
+
+    elif args.command == "read":
+        data = read_hook(args.role, args.name)
+        if data is None:
+            print(json.dumps({"status": "error", "message": f"No hook for {args.role}/{args.name}"}), file=sys.stderr)
+            sys.exit(1)
+        print(json.dumps(data))
+        sys.exit(0)
+
+    elif args.command == "update-resumption":
+        try:
+            data = update_resumption_instructions(args.role, args.name, args.instructions)
+            print(json.dumps({"status": "ok"}))
+            sys.exit(0)
+        except FileNotFoundError as e:
+            print(json.dumps({"status": "error", "message": str(e)}), file=sys.stderr)
+            sys.exit(1)
+
+    else:
+        parser.print_help()
+        sys.exit(1)

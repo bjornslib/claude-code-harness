@@ -368,3 +368,102 @@ def find_stale(
             stale.append(identity)
 
     return stale
+
+
+if __name__ == "__main__":
+    import argparse
+    import json
+    import sys
+
+    parser = argparse.ArgumentParser(description="Identity Registry CLI")
+    subparsers = parser.add_subparsers(dest="command")
+
+    # update-liveness
+    p_ul = subparsers.add_parser("update-liveness", help="Update heartbeat for an agent")
+    p_ul.add_argument("role", help="Agent role (orchestrator/runner/guardian)")
+    p_ul.add_argument("name", help="Agent name/node_id")
+
+    # find-stale
+    p_fs = subparsers.add_parser("find-stale", help="Find stale agents")
+    p_fs.add_argument("--timeout", type=int, default=300, help="Seconds since last heartbeat to be considered stale")
+
+    # list
+    p_ls = subparsers.add_parser("list", help="List all agent identities")
+    p_ls.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON")
+    p_ls.add_argument("--stale-only", type=int, metavar="TIMEOUT_SECONDS", dest="stale_only", help="Only show agents stale for N seconds")
+
+    # mark-crashed
+    p_mc = subparsers.add_parser("mark-crashed", help="Mark agent as crashed")
+    p_mc.add_argument("role")
+    p_mc.add_argument("name")
+
+    # mark-terminated
+    p_mt = subparsers.add_parser("mark-terminated", help="Mark agent as terminated")
+    p_mt.add_argument("role")
+    p_mt.add_argument("name")
+
+    args = parser.parse_args()
+
+    if args.command == "update-liveness":
+        try:
+            data = update_liveness(args.role, args.name)
+            print(json.dumps({"status": "ok", "last_heartbeat": data["last_heartbeat"]}))
+            sys.exit(0)
+        except FileNotFoundError as e:
+            print(json.dumps({"status": "error", "message": str(e)}), file=sys.stderr)
+            sys.exit(1)
+
+    elif args.command == "find-stale":
+        stale = find_stale(timeout_seconds=args.timeout)
+        print(json.dumps(stale))
+        sys.exit(0)
+
+    elif args.command == "list":
+        all_agents = list_all()
+        if hasattr(args, "stale_only") and args.stale_only is not None:
+            import time
+            cutoff = time.time() - args.stale_only
+            from datetime import datetime
+            def _ts(agent):
+                hb = agent.get("last_heartbeat")
+                if not hb:
+                    return 0.0
+                try:
+                    return datetime.fromisoformat(hb.replace("Z", "+00:00")).timestamp()
+                except Exception:
+                    return 0.0
+            all_agents = [a for a in all_agents if _ts(a) < cutoff]
+        if args.as_json:
+            print(json.dumps(all_agents))
+        else:
+            if not all_agents:
+                print("No agent identities found.")
+            else:
+                header = f"{'ROLE':<16} {'NAME':<24} {'STATUS':<12} {'LAST HEARTBEAT'}"
+                print(header)
+                print("-" * len(header))
+                for a in all_agents:
+                    print(f"{a.get('role',''):<16} {a.get('name',''):<24} {a.get('status',''):<12} {a.get('last_heartbeat','')}")
+        sys.exit(0)
+
+    elif args.command == "mark-crashed":
+        try:
+            data = mark_crashed(args.role, args.name)
+            print(json.dumps({"status": "ok", "crashed_at": data["crashed_at"]}))
+            sys.exit(0)
+        except FileNotFoundError as e:
+            print(json.dumps({"status": "error", "message": str(e)}), file=sys.stderr)
+            sys.exit(1)
+
+    elif args.command == "mark-terminated":
+        try:
+            data = mark_terminated(args.role, args.name)
+            print(json.dumps({"status": "ok", "terminated_at": data["terminated_at"]}))
+            sys.exit(0)
+        except FileNotFoundError as e:
+            print(json.dumps({"status": "error", "message": str(e)}), file=sys.stderr)
+            sys.exit(1)
+
+    else:
+        parser.print_help()
+        sys.exit(1)

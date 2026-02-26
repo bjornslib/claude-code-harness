@@ -25,6 +25,7 @@ Usage:
     python3 cli.py run <file.dot> [--execute] [--channel <name>] [--json]
     python3 cli.py guardian status|list|verify-chain|audit [...]
     python3 cli.py agents list|show|mark-crashed|mark-terminated [...]
+    python3 cli.py merge-queue list|enqueue|process [...]
     python3 cli.py --help
 """
 
@@ -66,6 +67,7 @@ def main() -> None:
         print("  run           Run the production pipeline runner agent")
         print("  guardian      System 3 read-only monitor for pipeline runner state")
         print("  agents        Inspect and manage agent identity records")
+        print("  merge-queue   Manage the sequential merge queue (list/enqueue/process)")
         print()
         print("Run 'cli.py <command> --help' for subcommand details.")
         sys.exit(0)
@@ -130,6 +132,9 @@ def main() -> None:
     elif command == "agents":
         from agents_cmd import main as agents_main
         agents_main()
+    elif command in ("merge-queue", "merge_queue"):
+        from merge_queue_cmd import main as merge_queue_main
+        merge_queue_main()
     else:
         print(f"Unknown command: {command}", file=sys.stderr)
         print("Run 'cli.py --help' for available commands.", file=sys.stderr)
