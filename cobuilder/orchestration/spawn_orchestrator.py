@@ -1,0 +1,329 @@
+"""spawn_orchestrator.py — Create tmux session with Claude Code orchestrator.
+
+Usage:
+    python spawn_orchestrator.py --node <node_id> --prd <prd_ref>
+        --repo-root <path> [--session-name <name>] [--prompt <text>]
+        [--max-respawn <n>]
+
+Creates a tmux session named orch-<node_id> (or --session-name) starting
+in the repo root directory. Launches Claude Code with --worktree <node_id>
+which creates an isolated worktree at .claude/worktrees/<node_id>/ with
+branch worktree-<node_id>. Sets the orchestrator output style via slash
+command, then sends the prompt.
+
+Output (stdout, JSON):
+    {"status": "ok", "session": "<name>", "tmux_cmd": "<command run>", "respawn_count": 0}
+
+On error:
+    {"status": "error", "message": "<error>"}
+    exits with code 1
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import shlex
+import subprocess
+import sys
+import os
+import time
+
+# Ensure this file's directory is importable regardless of invocation CWD.
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+if _THIS_DIR not in sys.path:
+    sys.path.insert(0, _THIS_DIR)
+
+import identity_registry
+import hook_manager
+
+
+def _tmux_send(session: str, text: str, pause: float = 2.0) -> None:
+    """Send text to tmux with Enter as separate call (Pattern 1 from MEMORY.md)."""
+    subprocess.run(
+        ["tmux", "send-keys", "-t", session, text],
+        check=True, capture_output=True, text=True,
+    )
+    time.sleep(pause)
+    subprocess.run(
+        ["tmux", "send-keys", "-t", session, "Enter"],
+        check=True, capture_output=True, text=True,
+    )
+
+
+def check_orchestrator_alive(session: str) -> bool:
+    """Check if a tmux session exists.
+
+    Args:
+        session: tmux session name to check.
+
+    Returns:
+        True if the session exists (exit code 0), False otherwise.
+    """
+    result = subprocess.run(
+        ["tmux", "has-session", "-t", session],
+        capture_output=True,
+    )
+    return result.returncode == 0
+
+
+def respawn_orchestrator(
+    session_name: str,
+    work_dir: str,
+    node_id: str,
+    prompt: str | None,
+    respawn_count: int,
+    max_respawn: int,
+) -> dict:
+    """Attempt to respawn a dead orchestrator tmux session.
+
+    Args:
+        session_name: tmux session name to (re)create.
+        work_dir: Repo root directory for the new session.
+        node_id: Node identifier (used for --worktree name).
+        prompt: Optional initial prompt to send after launching Claude.
+        respawn_count: Current number of respawn attempts made so far.
+        max_respawn: Maximum allowed respawn attempts.
+
+    Returns:
+        Dict with status:
+            - ``{"status": "already_alive", "session": session_name}`` if session exists.
+            - ``{"status": "error", "message": "Max respawn limit reached (...)"}`` if limit exceeded.
+            - ``{"status": "respawned", "session": session_name, "respawn_count": respawn_count + 1}``
+              on successful respawn.
+    """
+    if check_orchestrator_alive(session_name):
+        return {"status": "already_alive", "session": session_name}
+
+    if respawn_count >= max_respawn:
+        return {
+            "status": "error",
+            "message": f"Max respawn limit reached ({respawn_count}/{max_respawn})",
+        }
+
+    # Inject wisdom from previous session hook before sending the prompt
+    existing_hook = hook_manager.read_hook("orchestrator", node_id)
+    if existing_hook:
+        wisdom_block = hook_manager.build_wisdom_prompt_block(existing_hook)
+        prompt = f"{wisdom_block}\n\n{prompt}" if prompt else wisdom_block
+
+    # Recreate the tmux session using the same config as main()
+    tmux_cmd = [
+        "tmux", "new-session",
+        "-d",
+        "-s", session_name,
+        "-c", work_dir,
+        "-x", "220",
+        "-y", "50",
+        "exec zsh",
+    ]
+    subprocess.run(tmux_cmd, check=True, capture_output=True, text=True)
+
+    time.sleep(2)
+    _tmux_send(
+        session_name,
+        f"unset CLAUDECODE && ccorch --worktree {shlex.quote(node_id)}",
+        pause=8.0,
+    )
+    _tmux_send(session_name, "/output-style orchestrator", pause=3.0)
+    if prompt:
+        _tmux_send(session_name, prompt, pause=2.0)
+
+    # Register new identity for the respawned instance
+    identity = identity_registry.create_identity(
+        role="orchestrator",
+        name=node_id,
+        session_id=session_name,
+        worktree=f".claude/worktrees/{node_id}",
+        predecessor_id=None,  # caller may set via --predecessor-id if needed
+    )
+
+    # Create or update hook for this orchestrator
+    hook = hook_manager.create_hook(
+        role="orchestrator",
+        name=node_id,
+    )
+
+    return {
+        "status": "respawned",
+        "session": session_name,
+        "respawn_count": respawn_count + 1,
+        "hook_id": hook.get("hook_id"),
+    }
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        prog="spawn_orchestrator.py",
+        description="Create a tmux session running Claude Code as orchestrator.",
+    )
+    parser.add_argument("--node", required=True, help="Node identifier")
+    parser.add_argument("--prd", required=True, help="PRD reference (e.g., PRD-AUTH-001)")
+    parser.add_argument("--worktree", required=False, help="DEPRECATED: use --repo-root instead")
+    parser.add_argument("--repo-root", required=False, dest="repo_root",
+                        help="Repo root directory (Claude creates worktree internally)")
+    parser.add_argument("--session-name", default=None, dest="session_name",
+                        help="tmux session name (default: orch-<node>)")
+    parser.add_argument("--prompt", default=None,
+                        help="Initial prompt to send after launching Claude")
+    parser.add_argument("--max-respawn", type=int, default=3, dest="max_respawn",
+                        help="Maximum respawn attempts if session dies (default: 3)")
+    parser.add_argument("--predecessor-id", default=None, dest="predecessor_id",
+                        help="agent_id of the previous orchestrator instance (for respawn tracking)")
+
+    args = parser.parse_args()
+
+    session_name = args.session_name or f"orch-{args.node}"
+    # Support both --repo-root (new) and --worktree (deprecated, same meaning now)
+    work_dir = args.repo_root or args.worktree
+    if not work_dir:
+        print(json.dumps({
+            "status": "error",
+            "message": "Either --repo-root or --worktree (deprecated) is required",
+        }))
+        sys.exit(1)
+
+    # Validate session name: reject reserved s3-live- prefix
+    if re.match(r"s3-live-", session_name):
+        print(json.dumps({
+            "status": "error",
+            "message": (
+                f"Session name '{session_name}' uses reserved 's3-live-' prefix. "
+                "Use 'orch-' or 'runner-' prefix."
+            ),
+        }))
+        sys.exit(1)
+
+    # tmux new-session — start a clean shell IN the target directory via -c.
+    # We use "exec zsh" (not "claude" directly) because:
+    # 1. CLAUDECODE env var must be unset to avoid nested-session error
+    # 2. Shell environment (PATH, etc.) must be properly initialized
+    tmux_cmd = [
+        "tmux", "new-session",
+        "-d",               # detached
+        "-s", session_name,
+        "-c", work_dir,     # tmux starts IN target dir
+        "-x", "220",        # width
+        "-y", "50",         # height
+        "exec zsh",         # clean shell (ccorch pattern from MEMORY.md)
+    ]
+
+    try:
+        subprocess.run(
+            tmux_cmd,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        error_msg = exc.stderr.strip() if exc.stderr else str(exc)
+        print(json.dumps({
+            "status": "error",
+            "message": f"Failed to create tmux session: {error_msg}",
+        }))
+        sys.exit(1)
+    except FileNotFoundError:
+        print(json.dumps({
+            "status": "error",
+            "message": "tmux not found. Please install tmux.",
+        }))
+        sys.exit(1)
+    except Exception as exc:
+        print(json.dumps({"status": "error", "message": str(exc)}))
+        sys.exit(1)
+
+    # Wait for shell to initialize
+    time.sleep(2)
+
+    # Alive check: attempt respawn if session died immediately after creation
+    respawn_count = 0
+    if not check_orchestrator_alive(session_name):
+        respawn_result = respawn_orchestrator(
+            session_name=session_name,
+            work_dir=work_dir,
+            node_id=args.node,
+            prompt=args.prompt,
+            respawn_count=respawn_count,
+            max_respawn=args.max_respawn,
+        )
+        if respawn_result["status"] == "error":
+            print(json.dumps(respawn_result))
+            sys.exit(1)
+        respawn_count = respawn_result.get("respawn_count", 0)
+        # Session was respawned with Claude and prompt already sent; output and return.
+        print(json.dumps({
+            "status": "ok",
+            "session": session_name,
+            "tmux_cmd": " ".join(shlex.quote(c) for c in tmux_cmd),
+            "respawn_count": respawn_count,
+        }))
+        return
+
+    # Unset CLAUDECODE to avoid nested-session error, then launch via ccorch
+    # which sets env vars (CLAUDE_OUTPUT_STYLE, CLAUDE_SESSION_ID, etc.)
+    # --worktree is forwarded to claude via ccorch's "$@"
+    try:
+        _tmux_send(
+            session_name,
+            f"unset CLAUDECODE && ccorch --worktree {shlex.quote(args.node)}",
+            pause=8.0,
+        )
+    except subprocess.CalledProcessError as exc:
+        error_msg = exc.stderr.strip() if exc.stderr else str(exc)
+        print(json.dumps({
+            "status": "error",
+            "message": f"Session created but failed to launch Claude: {error_msg}",
+        }))
+        sys.exit(1)
+
+    # Set output style via slash command (not CLI flag)
+    try:
+        _tmux_send(session_name, "/output-style orchestrator", pause=3.0)
+    except subprocess.CalledProcessError as exc:
+        error_msg = exc.stderr.strip() if exc.stderr else str(exc)
+        print(json.dumps({
+            "status": "error",
+            "message": f"Session created but failed to set output style: {error_msg}",
+        }))
+        sys.exit(1)
+
+    # Register agent identity after successful launch
+    identity = identity_registry.create_identity(
+        role="orchestrator",
+        name=args.node,
+        session_id=session_name,
+        worktree=f".claude/worktrees/{args.node}",
+        predecessor_id=getattr(args, "predecessor_id", None),
+    )
+
+    # Create persistent hook for this orchestrator
+    hook = hook_manager.create_hook(
+        role="orchestrator",
+        name=args.node,
+    )
+
+    # Send initial prompt if provided
+    if args.prompt:
+        try:
+            _tmux_send(session_name, args.prompt, pause=2.0)
+        except subprocess.CalledProcessError as exc:
+            error_msg = exc.stderr.strip() if exc.stderr else str(exc)
+            print(json.dumps({
+                "status": "error",
+                "message": f"Session created but failed to send prompt: {error_msg}",
+            }))
+            sys.exit(1)
+
+    print(json.dumps({
+        "status": "ok",
+        "session": session_name,
+        "tmux_cmd": " ".join(shlex.quote(c) for c in tmux_cmd),
+        "respawn_count": respawn_count,
+        "predecessor_id": getattr(args, "predecessor_id", None),
+        "hook_id": hook.get("hook_id"),
+    }))
+
+
+if __name__ == "__main__":
+    main()

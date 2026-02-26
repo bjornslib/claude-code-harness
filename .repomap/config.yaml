@@ -1,0 +1,12 @@
+# .repomap/config.yaml
+# Registry of repositories tracked by CoBuilder RepoMap.
+# This file is committed to git — add entries for each repo you track.
+version: "1.0"
+repos: []
+# Example entry:
+#   - name: agencheck
+#     path: /path/to/repo
+#     last_synced: 2026-02-27T10:00:00Z
+#     baseline_hash: "sha256:abc123..."
+#     node_count: 3037
+#     file_count: 312
