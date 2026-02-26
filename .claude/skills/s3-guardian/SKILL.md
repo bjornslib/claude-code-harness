@@ -181,17 +181,22 @@ section (Section 1) or derive objectives from the parent PRD's Goals (Section 2)
 
 ### Step 2: Generate Journey Tests (Journey Mode)
 
-After generating per-epic Gherkin, generate blind journey tests from the SD's Business Context section.
+After generating per-epic Gherkin, generate blind journey tests from the **PRD** — not the SD.
+Journey tests are cross-epic: they verify end-to-end business flows that span multiple epics and
+cannot be validated by any single SD. The PRD's Goals and User Stories sections define these flows.
 
 ```python
-Skill("acceptance-test-writer", args="--source=/path/to/impl-repo/.taskmaster/docs/SD-{ID}.md --prd=PRD-{ID} --mode=journey")
+# Source the PRD — journey tests must capture cross-epic business outcomes
+# One set of journey tests per PRD (not per SD)
+Skill("acceptance-test-writer", args="--source=/path/to/impl-repo/.taskmaster/docs/PRD-{ID}.md --prd=PRD-{ID} --mode=journey")
 ```
 
 This creates `acceptance-tests/PRD-{ID}/journeys/` in the config repo (where meta-orchestrators cannot see it).
 Journey tests are generated BEFORE the meta-orchestrator is spawned — they stay blind throughout.
 
 **Verify the output:**
-- [ ] At least one `J{N}.feature` file exists per SD business objective (Section 1: Business Context)
+- [ ] At least one `J{N}.feature` file exists per PRD business objective (Goals section / Section 2)
+- [ ] Scenarios cross epic boundaries — a journey that stays within one epic is a mis-scoped scenario
 - [ ] `runner_config.yaml` is present with sensible service URLs
 - [ ] Each scenario crosses at least 2 system layers and ends with a business outcome assertion
 - [ ] Tags include `@journey @prd-{ID} @J{N}`
@@ -809,7 +814,37 @@ cs-promise --meet <id> --ac-id AC-4.5 \
 
 ### Step 5a: Validation Method-Specific Prompt Construction
 
-Before dispatching scoring agents for each feature, read `validation_method` from the manifest and prepend mandatory instructions to the scoring agent's prompt:
+Before dispatching scoring agents for each feature, provide the scoring agent with both:
+- The **Gherkin scenario** (blind rubric from Phase 1, generated from the SD)
+- The **SD document** for this epic (`solution_design` attribute on the DOT node, or from
+  `.taskmaster/docs/SD-{CATEGORY}-{NUMBER}-{epic-slug}.md`)
+
+The SD contains the file scope, API contracts, and per-feature acceptance criteria that tell
+the scoring agent exactly what "done" looks like. Without it, agents score on gut feel rather
+than specification.
+
+```python
+# Read SD path from DOT node or construct from naming convention
+sd_path = node_attrs.get("solution_design", f".taskmaster/docs/SD-{epic_id}.md")
+
+# Build per-feature scoring prompt
+scoring_prompt = f"""
+You are scoring the implementation of this feature against its acceptance rubric.
+
+**Solution Design** (read this first — it defines done):
+{sd_path}
+
+Key sections to check:
+- Section 4: Functional Decomposition (is each capability implemented?)
+- Section 6: Acceptance Criteria per Feature (per-feature definition of done)
+- Section 8: File Scope (were only allowed files modified?)
+
+**Feature scenario to score:**
+[scenario text from Gherkin file]
+"""
+```
+
+Also read `validation_method` from the manifest and prepend mandatory tooling instructions:
 
 **For `browser-required` features:**
 ```
@@ -865,6 +900,10 @@ This gate ensures that even if a scoring agent ignores the prompt prepend, its s
 
 After computing the per-feature weighted score, execute the journey tests in `journeys/`.
 
+Journey tests were generated from the **PRD** (`PRD-{ID}.md`) — they verify cross-epic business
+flows that no single orchestrator owns. The runner should be given the PRD for context so it can
+understand *why* each step exists, not just whether it passes.
+
 **Execution approach** — spawn a tdd-test-engineer sub-agent:
 
 ```python
@@ -873,6 +912,10 @@ Task(
     description="Execute journey tests for PRD-{ID}",
     prompt="""
     Execute the journey test scenarios at: acceptance-tests/PRD-{ID}/journeys/
+
+    Context: these tests were generated from .taskmaster/docs/PRD-{ID}.md and validate
+    end-to-end business flows that span multiple implementation epics. Read the PRD
+    Goals section (Section 2) to understand the business outcomes being verified.
 
     For each J{N}.feature file:
     1. Read the scenario
