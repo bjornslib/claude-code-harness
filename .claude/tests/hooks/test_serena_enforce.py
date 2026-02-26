@@ -188,12 +188,12 @@ class TestPreToolEndToEnd(unittest.TestCase):
 
             return json.loads(result.stdout)
 
-    def test_blocks_read_on_python_file(self) -> None:
-        """AC-1: Read on .py file should be blocked."""
+    def test_approves_read_on_python_file_with_nudge(self) -> None:
+        """AC-1: Read on .py file should be approved with a Serena nudge."""
         result = self._run_hook("Read", {"file_path": "src/auth/routes.py"})
-        self.assertEqual(result["decision"], "block")
-        self.assertIn("serena-enforce", result["reason"])
-        self.assertIn("find_symbol", result["reason"])
+        self.assertEqual(result["decision"], "approve")
+        self.assertIn("serena-enforce", result["systemMessage"])
+        self.assertIn("find_symbol", result["systemMessage"])
 
     def test_approves_read_on_markdown(self) -> None:
         """AC-1: Read on .md file should be approved."""
@@ -215,15 +215,17 @@ class TestPreToolEndToEnd(unittest.TestCase):
         result = self._run_hook("Read", {"file_path": ".taskmaster/docs/prd.md"})
         self.assertEqual(result["decision"], "approve")
 
-    def test_blocks_read_on_typescript(self) -> None:
-        """AC-1: Read on .ts file should be blocked."""
+    def test_approves_read_on_typescript_with_nudge(self) -> None:
+        """AC-1: Read on .ts file should be approved with a Serena nudge."""
         result = self._run_hook("Read", {"file_path": "src/components/Login.ts"})
-        self.assertEqual(result["decision"], "block")
+        self.assertEqual(result["decision"], "approve")
+        self.assertIn("serena-enforce", result["systemMessage"])
 
-    def test_blocks_read_on_tsx(self) -> None:
-        """AC-1: Read on .tsx file should be blocked."""
+    def test_approves_read_on_tsx_with_nudge(self) -> None:
+        """AC-1: Read on .tsx file should be approved with a Serena nudge."""
         result = self._run_hook("Read", {"file_path": "app/page.tsx"})
-        self.assertEqual(result["decision"], "block")
+        self.assertEqual(result["decision"], "approve")
+        self.assertIn("serena-enforce", result["systemMessage"])
 
     def test_bypass_with_env_var(self) -> None:
         """AC-5: SERENA_ENFORCE_SKIP=1 should bypass blocking."""

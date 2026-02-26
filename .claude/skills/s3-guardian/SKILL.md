@@ -623,49 +623,53 @@ sleep 2   # Wait for bracketed paste to complete
 tmux send-keys -t "orch-epic1" Enter
 ```
 
-### Spawn Sequence (One Orchestrator per Epic/Node)
+### The Mandatory 3-Step Boot Sequence
+
+Every orchestrator MUST go through these 3 steps in this exact order. No exceptions.
+
+```
+Step 1: ccorch          → Sets 9 env vars (output style, session ID, agent teams, etc.)
+Step 2: /output-style   → Loads orchestrator persona and delegation rules
+Step 3: Skill prompt    → Orchestrator invokes Skill("orchestrator-multiagent") before any work
+```
+
+Skipping ANY step produces a crippled orchestrator that either:
+- Has no delegation rules (missing Step 2) → tries to implement directly
+- Has no team coordination patterns (missing Step 3) → cannot spawn workers
+- Has no session tracking, no model selection, no chrome (missing Step 1) → everything breaks silently
+
+### Spawn Sequence: Use `spawn_orchestrator.py` (MANDATORY)
+
+**Always use the canonical spawn script.** Never write ad-hoc tmux Bash for spawning.
+
+The script at `.claude/scripts/attractor/spawn_orchestrator.py` handles:
+- tmux session creation with `exec zsh` and correct dimensions
+- `unset CLAUDECODE && ccorch --worktree <node_id>` (Step 1)
+- `/output-style orchestrator` (Step 2)
+- Prompt delivery (Step 3)
+- Pattern 1 (Enter as separate send-keys call)
+- Respawn logic if session dies
+
+**CRITICAL: `IMPL_REPO` must point to the directory that contains `.claude/`** — this is the Claude Code project root. For monorepo layouts like `zenagent2/zenagent/agencheck/`, the project root is at `agencheck/` (where `.claude/output-styles/`, `.claude/settings.json`, etc. live), NOT at a subdirectory like `agencheck-support-agent/` or `agencheck-support-frontend/`. Spawning at the wrong level means the orchestrator boots without output styles, hooks, or skills.
 
 ```bash
 EPIC_NAME="epic1"
-IMPL_REPO="/path/to/impl-repo"
+# ✅ CORRECT: points to directory containing .claude/
+IMPL_REPO="/path/to/impl-repo/agencheck"
+# ❌ WRONG: subdirectory — no .claude/ here, orchestrator boots broken
+# IMPL_REPO="/path/to/impl-repo/agencheck/agencheck-support-agent"  # DON'T use subdirectories!
 PRD_ID="PRD-XXX-001"
 
-# 1. Create tmux session in repo root (Claude --worktree creates the worktree internally)
-tmux new-session -d -s "orch-${EPIC_NAME}" -c "${IMPL_REPO}" -x 220 -y 50 "exec zsh"
-sleep 2
-
-# 2. Set required env vars
-tmux send-keys -t "orch-${EPIC_NAME}" "export CLAUDE_SESSION_DIR=${EPIC_NAME}-$(date +%Y%m%d)"
-tmux send-keys -t "orch-${EPIC_NAME}" Enter
-tmux send-keys -t "orch-${EPIC_NAME}" "export CLAUDE_SESSION_ID=orch-${EPIC_NAME}"
-tmux send-keys -t "orch-${EPIC_NAME}" Enter
-tmux send-keys -t "orch-${EPIC_NAME}" "export CLAUDE_CODE_TASK_LIST_ID=${PRD_ID}"
-tmux send-keys -t "orch-${EPIC_NAME}" Enter
-tmux send-keys -t "orch-${EPIC_NAME}" "export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1"
-tmux send-keys -t "orch-${EPIC_NAME}" Enter
-
-# 3. Launch Claude Code via ccorch with --worktree (creates .claude/worktrees/<name>/)
-#    ccorch sets env vars (SESSION_ID, OUTPUT_STYLE, AGENT_TEAMS, etc.)
-#    --worktree is forwarded to claude via ccorch's "$@"
-tmux send-keys -t "orch-${EPIC_NAME}" "unset CLAUDECODE && ccorch --worktree ${EPIC_NAME}"
-tmux send-keys -t "orch-${EPIC_NAME}" Enter
-sleep 8   # Wait for Claude Code initialization
-
-# 4. Set output style BEFORE wisdom injection (Pattern 1)
-tmux send-keys -t "orch-${EPIC_NAME}" "/output-style orchestrator"
-tmux send-keys -t "orch-${EPIC_NAME}" Enter
-sleep 3
-
-# 5. Write wisdom to temp file (avoids large paste issues — Pattern 4)
-#    SD_PATH is the solution_design attribute from the DOT node (set during planning)
+# 1. Write the wisdom/prompt to a temp file FIRST
+#    SD_PATH is the solution_design attribute from the DOT node
 #    e.g., SD_PATH=".taskmaster/docs/SD-AUTH-001-login.md"
-cat > "/tmp/wisdom-${EPIC_NAME}.md" << EOF
+cat > "/tmp/wisdom-${EPIC_NAME}.md" << 'WISDOMEOF'
 You are an orchestrator for initiative: ${EPIC_NAME}
 
 > Your output style was set to "orchestrator" by the guardian during spawn.
 
-## FIRST ACTIONS (Mandatory)
-1. Skill("orchestrator-multiagent")
+## FIRST ACTIONS (Mandatory — do these BEFORE any investigation or implementation)
+1. Skill("orchestrator-multiagent")   ← This loads your delegation patterns
 2. Teammate(operation="spawnTeam", team_name="${EPIC_NAME}-workers", description="Workers for ${EPIC_NAME}")
 
 ## Your Mission
@@ -690,19 +694,59 @@ ${WISDOM_FROM_HINDSIGHT}
 
 ## On Completion
 Update bead to impl_complete: bd update ${BEAD_ID} --status=impl_complete
-EOF
+WISDOMEOF
 
-# 6. Send initialization via file reference (Pattern 1 + Pattern 4)
-tmux send-keys -t "orch-${EPIC_NAME}" "Read the file at /tmp/wisdom-${EPIC_NAME}.md and follow those instructions."
-sleep 2
-tmux send-keys -t "orch-${EPIC_NAME}" Enter
+# 2. Spawn via canonical script (handles Steps 1-3 of the boot sequence)
+python3 "${IMPL_REPO}/.claude/scripts/attractor/spawn_orchestrator.py" \
+    --node "${EPIC_NAME}" \
+    --prd "${PRD_ID}" \
+    --repo-root "${IMPL_REPO}" \
+    --prompt "Read the file at /tmp/wisdom-${EPIC_NAME}.md and follow those instructions. Your FIRST ACTION must be: Skill(\"orchestrator-multiagent\")"
+
+# 3. Verify spawn succeeded (script outputs JSON)
+# {"status": "ok", "session": "orch-epic1", ...}
 ```
 
-**Key changes from previous spawn sequence:**
-- Steps 1-2 (manual worktree + symlink) **removed** — `--worktree` creates `.claude/worktrees/<name>/` automatically
-- `ccorch` now receives `--worktree <name>` which forwards to `claude` via `"$@"`
-- tmux session starts in **repo root** (not worktree) — Claude handles worktree creation
-- `.claude/` is a real directory inside native worktrees (not a symlink) — skills/hooks/output-styles all present
+**What `spawn_orchestrator.py` does internally** (you should NOT replicate this manually):
+1. Creates tmux session with `exec zsh` in `--repo-root` directory
+2. Sends `unset CLAUDECODE && ccorch --worktree <node>` (8s pause) — **Step 1**
+3. Sends `/output-style orchestrator` (3s pause) — **Step 2**
+4. Sends the `--prompt` text (2s pause) — **Step 3**
+5. All sends use Pattern 1 (Enter as separate call)
+
+### Anti-Pattern: Ad-Hoc Bash Spawn (NEVER DO THIS)
+
+The following code was found in a real session. It produces a **broken orchestrator** that lacks output style, delegation patterns, session tracking, and agent team support:
+
+```bash
+# ❌ WRONG — 5 critical violations that produce a crippled orchestrator
+tmux new-session -d -s "orch-v2-ux" -c "$WORK_DIR"
+sleep 1
+tmux send-keys -t "orch-v2-ux" "exec zsh" Enter           # ❌ Pattern 1: Enter appended
+sleep 2
+tmux send-keys -t "orch-v2-ux" "unset CLAUDECODE && cd $WORK_DIR && claude --dangerously-skip-permissions" Enter
+#                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#                                    ❌ Uses plain `claude` instead of `ccorch`
+#                                    ❌ Missing: output style, session ID, agent teams,
+#                                       task list, project bank, model, chrome flag
+sleep 10
+tmux send-keys -t "orch-v2-ux" "$WISDOM"                   # ❌ No /output-style step
+sleep 2                                                      # ❌ No Skill("orchestrator-multiagent")
+tmux send-keys -t "orch-v2-ux" "" Enter
+```
+
+**Why each violation matters:**
+
+| Violation | Consequence |
+|-----------|-------------|
+| `claude` instead of `ccorch` | No `CLAUDE_OUTPUT_STYLE`, no `CLAUDE_SESSION_ID`, no `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`, no `--model claude-opus-4-6`, no `--chrome`. Orchestrator boots as a generic Claude session. |
+| No `/output-style orchestrator` | Orchestrator has no delegation rules — will try to implement code directly instead of spawning workers. |
+| No `Skill("orchestrator-multiagent")` in prompt | Orchestrator doesn't know HOW to create teams, delegate tasks, or coordinate workers. |
+| `Enter` appended to command | tmux may silently drop the Enter key, causing commands to not execute. |
+| Direct paste instead of file reference | Large wisdom text can overflow tmux paste buffer, causing truncation. |
+| `IMPL_REPO` points to subdirectory instead of `.claude/` root | Orchestrator boots without output styles, hooks, or skills. e.g., using `agencheck-support-agent/` instead of `agencheck/`. |
+
+**The fix is always the same:** Use `spawn_orchestrator.py` with `--repo-root` pointing to the directory that contains `.claude/`.
 
 ### Parallel Spawning (Multiple Epics)
 
@@ -1413,14 +1457,18 @@ Each level adds independent verification. The key constraint: each guardian stor
 | Ignoring AMEND verdict | Sunk cost fallacy — beads already exist | Re-parse is cheap, bad design is expensive |
 | Only writing scoring rubrics for UX PRDs | Cannot automatically verify browser behavior | Write executable-tests/ alongside scenarios.feature |
 | Scoring UX at 0.9 from code reading alone | Code may compile but render incorrectly | Executable browser tests cap/floor confidence scores |
+| Ad-hoc Bash spawn (plain `claude` in tmux) | Missing output style, session ID, agent teams, model — orchestrator is crippled | Always use `spawn_orchestrator.py` |
+| Skipping `/output-style orchestrator` step | Orchestrator has no delegation rules, tries to implement directly | Script handles this automatically |
+| Wisdom without `Skill("orchestrator-multiagent")` | Orchestrator cannot create teams or delegate to workers | Include in `--prompt` or wisdom file |
 
 ---
 
-**Version**: 0.2.0
+**Version**: 0.2.1
 **Dependencies**: cs-promise CLI, tmux, Hindsight MCP, ccsystem3 shell function, Task Master MCP, ZeroRepo
 **Integration**: system3-orchestrator skill, completion-promise skill, acceptance-test-writer skill, parallel-solutioning skill, research-first skill
 **Theory**: Independent verification eliminates self-reporting bias in agentic systems
 
 **Changelog**:
+- v0.2.1: Replaced inline Bash spawn sequence with mandatory `spawn_orchestrator.py` usage. Added "Mandatory 3-Step Boot Sequence" section. Added "Anti-Pattern: Ad-Hoc Bash Spawn" with real-world example showing 5 violations. Added 3 new anti-patterns to table. Root cause: inline Bash in Phase 2 invited copy-paste adaptation that dropped ccorch, /output-style, and Skill("orchestrator-multiagent").
 - v0.2.0: Added Phase 0 (PRD Design & Challenge) with ZeroRepo analysis, Task Master parsing, beads sync, and mandatory design challenge via parallel-solutioning + research-first. Added executable browser test scripts (Phase 1, Step 3) for UX PRDs with claude-in-chrome MCP tool mapping. Updated promise template with AC-0. Added 4 new anti-patterns. Lesson learned: PRD-P1.1-UNIFIED-FORM-001 had 17 Gherkin scoring rubrics but zero executable tests — the guardian could not automatically verify browser behavior.
 - v0.1.0: Initial release — blind Gherkin acceptance tests, tmux monitoring, gradient confidence scoring, DOT pipeline integration, SDK mode.
