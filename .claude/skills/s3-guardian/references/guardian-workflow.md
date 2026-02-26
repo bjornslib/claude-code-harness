@@ -243,7 +243,7 @@ After verification, send the meta-orchestrator its mission:
 
 ```bash
 # Construct the instruction payload
-INSTRUCTION="You are the System 3 meta-orchestrator. Invoke Skill('system3-orchestrator') first. Then read PRD-{ID} at .taskmaster/docs/PRD-{ID}.md. Parse tasks with Task Master. Spawn orchestrators as needed. Report when all epics are complete."
+INSTRUCTION="You are the System 3 meta-orchestrator. Invoke Skill('s3-guardian') first. Then read PRD-{ID} at .taskmaster/docs/PRD-{ID}.md. Parse tasks with Task Master. Spawn orchestrators as needed. Report when all epics are complete."
 
 # Send via tmux (text first, then Enter separately)
 tmux send-keys -t "s3-{initiative}" "$INSTRUCTION"

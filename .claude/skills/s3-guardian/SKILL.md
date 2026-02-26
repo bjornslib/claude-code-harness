@@ -14,16 +14,13 @@ The guardian angel pattern provides independent, blind validation of System 3 me
 Guardian (this session, config repo)
     |
     |-- Creates blind Gherkin acceptance tests (stored here, NOT in impl repo)
-    |-- Spawns S3 Meta-Orchestrator in tmux (at impl repo)
+    |-- Spawns Orchestrators in tmux (one per epic/DOT node)
     |       |
-    |       +-- Orchestrators (spawned by meta-orchestrator)
-    |       |       +-- Workers
-    |       |
-    |       +-- s3-communicator (heartbeat)
+    |       +-- Workers (native Agent Teams, spawned by orchestrator)
     |
-    |-- Monitors meta-orchestrator progress via tmux capture-pane
+    |-- Monitors orchestrator progress via tmux capture-pane
     |-- Independently validates claims against rubric
-    |-- Reports to oversight team with gradient scores
+    |-- Delivers verdict with gradient confidence scores
 ```
 
 **Key Innovation**: Acceptance tests live in `claude-harness-setup/acceptance-tests/PRD-{ID}/`, NOT in the implementation repository. Meta-orchestrators and their workers never see the rubric. This enables truly independent validation — the guardian reads actual code and scores it against criteria the implementers did not have access to.
@@ -1088,5 +1085,5 @@ Each level adds independent verification. The key constraint: each guardian stor
 
 **Version**: 0.1.0
 **Dependencies**: cs-promise CLI, tmux, Hindsight MCP, ccsystem3 shell function
-**Integration**: system3-orchestrator skill, completion-promise skill, acceptance-test-writer skill
+**Integration**: completion-promise skill, acceptance-test-writer skill, orchestrator-multiagent skill
 **Theory**: Independent verification eliminates self-reporting bias in agentic systems
