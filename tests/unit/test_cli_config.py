@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-from zerorepo.cli.config import (
+from cobuilder.repomap.cli.config import (
     DEFAULT_CONFIG_DIR,
     DEFAULT_CONFIG_FILE,
     ZeroRepoConfig,

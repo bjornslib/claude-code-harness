@@ -21,22 +21,22 @@ from uuid import uuid4
 import numpy as np
 import pytest
 
-from zerorepo.models.enums import (
+from cobuilder.repomap.models.enums import (
     NodeLevel,
     NodeType,
     TestStatus,
 )
-from zerorepo.models.node import RPGNode
+from cobuilder.repomap.models.node import RPGNode
 
-from zerorepo.vectordb.exceptions import (
+from cobuilder.repomap.vectordb.exceptions import (
     CollectionError,
     EmbeddingError,
     StoreNotInitializedError,
     VectorStoreError,
 )
-from zerorepo.vectordb.models import SearchResult, VectorStoreConfig
-from zerorepo.vectordb.embeddings import EmbeddingGenerator
-from zerorepo.vectordb import VectorStore
+from cobuilder.repomap.vectordb.models import SearchResult, VectorStoreConfig
+from cobuilder.repomap.vectordb.embeddings import EmbeddingGenerator
+from cobuilder.repomap.vectordb import VectorStore
 
 
 # --------------------------------------------------------------------------- #

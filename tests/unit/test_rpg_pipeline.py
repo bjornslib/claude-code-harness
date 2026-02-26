@@ -7,12 +7,12 @@ from typing import Any
 
 import pytest
 
-from zerorepo.models.enums import InterfaceType, NodeLevel, NodeType
-from zerorepo.models.graph import RPGGraph
-from zerorepo.models.node import RPGNode
-from zerorepo.rpg_enrichment.base import RPGEncoder
-from zerorepo.rpg_enrichment.models import EncoderStep, ValidationResult
-from zerorepo.rpg_enrichment.pipeline import RPGBuilder
+from cobuilder.repomap.models.enums import InterfaceType, NodeLevel, NodeType
+from cobuilder.repomap.models.graph import RPGGraph
+from cobuilder.repomap.models.node import RPGNode
+from cobuilder.repomap.rpg_enrichment.base import RPGEncoder
+from cobuilder.repomap.rpg_enrichment.models import EncoderStep, ValidationResult
+from cobuilder.repomap.rpg_enrichment.pipeline import RPGBuilder
 
 
 # ---------------------------------------------------------------------------
@@ -360,7 +360,7 @@ class TestRPGBuilderLogging:
         builder = RPGBuilder()
         builder.add_encoder(MetadataEncoder())
 
-        with caplog.at_level(logging.INFO, logger="zerorepo.rpg_enrichment.pipeline"):
+        with caplog.at_level(logging.INFO, logger="cobuilder.repomap.rpg_enrichment.pipeline"):
             builder.run(graph)
 
         messages = [r.message for r in caplog.records]
@@ -373,7 +373,7 @@ class TestRPGBuilderLogging:
         builder = RPGBuilder()
         builder.add_encoder(MetadataEncoder())
 
-        with caplog.at_level(logging.INFO, logger="zerorepo.rpg_enrichment.pipeline"):
+        with caplog.at_level(logging.INFO, logger="cobuilder.repomap.rpg_enrichment.pipeline"):
             builder.run(graph)
 
         messages = [r.message for r in caplog.records]
@@ -384,7 +384,7 @@ class TestRPGBuilderLogging:
         graph = _make_graph(1)
         builder = RPGBuilder()
 
-        with caplog.at_level(logging.WARNING, logger="zerorepo.rpg_enrichment.pipeline"):
+        with caplog.at_level(logging.WARNING, logger="cobuilder.repomap.rpg_enrichment.pipeline"):
             builder.run(graph)
 
         messages = [r.message for r in caplog.records]
@@ -396,7 +396,7 @@ class TestRPGBuilderLogging:
         builder = RPGBuilder()
         builder.add_encoder(FailingValidationEncoder())
 
-        with caplog.at_level(logging.WARNING, logger="zerorepo.rpg_enrichment.pipeline"):
+        with caplog.at_level(logging.WARNING, logger="cobuilder.repomap.rpg_enrichment.pipeline"):
             builder.run(graph)
 
         messages = [r.message for r in caplog.records]

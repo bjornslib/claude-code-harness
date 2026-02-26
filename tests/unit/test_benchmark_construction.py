@@ -14,9 +14,9 @@ from pathlib import Path
 
 import pytest
 
-from zerorepo.evaluation.categorizer import Categorizer
-from zerorepo.evaluation.models import BenchmarkTask, DifficultyLevel, Taxonomy, TaxonomyNode
-from zerorepo.evaluation.test_filter import TestFilter
+from cobuilder.repomap.evaluation.categorizer import Categorizer
+from cobuilder.repomap.evaluation.models import BenchmarkTask, DifficultyLevel, Taxonomy, TaxonomyNode
+from cobuilder.repomap.evaluation.test_filter import TestFilter
 
 # Import the harvester from scripts/benchmark which is on sys.path via conftest
 # or PYTHONPATH. We use a lazy import inside the test class to handle this.

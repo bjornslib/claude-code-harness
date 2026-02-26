@@ -21,8 +21,8 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from zerorepo.evaluation.localization import FunctionLocalizer
-from zerorepo.evaluation.models import BenchmarkTask, DifficultyLevel, FunctionSignature
+from cobuilder.repomap.evaluation.localization import FunctionLocalizer
+from cobuilder.repomap.evaluation.models import BenchmarkTask, DifficultyLevel, FunctionSignature
 
 
 @pytest.fixture()
@@ -114,8 +114,8 @@ def tmp_repo(tmp_path: Path) -> Path:
 @pytest.fixture()
 def localizer() -> FunctionLocalizer:
     """Create a FunctionLocalizer with mocked model loading."""
-    with patch("zerorepo.evaluation.localization._ST_AVAILABLE", True):
-        with patch("zerorepo.evaluation.localization.SentenceTransformer"):
+    with patch("cobuilder.repomap.evaluation.localization._ST_AVAILABLE", True):
+        with patch("cobuilder.repomap.evaluation.localization.SentenceTransformer"):
             loc = FunctionLocalizer(model_name="all-MiniLM-L6-v2")
     return loc
 
@@ -395,6 +395,6 @@ class TestImportHandling:
 
     def test_import_error_when_unavailable(self) -> None:
         """Should raise ImportError when sentence-transformers is not installed."""
-        with patch("zerorepo.evaluation.localization._ST_AVAILABLE", False):
+        with patch("cobuilder.repomap.evaluation.localization._ST_AVAILABLE", False):
             with pytest.raises(ImportError, match="sentence-transformers"):
                 FunctionLocalizer()

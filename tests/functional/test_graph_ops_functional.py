@@ -9,18 +9,18 @@ from __future__ import annotations
 import pytest
 from uuid import UUID, uuid4
 
-from zerorepo.models.enums import (
+from cobuilder.repomap.models.enums import (
     EdgeType,
     InterfaceType,
     NodeLevel,
     NodeType,
     TestStatus,
 )
-from zerorepo.models.edge import RPGEdge
-from zerorepo.models.graph import RPGGraph
-from zerorepo.models.node import RPGNode
+from cobuilder.repomap.models.edge import RPGEdge
+from cobuilder.repomap.models.graph import RPGGraph
+from cobuilder.repomap.models.node import RPGNode
 
-from zerorepo.graph_ops import (
+from cobuilder.repomap.graph_ops import (
     CycleDetectedError,
     topological_sort,
     detect_cycles,

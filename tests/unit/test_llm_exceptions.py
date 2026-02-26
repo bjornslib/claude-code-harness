@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from zerorepo.llm.exceptions import (
+from cobuilder.repomap.llm.exceptions import (
     ConfigurationError,
     LLMGatewayError,
     RetryExhaustedError,

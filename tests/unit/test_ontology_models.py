@@ -11,8 +11,8 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from zerorepo.ontology.backend import OntologyBackend
-from zerorepo.ontology.models import FeatureNode, FeaturePath, OntologyStats
+from cobuilder.repomap.ontology.backend import OntologyBackend
+from cobuilder.repomap.ontology.models import FeatureNode, FeaturePath, OntologyStats
 
 
 # ---------------------------------------------------------------------------
@@ -923,8 +923,8 @@ class TestPackageImports:
     """Test that the ontology package exports all expected symbols."""
 
     def test_import_from_package(self) -> None:
-        """All public symbols are importable from zerorepo.ontology."""
-        from zerorepo.ontology import (
+        """All public symbols are importable from cobuilder.repomap.ontology."""
+        from cobuilder.repomap.ontology import (
             FeatureNode,
             FeaturePath,
             OntologyBackend,
@@ -937,8 +937,8 @@ class TestPackageImports:
         assert OntologyStats is not None
 
     def test_import_from_models(self) -> None:
-        """Models are importable from zerorepo.ontology.models."""
-        from zerorepo.ontology.models import (
+        """Models are importable from cobuilder.repomap.ontology.models."""
+        from cobuilder.repomap.ontology.models import (
             FeatureNode,
             FeaturePath,
             OntologyStats,
@@ -949,7 +949,7 @@ class TestPackageImports:
         assert OntologyStats is not None
 
     def test_import_from_backend(self) -> None:
-        """Backend is importable from zerorepo.ontology.backend."""
-        from zerorepo.ontology.backend import OntologyBackend
+        """Backend is importable from cobuilder.repomap.ontology.backend."""
+        from cobuilder.repomap.ontology.backend import OntologyBackend
 
         assert OntologyBackend is not None

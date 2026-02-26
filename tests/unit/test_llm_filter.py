@@ -20,9 +20,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from zerorepo.llm.models import ModelTier
-from zerorepo.ontology.models import FeatureNode, FeaturePath
-from zerorepo.selection.llm_filter import (
+from cobuilder.repomap.llm.models import ModelTier
+from cobuilder.repomap.ontology.models import FeatureNode, FeaturePath
+from cobuilder.repomap.selection.llm_filter import (
     FilterDecision,
     FilterResult,
     LLMFilter,
@@ -467,7 +467,7 @@ class TestImports:
     """Tests for module imports."""
 
     def test_import_from_module(self) -> None:
-        from zerorepo.selection.llm_filter import (
+        from cobuilder.repomap.selection.llm_filter import (
             FilterDecision,
             FilterResult,
             LLMFilter,

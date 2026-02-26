@@ -13,8 +13,8 @@ from __future__ import annotations
 
 import pytest
 
-from zerorepo.evaluation.models import BenchmarkTask, DifficultyLevel
-from zerorepo.evaluation.test_filter import FLAKY_PATTERNS, SKIP_DECORATORS, TestFilter
+from cobuilder.repomap.evaluation.models import BenchmarkTask, DifficultyLevel
+from cobuilder.repomap.evaluation.test_filter import FLAKY_PATTERNS, SKIP_DECORATORS, TestFilter
 
 
 def _make_task(

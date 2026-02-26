@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from zerorepo.serena.session import (
+from cobuilder.repomap.serena.session import (
     ActivationResult,
     CodebaseAnalyzerProtocol,
     DirectoryEntry,

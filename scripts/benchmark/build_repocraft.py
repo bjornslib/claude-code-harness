@@ -31,9 +31,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from zerorepo.evaluation.categorizer import Categorizer
-from zerorepo.evaluation.models import BenchmarkTask, Taxonomy
-from zerorepo.evaluation.test_filter import TestFilter
+from cobuilder.repomap.evaluation.categorizer import Categorizer
+from cobuilder.repomap.evaluation.models import BenchmarkTask, Taxonomy
+from cobuilder.repomap.evaluation.test_filter import TestFilter
 
 from scripts.benchmark.harvest_tests import TestHarvester
 

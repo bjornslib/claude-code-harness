@@ -19,22 +19,22 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from zerorepo.graph_construction.attractor_exporter import (
+from cobuilder.repomap.graph_construction.exporter import (
     AttractorExporter,
     _esc,
     _sanitize_id,
     _wrap,
     infer_worker_type,
 )
-from zerorepo.models.edge import RPGEdge
-from zerorepo.models.enums import (
+from cobuilder.repomap.models.edge import RPGEdge
+from cobuilder.repomap.models.enums import (
     DeltaStatus,
     EdgeType,
     NodeLevel,
     NodeType,
 )
-from zerorepo.models.graph import RPGGraph
-from zerorepo.models.node import RPGNode
+from cobuilder.repomap.models.graph import RPGGraph
+from cobuilder.repomap.models.node import RPGNode
 
 
 # ---------------------------------------------------------------------------

@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from zerorepo.evaluation.caching import (
+from cobuilder.repomap.evaluation.caching import (
     BatchedFunctionGenerator,
     EmbeddingCache,
     LLMResponseCache,

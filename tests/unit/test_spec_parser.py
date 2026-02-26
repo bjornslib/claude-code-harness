@@ -13,8 +13,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from zerorepo.llm.models import ModelTier
-from zerorepo.spec_parser.models import (
+from cobuilder.repomap.llm.models import ModelTier
+from cobuilder.repomap.spec_parser.models import (
     Component,
     Constraint,
     ConstraintPriority,
@@ -27,7 +27,7 @@ from zerorepo.spec_parser.models import (
     ScopeType,
     TechnicalRequirement,
 )
-from zerorepo.spec_parser.parser import (
+from cobuilder.repomap.spec_parser.parser import (
     ParsedComponent,
     ParsedConstraint,
     ParsedDataFlow,

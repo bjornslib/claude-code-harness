@@ -17,8 +17,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from zerorepo.evaluation.execution_testing import ExecutionTester, SandboxProtocol
-from zerorepo.evaluation.models import BenchmarkTask, DifficultyLevel, ExecutionResult
+from cobuilder.repomap.evaluation.execution_testing import ExecutionTester, SandboxProtocol
+from cobuilder.repomap.evaluation.models import BenchmarkTask, DifficultyLevel, ExecutionResult
 
 
 def _make_task(

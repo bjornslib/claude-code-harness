@@ -19,9 +19,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from zerorepo.llm.models import ModelTier
-from zerorepo.ontology.models import FeatureNode, FeaturePath
-from zerorepo.selection.exploration import (
+from cobuilder.repomap.llm.models import ModelTier
+from cobuilder.repomap.ontology.models import FeatureNode, FeaturePath
+from cobuilder.repomap.selection.exploration import (
     CoverageStats,
     CoverageTracker,
     ExplorationConfig,
@@ -554,7 +554,7 @@ class TestImports:
     """Tests for module imports."""
 
     def test_import_from_package(self) -> None:
-        from zerorepo.selection import (
+        from cobuilder.repomap.selection import (
             CoverageStats,
             CoverageTracker,
             ExplorationConfig,
@@ -565,7 +565,7 @@ class TestImports:
         assert ExplorationStrategy is not None
 
     def test_import_from_module(self) -> None:
-        from zerorepo.selection.exploration import (
+        from cobuilder.repomap.selection.exploration import (
             CoverageStats,
             CoverageTracker,
             ExplorationConfig,

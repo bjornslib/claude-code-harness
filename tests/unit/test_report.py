@@ -18,13 +18,13 @@ from typing import Any
 
 import pytest
 
-from zerorepo.evaluation.models import (
+from cobuilder.repomap.evaluation.models import (
     BenchmarkResult,
     ProfilingData,
     RepositoryResult,
     TokenStats,
 )
-from zerorepo.evaluation.report import PAPER_METRICS, ReportGenerator
+from cobuilder.repomap.evaluation.report import PAPER_METRICS, ReportGenerator
 
 
 def _make_evaluation(

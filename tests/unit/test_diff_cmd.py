@@ -15,16 +15,16 @@ from pathlib import Path
 
 import pytest
 
-from zerorepo.cli.diff_cmd import (
+from cobuilder.repomap.cli.diff_cmd import (
     RegressionResult,
     _extract_pipeline_file_paths,
     _sanitize_dot_id,
     compare_graphs,
     generate_regression_dot,
 )
-from zerorepo.models.enums import NodeLevel, NodeType
-from zerorepo.models.graph import RPGGraph
-from zerorepo.models.node import RPGNode
+from cobuilder.repomap.models.enums import NodeLevel, NodeType
+from cobuilder.repomap.models.graph import RPGGraph
+from cobuilder.repomap.models.node import RPGNode
 
 
 # ---------------------------------------------------------------------------
@@ -436,7 +436,7 @@ class TestDiffIntegration:
 
     def test_regression_detected_from_json_files(self, tmp_path: Path):
         """Full integration: load two JSON graphs, detect regression."""
-        from zerorepo.cli.diff_cmd import _load_graph
+        from cobuilder.repomap.cli.diff_cmd import _load_graph
 
         before_graph = _make_graph(
             _make_node("AuthService", delta_status="existing", file_path="src/auth.py"),
@@ -461,7 +461,7 @@ class TestDiffIntegration:
     def test_missing_file_raises_bad_parameter(self, tmp_path: Path):
         """Loading a missing file raises typer.BadParameter."""
         import typer
-        from zerorepo.cli.diff_cmd import _load_graph
+        from cobuilder.repomap.cli.diff_cmd import _load_graph
 
         with pytest.raises(typer.BadParameter):
             _load_graph(tmp_path / "nonexistent.json")
@@ -469,7 +469,7 @@ class TestDiffIntegration:
     def test_output_written_to_file(self, tmp_path: Path):
         """When output path is provided, DOT file is written there."""
         from rich.console import Console
-        from zerorepo.cli.diff_cmd import run_diff
+        from cobuilder.repomap.cli.diff_cmd import run_diff
 
         before_graph = _make_graph(
             _make_node("A", delta_status="existing"),
@@ -501,7 +501,7 @@ class TestDiffIntegration:
     def test_pipeline_filter_integration(self, tmp_path: Path):
         """Pipeline DOT filter correctly restricts regression detection."""
         from rich.console import Console
-        from zerorepo.cli.diff_cmd import run_diff
+        from cobuilder.repomap.cli.diff_cmd import run_diff
 
         pipeline_dot = textwrap.dedent("""\
             digraph "test" {

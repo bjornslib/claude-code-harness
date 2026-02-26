@@ -20,13 +20,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from zerorepo.evaluation.benchmark_runner import (
+from cobuilder.repomap.evaluation.benchmark_runner import (
     BenchmarkRunner,
     ProjectConfig,
     RunnerConfig,
     RunSummary,
 )
-from zerorepo.evaluation.models import (
+from cobuilder.repomap.evaluation.models import (
     BenchmarkResult,
     BenchmarkTask,
     CodeStats,

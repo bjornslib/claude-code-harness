@@ -12,24 +12,24 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from zerorepo.codegen.localization import (
+from cobuilder.repomap.codegen.localization import (
     LocalizationTracker,
     RPGFuzzySearch,
 )
-from zerorepo.codegen.localization_models import LocalizationResult
-from zerorepo.codegen.localization_orchestrator import LocalizationOrchestrator
-from zerorepo.codegen.serena_editing import SerenaEditor
-from zerorepo.models.enums import (
+from cobuilder.repomap.codegen.localization_models import LocalizationResult
+from cobuilder.repomap.codegen.localization_orchestrator import LocalizationOrchestrator
+from cobuilder.repomap.codegen.serena_editing import SerenaEditor
+from cobuilder.repomap.models.enums import (
     InterfaceType,
     NodeLevel,
     NodeType,
     TestStatus,
 )
-from zerorepo.models.graph import RPGGraph
-from zerorepo.models.node import RPGNode
-from zerorepo.serena.exceptions import MCPError, SerenaError
-from zerorepo.serena.models import SymbolInfo
-from zerorepo.vectordb.models import SearchResult
+from cobuilder.repomap.models.graph import RPGGraph
+from cobuilder.repomap.models.node import RPGNode
+from cobuilder.repomap.serena.exceptions import MCPError, SerenaError
+from cobuilder.repomap.serena.models import SymbolInfo
+from cobuilder.repomap.vectordb.models import SearchResult
 
 
 # --------------------------------------------------------------------------- #

@@ -16,14 +16,14 @@ from unittest.mock import MagicMock, PropertyMock, call, patch
 import pytest
 from pydantic import ValidationError
 
-from zerorepo.serena.client import MCPClient, SUPPORTED_TOOLS
-from zerorepo.serena.dependencies import DependencyExtractor
-from zerorepo.serena.exceptions import MCPError, SerenaError, ToolNotFoundError
-from zerorepo.serena.models import PyrightConfig, SymbolInfo
-from zerorepo.serena.pyright import PyrightConfigurator
-from zerorepo.serena.server import SerenaMCPServer
-from zerorepo.serena.symbols import SymbolLookup
-from zerorepo.serena.workspace import WorkspaceManager
+from cobuilder.repomap.serena.client import MCPClient, SUPPORTED_TOOLS
+from cobuilder.repomap.serena.dependencies import DependencyExtractor
+from cobuilder.repomap.serena.exceptions import MCPError, SerenaError, ToolNotFoundError
+from cobuilder.repomap.serena.models import PyrightConfig, SymbolInfo
+from cobuilder.repomap.serena.pyright import PyrightConfigurator
+from cobuilder.repomap.serena.server import SerenaMCPServer
+from cobuilder.repomap.serena.symbols import SymbolLookup
+from cobuilder.repomap.serena.workspace import WorkspaceManager
 
 
 # ---------------------------------------------------------------------------
@@ -210,7 +210,7 @@ class TestSerenaMCPServerInit:
 class TestSerenaMCPServerStart:
     """Tests for server start lifecycle."""
 
-    @patch("zerorepo.serena.server.subprocess.Popen")
+    @patch("cobuilder.repomap.serena.server.subprocess.Popen")
     def test_start_launches_process(
         self, mock_popen: MagicMock, tmp_path: Path
     ) -> None:
@@ -230,7 +230,7 @@ class TestSerenaMCPServerStart:
         assert "--workspace" in cmd
         assert str(tmp_path.resolve()) in cmd
 
-    @patch("zerorepo.serena.server.subprocess.Popen")
+    @patch("cobuilder.repomap.serena.server.subprocess.Popen")
     def test_start_with_pyright_config(
         self, mock_popen: MagicMock, tmp_path: Path
     ) -> None:
@@ -247,7 +247,7 @@ class TestSerenaMCPServerStart:
         assert "--pyright-config" in cmd
         assert str(pyright_path.resolve()) in cmd
 
-    @patch("zerorepo.serena.server.subprocess.Popen")
+    @patch("cobuilder.repomap.serena.server.subprocess.Popen")
     def test_start_sets_stdio_pipes(
         self, mock_popen: MagicMock, tmp_path: Path
     ) -> None:
@@ -266,7 +266,7 @@ class TestSerenaMCPServerStart:
         assert call_kwargs["stdout"] == subprocess.PIPE
         assert call_kwargs["stderr"] == subprocess.PIPE
 
-    @patch("zerorepo.serena.server.subprocess.Popen")
+    @patch("cobuilder.repomap.serena.server.subprocess.Popen")
     def test_start_raises_if_already_running(
         self, mock_popen: MagicMock, tmp_path: Path
     ) -> None:
@@ -281,7 +281,7 @@ class TestSerenaMCPServerStart:
         with pytest.raises(SerenaError, match="already running"):
             server.start(tmp_path)
 
-    @patch("zerorepo.serena.server.subprocess.Popen")
+    @patch("cobuilder.repomap.serena.server.subprocess.Popen")
     def test_start_raises_on_file_not_found(
         self, mock_popen: MagicMock, tmp_path: Path
     ) -> None:
@@ -291,7 +291,7 @@ class TestSerenaMCPServerStart:
         with pytest.raises(SerenaError, match="npx not found"):
             server.start(tmp_path)
 
-    @patch("zerorepo.serena.server.subprocess.Popen")
+    @patch("cobuilder.repomap.serena.server.subprocess.Popen")
     def test_start_raises_on_os_error(
         self, mock_popen: MagicMock, tmp_path: Path
     ) -> None:
@@ -305,7 +305,7 @@ class TestSerenaMCPServerStart:
 class TestSerenaMCPServerStop:
     """Tests for server stop lifecycle."""
 
-    @patch("zerorepo.serena.server.subprocess.Popen")
+    @patch("cobuilder.repomap.serena.server.subprocess.Popen")
     def test_stop_terminates_process(
         self, mock_popen: MagicMock, tmp_path: Path
     ) -> None:
@@ -322,7 +322,7 @@ class TestSerenaMCPServerStop:
         mock_process.wait.assert_called_once_with(timeout=5)
         assert server._process is None
 
-    @patch("zerorepo.serena.server.subprocess.Popen")
+    @patch("cobuilder.repomap.serena.server.subprocess.Popen")
     def test_stop_kills_on_timeout(
         self, mock_popen: MagicMock, tmp_path: Path
     ) -> None:
@@ -349,7 +349,7 @@ class TestSerenaMCPServerStop:
         # Should not raise
         server.stop()
 
-    @patch("zerorepo.serena.server.subprocess.Popen")
+    @patch("cobuilder.repomap.serena.server.subprocess.Popen")
     def test_stop_handles_os_error(
         self, mock_popen: MagicMock, tmp_path: Path
     ) -> None:
@@ -369,7 +369,7 @@ class TestSerenaMCPServerStop:
 class TestSerenaMCPServerIsRunning:
     """Tests for the is_running check."""
 
-    @patch("zerorepo.serena.server.subprocess.Popen")
+    @patch("cobuilder.repomap.serena.server.subprocess.Popen")
     def test_is_running_true(
         self, mock_popen: MagicMock, tmp_path: Path
     ) -> None:
@@ -382,7 +382,7 @@ class TestSerenaMCPServerIsRunning:
         server.start(tmp_path)
         assert server.is_running() is True
 
-    @patch("zerorepo.serena.server.subprocess.Popen")
+    @patch("cobuilder.repomap.serena.server.subprocess.Popen")
     def test_is_running_false_after_exit(
         self, mock_popen: MagicMock, tmp_path: Path
     ) -> None:
@@ -399,7 +399,7 @@ class TestSerenaMCPServerIsRunning:
 class TestSerenaMCPServerContextManager:
     """Tests for context manager support."""
 
-    @patch("zerorepo.serena.server.subprocess.Popen")
+    @patch("cobuilder.repomap.serena.server.subprocess.Popen")
     def test_context_manager_stops_on_exit(
         self, mock_popen: MagicMock, tmp_path: Path
     ) -> None:
@@ -1027,7 +1027,7 @@ class TestSerenaImports:
     """Tests that the module's public API is correctly exported."""
 
     def test_import_from_package(self) -> None:
-        from zerorepo.serena import (
+        from cobuilder.repomap.serena import (
             DependencyExtractor,
             MCPClient,
             MCPError,

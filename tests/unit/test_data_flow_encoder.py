@@ -10,15 +10,15 @@ from uuid import UUID
 
 import pytest
 
-from zerorepo.models.edge import RPGEdge
-from zerorepo.models.enums import EdgeType, NodeLevel, NodeType
-from zerorepo.models.graph import RPGGraph
-from zerorepo.models.node import RPGNode
-from zerorepo.rpg_enrichment.dataflow_encoder import (
+from cobuilder.repomap.models.edge import RPGEdge
+from cobuilder.repomap.models.enums import EdgeType, NodeLevel, NodeType
+from cobuilder.repomap.models.graph import RPGGraph
+from cobuilder.repomap.models.node import RPGNode
+from cobuilder.repomap.rpg_enrichment.dataflow_encoder import (
     DataFlowEncoder,
     _infer_type_from_name,
 )
-from zerorepo.rpg_enrichment.models import ValidationResult
+from cobuilder.repomap.rpg_enrichment.models import ValidationResult
 
 
 # ---------------------------------------------------------------------------

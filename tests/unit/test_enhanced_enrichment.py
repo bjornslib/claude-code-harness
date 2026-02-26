@@ -12,18 +12,18 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from zerorepo.models.edge import RPGEdge
-from zerorepo.models.enums import (
+from cobuilder.repomap.models.edge import RPGEdge
+from cobuilder.repomap.models.enums import (
     EdgeType,
     InterfaceType,
     NodeLevel,
     NodeType,
 )
-from zerorepo.models.graph import RPGGraph
-from zerorepo.models.node import RPGNode
-from zerorepo.rpg_enrichment.dataflow_encoder import DataFlowEncoder
-from zerorepo.rpg_enrichment.folder_encoder import FolderEncoder
-from zerorepo.rpg_enrichment.interface_design_encoder import (
+from cobuilder.repomap.models.graph import RPGGraph
+from cobuilder.repomap.models.node import RPGNode
+from cobuilder.repomap.rpg_enrichment.dataflow_encoder import DataFlowEncoder
+from cobuilder.repomap.rpg_enrichment.folder_encoder import FolderEncoder
+from cobuilder.repomap.rpg_enrichment.interface_design_encoder import (
     InterfaceDesignEncoder,
 )
 

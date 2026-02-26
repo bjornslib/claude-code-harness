@@ -7,7 +7,7 @@ from datetime import datetime
 import pytest
 from pydantic import ValidationError
 
-from zerorepo.evaluation.models import (
+from cobuilder.repomap.evaluation.models import (
     ABTestResult,
     BenchmarkResult,
     BenchmarkTask,

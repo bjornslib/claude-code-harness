@@ -22,37 +22,37 @@ import networkx as nx
 import numpy as np
 import pytest
 
-from zerorepo.graph_construction.builder import (
+from cobuilder.repomap.graph_construction.builder import (
     BuilderConfig,
     FunctionalityGraph,
     FunctionalityGraphBuilder,
 )
-from zerorepo.graph_construction.dependencies import (
+from cobuilder.repomap.graph_construction.dependencies import (
     DependencyConfig,
     DependencyEdge,
 )
-from zerorepo.graph_construction.export import (
+from cobuilder.repomap.graph_construction.export import (
     ExportConfig,
     ExportFormat,
     GraphExporter,
 )
-from zerorepo.graph_construction.metrics import (
+from cobuilder.repomap.graph_construction.metrics import (
     MetricsConfig,
     compute_all_metrics,
     compute_cohesion,
     compute_coupling,
     compute_modularity,
 )
-from zerorepo.graph_construction.partitioner import (
+from cobuilder.repomap.graph_construction.partitioner import (
     ModulePartitioner,
     ModuleSpec,
     PartitionerConfig,
 )
-from zerorepo.graph_construction.refinement import (
+from cobuilder.repomap.graph_construction.refinement import (
     GraphRefinement,
     RefinementConfig,
 )
-from zerorepo.ontology.models import FeatureNode
+from cobuilder.repomap.ontology.models import FeatureNode
 
 
 # ---------------------------------------------------------------------------

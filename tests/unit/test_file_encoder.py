@@ -7,12 +7,12 @@ from uuid import UUID
 
 import pytest
 
-from zerorepo.models.edge import RPGEdge
-from zerorepo.models.enums import EdgeType, NodeLevel, NodeType
-from zerorepo.models.graph import RPGGraph
-from zerorepo.models.node import RPGNode
-from zerorepo.rpg_enrichment.file_encoder import FileEncoder, _to_file_name
-from zerorepo.rpg_enrichment.folder_encoder import FolderEncoder
+from cobuilder.repomap.models.edge import RPGEdge
+from cobuilder.repomap.models.enums import EdgeType, NodeLevel, NodeType
+from cobuilder.repomap.models.graph import RPGGraph
+from cobuilder.repomap.models.node import RPGNode
+from cobuilder.repomap.rpg_enrichment.file_encoder import FileEncoder, _to_file_name
+from cobuilder.repomap.rpg_enrichment.folder_encoder import FolderEncoder
 
 
 # ---------------------------------------------------------------------------
@@ -309,7 +309,7 @@ class TestFileEncoderInPipeline:
     """Test FileEncoder in a pipeline with FolderEncoder."""
 
     def test_folder_then_file_pipeline(self) -> None:
-        from zerorepo.rpg_enrichment.pipeline import RPGBuilder
+        from cobuilder.repomap.rpg_enrichment.pipeline import RPGBuilder
 
         graph, ids = _build_module_with_leaves(
             "data_loading", ["load_json", "load_csv"]

@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import pytest
 
-from zerorepo.evaluation.categorizer import Categorizer
-from zerorepo.evaluation.models import BenchmarkTask, DifficultyLevel, TaxonomyNode
+from cobuilder.repomap.evaluation.categorizer import Categorizer
+from cobuilder.repomap.evaluation.models import BenchmarkTask, DifficultyLevel, TaxonomyNode
 
 
 def _make_task(task_id: str, category: str) -> BenchmarkTask:

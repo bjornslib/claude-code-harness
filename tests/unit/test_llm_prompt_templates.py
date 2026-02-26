@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from zerorepo.llm.exceptions import TemplateError
-from zerorepo.llm.prompt_templates import PromptTemplate
+from cobuilder.repomap.llm.exceptions import TemplateError
+from cobuilder.repomap.llm.prompt_templates import PromptTemplate
 
 
 # Path to the built-in templates shipped with zerorepo.llm

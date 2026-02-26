@@ -9,17 +9,17 @@ import hashlib
 
 import pytest
 
-from zerorepo.evaluation.caching import (
+from cobuilder.repomap.evaluation.caching import (
     BatchedFunctionGenerator,
     EmbeddingCache,
     LLMResponseCache,
 )
-from zerorepo.evaluation.failure_analysis import (
+from cobuilder.repomap.evaluation.failure_analysis import (
     FailureAnalyzer,
     PromptABTest,
     RECOMMENDATION_RULES,
 )
-from zerorepo.evaluation.models import (
+from cobuilder.repomap.evaluation.models import (
     ABTestResult,
     FailureCategory,
     FailureReport,

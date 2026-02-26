@@ -12,15 +12,15 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from zerorepo.models.edge import RPGEdge
-from zerorepo.models.enums import EdgeType, InterfaceType, NodeLevel, NodeType
-from zerorepo.models.graph import RPGGraph
-from zerorepo.models.node import RPGNode
-from zerorepo.rpg_enrichment.interface_design_encoder import (
+from cobuilder.repomap.models.edge import RPGEdge
+from cobuilder.repomap.models.enums import EdgeType, InterfaceType, NodeLevel, NodeType
+from cobuilder.repomap.models.graph import RPGGraph
+from cobuilder.repomap.models.node import RPGNode
+from cobuilder.repomap.rpg_enrichment.interface_design_encoder import (
     InterfaceDesignEncoder,
     _validate_signature_syntax,
 )
-from zerorepo.rpg_enrichment.pipeline import RPGBuilder
+from cobuilder.repomap.rpg_enrichment.pipeline import RPGBuilder
 
 
 # ---------------------------------------------------------------------------
