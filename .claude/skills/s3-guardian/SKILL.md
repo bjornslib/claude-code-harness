@@ -17,13 +17,13 @@ Guardian (this session, config repo)
     |-- Challenges own designs via parallel-solutioning + research-first (Phase 0)
     |-- Creates blind Gherkin acceptance tests (stored here, NOT in impl repo)
     |-- Generates executable browser test scripts for UX prototypes
-    |-- Spawns Orchestrators in tmux (at impl repo)
+    |-- Spawns Orchestrators in tmux (one per epic/DOT node)
     |       |
-    |       +-- Workers (native teams)
+    |       +-- Workers (native Agent Teams, spawned by orchestrator)
     |
     |-- Monitors orchestrator progress via tmux capture-pane
     |-- Independently validates claims against rubric
-    |-- Reports to oversight team with gradient scores
+    |-- Delivers verdict with gradient confidence scores
 ```
 
 **Key Innovation**: Acceptance tests live in `claude-harness-setup/acceptance-tests/PRD-{ID}/`, NOT in the implementation repository. Meta-orchestrators and their workers never see the rubric. This enables truly independent validation — the guardian reads actual code and scores it against criteria the implementers did not have access to.
@@ -312,9 +312,21 @@ cs-promise --meet <id> --ac-id AC-0 \
 
 ## Phase 1: Acceptance Test Creation
 
-Generate blind acceptance tests from PRDs before any implementation begins. This phase uses
-the `acceptance-test-writer` skill in two modes: `--mode=guardian` for per-epic Gherkin scenarios,
+Generate blind acceptance tests from **Solution Design (SD) documents** before any implementation begins.
+The SD is the correct input because it contains:
+- **Business Context section** — the goals and success metrics the tests should validate
+- **Section 6: Acceptance Criteria per Feature** — Gherkin-ready criteria for each feature
+
+The PRD (business artifact) provides the broader context, but the SD contains the structured,
+feature-level acceptance criteria that `acceptance-test-writer` needs to generate meaningful tests.
+
+This phase uses `acceptance-test-writer` in two modes: `--mode=guardian` for per-epic Gherkin scenarios,
 and `--mode=journey` for cross-layer business journey scenarios.
+
+**Document lookup**:
+- SD files are in the implementation repo at: `.taskmaster/docs/SD-{CATEGORY}-{NUMBER}-{epic-slug}.md`
+- PRD files are at: `.taskmaster/docs/PRD-{CATEGORY}-{DESCRIPTOR}.md`
+- Both live in `.taskmaster/docs/` — SDs can be read directly from the impl repo path
 
 ### Step 1: Generate Per-Epic Gherkin Tests (Guardian Mode)
 
@@ -322,7 +334,14 @@ Invoke the acceptance-test-writer skill in guardian mode. This generates the per
 scenarios with confidence scoring guides that will be used for Phase 4 validation.
 
 ```python
-Skill("acceptance-test-writer", args="--source=/path/to/impl-repo/docs/prds/PRD-{ID}.md --mode=guardian")
+# Source the SD document — it has the structured acceptance criteria
+# The --prd flag identifies the parent PRD for test organisation
+Skill("acceptance-test-writer", args="--source=/path/to/impl-repo/.taskmaster/docs/SD-{ID}.md --prd=PRD-{ID} --mode=guardian")
+```
+
+If no SD exists yet (legacy initiative), fall back to the PRD:
+```python
+Skill("acceptance-test-writer", args="--source=/path/to/impl-repo/.taskmaster/docs/PRD-{ID}.md --mode=guardian")
 ```
 
 This creates:
@@ -330,28 +349,33 @@ This creates:
 - `acceptance-tests/PRD-{ID}/scenarios.feature` — Gherkin scenarios with confidence scoring guides
 
 **Verify the output:**
-- [ ] All PRD features represented with weights summing to 1.0
+- [ ] All SD features (Section 4: Functional Decomposition) represented with weights summing to 1.0
 - [ ] Each scenario has a confidence scoring guide (0.0 / 0.5 / 1.0 anchors)
-- [ ] Evidence references are specific (file names, function names, test names)
+- [ ] Evidence references are specific (file names, function names, test names from SD File Scope)
 - [ ] Red flags section present for each scenario
 - [ ] manifest.yaml has valid thresholds (default: accept=0.60, investigate=0.40)
 
-If the acceptance-test-writer cannot find a Goals section, derive objectives from the uber-epic
-Acceptance Criteria — what the user ultimately wanted to achieve.
+If the acceptance-test-writer cannot find a Goals section in the SD, use the SD's Business Context
+section (Section 1) or derive objectives from the parent PRD's Goals (Section 2).
 
 ### Step 2: Generate Journey Tests (Journey Mode)
 
-After generating per-epic Gherkin, generate blind journey tests from the PRD's Goals section.
+After generating per-epic Gherkin, generate blind journey tests from the **PRD** — not the SD.
+Journey tests are cross-epic: they verify end-to-end business flows that span multiple epics and
+cannot be validated by any single SD. The PRD's Goals and User Stories sections define these flows.
 
 ```python
-Skill("acceptance-test-writer", args="--source=/path/to/impl-repo/docs/prds/PRD-{ID}.md --mode=journey")
+# Source the PRD — journey tests must capture cross-epic business outcomes
+# One set of journey tests per PRD (not per SD)
+Skill("acceptance-test-writer", args="--source=/path/to/impl-repo/.taskmaster/docs/PRD-{ID}.md --prd=PRD-{ID} --mode=journey")
 ```
 
 This creates `acceptance-tests/PRD-{ID}/journeys/` in the config repo (where meta-orchestrators cannot see it).
 Journey tests are generated BEFORE the meta-orchestrator is spawned — they stay blind throughout.
 
 **Verify the output:**
-- [ ] At least one `J{N}.feature` file exists per PRD business objective
+- [ ] At least one `J{N}.feature` file exists per PRD business objective (Goals section / Section 2)
+- [ ] Scenarios cross epic boundaries — a journey that stays within one epic is a mis-scoped scenario
 - [ ] `runner_config.yaml` is present with sensible service URLs
 - [ ] Each scenario crosses at least 2 system layers and ends with a business outcome assertion
 - [ ] Tags include `@journey @prd-{ID} @J{N}`
@@ -517,8 +541,11 @@ Guardian (this session) ──spawns──► Orchestrator A (orch-epic1) ──
 
 Before spawning, verify:
 - [ ] Implementation repo exists and is accessible
-- [ ] PRD exists and acceptance tests have been created (Phase 1 complete)
+- [ ] PRD exists in `.taskmaster/docs/PRD-{ID}.md` (business artifact)
+- [ ] SD exists per epic in `.taskmaster/docs/SD-{ID}.md` (technical spec; Task Master input)
+- [ ] Acceptance tests have been created from SD (Phase 1 complete)
 - [ ] DOT pipeline exists (or create via `cli.py generate`) with bead IDs mapped to nodes
+- [ ] DOT codergen nodes have `solution_design` attribute pointing to their SD file
 - [ ] No existing tmux session with the same name
 - [ ] Hindsight wisdom gathered from project bank
 
@@ -630,6 +657,8 @@ tmux send-keys -t "orch-${EPIC_NAME}" Enter
 sleep 3
 
 # 5. Write wisdom to temp file (avoids large paste issues — Pattern 4)
+#    SD_PATH is the solution_design attribute from the DOT node (set during planning)
+#    e.g., SD_PATH=".taskmaster/docs/SD-AUTH-001-login.md"
 cat > "/tmp/wisdom-${EPIC_NAME}.md" << EOF
 You are an orchestrator for initiative: ${EPIC_NAME}
 
@@ -642,10 +671,18 @@ You are an orchestrator for initiative: ${EPIC_NAME}
 ## Your Mission
 ${EPIC_DESCRIPTION}
 
+## Solution Design (Primary Technical Reference)
+Your full technical specification is in: ${SD_PATH}
+Read it before delegating to workers. Key sections:
+- Section 2: Technical Architecture (data models, API contracts, component design)
+- Section 4: Functional Decomposition (features with explicit dependencies)
+- Section 6: Acceptance Criteria per Feature (definition of done for each worker task)
+- Section 8: File Scope (which files workers are allowed to touch)
+
 ## DOT Node Scope (pipeline-driven)
 - Node ID: ${NODE_ID}
 - Acceptance: "${ACCEPTANCE_CRITERIA}"
-- File Scope: ${FILE_PATHS}
+- File Scope: ${FILE_PATHS} (see SD Section 8 for full scoping)
 - Bead ID: ${BEAD_ID}
 
 ## Patterns from Hindsight
@@ -1098,7 +1135,37 @@ cs-promise --meet <id> --ac-id AC-4.5 \
 
 ### Step 5a: Validation Method-Specific Prompt Construction
 
-Before dispatching scoring agents for each feature, read `validation_method` from the manifest and prepend mandatory instructions to the scoring agent's prompt:
+Before dispatching scoring agents for each feature, provide the scoring agent with both:
+- The **Gherkin scenario** (blind rubric from Phase 1, generated from the SD)
+- The **SD document** for this epic (`solution_design` attribute on the DOT node, or from
+  `.taskmaster/docs/SD-{CATEGORY}-{NUMBER}-{epic-slug}.md`)
+
+The SD contains the file scope, API contracts, and per-feature acceptance criteria that tell
+the scoring agent exactly what "done" looks like. Without it, agents score on gut feel rather
+than specification.
+
+```python
+# Read SD path from DOT node or construct from naming convention
+sd_path = node_attrs.get("solution_design", f".taskmaster/docs/SD-{epic_id}.md")
+
+# Build per-feature scoring prompt
+scoring_prompt = f"""
+You are scoring the implementation of this feature against its acceptance rubric.
+
+**Solution Design** (read this first — it defines done):
+{sd_path}
+
+Key sections to check:
+- Section 4: Functional Decomposition (is each capability implemented?)
+- Section 6: Acceptance Criteria per Feature (per-feature definition of done)
+- Section 8: File Scope (were only allowed files modified?)
+
+**Feature scenario to score:**
+[scenario text from Gherkin file]
+"""
+```
+
+Also read `validation_method` from the manifest and prepend mandatory tooling instructions:
 
 **For `browser-required` features:**
 ```
@@ -1154,6 +1221,10 @@ This gate ensures that even if a scoring agent ignores the prompt prepend, its s
 
 After computing the per-feature weighted score, execute the journey tests in `journeys/`.
 
+Journey tests were generated from the **PRD** (`PRD-{ID}.md`) — they verify cross-epic business
+flows that no single orchestrator owns. The runner should be given the PRD for context so it can
+understand *why* each step exists, not just whether it passes.
+
 **Execution approach** — spawn a tdd-test-engineer sub-agent:
 
 ```python
@@ -1162,6 +1233,10 @@ Task(
     description="Execute journey tests for PRD-{ID}",
     prompt="""
     Execute the journey test scenarios at: acceptance-tests/PRD-{ID}/journeys/
+
+    Context: these tests were generated from .taskmaster/docs/PRD-{ID}.md and validate
+    end-to-end business flows that span multiple implementation epics. Read the PRD
+    Goals section (Section 2) to understand the business outcomes being verified.
 
     For each J{N}.feature file:
     1. Read the scenario

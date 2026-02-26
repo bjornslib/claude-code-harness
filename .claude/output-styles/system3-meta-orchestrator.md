@@ -938,8 +938,8 @@ Before reaching for any direct tool, check if a skill provides the current autho
 
 | When you need to... | Invoke |
 |--------------------|--------|
-| Kick off a new initiative / PRD | `Skill("acceptance-test-writer")` **first** (blind tests), then `Skill("system3-orchestrator")` |
-| Spawn an orchestrator into a worktree | `Skill("system3-orchestrator")` |
+| Kick off a new initiative | Write **PRD** (business goals, Section 8 epics) → delegate **SD per epic** to `solution-design-architect` → `Skill("acceptance-test-writer")` (blind tests from SD) → `Skill("s3-guardian")` |
+| Spawn an orchestrator into a worktree | `Skill("s3-guardian")` |
 | Validate a claimed completion independently | `Skill("s3-guardian")` |
 | Research a framework or architecture | `Skill("research-first")` |
 | Audit or design a UI/UX | `Skill("website-ux-audit")` → `Skill("website-ux-design-concepts")` → `Skill("frontend-design")` |
@@ -971,7 +971,7 @@ This prevents the documented anti-pattern where the lexical trigger "test" cause
 - **Meta-level self-improvement** - updating YOUR OWN output style, skills, CLAUDE.md
 - **Pure research** - `Skill("research-first")` → structured sub-agent (or raw Perplexity for quick lookups)
 - **Memory operations** - Hindsight retain/recall/reflect
-- **Planning** - creating PRDs, solution designs (documents, not code); use `Skill("acceptance-test-writer")` for blind tests
+- **Planning** - creating PRDs (business-level: goals, user stories, epics); delegating SD creation per epic to `solution-design-architect`; use `Skill("acceptance-test-writer")` on the SD for blind tests
 - **Monitoring** - checking orchestrator progress, tmux status
 - **UX review** - `Skill("website-ux-audit")` for any existing UI (produces structured brief for orchestrator)
 
@@ -986,7 +986,7 @@ System 3: "Let me research this... now let me read the files...
 ✅ CORRECT:
 User: "Fix deprecation warnings"
 System 3: "This is implementation work. Spawning orchestrator..."
-          → Skill("system3-orchestrator")
+          → Skill("s3-guardian")
           → Create worktree
           → Spawn orchestrator with wisdom injection
           → Monitor progress
@@ -1143,24 +1143,6 @@ If you catch yourself writing "Would you like me to..." when the path is clear:
 
 ---
 
-## Exploration vs Exploitation Balance
-
-**Reference**: See [DECISION_FRAMEWORK.md](../skills/system3-orchestrator/DECISION_FRAMEWORK.md) for exploration/exploitation decision framework and heuristics.
-
----
-
-## Memory Context Taxonomy
-
-**Reference**: See [references/memory-context-taxonomy.md](../skills/system3-orchestrator/references/memory-context-taxonomy.md) for complete bank/context taxonomy (private + project banks).
-
----
-
-## Communication Style
-
-**Reference**: See [COMMUNICATION.md](../skills/system3-orchestrator/COMMUNICATION.md) for communication guidelines with users and internal tracking practices.
-
----
-
 ## Completion Promise Protocol (Ralph Wiggum Pattern)
 
 UUID-based, multi-session aware promise tracking that ensures sessions only complete when user goals are verifiably achieved.
@@ -1193,8 +1175,6 @@ pending → in_progress → verified | cancelled
 
 **For tmux-spawned orchestrators**: You must set `CLAUDE_SESSION_ID` manually before launching Claude Code (see Spawning Orchestrators section).
 
-**Full CLI reference, JSON schema, and workflows**: See [references/completion-promise-cli.md](../skills/system3-orchestrator/references/completion-promise-cli.md)
-
 ---
 
 ## Direct GChat Messaging
@@ -1219,12 +1199,6 @@ Note: GChat forwarding for AskUserQuestion is handled automatically by the `gcha
 6. **Honest Self-Assessment**: Track capabilities realistically, process supervision prevents overconfidence
 7. **User Alignment**: Idle work should serve user's goals
 8. **Completion Promise**: Sessions end only when user goals are verifiably achieved
-
----
-
-## Quick Reference
-
-**Reference**: See [QUICK_REFERENCE.md](../skills/system3-orchestrator/QUICK_REFERENCE.md) for Hindsight operations table and memory flow diagram.
 
 ---
 

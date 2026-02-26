@@ -103,10 +103,10 @@ Before running any scenarios:
 Example invocations:
 ```bash
 # Auto-detect from frontmatter (PREFERRED)
-Skill("acceptance-test-writer", args="--source=docs/prds/auth-system.md")
+Skill("acceptance-test-writer", args="--source=.taskmaster/docs/PRD-AUTH-001-auth-system.md")
 
 # Explicit override (when frontmatter missing or for legacy PRDs)
-Skill("acceptance-test-writer", args="--prd=PRD-AUTH-001 --source=docs/prds/auth-system.md")
+Skill("acceptance-test-writer", args="--prd=PRD-AUTH-001 --source=.taskmaster/docs/PRD-AUTH-001-auth-system.md")
 ```
 
 ### PRD Frontmatter Format
@@ -252,7 +252,7 @@ Gherkin `.feature` format instead of YAML).
 
 ### Invocation
 ```
-Skill("acceptance-test-writer", args="--source=/path/to/impl-repo/docs/prds/PRD-{ID}.md --mode=guardian")
+Skill("acceptance-test-writer", args="--source=/path/to/impl-repo/.taskmaster/docs/SD-{ID}.md --mode=guardian")
 ```
 
 ### Workflow
@@ -381,7 +381,7 @@ Generates Gherkin journey scenarios from the PRD's **Goals / Business Objectives
 
 ### Invocation
 ```
-Skill("acceptance-test-writer", args="--source=docs/prds/PRD-{ID}.md --mode=journey")
+Skill("acceptance-test-writer", args="--source=.taskmaster/docs/PRD-{ID}.md --mode=journey")
 ```
 
 ### Workflow

@@ -121,7 +121,7 @@ LOOP:
   1. PRE-FLIGHT CHECK
      - If not done this session: Run full PREFLIGHT.md checklist
      - If already done: Quick service health check only
-     - If new PRD: Generate acceptance tests (see Acceptance Test Generation)
+     - If new initiative: Create SD per epic from PRD → generate acceptance tests from SD (see Acceptance Test Generation)
 
   2. SELECT NEXT TASK
      bd ready → Pick highest priority unblocked task
@@ -235,18 +235,23 @@ Use Markdown-based test specifications:
 
 ---
 
-## Acceptance Test Generation (After PRD Parse)
+## Acceptance Test Generation (After SD Parse)
 
-**When**: Immediately after Task Master parse-prd and beads sync completes
+**When**: Immediately after Task Master parse-prd (of SD) and beads sync completes
 
-**Purpose**: Generate executable test scripts from PRD before implementation begins
+**Purpose**: Generate executable test scripts from the Solution Design before implementation begins
+
+**Input**: The **SD document**, not the PRD — the SD's Business Context section provides goals for meaningful
+acceptance criteria, and Section 6 (Acceptance Criteria per Feature) provides Gherkin-ready criteria.
 
 **Workflow**:
 
-1. **Generate tests from PRD**:
+1. **Generate tests from SD**:
    ```python
    # Orchestrator invokes skill (NOT worker, NOT validation-test-agent)
-   Skill("acceptance-test-writer", args="--prd=PRD-XXX --source=docs/prds/prd.md")
+   # --prd flag identifies the parent PRD for test organization
+   # --source points to the SD document that was parsed
+   Skill("acceptance-test-writer", args="--prd=PRD-XXX --source=.taskmaster/docs/SD-{ID}.md")
    ```
 
 2. **Review generated tests**:

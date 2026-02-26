@@ -222,15 +222,19 @@ This loads the execution toolkit (PREFLIGHT, worker templates, beads integration
 
 ## 4-Phase Pattern
 
-1. **Ideation** - Brainstorm, research, parallel-solutioning
-2. **Planning** - PRD -> Task Master -> Beads hierarchy -> Acceptance Tests
-   - Parse PRD with `task-master parse-prd --append`
+1. **Ideation** - Brainstorm, research, parallel-solutioning → outputs **PRD** (business goals, user stories, arch decisions)
+2. **Planning** - PRD → SD (per epic) → Task Master → Beads hierarchy → Acceptance Tests
+   - Create a **Solution Design (SD)** per epic from the PRD via `solution-design-architect` worker
+     - SD template: `.taskmaster/templates/solution-design-template.md`
+     - SD lives at: `.taskmaster/docs/SD-{CATEGORY}-{NUMBER}-{epic-slug}.md`
+     - SD combines business context (from PRD) + technical design — this is what Task Master parses
+   - Parse **SD** with `task-master parse-prd .taskmaster/docs/SD-{ID}.md --append`
    - Note ID range of new tasks
    - **Run sync from `zenagent/` root** (not agencheck/) with `--from-id`, `--to-id`, `--tasks-path`
    - Sync auto-closes Task Master tasks after creating beads
-   - **Generate acceptance tests**: Invoke `Skill("acceptance-test-writer", args="--prd=PRD-XXX")` to create executable test scripts
+   - **Generate acceptance tests**: Invoke `Skill("acceptance-test-writer", args="--source=.taskmaster/docs/SD-{ID}.md --prd=PRD-XXX")` to create executable test scripts
    - Commit acceptance tests before Phase 3 begins (ensures tests exist before implementation)
-3. **Execution** - Delegate to workers, monitor progress
+3. **Execution** - Delegate to workers, monitor progress (workers reference SD for technical context)
 4. **Validation** - 3-level testing (Unit + API + E2E)
    - Route ALL validation through the validator teammate (see TASK CLOSURE GATE below)
    - Never invoke acceptance-test-runner directly; the validator handles test execution
@@ -253,7 +257,7 @@ Task(
     subagent_type="validation-test-agent",
     team_name="{initiative}-workers",
     name="validator",
-    prompt="You are the validator in team {initiative}-workers. When tasks are ready for validation, check TaskList for tasks needing review. Run validation (--mode=unit or --mode=e2e --prd=PRD-XXX). Close tasks with evidence via bd close. Report results via SendMessage to team-lead."
+    prompt="You are the validator in team {initiative}-workers. When tasks are ready for validation, check TaskList for tasks needing review. Run validation (--mode=unit or --mode=e2e --prd=PRD-XXX). Close tasks with evidence via bd close. Report results via SendMessage to team-lead. Technical context is in SD-{ID}.md alongside the PRD in .taskmaster/docs/."
 )
 
 # When a worker completes implementation, assign validation:
