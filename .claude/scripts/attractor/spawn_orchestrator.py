@@ -102,6 +102,12 @@ def respawn_orchestrator(
             "message": f"Max respawn limit reached ({respawn_count}/{max_respawn})",
         }
 
+    # Inject wisdom from previous session hook before sending the prompt
+    existing_hook = hook_manager.read_hook("orchestrator", node_id)
+    if existing_hook:
+        wisdom_block = hook_manager.build_wisdom_prompt_block(existing_hook)
+        prompt = f"{wisdom_block}\n\n{prompt}" if prompt else wisdom_block
+
     # Recreate the tmux session using the same config as main()
     tmux_cmd = [
         "tmux", "new-session",

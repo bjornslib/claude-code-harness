@@ -250,6 +250,40 @@ All scripts are in {scripts_dir}:
 Track retries per node in memory (dict). When a node exceeds {max_retries} retries, do not
 spawn again — escalate to Terminal with full context.
 
+## Hook Phase Tracking
+Update pipeline phase at lifecycle transitions:
+
+When beginning validation of a pipeline node:
+```bash
+python3 {scripts_dir}/hook_manager.py update-phase guardian {pipeline_id} validating
+```
+
+After successful merge of a node:
+```bash
+python3 {scripts_dir}/hook_manager.py update-phase guardian {pipeline_id} merged
+```
+
+## Merge Queue Integration
+When you receive a MERGE_READY signal from a runner, process the merge queue directly:
+```bash
+python3 -c "
+import sys; sys.path.insert(0, '{scripts_dir}')
+from merge_queue import process_next
+from signal_protocol import write_signal
+import json
+result = process_next()
+if result.get('success'):
+    entry = result.get('entry', {{}})
+    write_signal('guardian', 'runner', 'MERGE_COMPLETE', {{'node_id': entry.get('node_id', '')}})
+    print('MERGE_COMPLETE: ' + json.dumps(entry))
+else:
+    entry = result.get('entry', {{}})
+    error = result.get('error', 'unknown error')
+    write_signal('guardian', 'runner', 'MERGE_FAILED', {{'node_id': entry.get('node_id', ''), 'error': error}})
+    print('MERGE_FAILED: ' + error)
+"
+```
+
 ## Identity Scanning
 Periodically scan for stale agents using:
   python3 {scripts_dir}/identity_registry.py --find-stale --timeout 300

@@ -198,6 +198,24 @@ signal_protocol.write_signal(
 
 The Guardian will call `merge_queue.process_next()` and respond with MERGE_COMPLETE or MERGE_FAILED.
 
+## Hook Phase Tracking
+Update your work phase at each lifecycle transition so that respawned sessions can resume correctly.
+
+When you start an orchestrator session (after running spawn_orchestrator.py):
+```bash
+python3 {scripts_dir}/hook_manager.py update-phase runner {node_id} executing
+```
+
+When the orchestrator signals NODE_COMPLETE or IMPL_COMPLETE:
+```bash
+python3 {scripts_dir}/hook_manager.py update-phase runner {node_id} impl_complete
+```
+
+Update resumption instructions before any planned pause:
+```bash
+python3 {scripts_dir}/hook_manager.py update-resumption runner {node_id} "Brief description of where to resume"
+```
+
 ## Liveness Tracking
 This runner's identity is tracked in .claude/state/identities/runner-{node_id}.json.
 Call update_liveness periodically via:

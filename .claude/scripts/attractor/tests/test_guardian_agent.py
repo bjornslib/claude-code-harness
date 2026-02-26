@@ -649,5 +649,81 @@ class TestLogfireInstrumentation(unittest.TestCase):
         self.assertEqual(opts.allowed_tools, ["Bash"])
 
 
+# ---------------------------------------------------------------------------
+# TestHookPhaseTracking (Epic 2 — Hook Manager Lifecycle Integration)
+# ---------------------------------------------------------------------------
+
+
+class TestHookPhaseTracking(unittest.TestCase):
+    """Tests that build_system_prompt() includes hook phase tracking instructions."""
+
+    def test_contains_hook_phase_tracking_section(self) -> None:
+        """System prompt must contain Hook Phase Tracking section header."""
+        result = _make_system_prompt()
+        self.assertIn("Hook Phase Tracking", result)
+
+    def test_contains_validating_phase_command(self) -> None:
+        """System prompt must instruct guardian to call update-phase validating."""
+        result = _make_system_prompt()
+        self.assertIn("validating", result)
+        self.assertIn("update-phase", result)
+
+    def test_contains_merged_phase_command(self) -> None:
+        """System prompt must instruct guardian to call update-phase merged."""
+        result = _make_system_prompt()
+        self.assertIn("merged", result)
+
+    def test_hook_phase_uses_scripts_dir(self) -> None:
+        """Hook phase commands should reference the scripts_dir."""
+        result = _make_system_prompt(scripts_dir="/custom/scripts")
+        # The hook manager command should use the scripts_dir
+        self.assertIn("hook_manager.py", result)
+
+    def test_hook_phase_uses_pipeline_id(self) -> None:
+        """Hook phase commands should reference the pipeline_id."""
+        result = _make_system_prompt(pipeline_id="my-pipeline-999")
+        self.assertIn("my-pipeline-999", result)
+
+    def test_contains_merge_queue_integration_section(self) -> None:
+        """System prompt must contain Merge Queue Integration section."""
+        result = _make_system_prompt()
+        self.assertIn("Merge Queue Integration", result)
+
+    def test_merge_queue_contains_process_next(self) -> None:
+        """Merge Queue section must reference process_next function."""
+        result = _make_system_prompt()
+        self.assertIn("process_next", result)
+
+    def test_merge_queue_contains_write_signal(self) -> None:
+        """Merge Queue section must reference write_signal function."""
+        result = _make_system_prompt()
+        self.assertIn("write_signal", result)
+
+    def test_merge_queue_contains_merge_complete(self) -> None:
+        """Merge Queue section must include MERGE_COMPLETE signal."""
+        result = _make_system_prompt()
+        self.assertIn("MERGE_COMPLETE", result)
+
+    def test_merge_queue_contains_merge_failed(self) -> None:
+        """Merge Queue section must include MERGE_FAILED signal."""
+        result = _make_system_prompt()
+        self.assertIn("MERGE_FAILED", result)
+
+    def test_merge_queue_uses_scripts_dir(self) -> None:
+        """Merge Queue python3 invocation should reference the scripts_dir."""
+        result = _make_system_prompt(scripts_dir="/scripts/path")
+        self.assertIn("/scripts/path", result)
+
+    def test_hook_phase_section_before_identity_scanning(self) -> None:
+        """Hook Phase Tracking section should appear before Identity Scanning section."""
+        result = _make_system_prompt()
+        hook_pos = result.find("Hook Phase Tracking")
+        identity_pos = result.find("Identity Scanning")
+        self.assertGreater(hook_pos, 0, "Hook Phase Tracking section not found")
+        self.assertGreater(identity_pos, 0, "Identity Scanning section not found")
+        self.assertLess(hook_pos, identity_pos,
+                        "Hook Phase Tracking should appear before Identity Scanning")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

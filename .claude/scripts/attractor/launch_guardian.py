@@ -58,6 +58,10 @@ if _THIS_DIR not in sys.path:
 # ``launch_guardian.wait_for_signal`` directly via unittest.mock.patch.
 from signal_protocol import wait_for_signal  # noqa: E402
 
+# Import identity_registry at module level so tests can patch
+# ``launch_guardian.identity_registry`` directly via unittest.mock.patch.
+import identity_registry  # noqa: E402
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -813,6 +817,14 @@ def main(argv: list[str] | None = None) -> None:
         }
         print(json.dumps(config, indent=2))
         sys.exit(0)
+
+    # Register Layer 0 (launch_guardian) identity before starting the agent loop.
+    identity_registry.create_identity(
+        role="launch",
+        name="guardian",
+        session_id="launch-guardian",
+        worktree=os.getcwd(),
+    )
 
     # Live run: launch the Guardian agent.
     result = launch_guardian(

@@ -1198,5 +1198,117 @@ class TestMonitorGuardianValidationComplete(unittest.TestCase):
         self.assertNotEqual(result["status"], "complete")
 
 
+# ---------------------------------------------------------------------------
+# TestIdentityRegistration (Epic 2 — Hook Manager Lifecycle Integration)
+# ---------------------------------------------------------------------------
+
+
+class TestIdentityRegistration(unittest.TestCase):
+    """Tests that launch_guardian.main() registers a Layer 0 identity before launching."""
+
+    def _make_dot_file(self, tmp_dir: str) -> str:
+        """Create a minimal DOT file for testing."""
+        import tempfile
+        dot_content = (
+            'digraph pipeline {\n'
+            '    graph [target_dir="/tmp/project"];\n'
+            '    impl_auth [type="codergen", prd="PRD-AUTH-001"];\n'
+            '}\n'
+        )
+        dot_path = os.path.join(tmp_dir, "pipeline.dot")
+        with open(dot_path, "w") as fh:
+            fh.write(dot_content)
+        return dot_path
+
+    def test_identity_registry_create_called_before_launch(self) -> None:
+        """main() must call identity_registry.create_identity before launching the Guardian."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            dot_path = self._make_dot_file(tmp_dir)
+            argv = [
+                "--dot", dot_path,
+                "--pipeline-id", "test-pipeline",
+                "--target-dir", tmp_dir,
+            ]
+            with patch("launch_guardian.launch_guardian") as mock_launch, \
+                 patch("launch_guardian.identity_registry") as mock_registry:
+                mock_launch.return_value = {"status": "ok", "pipeline_id": "test-pipeline", "dot_path": dot_path}
+                buf = io.StringIO()
+                try:
+                    with redirect_stdout(buf):
+                        launch_guardian.main(argv)
+                except SystemExit:
+                    pass
+            mock_registry.create_identity.assert_called_once()
+
+    def test_identity_registered_as_launch_role(self) -> None:
+        """Identity must be registered with role='launch'."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            dot_path = self._make_dot_file(tmp_dir)
+            argv = [
+                "--dot", dot_path,
+                "--pipeline-id", "test-pipeline",
+                "--target-dir", tmp_dir,
+            ]
+            with patch("launch_guardian.launch_guardian") as mock_launch, \
+                 patch("launch_guardian.identity_registry") as mock_registry:
+                mock_launch.return_value = {"status": "ok", "pipeline_id": "test-pipeline", "dot_path": dot_path}
+                buf = io.StringIO()
+                try:
+                    with redirect_stdout(buf):
+                        launch_guardian.main(argv)
+                except SystemExit:
+                    pass
+            call_kwargs = mock_registry.create_identity.call_args
+            # Check role argument (positional or keyword)
+            if call_kwargs.kwargs:
+                self.assertEqual(call_kwargs.kwargs.get("role"), "launch")
+            else:
+                self.assertEqual(call_kwargs.args[0], "launch")
+
+    def test_identity_registered_with_guardian_name(self) -> None:
+        """Identity must be registered with name='guardian'."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            dot_path = self._make_dot_file(tmp_dir)
+            argv = [
+                "--dot", dot_path,
+                "--pipeline-id", "test-pipeline",
+                "--target-dir", tmp_dir,
+            ]
+            with patch("launch_guardian.launch_guardian") as mock_launch, \
+                 patch("launch_guardian.identity_registry") as mock_registry:
+                mock_launch.return_value = {"status": "ok", "pipeline_id": "test-pipeline", "dot_path": dot_path}
+                buf = io.StringIO()
+                try:
+                    with redirect_stdout(buf):
+                        launch_guardian.main(argv)
+                except SystemExit:
+                    pass
+            call_kwargs = mock_registry.create_identity.call_args
+            if call_kwargs.kwargs:
+                self.assertEqual(call_kwargs.kwargs.get("name"), "guardian")
+
+    def test_identity_not_registered_in_dry_run(self) -> None:
+        """Dry-run mode should exit before identity registration."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            dot_path = self._make_dot_file(tmp_dir)
+            argv = [
+                "--dot", dot_path,
+                "--pipeline-id", "test-pipeline",
+                "--target-dir", tmp_dir,
+                "--dry-run",
+            ]
+            with patch("launch_guardian.identity_registry") as mock_registry:
+                buf = io.StringIO()
+                with self.assertRaises(SystemExit):
+                    with redirect_stdout(buf):
+                        launch_guardian.main(argv)
+            # In dry-run, we exit before identity registration
+            mock_registry.create_identity.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
