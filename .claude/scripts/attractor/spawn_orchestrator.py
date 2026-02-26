@@ -30,6 +30,14 @@ import sys
 import os
 import time
 
+# Ensure this file's directory is importable regardless of invocation CWD.
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+if _THIS_DIR not in sys.path:
+    sys.path.insert(0, _THIS_DIR)
+
+import identity_registry
+import hook_manager
+
 
 def _tmux_send(session: str, text: str, pause: float = 2.0) -> None:
     """Send text to tmux with Enter as separate call (Pattern 1 from MEMORY.md)."""
@@ -116,10 +124,26 @@ def respawn_orchestrator(
     if prompt:
         _tmux_send(session_name, prompt, pause=2.0)
 
+    # Register new identity for the respawned instance
+    identity = identity_registry.create_identity(
+        role="orchestrator",
+        name=node_id,
+        session_id=session_name,
+        worktree=f".claude/worktrees/{node_id}",
+        predecessor_id=None,  # caller may set via --predecessor-id if needed
+    )
+
+    # Create or update hook for this orchestrator
+    hook = hook_manager.create_hook(
+        role="orchestrator",
+        name=node_id,
+    )
+
     return {
         "status": "respawned",
         "session": session_name,
         "respawn_count": respawn_count + 1,
+        "hook_id": hook.get("hook_id"),
     }
 
 
@@ -139,6 +163,8 @@ def main() -> None:
                         help="Initial prompt to send after launching Claude")
     parser.add_argument("--max-respawn", type=int, default=3, dest="max_respawn",
                         help="Maximum respawn attempts if session dies (default: 3)")
+    parser.add_argument("--predecessor-id", default=None, dest="predecessor_id",
+                        help="agent_id of the previous orchestrator instance (for respawn tracking)")
 
     args = parser.parse_args()
 
@@ -256,6 +282,21 @@ def main() -> None:
         }))
         sys.exit(1)
 
+    # Register agent identity after successful launch
+    identity = identity_registry.create_identity(
+        role="orchestrator",
+        name=args.node,
+        session_id=session_name,
+        worktree=f".claude/worktrees/{args.node}",
+        predecessor_id=getattr(args, "predecessor_id", None),
+    )
+
+    # Create persistent hook for this orchestrator
+    hook = hook_manager.create_hook(
+        role="orchestrator",
+        name=args.node,
+    )
+
     # Send initial prompt if provided
     if args.prompt:
         try:
@@ -273,6 +314,8 @@ def main() -> None:
         "session": session_name,
         "tmux_cmd": " ".join(shlex.quote(c) for c in tmux_cmd),
         "respawn_count": respawn_count,
+        "predecessor_id": getattr(args, "predecessor_id", None),
+        "hook_id": hook.get("hook_id"),
     }))
 
 

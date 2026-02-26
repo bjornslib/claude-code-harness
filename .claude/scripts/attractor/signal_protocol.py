@@ -61,6 +61,11 @@ MERGE_READY    = "MERGE_READY"    # payload: {node_id, branch}
 MERGE_COMPLETE = "MERGE_COMPLETE" # payload: {node_id, branch, entry_id}
 MERGE_FAILED   = "MERGE_FAILED"   # payload: {node_id, branch, error}
 
+# Agent lifecycle signals (any → guardian) — Epic 1: Identity Registry
+AGENT_REGISTERED = "AGENT_REGISTERED"  # payload: {agent_id, role, name, session_id, worktree}
+AGENT_CRASHED    = "AGENT_CRASHED"     # payload: {agent_id, role, name, crashed_at}
+AGENT_TERMINATED = "AGENT_TERMINATED"  # payload: {agent_id, role, name, terminated_at}
+
 
 # ---------------------------------------------------------------------------
 # Directory resolution
@@ -294,3 +299,110 @@ def wait_for_signal(
                 f"No signal for target '{target_layer}' within {timeout}s"
             )
         time.sleep(sleep_time)
+
+
+# ---------------------------------------------------------------------------
+# Agent lifecycle signal helpers
+# ---------------------------------------------------------------------------
+
+
+def write_agent_registered(
+    agent_id: str,
+    role: str,
+    name: str,
+    session_id: str,
+    worktree: str,
+    signals_dir: Optional[str] = None,
+) -> str:
+    """Write an AGENT_REGISTERED signal to the guardian.
+
+    Args:
+        agent_id: Unique agent identifier (from identity_registry).
+        role: Agent role (e.g., "orchestrator", "runner", "guardian").
+        name: Agent name / node identifier.
+        session_id: Session identifier string.
+        worktree: Worktree path for the agent.
+        signals_dir: Override the default signals directory.
+
+    Returns:
+        Absolute path to the written signal file.
+    """
+    return write_signal(
+        source=role,
+        target="guardian",
+        signal_type=AGENT_REGISTERED,
+        payload={
+            "agent_id": agent_id,
+            "role": role,
+            "name": name,
+            "session_id": session_id,
+            "worktree": worktree,
+        },
+        signals_dir=signals_dir,
+    )
+
+
+def write_agent_crashed(
+    agent_id: str,
+    role: str,
+    name: str,
+    crashed_at: str,
+    signals_dir: Optional[str] = None,
+) -> str:
+    """Write an AGENT_CRASHED signal to the guardian.
+
+    Args:
+        agent_id: Unique agent identifier (from identity_registry).
+        role: Agent role.
+        name: Agent name.
+        crashed_at: ISO 8601 timestamp string of when the crash occurred.
+        signals_dir: Override the default signals directory.
+
+    Returns:
+        Absolute path to the written signal file.
+    """
+    return write_signal(
+        source=role,
+        target="guardian",
+        signal_type=AGENT_CRASHED,
+        payload={
+            "agent_id": agent_id,
+            "role": role,
+            "name": name,
+            "crashed_at": crashed_at,
+        },
+        signals_dir=signals_dir,
+    )
+
+
+def write_agent_terminated(
+    agent_id: str,
+    role: str,
+    name: str,
+    terminated_at: str,
+    signals_dir: Optional[str] = None,
+) -> str:
+    """Write an AGENT_TERMINATED signal to the guardian.
+
+    Args:
+        agent_id: Unique agent identifier (from identity_registry).
+        role: Agent role.
+        name: Agent name.
+        terminated_at: ISO 8601 timestamp string of when termination occurred.
+        signals_dir: Override the default signals directory.
+
+    Returns:
+        Absolute path to the written signal file.
+    """
+    return write_signal(
+        source=role,
+        target="guardian",
+        signal_type=AGENT_TERMINATED,
+        payload={
+            "agent_id": agent_id,
+            "role": role,
+            "name": name,
+            "terminated_at": terminated_at,
+        },
+        signals_dir=signals_dir,
+    )
