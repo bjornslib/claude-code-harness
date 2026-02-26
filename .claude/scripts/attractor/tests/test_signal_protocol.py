@@ -24,10 +24,16 @@ if _ATTRACTOR_DIR not in sys.path:
     sys.path.insert(0, _ATTRACTOR_DIR)
 
 from signal_protocol import (  # noqa: E402
+    AGENT_CRASHED,
+    AGENT_REGISTERED,
+    AGENT_TERMINATED,
     list_signals,
     move_to_processed,
     read_signal,
     wait_for_signal,
+    write_agent_crashed,
+    write_agent_registered,
+    write_agent_terminated,
     write_signal,
 )
 
@@ -399,3 +405,153 @@ class TestListSignals:
         assert len(result) == 2
         # Earlier file should come first
         assert result[0] == p1 or os.path.basename(result[0]) <= os.path.basename(result[1])
+
+
+# ---------------------------------------------------------------------------
+# TestAgentLifecycleSignals
+# ---------------------------------------------------------------------------
+
+class TestAgentLifecycleSignals:
+    """Tests for write_agent_registered(), write_agent_crashed(), write_agent_terminated()."""
+
+    def test_write_agent_registered_creates_file(self, tmp_path):
+        """write_agent_registered() creates a signal file."""
+        signals_dir = str(tmp_path / "signals")
+        path = write_agent_registered(
+            agent_id="orchestrator-auth-20260226T120000Z",
+            role="orchestrator",
+            name="auth",
+            session_id="orch-auth",
+            worktree=".claude/worktrees/auth",
+            signals_dir=signals_dir,
+        )
+        assert os.path.exists(path)
+
+    def test_write_agent_registered_correct_signal_type(self, tmp_path):
+        """write_agent_registered() uses AGENT_REGISTERED signal type."""
+        signals_dir = str(tmp_path / "signals")
+        path = write_agent_registered(
+            agent_id="orchestrator-auth-20260226T120000Z",
+            role="orchestrator",
+            name="auth",
+            session_id="orch-auth",
+            worktree=".claude/worktrees/auth",
+            signals_dir=signals_dir,
+        )
+        data = read_signal(path)
+        assert data["signal_type"] == AGENT_REGISTERED
+        assert data["target"] == "guardian"
+        assert data["source"] == "orchestrator"
+
+    def test_write_agent_registered_correct_payload(self, tmp_path):
+        """write_agent_registered() embeds correct payload fields."""
+        signals_dir = str(tmp_path / "signals")
+        path = write_agent_registered(
+            agent_id="runner-n1-20260226T120000Z",
+            role="runner",
+            name="n1",
+            session_id="runner-n1",
+            worktree="",
+            signals_dir=signals_dir,
+        )
+        data = read_signal(path)
+        payload = data["payload"]
+        assert payload["agent_id"] == "runner-n1-20260226T120000Z"
+        assert payload["role"] == "runner"
+        assert payload["name"] == "n1"
+        assert payload["session_id"] == "runner-n1"
+        assert payload["worktree"] == ""
+
+    def test_write_agent_crashed_creates_file(self, tmp_path):
+        """write_agent_crashed() creates a signal file."""
+        signals_dir = str(tmp_path / "signals")
+        path = write_agent_crashed(
+            agent_id="runner-n1-20260226T120000Z",
+            role="runner",
+            name="n1",
+            crashed_at="2026-02-26T12:30:00Z",
+            signals_dir=signals_dir,
+        )
+        assert os.path.exists(path)
+
+    def test_write_agent_crashed_correct_signal_type(self, tmp_path):
+        """write_agent_crashed() uses AGENT_CRASHED signal type."""
+        signals_dir = str(tmp_path / "signals")
+        path = write_agent_crashed(
+            agent_id="runner-n1-20260226T120000Z",
+            role="runner",
+            name="n1",
+            crashed_at="2026-02-26T12:30:00Z",
+            signals_dir=signals_dir,
+        )
+        data = read_signal(path)
+        assert data["signal_type"] == AGENT_CRASHED
+        assert data["source"] == "runner"
+        assert data["target"] == "guardian"
+
+    def test_write_agent_crashed_correct_payload(self, tmp_path):
+        """write_agent_crashed() embeds correct payload fields."""
+        signals_dir = str(tmp_path / "signals")
+        path = write_agent_crashed(
+            agent_id="runner-n1-20260226T120000Z",
+            role="runner",
+            name="n1",
+            crashed_at="2026-02-26T12:30:00Z",
+            signals_dir=signals_dir,
+        )
+        data = read_signal(path)
+        payload = data["payload"]
+        assert payload["agent_id"] == "runner-n1-20260226T120000Z"
+        assert payload["role"] == "runner"
+        assert payload["name"] == "n1"
+        assert payload["crashed_at"] == "2026-02-26T12:30:00Z"
+
+    def test_write_agent_terminated_creates_file(self, tmp_path):
+        """write_agent_terminated() creates a signal file."""
+        signals_dir = str(tmp_path / "signals")
+        path = write_agent_terminated(
+            agent_id="guardian-pipeline-1-20260226T120000Z",
+            role="guardian",
+            name="pipeline-1",
+            terminated_at="2026-02-26T13:00:00Z",
+            signals_dir=signals_dir,
+        )
+        assert os.path.exists(path)
+
+    def test_write_agent_terminated_correct_signal_type(self, tmp_path):
+        """write_agent_terminated() uses AGENT_TERMINATED signal type."""
+        signals_dir = str(tmp_path / "signals")
+        path = write_agent_terminated(
+            agent_id="guardian-pipeline-1-20260226T120000Z",
+            role="guardian",
+            name="pipeline-1",
+            terminated_at="2026-02-26T13:00:00Z",
+            signals_dir=signals_dir,
+        )
+        data = read_signal(path)
+        assert data["signal_type"] == AGENT_TERMINATED
+        assert data["source"] == "guardian"
+        assert data["target"] == "guardian"
+
+    def test_write_agent_terminated_correct_payload(self, tmp_path):
+        """write_agent_terminated() embeds correct payload fields."""
+        signals_dir = str(tmp_path / "signals")
+        path = write_agent_terminated(
+            agent_id="guardian-pipeline-1-20260226T120000Z",
+            role="guardian",
+            name="pipeline-1",
+            terminated_at="2026-02-26T13:00:00Z",
+            signals_dir=signals_dir,
+        )
+        data = read_signal(path)
+        payload = data["payload"]
+        assert payload["agent_id"] == "guardian-pipeline-1-20260226T120000Z"
+        assert payload["role"] == "guardian"
+        assert payload["name"] == "pipeline-1"
+        assert payload["terminated_at"] == "2026-02-26T13:00:00Z"
+
+    def test_agent_constants_have_correct_values(self):
+        """AGENT_REGISTERED, AGENT_CRASHED, AGENT_TERMINATED constants are correct strings."""
+        assert AGENT_REGISTERED == "AGENT_REGISTERED"
+        assert AGENT_CRASHED == "AGENT_CRASHED"
+        assert AGENT_TERMINATED == "AGENT_TERMINATED"
