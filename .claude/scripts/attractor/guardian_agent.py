@@ -224,18 +224,18 @@ All scripts are in {scripts_dir}:
        signal_protocol.write_signal(
            source="guardian", target="runner",
            signal_type="MERGE_COMPLETE",
-           payload={"node_id": result["entry"]["node_id"],
+           payload={{"node_id": result["entry"]["node_id"],
                     "branch": result["entry"]["branch"],
-                    "entry_id": result["entry"]["entry_id"]},
+                    "entry_id": result["entry"]["entry_id"]}},
        )
    - If result["success"] is False:
      * Write MERGE_FAILED signal back to runner:
        signal_protocol.write_signal(
            source="guardian", target="runner",
            signal_type="MERGE_FAILED",
-           payload={"node_id": result["entry"]["node_id"],
+           payload={{"node_id": result["entry"]["node_id"],
                     "branch": result["entry"]["branch"],
-                    "error": result["error"]},
+                    "error": result["error"]}},
        )
      * Log the failure and escalate if repeated failures occur
 
