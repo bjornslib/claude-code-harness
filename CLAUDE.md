@@ -16,7 +16,7 @@ This setup implements a sophisticated multi-agent system with three distinct lev
 ┌─────────────────────────────────────────────────────────────────────┐
 │  LEVEL 1: SYSTEM 3 (Meta-Orchestrator)                              │
 │  Output Style: system3-meta-orchestrator.md                         │
-│  Skills: system3-orchestrator/, completion-promise                  │
+│  Skills: s3-guardian/, completion-promise                           │
 │  Role: Strategic planning, OKR tracking, business validation        │
 ├─────────────────────────────────────────────────────────────────────┤
 │  LEVEL 2: ORCHESTRATOR                                              │
@@ -56,7 +56,6 @@ This setup implements a sophisticated multi-agent system with three distinct lev
 │   └── system3-meta-orchestrator.md  # Level 1 meta-orchestrator behavior
 ├── skills/                       # Explicitly invoked agent skills
 │   ├── orchestrator-multiagent/  # Multi-agent orchestration patterns
-│   ├── system3-orchestrator/     # System 3 strategic planning
 │   ├── completion-promise/       # Session completion tracking
 │   ├── mcp-skills/              # MCP server wrappers with progressive disclosure
 │   └── [20+ additional skills]
@@ -398,9 +397,8 @@ Skills are explicitly invoked via `Skill("skill-name")`. Use this library to kno
 
 | Skill | Invoke When |
 |-------|------------|
-| `system3-orchestrator` | About to spawn an orchestrator into a tmux worktree |
+| `s3-guardian` | Spawning orchestrators, creating blind acceptance tests, monitoring and independent validation |
 | `orchestrator-multiagent` | Orchestrator setting up a native Agent Team and delegating to workers |
-| `s3-guardian` | Independent validation of an orchestrator's claimed completion; blind acceptance tests needed |
 | `s3-heartbeat` | Setting up a session-scoped keep-alive agent that scans for work on a cycle |
 | `completion-promise` | Tracking session-level goals with verifiable acceptance criteria |
 | `worker-focused-execution` | A worker agent needs persistent task claiming and completion reporting patterns |
@@ -469,7 +467,7 @@ Skills are explicitly invoked via `Skill("skill-name")`. Use this library to kno
 
 **Before any new initiative** → `acceptance-test-writer` (blind tests first)
 **Before researching a framework** → `research-first`
-**Before spawning an orchestrator** → `system3-orchestrator`
+**Before spawning an orchestrator** → `s3-guardian`
 **Before designing UI** → `website-ux-audit` → `website-ux-design-concepts` → `frontend-design`
 **Before deploying to Railway** → `railway-stat` → `railway-deploy`
 **After orchestrator claims done** → `s3-guardian` or validation-test-agent
