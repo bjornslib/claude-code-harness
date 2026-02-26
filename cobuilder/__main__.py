@@ -2,5 +2,11 @@
 
 from cobuilder.cli import app
 
-if __name__ == "__main__":
+
+def main() -> None:
+    """CLI entry point for the `cobuilder` script."""
     app()
+
+
+if __name__ == "__main__":
+    main()
