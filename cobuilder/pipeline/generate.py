@@ -1,31 +1,40 @@
 #!/usr/bin/env python3
-"""Attractor DOT Pipeline Generator.
+"""Attractor DOT Pipeline Generator — RepoMap-native edition.
 
-Generates an Attractor-compatible pipeline.dot from beads task data.
-For each task bead: creates a codergen node with bead_id, worker_type, status,
-paired AT hexagon nodes (technical + business validation), and conditional
-diamonds. Includes start (Mdiamond) and finish (Msquare) nodes.
+Generates an Attractor-compatible pipeline.dot from RepoMap baseline data
+(F2.1/F2.2/F2.4/F2.6) or from beads task data (legacy fallback).
 
 Usage:
-    python3 generate.py --prd PRD-S3-ATTRACTOR-001 [--output pipeline.dot]
-    python3 generate.py --prd PRD-S3-ATTRACTOR-001 --beads-json <file.json>
+    # RepoMap-native mode (preferred):
+    python3 generate.py --prd PRD-S3-ATTRACTOR-001 --repo-name myrepo
+    # Legacy beads-only mode:
+    python3 generate.py --prd PRD-S3-ATTRACTOR-001 [--beads-json file.json]
+    python3 generate.py --scaffold [--prd PRD-...]
     python3 generate.py --help
 
 Input:
-    Beads data is read from `bd list --json` by default.
-    Alternatively, provide a JSON file via --beads-json.
+    Beads data is read from `bd list --json` by default for cross-referencing.
+    RepoMap baseline is read from .repomap/baselines/{repo_name}/baseline.json.
 
 Output:
     Valid Attractor DOT to stdout or to --output file.
 """
 
+from __future__ import annotations
+
 import argparse
 import json
+import logging
 import os
 import re
 import subprocess
 import sys
+from pathlib import Path
 from typing import Any
+
+import cobuilder.bridge as bridge
+
+logger = logging.getLogger(__name__)
 
 
 # --- Worker type inference ---
@@ -70,6 +79,172 @@ STATUS_COLORS: dict[str, str] = {
     "validated": "lightgreen",
     "failed": "lightcoral",
 }
+
+
+# ---------------------------------------------------------------------------
+# F2.1 — ensure_baseline
+# ---------------------------------------------------------------------------
+
+
+def ensure_baseline(repo_name: str, project_root: str | Path) -> Path:
+    """Ensure a baseline exists for repo_name, auto-initializing if missing.
+
+    Checks if ``.repomap/baselines/{repo_name}/baseline.json`` exists inside
+    *project_root*.  If the file is absent, logs a progress message, calls
+    ``bridge.init_repo()`` followed by ``bridge.sync_baseline()`` to create it.
+
+    Args:
+        repo_name: Short identifier for the repository (e.g. ``"myrepo"``).
+        project_root: Root of the project that owns ``.repomap/``.
+
+    Returns:
+        :class:`pathlib.Path` pointing to the baseline.json file.
+    """
+    project_root = Path(project_root)
+    baseline_path = project_root / ".repomap" / "baselines" / repo_name / "baseline.json"
+
+    if not baseline_path.exists():
+        print(
+            f"Running repomap init for {repo_name}... (~2-3 min)",
+            file=sys.stderr,
+        )
+        logger.info("Auto-initialising baseline for '%s'", repo_name)
+        bridge.init_repo(repo_name, project_root, project_root=project_root, force=True)
+        bridge.sync_baseline(repo_name, project_root=project_root)
+
+    return baseline_path
+
+
+# ---------------------------------------------------------------------------
+# F2.2 — collect_repomap_nodes
+# ---------------------------------------------------------------------------
+
+
+def collect_repomap_nodes(repo_name: str, project_root: str | Path) -> list[dict]:
+    """Load baseline.json and extract node dicts for MODIFIED/NEW nodes.
+
+    Reads the RPGGraph JSON serialized by :class:`~cobuilder.repomap.serena.baseline.BaselineManager`
+    from ``.repomap/baselines/{repo_name}/baseline.json``.  Filters to nodes
+    whose ``delta_status`` (stored in ``node.metadata``) is ``"MODIFIED"`` or
+    ``"NEW"``.  If no nodes have a ``delta_status``, all nodes are returned
+    (useful for a fresh/uncompared baseline).
+
+    Args:
+        repo_name: Short identifier for the repository.
+        project_root: Root of the project that owns ``.repomap/``.
+
+    Returns:
+        List of dicts with keys:
+        ``node_id``, ``title``, ``file_path``, ``delta_status``,
+        ``module``, ``interfaces``.
+    """
+    baseline_path = ensure_baseline(repo_name, project_root)
+
+    json_str = baseline_path.read_text(encoding="utf-8")
+    data = json.loads(json_str)
+
+    result: list[dict] = []
+    for node_id, node_data in data.get("nodes", {}).items():
+        metadata: dict[str, Any] = node_data.get("metadata") or {}
+        delta_status: str = metadata.get("delta_status", "")
+
+        # Module: top-level folder segment from folder_path
+        folder_path: str = node_data.get("folder_path") or ""
+        module = folder_path.split("/")[0] if folder_path else ""
+
+        # Interfaces: prefer metadata list, fall back to interface_type enum value
+        raw_interfaces = metadata.get("interfaces")
+        if raw_interfaces and isinstance(raw_interfaces, list):
+            interfaces: list[str] = [str(i) for i in raw_interfaces]
+        else:
+            interface_type = node_data.get("interface_type")
+            interfaces = [str(interface_type)] if interface_type else []
+
+        result.append({
+            "node_id": node_id,
+            "title": node_data.get("name") or "",
+            "file_path": node_data.get("file_path") or "",
+            "delta_status": delta_status,
+            "module": module,
+            "interfaces": interfaces,
+        })
+
+    # Filter to changed nodes; fall back to all if none are delta-tagged
+    filtered = [n for n in result if n["delta_status"] in ("MODIFIED", "NEW")]
+    return filtered if filtered else result
+
+
+# ---------------------------------------------------------------------------
+# F2.4 — cross_reference_beads
+# ---------------------------------------------------------------------------
+
+
+def cross_reference_beads(repomap_nodes: list[dict], prd_ref: str) -> list[dict]:
+    """Match repomap nodes with beads for priority/ID enrichment.
+
+    Runs ``bd list --json`` to obtain all beads.  For each *repomap_node*,
+    tries to find a matching bead using two heuristics:
+
+    1. **Word-overlap**: lowercase token intersection ≥ 50% of the smaller set
+       (between node title and bead title).
+    2. **Path mention**: the node's ``file_path`` appears literally in the bead
+       description.
+
+    Matched nodes gain ``bead_id`` and ``priority`` keys.
+    Unmatched nodes get ``bead_id=None`` and ``priority=None``.
+
+    Args:
+        repomap_nodes: List of node dicts from :func:`collect_repomap_nodes`.
+        prd_ref: PRD reference string (reserved for future server-side filtering).
+
+    Returns:
+        Enriched copy of *repomap_nodes* with ``bead_id`` and ``priority`` added.
+    """
+    beads = get_beads_data()
+
+    enriched: list[dict] = []
+    for node in repomap_nodes:
+        node = dict(node)  # shallow copy — do not mutate caller's list
+
+        node_words = set(re.sub(r"[^a-z0-9 ]", " ", (node.get("title") or "").lower()).split())
+        node_file = (node.get("file_path") or "").lower()
+
+        best_bead: dict | None = None
+        best_overlap = 0.0
+
+        for bead in beads:
+            bead_words = set(
+                re.sub(r"[^a-z0-9 ]", " ", (bead.get("title") or "").lower()).split()
+            )
+            bead_desc = (bead.get("description") or "").lower()
+
+            # Word-overlap ratio relative to the smaller token set
+            common = node_words & bead_words
+            smaller = min(len(node_words), len(bead_words))
+            overlap = len(common) / smaller if smaller > 0 else 0.0
+
+            file_match = bool(node_file and node_file in bead_desc)
+
+            if overlap >= 0.5 or file_match:
+                if overlap > best_overlap or (file_match and best_bead is None):
+                    best_bead = bead
+                    best_overlap = overlap
+
+        if best_bead is not None:
+            node["bead_id"] = best_bead["id"]
+            node["priority"] = best_bead.get("priority")
+        else:
+            node["bead_id"] = None
+            node["priority"] = None
+
+        enriched.append(node)
+
+    return enriched
+
+
+# ---------------------------------------------------------------------------
+# Utility helpers (unchanged from original)
+# ---------------------------------------------------------------------------
 
 
 def infer_worker_type(title: str, description: str = "", design: str = "") -> str:
@@ -211,21 +386,45 @@ def filter_beads_for_prd(beads: list[dict], prd_ref: str) -> list[dict]:
     return task_beads
 
 
+# ---------------------------------------------------------------------------
+# F2.6 — generate_pipeline_dot (RepoMap-native signature)
+# ---------------------------------------------------------------------------
+
+
 def generate_pipeline_dot(
     prd_ref: str,
-    beads: list[dict],
+    nodes: list[dict],
     label: str = "",
     promise_id: str = "",
     target_dir: str = "",
+    solution_design: str = "",
 ) -> str:
-    """Generate an Attractor-compatible DOT pipeline from beads data.
+    """Generate an Attractor-compatible DOT pipeline from enriched RepoMap nodes.
+
+    Replaces the legacy beads-based signature.  Each entry in *nodes* is a
+    dict produced by :func:`collect_repomap_nodes` (optionally enriched by
+    :func:`cross_reference_beads`).
+
+    Additional DOT attributes rendered on codergen nodes (when present in the
+    node dict):
+
+    - ``file_path``       — primary source file
+    - ``delta_status``    — ``MODIFIED`` / ``NEW``
+    - ``interfaces``      — comma-joined interface names
+    - ``change_summary``  — brief description of the change
+    - ``worker_type``     — specialist agent type
+    - ``solution_design`` — path to the solution design document (graph-level)
+
+    The overall pipeline structure (scaffold stages, validation hexagons,
+    conditional diamonds, finalize node) is preserved.
 
     Args:
-        prd_ref: PRD reference identifier (e.g., PRD-S3-ATTRACTOR-001)
-        beads: List of bead dicts from bd list --json
-        label: Human-readable initiative label (defaults to prd_ref)
-        promise_id: Completion promise ID (empty = to be populated later)
-        target_dir: Target implementation repo directory (stored as graph attr)
+        prd_ref: PRD reference identifier (e.g. ``PRD-S3-ATTRACTOR-001``).
+        nodes: List of enriched RepoMap node dicts.
+        label: Human-readable initiative label (defaults to *prd_ref*).
+        promise_id: Completion promise ID (empty = populated by init-promise).
+        target_dir: Target implementation repo directory (stored as graph attr).
+        solution_design: Path to the solution design document.
 
     Returns:
         Valid DOT string.
@@ -246,6 +445,8 @@ def generate_pipeline_dot(
     lines.append(f'        promise_id="{promise_id}"')
     if target_dir:
         lines.append(f'        target_dir="{target_dir}"')
+    if solution_design:
+        lines.append(f'        solution_design="{escape_dot_string(solution_design)}"')
     lines.append("    ];")
     lines.append("")
     lines.append('    node [fontname="Helvetica" fontsize=11];')
@@ -256,7 +457,7 @@ def generate_pipeline_dot(
     lines.append("    // ===== STAGE 1: PARSE =====")
     lines.append("")
     lines.append("    start [")
-    lines.append(f'        shape=Mdiamond')
+    lines.append("        shape=Mdiamond")
     lines.append(f'        label="PARSE\\n{prd_ref}"')
     lines.append('        handler="start"')
     lines.append('        status="validated"')
@@ -302,9 +503,9 @@ def generate_pipeline_dot(
     lines.append("    // ===== STAGE 4: EXECUTE =====")
     lines.append("")
 
-    if not beads:
-        # No beads: create a placeholder codergen node
-        lines.append("    // No beads found - placeholder task")
+    if not nodes:
+        # No nodes: create a placeholder codergen node
+        lines.append("    // No nodes found - placeholder task")
         lines.append("    impl_placeholder [")
         lines.append("        shape=box")
         lines.append('        label="Placeholder\\nTask"')
@@ -320,39 +521,44 @@ def generate_pipeline_dot(
         lines.append('    impl_placeholder -> finalize [label="done"];')
         lines.append("")
     else:
-        # Generate task nodes from beads
-        task_nodes: list[dict[str, str]] = []  # {node_id, bead_id, ...}
+        # Generate task nodes from enriched RepoMap nodes
+        task_nodes: list[dict[str, Any]] = []
         ac_counter = 0
 
-        for bead in beads:
-            bead_id = bead["id"]
-            title = bead.get("title", "Untitled")
-            description = bead.get("description", "")
-            design = bead.get("design", "")
-            acceptance = bead.get("acceptance_criteria", "")
-            beads_status = bead.get("status", "open")
+        for node in nodes:
+            node_id_raw = node.get("node_id", "")
+            title = node.get("title", "Untitled")
 
-            node_id = f"impl_{sanitize_node_id(title)}"
-            # Ensure uniqueness
-            existing_ids = {t["node_id"] for t in task_nodes}
-            if node_id in existing_ids:
-                node_id = f"{node_id}_{sanitize_node_id(bead_id)}"
+            # Stable DOT identifier derived from title (or fallback to node_id slice)
+            dot_node_id = f"impl_{sanitize_node_id(title)}"
+            existing_ids = {t["dot_node_id"] for t in task_nodes}
+            if dot_node_id in existing_ids:
+                dot_node_id = f"{dot_node_id}_{sanitize_node_id(node_id_raw[-8:] if node_id_raw else 'x')}"
 
-            worker_type = infer_worker_type(title, description, design)
-            dot_status = map_beads_status(beads_status)
+            # Determine worker_type: prefer explicit field, else infer from title
+            worker_type = node.get("worker_type") or infer_worker_type(title)
+
+            bead_id = node.get("bead_id") or "UNASSIGNED"
+            dot_status = "pending"
             fillcolor = STATUS_COLORS.get(dot_status, "lightyellow")
+
             ac_counter += 1
             promise_ac = f"AC-{ac_counter}"
 
             task_nodes.append({
-                "node_id": node_id,
+                "dot_node_id": dot_node_id,
+                "node_id": node_id_raw,
                 "bead_id": bead_id,
                 "title": title,
                 "worker_type": worker_type,
                 "status": dot_status,
                 "fillcolor": fillcolor,
-                "acceptance": acceptance,
                 "promise_ac": promise_ac,
+                # Enriched RepoMap fields
+                "file_path": node.get("file_path") or "",
+                "delta_status": node.get("delta_status") or "",
+                "interfaces": node.get("interfaces") or [],
+                "change_summary": node.get("change_summary") or "",
             })
 
         # Determine if we use parallel execution (2+ tasks)
@@ -379,9 +585,9 @@ def generate_pipeline_dot(
 
         # Generate each task's nodes: impl -> tech_validation -> biz_validation -> decision
         for i, task in enumerate(task_nodes):
-            nid = task["node_id"]
+            nid = task["dot_node_id"]
             bid = task["bead_id"]
-            label = truncate_label(task["title"])
+            node_label = truncate_label(task["title"])
 
             lines.append(f"    // --- Task: {task['title'][:60]} ---")
             lines.append("")
@@ -389,15 +595,29 @@ def generate_pipeline_dot(
             # Implementation (codergen) node
             lines.append(f"    {nid} [")
             lines.append("        shape=box")
-            lines.append(f'        label="{label}"')
+            lines.append(f'        label="{node_label}"')
             lines.append('        handler="codergen"')
             lines.append(f'        bead_id="{bid}"')
             lines.append(f'        worker_type="{task["worker_type"]}"')
-            if task["acceptance"]:
-                lines.append(f'        acceptance="{escape_dot_string(task["acceptance"][:120])}"')
             lines.append(f'        promise_ac="{task["promise_ac"]}"')
             lines.append(f'        prd_ref="{prd_ref}"')
             lines.append(f'        status="{task["status"]}"')
+
+            # F2.6 enriched attributes — only emit when non-empty
+            if task["file_path"]:
+                lines.append(f'        file_path="{escape_dot_string(task["file_path"])}"')
+            if task["delta_status"]:
+                lines.append(f'        delta_status="{task["delta_status"]}"')
+            if task["interfaces"]:
+                ifaces_str = escape_dot_string(", ".join(task["interfaces"]))
+                lines.append(f'        interfaces="{ifaces_str}"')
+            if task["change_summary"]:
+                lines.append(
+                    f'        change_summary="{escape_dot_string(task["change_summary"][:120])}"'
+                )
+            if solution_design:
+                lines.append(f'        solution_design="{escape_dot_string(solution_design)}"')
+
             lines.append("        style=filled")
             lines.append(f'        fillcolor={task["fillcolor"]}')
             lines.append("    ];")
@@ -508,7 +728,7 @@ def generate_pipeline_dot(
             # Sequential: chain tasks if more than one
             for i in range(len(task_nodes) - 1):
                 src_decision = task_nodes[i]["decision_id"]
-                dst_impl = task_nodes[i + 1]["node_id"]
+                dst_impl = task_nodes[i + 1]["dot_node_id"]
                 lines.append(f"    {src_decision} -> {dst_impl} [")
                 lines.append('        label="pass"')
                 lines.append('        condition="pass"')
@@ -524,8 +744,8 @@ def generate_pipeline_dot(
     lines.append('        label="FINALIZE\\nTriple Gate\\ncs-verify"')
     lines.append('        handler="exit"')
     lines.append(f'        promise_id="{promise_id}"')
-    if beads:
-        lines.append(f'        promise_ac="AC-{len(beads)}"')
+    if nodes:
+        lines.append(f'        promise_ac="AC-{len(nodes)}"')
     lines.append('        status="pending"')
     lines.append("        style=filled")
     lines.append("        fillcolor=lightyellow")
@@ -652,12 +872,26 @@ def generate_scaffold_dot(
 def main() -> None:
     """CLI entry point."""
     ap = argparse.ArgumentParser(
-        description="Generate Attractor-compatible pipeline.dot from beads task data."
+        description=(
+            "Generate Attractor-compatible pipeline.dot from RepoMap baseline "
+            "data (F2.x) or beads task data (legacy)."
+        )
     )
     ap.add_argument(
         "--prd",
         default="",
         help="PRD reference identifier (e.g., PRD-S3-ATTRACTOR-001). Required unless --scaffold.",
+    )
+    ap.add_argument(
+        "--repo-name",
+        default="",
+        dest="repo_name",
+        help=(
+            "Repository name for RepoMap-native mode.  "
+            "If provided, nodes are collected from .repomap/baselines/<repo-name>/baseline.json "
+            "and cross-referenced with beads.  "
+            "If absent, legacy beads-only mode is used."
+        ),
     )
     ap.add_argument(
         "--scaffold",
@@ -691,15 +925,27 @@ def main() -> None:
         help="Target implementation repo directory (stored as graph attr in DOT)",
     )
     ap.add_argument(
+        "--solution-design",
+        default="",
+        dest="solution_design",
+        help="Path to solution design document (stored as graph/node attr in DOT)",
+    )
+    ap.add_argument(
         "--filter-prd",
         action="store_true",
         default=True,
-        help="Filter beads to only those related to the PRD (default: true)",
+        help="Filter beads to only those related to the PRD (default: true, legacy mode only)",
     )
     ap.add_argument(
         "--no-filter",
         action="store_true",
-        help="Include all beads without filtering",
+        help="Include all beads without filtering (legacy mode only)",
+    )
+    ap.add_argument(
+        "--project-root",
+        default=".",
+        dest="project_root",
+        help="Project root directory containing .repomap/ (default: .)",
     )
     args = ap.parse_args()
 
@@ -728,7 +974,33 @@ def main() -> None:
     if not args.prd:
         ap.error("--prd is required unless --scaffold is specified")
 
-    # Get beads data
+    # --- RepoMap-native mode (F2.x) ---
+    if args.repo_name:
+        project_root = Path(args.project_root)
+        repomap_nodes = collect_repomap_nodes(args.repo_name, project_root)
+        nodes = cross_reference_beads(repomap_nodes, args.prd)
+
+        dot = generate_pipeline_dot(
+            prd_ref=args.prd,
+            nodes=nodes,
+            label=args.label or "",
+            promise_id=args.promise_id,
+            target_dir=args.target_dir,
+            solution_design=args.solution_design,
+        )
+
+        if args.output:
+            os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
+            with open(args.output, "w") as f:
+                f.write(dot)
+            print(f"Generated: {args.output}", file=sys.stderr)
+            print(f"RepoMap nodes: {len(nodes)}", file=sys.stderr)
+            print(f"PRD: {args.prd}", file=sys.stderr)
+        else:
+            print(dot)
+        return
+
+    # --- Legacy beads-only mode ---
     beads = get_beads_data(args.beads_json or "")
 
     if not beads:
@@ -752,22 +1024,41 @@ def main() -> None:
     # Filter out epics (only tasks)
     beads = [b for b in beads if b.get("issue_type") != "epic"]
 
-    # Generate DOT
+    # Convert beads to the RepoMap node format expected by generate_pipeline_dot
+    nodes = []
+    for bead in beads:
+        title = bead.get("title", "Untitled")
+        description = bead.get("description", "")
+        design = bead.get("design", "")
+        worker_type = infer_worker_type(title, description, design)
+        nodes.append({
+            "node_id": bead["id"],
+            "title": title,
+            "file_path": "",
+            "delta_status": "",
+            "module": "",
+            "interfaces": [],
+            "change_summary": description[:120] if description else "",
+            "worker_type": worker_type,
+            "bead_id": bead["id"],
+            "priority": bead.get("priority"),
+        })
+
     dot = generate_pipeline_dot(
         prd_ref=args.prd,
-        beads=beads,
+        nodes=nodes,
         label=args.label or "",
         promise_id=args.promise_id,
         target_dir=args.target_dir,
+        solution_design=args.solution_design,
     )
 
-    # Output
     if args.output:
         os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
         with open(args.output, "w") as f:
             f.write(dot)
         print(f"Generated: {args.output}", file=sys.stderr)
-        print(f"Tasks: {len(beads)}", file=sys.stderr)
+        print(f"Tasks: {len(nodes)}", file=sys.stderr)
         print(f"PRD: {args.prd}", file=sys.stderr)
     else:
         print(dot)

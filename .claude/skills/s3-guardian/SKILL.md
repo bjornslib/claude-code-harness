@@ -1,6 +1,6 @@
 ---
 name: s3-guardian
-description: This skill should be used when System 3 needs to act as an independent guardian angel — designing PRDs with ZeroRepo analysis, challenging designs via parallel solutioning, spawning orchestrators in tmux, creating blind Gherkin acceptance tests and executable browser test scripts from PRDs, monitoring orchestrator progress, independently validating claims against acceptance criteria using gradient confidence scoring (0.0-1.0), and setting session promises. Use when asked to "spawn and monitor an orchestrator", "create acceptance tests for a PRD", "validate orchestrator claims", "act as guardian angel", "independently verify implementation work", or "design and challenge a PRD".
+description: This skill should be used when System 3 needs to act as an independent guardian angel — designing PRDs with CoBuilder RepoMap context injection, challenging designs via parallel solutioning, spawning orchestrators in tmux, creating blind Gherkin acceptance tests and executable browser test scripts from PRDs, monitoring orchestrator progress, independently validating claims against acceptance criteria using gradient confidence scoring (0.0-1.0), and setting session promises. Use when asked to "spawn and monitor an orchestrator", "create acceptance tests for a PRD", "validate orchestrator claims", "act as guardian angel", "independently verify implementation work", or "design and challenge a PRD".
 version: 0.1.0
 title: "S3 Guardian"
 status: active
@@ -13,7 +13,7 @@ The guardian angel pattern provides independent, blind validation of System 3 me
 ```
 Guardian (this session, config repo)
     |
-    |-- Designs PRDs with ZeroRepo codebase analysis (Phase 0)
+    |-- Designs PRDs with CoBuilder RepoMap context (Phase 0)
     |-- Challenges own designs via parallel-solutioning + research-first (Phase 0)
     |-- Creates blind Gherkin acceptance tests (stored here, NOT in impl repo)
     |-- Generates executable browser test scripts for UX prototypes
@@ -139,19 +139,72 @@ When the guardian is initiating a new initiative (rather than validating an exis
 
 **Skip Phase 0 if**: A finalized PRD already exists at the implementation repo's `docs/prds/PRD-{ID}.md` and has been reviewed. Proceed directly to Phase 1.
 
-### Step 0.1: PRD Authoring with ZeroRepo Analysis
+### Step 0.1: PRD Authoring with CoBuilder RepoMap Context
 
-Before writing the PRD, understand the current codebase structure:
+Before writing the PRD, understand the current codebase structure using CoBuilder's RepoMap context command:
 
 ```bash
-# If impl repo has ZeroRepo baseline, run analysis
-if [ -d "/path/to/impl-repo/.zerorepo" ]; then
-    zerorepo generate --project-path /path/to/impl-repo
-    # Output: node/edge graph showing existing modules, dependencies, delta status
-fi
+# Generate structured YAML codebase context filtered to the relevant PRD scope
+cobuilder repomap context --name <repo-name> --prd PRD-{ID}
 
-# Also gather domain context from Hindsight
+# For SD-optimized output (recommended when delegating to solution-design-architect):
+cobuilder repomap context --name <repo-name> --prd PRD-{ID} --format sd-injection
 ```
+
+The command outputs structured YAML with module relevance, dependency graph, and protected files:
+
+```yaml
+# Example output of: cobuilder repomap context --name agencheck --prd PRD-AUTH-001
+
+repository: agencheck
+snapshot_date: 2026-02-27T10:00:00Z
+total_nodes: 3037
+total_files: 312
+
+modules_relevant_to_epic:
+  - name: src/auth/
+    delta: existing          # existing | modified | new
+    files: 8
+    summary: |
+      Authentication module with JWT handling.
+      Fully implemented — no changes needed for this epic.
+    key_interfaces:
+      - signature: "authenticate(token: str) -> User"
+        file: src/auth/middleware.py
+        line: 42
+
+  - name: src/api/routes/
+    delta: modified
+    files: 12
+    summary: |
+      API route handlers for all endpoints.
+      Needs new refresh token endpoint added.
+    change_summary: "Add POST /auth/refresh route handler"
+
+  - name: src/email/
+    delta: new
+    files: 0
+    summary: |
+      Email notification service — does not exist yet.
+      Needs to be created from scratch.
+    suggested_structure:
+      - email_service/__init__.py
+      - email_service/sender.py
+
+dependency_graph:
+  - from: src/api/routes/
+    to: src/auth/
+    type: invokes
+    description: "Route handlers call authenticate()"
+
+protected_files:
+  - path: src/database/models.py
+    reason: "Core data models — shared across all modules"
+  - path: src/auth/jwt.py
+    reason: "JWT utilities — security-critical, modify with care"
+```
+
+Also gather domain context from Hindsight:
 
 ```python
 PROJECT_BANK = os.environ.get("CLAUDE_PROJECT_BANK", "claude-harness-setup")
@@ -162,11 +215,47 @@ domain_context = mcp__hindsight__reflect(
 )
 ```
 
-Using ZeroRepo output and Hindsight context, write the PRD to `docs/prds/PRD-{ID}.md` in the impl repo. The PRD must include:
+Using RepoMap context and Hindsight context, write the PRD to `docs/prds/PRD-{ID}.md` in the impl repo. The PRD must include:
 - YAML frontmatter with `prd_id`, `title`, `status`, `created`
 - Goals section (maps to journey tests)
 - Epic breakdown with acceptance criteria per epic
-- Technical approach (informed by ZeroRepo delta analysis — what's new vs existing)
+- Technical approach (informed by RepoMap delta analysis — what's `new` vs `existing` vs `modified`)
+
+#### Injecting RepoMap Context into SD Creation
+
+When delegating SD creation to a `solution-design-architect`, inject the RepoMap YAML directly into the prompt. This ensures the SD references actual file paths, uses real interface signatures, and respects protected files:
+
+```python
+# Generate RepoMap context (capture output as string)
+context_yaml = Bash(
+    f"cobuilder repomap context --name {repo_name} --prd {prd_id} --format sd-injection"
+)
+
+# Inject into solution-design-architect prompt
+Task(
+    subagent_type="solution-design-architect",
+    prompt=f"""
+    Create a Solution Design for Epic {epic_num} of {prd_id}.
+
+    ## PRD Reference
+    Read: {prd_path}
+
+    ## Codebase Context (RepoMap — read carefully before designing)
+    ```yaml
+    {context_yaml}
+    ```
+
+    Use this context to:
+    - Reference EXISTING modules by their actual file paths
+    - Scope MODIFIED modules to specific changes needed
+    - Design NEW modules with suggested structure from RepoMap
+    - Respect protected_files — do not include them in File Scope unless PRD requires changes
+    - Use key_interfaces for accurate API contracts in your design
+    """
+)
+```
+
+> **Note on `--format sd-injection`**: This flag produces output pre-formatted for direct paste into SD prompts — it omits summary statistics and uses concise field names optimized for LLM consumption. Use the default YAML format (no flag) when reviewing context yourself; use `--format sd-injection` when the output is consumed by another agent.
 
 ### Step 0.2: Create DOT Pipeline
 
