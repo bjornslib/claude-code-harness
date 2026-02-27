@@ -26,7 +26,7 @@ def pipeline_create(
 ) -> None:
     """Create an Attractor DOT pipeline from a Solution Design + RepoMap baseline."""
     from pathlib import Path
-    from cobuilder.pipeline.generate import ensure_baseline, collect_repomap_nodes, cross_reference_beads, generate_pipeline_dot
+    from cobuilder.pipeline.generate import ensure_baseline, collect_repomap_nodes, filter_nodes_by_sd_relevance, cross_reference_beads, generate_pipeline_dot
     from cobuilder.pipeline.enrichers import EnrichmentPipeline
     from cobuilder.pipeline.taskmaster_bridge import run_taskmaster_parse
     from cobuilder.pipeline.sd_enricher import write_all_enrichments
@@ -42,6 +42,12 @@ def pipeline_create(
     nodes = collect_repomap_nodes(repo, project_root)
     typer.echo(f"      Found {len(nodes)} MODIFIED/NEW nodes")
 
+    # Step 2.5: SD relevance filter
+    sd_content = sd_path.read_text() if sd_path.exists() else ""
+    typer.echo(f"[2.5/7] Filtering nodes by SD relevance ({len(nodes)} candidates)...")
+    nodes = filter_nodes_by_sd_relevance(nodes, sd_content)
+    typer.echo(f"        Retained {len(nodes)} SD-relevant nodes")
+
     # Step 3: TaskMaster parse
     taskmaster_tasks = {}
     if not skip_taskmaster:
@@ -55,7 +61,6 @@ def pipeline_create(
     nodes = cross_reference_beads(nodes, prd)
 
     # Step 5: LLM enrichment
-    sd_content = sd_path.read_text() if sd_path.exists() else ""
     if not skip_enrichment:
         typer.echo("[5/7] Running LLM enrichment pipeline (5 enrichers)...")
         pipeline = EnrichmentPipeline()

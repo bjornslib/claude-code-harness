@@ -32,6 +32,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import anthropic
+
 import cobuilder.bridge as bridge
 
 logger = logging.getLogger(__name__)
@@ -172,6 +174,116 @@ def collect_repomap_nodes(repo_name: str, project_root: str | Path) -> list[dict
     # Filter to changed nodes; fall back to all if none are delta-tagged
     filtered = [n for n in result if n["delta_status"] in ("MODIFIED", "NEW")]
     return filtered if filtered else result
+
+
+# ---------------------------------------------------------------------------
+# F2.3 — filter_nodes_by_sd_relevance
+# ---------------------------------------------------------------------------
+
+
+def filter_nodes_by_sd_relevance(
+    nodes: list[dict],
+    sd_content: str,
+    model: str = "claude-haiku-4-5-20251001",
+    batch_size: int = 300,
+) -> list[dict]:
+    """Filter repomap nodes to those relevant to the Solution Design using LLM.
+
+    Processes nodes in batches and uses an LLM to identify which nodes would
+    be created or modified when implementing the solution described in the SD.
+
+    On any failure (API error, parse error, empty result), logs a warning and
+    returns the original *nodes* list unchanged.
+
+    Args:
+        nodes: List of node dicts from :func:`collect_repomap_nodes`.
+        sd_content: Full text of the Solution Design document.
+        model: Claude model to use (defaults to claude-haiku for speed/cost).
+        batch_size: Maximum number of nodes per LLM batch call.
+
+    Returns:
+        Filtered list of nodes relevant to the SD, or original nodes on failure.
+    """
+    if not nodes:
+        return nodes
+    if not sd_content.strip():
+        logger.warning("filter_nodes_by_sd_relevance: no SD content provided, skipping filter")
+        return nodes
+
+    # Truncate SD to avoid excessive token usage; first ~4000 chars contain the key context
+    sd_excerpt = sd_content[:4000]
+
+    try:
+        client = anthropic.Anthropic()
+        relevant: list[dict] = []
+
+        num_batches = (len(nodes) + batch_size - 1) // batch_size
+        for batch_idx in range(num_batches):
+            batch_start = batch_idx * batch_size
+            batch = nodes[batch_start : batch_start + batch_size]
+
+            # Build compact node listing — one line per node
+            node_lines = "\n".join(
+                f"{i}: {(node.get('title') or '')[:60]} | {(node.get('file_path') or '')[:80]}"
+                for i, node in enumerate(batch)
+            )
+
+            prompt = (
+                f"## Solution Design (excerpt)\n{sd_excerpt}\n\n"
+                f"## Candidate Code Nodes (batch {batch_idx + 1}/{num_batches})\n"
+                f"Format per line: INDEX: title | file_path\n"
+                f"{node_lines}\n\n"
+                f"## Task\n"
+                f"Select ONLY the nodes that will need to be CREATED or MODIFIED "
+                f"to implement the solution described above.\n"
+                f"Return a JSON array of INDEX integers only. Example: [0, 3, 7]\n"
+                f"Return ONLY the JSON array, nothing else.\n"
+                f"If no nodes in this batch are relevant, return: []"
+            )
+
+            msg = client.messages.create(
+                model=model,
+                max_tokens=512,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            response_text = msg.content[0].text.strip()
+
+            # Extract JSON array from response
+            match = re.search(r"\[[\d,\s]*\]", response_text)
+            if not match:
+                logger.warning(
+                    "filter_nodes_by_sd_relevance: could not parse batch %d response: %r",
+                    batch_idx,
+                    response_text[:120],
+                )
+                continue
+
+            indexes = json.loads(match.group())
+            for idx in indexes:
+                if isinstance(idx, int) and 0 <= idx < len(batch):
+                    relevant.append(batch[idx])
+
+        if not relevant:
+            logger.warning(
+                "filter_nodes_by_sd_relevance: LLM returned no relevant nodes "
+                "from %d candidates; returning all nodes unchanged",
+                len(nodes),
+            )
+            return nodes
+
+        logger.info(
+            "filter_nodes_by_sd_relevance: %d → %d nodes after SD relevance filter",
+            len(nodes),
+            len(relevant),
+        )
+        return relevant
+
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "filter_nodes_by_sd_relevance failed (%s); returning all nodes unchanged",
+            exc,
+        )
+        return nodes
 
 
 # ---------------------------------------------------------------------------
