@@ -321,24 +321,38 @@ def get_repomap_context(
     *,
     project_root: Path | str = Path("."),
     max_modules: int = 10,
+    prd_keywords: list[str] | None = None,
+    sd_file_references: list[str] | None = None,
+    format: str = "yaml",
 ) -> str:
-    """Return a human-readable repomap context string for LLM injection.
+    """Return a repomap context string suitable for LLM injection.
 
-    Reads the manifest YAML for *name* and formats a concise text block
-    suitable for inclusion in an LLM prompt as codebase context.
+    Supports two output formats:
+
+    - ``"yaml"`` *(default)*: Returns a structured YAML document with
+      repository stats, relevant modules (filtered by *prd_keywords* and
+      *sd_file_references*), a dependency graph, and protected files.
+    - ``"text"``: Returns the original plain-text format (backward-compatible).
 
     Args:
         name: Repository name.
         project_root: Root of the project that owns .repomap/.
-        max_modules: Maximum number of top modules to list.
+        max_modules: Maximum number of top modules to include.
+        prd_keywords: Optional keyword list for relevance filtering (yaml mode).
+        sd_file_references: Optional list of file paths from the SD (yaml mode).
+        format: Output format — ``"yaml"`` or ``"text"``.
 
     Returns:
-        A formatted string with repo stats and top modules.
+        A formatted string (YAML or plain text).
 
     Raises:
         KeyError: If *name* is not registered.
         FileNotFoundError: If no manifest exists (sync first).
+        ValueError: If *format* is not ``"yaml"`` or ``"text"``.
     """
+    if format not in ("yaml", "text"):
+        raise ValueError(f"format must be 'yaml' or 'text', got '{format}'")
+
     project_root = Path(project_root).resolve()
     repomap_dir = _repomap_dir(project_root)
     config = _load_config(repomap_dir)
@@ -356,28 +370,80 @@ def get_repomap_context(
     with manifest_path.open("r", encoding="utf-8") as fh:
         manifest = yaml.safe_load(fh) or {}
 
-    lines: list[str] = [
-        f"## Codebase: {name}",
-        f"Path: {entry.get('path', 'unknown')}",
-        f"Last synced: {entry.get('last_synced', 'never')}",
-        f"Total nodes: {manifest.get('total_nodes', 0)}",
-        f"Files: {manifest.get('total_files', 0)}",
-        f"Functions: {manifest.get('total_functions', 0)}",
-        "",
-        "### Top Modules",
-    ]
+    # ------------------------------------------------------------------ text
+    if format == "text":
+        lines: list[str] = [
+            f"## Codebase: {name}",
+            f"Path: {entry.get('path', 'unknown')}",
+            f"Last synced: {entry.get('last_synced', 'never')}",
+            f"Total nodes: {manifest.get('total_nodes', 0)}",
+            f"Files: {manifest.get('total_files', 0)}",
+            f"Functions: {manifest.get('total_functions', 0)}",
+            "",
+            "### Top Modules",
+        ]
+        top_modules = manifest.get("top_modules", [])[:max_modules]
+        for mod in top_modules:
+            mod_name = mod.get("name", "?")
+            files = mod.get("files", 0)
+            delta = mod.get("delta", "existing")
+            lines.append(f"  - {mod_name}: {files} files [{delta}]")
+        if not top_modules:
+            lines.append("  (no modules — run sync_baseline first)")
+        return "\n".join(lines)
 
-    top_modules = manifest.get("top_modules", [])[:max_modules]
-    for mod in top_modules:
-        mod_name = mod.get("name", "?")
-        files = mod.get("files", 0)
-        delta = mod.get("delta", "existing")
-        lines.append(f"  - {mod_name}: {files} files [{delta}]")
+    # ------------------------------------------------------------------ yaml
+    # Try to load the baseline for richer module/dependency data.
+    baseline_path = _baseline_dir(repomap_dir, name) / "baseline.json"
+    relevant_modules: list[dict] = []
+    dependency_graph: list[dict] = []
+    protected_files: list[dict] = []
 
-    if not top_modules:
-        lines.append("  (no modules — run sync_baseline first)")
+    if baseline_path.exists() and (prd_keywords or sd_file_references):
+        from cobuilder.repomap.context_filter import filter_relevant_modules
 
-    return "\n".join(lines)
+        relevant_modules = filter_relevant_modules(
+            baseline_path=baseline_path,
+            prd_keywords=prd_keywords or [],
+            sd_file_references=sd_file_references or [],
+            max_results=max_modules,
+        )
+    else:
+        # Fall back to manifest top_modules with minimal structure
+        top_modules = manifest.get("top_modules", [])[:max_modules]
+        for mod in top_modules:
+            relevant_modules.append(
+                {
+                    "name": mod.get("name", "?"),
+                    "delta": mod.get("delta", "existing"),
+                    "files": mod.get("files", 0),
+                    "summary": None,
+                    "key_interfaces": [],
+                }
+            )
+
+    # Build dependency graph from relevant module names (baseline required)
+    if baseline_path.exists() and relevant_modules:
+        from cobuilder.repomap.context_filter import extract_dependency_graph
+
+        relevant_names = [m["name"] for m in relevant_modules]
+        dependency_graph = extract_dependency_graph(baseline_path, relevant_names)
+
+    # Build structured YAML document
+    doc: dict = {
+        "repository": name,
+        "snapshot_date": entry.get("last_synced") or manifest.get("snapshot_date", ""),
+        "total_nodes": manifest.get("total_nodes", 0),
+        "total_files": manifest.get("total_files", 0),
+        "total_functions": manifest.get("total_functions", 0),
+        "modules_relevant_to_epic": relevant_modules or None,
+        "dependency_graph": dependency_graph or None,
+        "protected_files": protected_files or None,
+    }
+    # Remove None-valued top-level keys for cleaner output
+    doc = {k: v for k, v in doc.items() if v is not None}
+
+    return yaml.dump(doc, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
 
 def refresh_baseline(
