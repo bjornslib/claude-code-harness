@@ -1,8 +1,14 @@
 version: '1.0'
 repos:
 - name: story-writer
-  path: /Users/theb/Documents/Windsurf/claude-harness-setup/.claude/worktrees/cobuilder-fix
-  last_synced: '2026-02-27T06:45:33.192441+00:00'
-  baseline_hash: sha256:e36b7e0b3da63a99
-  node_count: 2564
-  file_count: 339
+  path: /Users/theb/Documents/Windsurf/story-writer
+  last_synced: '2026-02-27T07:30:55.594141+00:00'
+  baseline_hash: sha256:27aa16c3ff588ed9
+  node_count: 648
+  file_count: 138
+- name: claude-harness-setup
+  path: /Users/theb/Documents/Windsurf/claude-harness-setup
+  last_synced: '2026-02-27T07:52:07.073520+00:00'
+  baseline_hash: sha256:fbd70ccc3a42e5d7
+  node_count: 2593
+  file_count: 340

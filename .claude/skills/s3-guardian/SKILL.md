@@ -939,6 +939,66 @@ for SESSION in orch-epic1 orch-epic2 orch-epic3; do
 done
 ```
 
+### Pause-and-Check Pattern (Blocking Task Agent)
+
+When the guardian is satisfied that an orchestrator is progressing well and doesn't need
+frequent intervention, use a blocking Task agent as a clean pause timer instead of
+bash sleep loops:
+
+```python
+# Pause for N seconds while orchestrator works
+Task(
+    subagent_type="general-purpose",
+    model="haiku",
+    description=f"Wait {wait_seconds}s for orchestrator to work",
+    prompt=f"Run: sleep {wait_seconds}. Then return 'PAUSE_COMPLETE'.",
+    run_in_background=False,  # BLOCKING — guardian waits in-context
+)
+# Guardian resumes here with full context intact
+```
+
+**Why this is better than `Bash("sleep 100")`:**
+- Status line shows "Waiting for task (esc to give additional instructions)" — user knows what's happening
+- User can press Esc to interrupt the pause and give S3 new instructions
+- No shell output cluttering the conversation context
+- S3 resumes with full context when the pause completes
+
+**When to use:**
+- After initial spawn verification (orchestrator is running, output style loaded)
+- When monitoring cadence is 120s+ (idle/waiting for workers)
+- Between monitoring check-ins when no intervention signals were found
+
+**When NOT to use:**
+- During active intervention (errors detected, guidance needed)
+- When AskUserQuestion blocks are likely (use 30s tmux polling instead)
+- For the first 5 minutes after spawn (use active monitoring to catch boot failures)
+
+**Recommended cadence:**
+
+| Phase | Pause Duration | Rationale |
+|-------|---------------|-----------|
+| Post-spawn (first 5 min) | Don't use — active poll at 30s | Catch boot failures early |
+| Active implementation | 60-90s | Check frequently but not constantly |
+| Investigation/planning | 120-180s | Orchestrator is thinking, less likely to block |
+| Worker execution (steady state) | 180-300s | Workers are running, minimal intervention needed |
+
+**Combined pattern — pause then check:**
+```python
+while not orchestrator_complete:
+    # Pause
+    Task(
+        subagent_type="general-purpose", model="haiku",
+        description=f"Wait {pause_seconds}s for {epic_name}",
+        prompt=f"Sleep {pause_seconds} seconds, then return PAUSE_COMPLETE.",
+    )
+
+    # Check
+    output = Bash(f'tmux capture-pane -t "orch-{epic}" -p -S -50')
+    if "COMPLETE" in output or "error" in output.lower():
+        break
+    # Adjust pause_seconds based on signals found
+```
+
 ### Intervention Triggers
 
 | Signal | Action |
