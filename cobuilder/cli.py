@@ -1,5 +1,11 @@
 """CoBuilder CLI — command groups for repomap, pipeline, and agents."""
 
+import sys
+import json
+import datetime
+from pathlib import Path
+from typing import Optional, List
+
 import typer
 
 from cobuilder.repomap.cli.commands import app as repomap_app
@@ -25,7 +31,6 @@ def pipeline_create(
     skip_taskmaster: bool = typer.Option(False, "--skip-taskmaster", help="Skip TaskMaster parse"),
 ) -> None:
     """Create an Attractor DOT pipeline from a Solution Design + RepoMap baseline."""
-    from pathlib import Path
     from cobuilder.pipeline.generate import ensure_baseline, collect_repomap_nodes, cross_reference_beads, generate_pipeline_dot
     from cobuilder.pipeline.enrichers import EnrichmentPipeline
     from cobuilder.pipeline.taskmaster_bridge import run_taskmaster_parse
@@ -84,3 +89,695 @@ def pipeline_create(
         typer.echo(f"Pipeline written to: {output}")
     else:
         typer.echo(dot)
+
+
+# ---------------------------------------------------------------------------
+# Node operations
+# ---------------------------------------------------------------------------
+
+
+@pipeline_app.command("node-list")
+def pipeline_node_list(
+    file: str = typer.Argument(..., help="Path to .dot file"),
+    output: str = typer.Option("text", "--output", help="Output format: text or json"),
+) -> None:
+    """List all nodes in a pipeline."""
+    from cobuilder.pipeline.node_ops import list_nodes
+
+    try:
+        content = Path(file).read_text()
+    except FileNotFoundError:
+        typer.echo(f"Error: File not found: {file}", err=True)
+        raise typer.Exit(1)
+
+    list_nodes(content, output=output)
+
+
+@pipeline_app.command("node-add")
+def pipeline_node_add(
+    file: str = typer.Argument(..., help="Path to .dot file"),
+    node_id: str = typer.Argument(..., help="Node identifier (unique)"),
+    handler: str = typer.Option(..., "--handler", help="Handler type (determines shape)"),
+    label: str = typer.Option(..., "--label", help="Display label for the node"),
+    status: str = typer.Option("pending", "--status", help="Initial status (default: pending)"),
+    set_attrs: Optional[List[str]] = typer.Option(None, "--set", help="Additional attribute(s) as key=value (repeatable)"),
+    no_at_pair: bool = typer.Option(False, "--no-at-pair", help="Suppress automatic AT gate pairing for codergen nodes"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview without writing"),
+    output: str = typer.Option("text", "--output", help="Output format: text or json"),
+) -> None:
+    """Add a new node to a pipeline."""
+    from cobuilder.pipeline.node_ops import add_node, _parse_set_args, _dot_file_lock, _append_ops_jsonl
+
+    try:
+        content = Path(file).read_text()
+    except FileNotFoundError:
+        typer.echo(f"Error: File not found: {file}", err=True)
+        raise typer.Exit(1)
+
+    extra_attrs = {}
+    if set_attrs:
+        try:
+            extra_attrs = _parse_set_args(list(set_attrs))
+        except ValueError as e:
+            typer.echo(f"Error: {e}", err=True)
+            raise typer.Exit(1)
+
+    try:
+        updated = add_node(
+            content,
+            node_id,
+            handler=handler,
+            label=label,
+            status=status,
+            extra_attrs=extra_attrs if extra_attrs else None,
+            auto_pair_at=not no_at_pair,
+        )
+    except ValueError as e:
+        if output == "json":
+            typer.echo(json.dumps({"success": False, "error": str(e)}, indent=2))
+        else:
+            typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+    at_node_id = f"{node_id}_at" if (not no_at_pair and handler == "codergen") else None
+
+    if dry_run:
+        if output == "json":
+            result: dict = {"success": True, "dry_run": True, "node_id": node_id}
+            if at_node_id:
+                result["at_node_id"] = at_node_id
+            typer.echo(json.dumps(result, indent=2))
+        else:
+            typer.echo(f"DRY RUN: would add node '{node_id}' (handler={handler})")
+            if at_node_id:
+                typer.echo(f"  Also would add AT gate node '{at_node_id}' (handler=wait.human)")
+                typer.echo(f"  Also would add edge: {node_id} -> {at_node_id}")
+            typer.echo("(no changes written)")
+    else:
+        with _dot_file_lock(file):
+            Path(file).write_text(updated)
+
+            timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            log_entry: dict = {
+                "timestamp": timestamp,
+                "file": file,
+                "command": "node add",
+                "node_id": node_id,
+                "handler": handler,
+                "label": label,
+                "status": status,
+            }
+            if at_node_id:
+                log_entry["at_node_id"] = at_node_id
+                log_entry["auto_pair_at"] = True
+            _append_ops_jsonl(file, log_entry)
+
+        if output == "json":
+            result = {"success": True, "node_id": node_id, "file": file}
+            if at_node_id:
+                result["at_node_id"] = at_node_id
+            typer.echo(json.dumps(result, indent=2))
+        else:
+            typer.echo(f"Node added: {node_id}")
+            if at_node_id:
+                typer.echo(f"  AT gate node added: {at_node_id}")
+                typer.echo(f"  Edge added: {node_id} -> {at_node_id}")
+            typer.echo(f"Updated: {file}")
+
+
+@pipeline_app.command("node-remove")
+def pipeline_node_remove(
+    file: str = typer.Argument(..., help="Path to .dot file"),
+    node_id: str = typer.Argument(..., help="Node ID to remove"),
+    keep_edges: bool = typer.Option(False, "--keep-edges", help="Do not remove edges referencing this node"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview without writing"),
+    output: str = typer.Option("text", "--output", help="Output format: text or json"),
+) -> None:
+    """Remove a node from a pipeline."""
+    from cobuilder.pipeline.node_ops import remove_node, _dot_file_lock, _append_ops_jsonl
+
+    try:
+        content = Path(file).read_text()
+    except FileNotFoundError:
+        typer.echo(f"Error: File not found: {file}", err=True)
+        raise typer.Exit(1)
+
+    remove_edges = not keep_edges
+    try:
+        updated, removed_edges = remove_node(content, node_id, remove_edges=remove_edges)
+    except ValueError as e:
+        if output == "json":
+            typer.echo(json.dumps({"success": False, "error": str(e)}, indent=2))
+        else:
+            typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+    if dry_run:
+        if output == "json":
+            typer.echo(json.dumps({
+                "success": True,
+                "dry_run": True,
+                "node_id": node_id,
+                "edges_removed": len(removed_edges),
+            }, indent=2))
+        else:
+            typer.echo(f"DRY RUN: would remove node '{node_id}'")
+            if removed_edges:
+                typer.echo(f"  Would also remove {len(removed_edges)} edge(s)")
+            typer.echo("(no changes written)")
+    else:
+        with _dot_file_lock(file):
+            Path(file).write_text(updated)
+
+            timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            _append_ops_jsonl(
+                file,
+                {
+                    "timestamp": timestamp,
+                    "file": file,
+                    "command": "node remove",
+                    "node_id": node_id,
+                    "edges_removed": len(removed_edges),
+                },
+            )
+
+        if output == "json":
+            typer.echo(json.dumps({
+                "success": True,
+                "node_id": node_id,
+                "edges_removed": len(removed_edges),
+                "file": file,
+            }, indent=2))
+        else:
+            typer.echo(f"Node removed: {node_id}")
+            if removed_edges:
+                typer.echo(f"  Also removed {len(removed_edges)} edge(s) referencing this node")
+            typer.echo(f"Updated: {file}")
+
+
+@pipeline_app.command("node-modify")
+def pipeline_node_modify(
+    file: str = typer.Argument(..., help="Path to .dot file"),
+    node_id: str = typer.Argument(..., help="Node ID to modify"),
+    set_attrs: List[str] = typer.Option(..., "--set", help="Attribute(s) to update as key=value (repeatable)"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview without writing"),
+    output: str = typer.Option("text", "--output", help="Output format: text or json"),
+) -> None:
+    """Modify attributes of an existing node."""
+    from cobuilder.pipeline.node_ops import modify_node, _parse_set_args, _dot_file_lock, _append_ops_jsonl
+
+    try:
+        content = Path(file).read_text()
+    except FileNotFoundError:
+        typer.echo(f"Error: File not found: {file}", err=True)
+        raise typer.Exit(1)
+
+    try:
+        attr_updates = _parse_set_args(list(set_attrs))
+    except ValueError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+    try:
+        updated = modify_node(content, node_id, attr_updates)
+    except ValueError as e:
+        if output == "json":
+            typer.echo(json.dumps({"success": False, "error": str(e)}, indent=2))
+        else:
+            typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+    if dry_run:
+        if output == "json":
+            typer.echo(json.dumps({
+                "success": True,
+                "dry_run": True,
+                "node_id": node_id,
+                "updates": attr_updates,
+            }, indent=2))
+        else:
+            typer.echo(f"DRY RUN: would modify node '{node_id}'")
+            for k, v in attr_updates.items():
+                typer.echo(f'  {k} = "{v}"')
+            typer.echo("(no changes written)")
+    else:
+        with _dot_file_lock(file):
+            Path(file).write_text(updated)
+
+            timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            _append_ops_jsonl(
+                file,
+                {
+                    "timestamp": timestamp,
+                    "file": file,
+                    "command": "node modify",
+                    "node_id": node_id,
+                    "updates": attr_updates,
+                },
+            )
+
+        if output == "json":
+            typer.echo(json.dumps({
+                "success": True,
+                "node_id": node_id,
+                "updates": attr_updates,
+                "file": file,
+            }, indent=2))
+        else:
+            typer.echo(f"Node modified: {node_id}")
+            for k, v in attr_updates.items():
+                typer.echo(f'  {k} = "{v}"')
+            typer.echo(f"Updated: {file}")
+
+
+# ---------------------------------------------------------------------------
+# Edge operations
+# ---------------------------------------------------------------------------
+
+
+@pipeline_app.command("edge-list")
+def pipeline_edge_list(
+    file: str = typer.Argument(..., help="Path to .dot file"),
+    output: str = typer.Option("text", "--output", help="Output format: text or json"),
+) -> None:
+    """List all edges in a pipeline."""
+    from cobuilder.pipeline.edge_ops import list_edges
+
+    try:
+        content = Path(file).read_text()
+    except FileNotFoundError:
+        typer.echo(f"Error: File not found: {file}", err=True)
+        raise typer.Exit(1)
+
+    list_edges(content, output=output)
+
+
+@pipeline_app.command("edge-add")
+def pipeline_edge_add(
+    file: str = typer.Argument(..., help="Path to .dot file"),
+    src: str = typer.Argument(..., help="Source node ID"),
+    dst: str = typer.Argument(..., help="Destination node ID"),
+    label: str = typer.Option("", "--label", help="Edge label (optional)"),
+    condition: str = typer.Option("", "--condition", help="Edge condition: pass, fail, or partial (optional)"),
+    set_attrs: Optional[List[str]] = typer.Option(None, "--set", help="Additional edge attribute(s) as key=value (repeatable)"),
+    allow_cycle: bool = typer.Option(False, "--allow-cycle", help="Skip unguarded cycle detection for this edge"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview without writing"),
+    output: str = typer.Option("text", "--output", help="Output format: text or json"),
+) -> None:
+    """Add a new edge to a pipeline."""
+    from cobuilder.pipeline.edge_ops import add_edge, _parse_set_args, _dot_file_lock, _append_ops_jsonl
+
+    try:
+        content = Path(file).read_text()
+    except FileNotFoundError:
+        typer.echo(f"Error: File not found: {file}", err=True)
+        raise typer.Exit(1)
+
+    extra_attrs = {}
+    if set_attrs:
+        try:
+            extra_attrs = _parse_set_args(list(set_attrs))
+        except ValueError as e:
+            typer.echo(f"Error: {e}", err=True)
+            raise typer.Exit(1)
+
+    try:
+        updated = add_edge(
+            content,
+            src,
+            dst,
+            label=label,
+            condition=condition,
+            extra_attrs=extra_attrs if extra_attrs else None,
+            allow_cycle=allow_cycle,
+        )
+    except ValueError as e:
+        if output == "json":
+            typer.echo(json.dumps({"success": False, "error": str(e)}, indent=2))
+        else:
+            typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+    desc = f"{src} -> {dst}"
+    if condition:
+        desc += f" [{condition}]"
+
+    if dry_run:
+        if output == "json":
+            typer.echo(json.dumps({
+                "success": True,
+                "dry_run": True,
+                "src": src,
+                "dst": dst,
+                "condition": condition,
+                "label": label,
+            }, indent=2))
+        else:
+            typer.echo(f"DRY RUN: would add edge '{desc}'")
+            typer.echo("(no changes written)")
+    else:
+        with _dot_file_lock(file):
+            Path(file).write_text(updated)
+
+            timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            _append_ops_jsonl(
+                file,
+                {
+                    "timestamp": timestamp,
+                    "file": file,
+                    "command": "edge add",
+                    "src": src,
+                    "dst": dst,
+                    "label": label,
+                    "condition": condition,
+                },
+            )
+
+        if output == "json":
+            typer.echo(json.dumps({
+                "success": True,
+                "src": src,
+                "dst": dst,
+                "condition": condition,
+                "label": label,
+                "file": file,
+            }, indent=2))
+        else:
+            typer.echo(f"Edge added: {desc}")
+            typer.echo(f"Updated: {file}")
+
+
+@pipeline_app.command("edge-remove")
+def pipeline_edge_remove(
+    file: str = typer.Argument(..., help="Path to .dot file"),
+    src: str = typer.Argument(..., help="Source node ID"),
+    dst: str = typer.Argument(..., help="Destination node ID"),
+    condition: str = typer.Option("", "--condition", help="Filter by condition (optional; removes all edges when omitted)"),
+    label: str = typer.Option("", "--label", help="Filter by label (optional)"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview without writing"),
+    output: str = typer.Option("text", "--output", help="Output format: text or json"),
+) -> None:
+    """Remove edge(s) from a pipeline."""
+    from cobuilder.pipeline.edge_ops import remove_edge, _dot_file_lock, _append_ops_jsonl
+
+    try:
+        content = Path(file).read_text()
+    except FileNotFoundError:
+        typer.echo(f"Error: File not found: {file}", err=True)
+        raise typer.Exit(1)
+
+    try:
+        updated, count = remove_edge(content, src, dst, condition=condition, label=label)
+    except ValueError as e:
+        if output == "json":
+            typer.echo(json.dumps({"success": False, "error": str(e)}, indent=2))
+        else:
+            typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+    desc = f"{src} -> {dst}"
+    if condition:
+        desc += f" [condition={condition}]"
+
+    if dry_run:
+        if output == "json":
+            typer.echo(json.dumps({
+                "success": True,
+                "dry_run": True,
+                "src": src,
+                "dst": dst,
+                "count": count,
+            }, indent=2))
+        else:
+            typer.echo(f"DRY RUN: would remove {count} edge(s) matching '{desc}'")
+            typer.echo("(no changes written)")
+    else:
+        with _dot_file_lock(file):
+            Path(file).write_text(updated)
+
+            timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            _append_ops_jsonl(
+                file,
+                {
+                    "timestamp": timestamp,
+                    "file": file,
+                    "command": "edge remove",
+                    "src": src,
+                    "dst": dst,
+                    "condition": condition,
+                    "label": label,
+                    "count": count,
+                },
+            )
+
+        if output == "json":
+            typer.echo(json.dumps({
+                "success": True,
+                "src": src,
+                "dst": dst,
+                "count": count,
+                "file": file,
+            }, indent=2))
+        else:
+            typer.echo(f"Edge(s) removed: {count} matching '{desc}'")
+            typer.echo(f"Updated: {file}")
+
+
+# ---------------------------------------------------------------------------
+# Checkpoint operations
+# ---------------------------------------------------------------------------
+
+
+@pipeline_app.command("checkpoint-save")
+def pipeline_checkpoint_save(
+    file: str = typer.Argument(..., help="Path to .dot file"),
+    output: str = typer.Option("", "--output", help="Output path for checkpoint JSON (default: auto-generated)"),
+) -> None:
+    """Save pipeline state to a JSON checkpoint."""
+    from cobuilder.pipeline.checkpoint import save_checkpoint
+
+    try:
+        result = save_checkpoint(file, output)
+        typer.echo(f"Checkpoint saved: {result['checkpoint_path']}")
+        cp = result["checkpoint"]
+        typer.echo(f"  Graph: {cp['graph_name']}")
+        typer.echo(f"  Nodes: {len(cp['nodes'])}")
+        typer.echo(f"  Edges: {len(cp['edges'])}")
+        typer.echo(f"  Hash:  {cp['content_hash']}")
+    except FileNotFoundError:
+        typer.echo(f"Error: File not found: {file}", err=True)
+        raise typer.Exit(1)
+    except Exception as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@pipeline_app.command("checkpoint-restore")
+def pipeline_checkpoint_restore(
+    file: str = typer.Argument(..., help="Path to checkpoint .json file"),
+    output: str = typer.Option("", "--output", help="Output path for restored .dot file (default: auto-generated)"),
+) -> None:
+    """Restore a pipeline from a JSON checkpoint."""
+    from cobuilder.pipeline.checkpoint import restore_checkpoint
+
+    try:
+        out_path = restore_checkpoint(file, output)
+        typer.echo(f"Pipeline restored: {out_path}")
+    except FileNotFoundError:
+        typer.echo(f"Error: File not found: {file}", err=True)
+        raise typer.Exit(1)
+    except json.JSONDecodeError as e:
+        typer.echo(f"Error: Invalid JSON in {file}: {e}", err=True)
+        raise typer.Exit(1)
+    except Exception as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+
+# ---------------------------------------------------------------------------
+# Dashboard
+# ---------------------------------------------------------------------------
+
+
+@pipeline_app.command("dashboard")
+def pipeline_dashboard(
+    file: str = typer.Argument(..., help="Path to pipeline .dot file"),
+    output: str = typer.Option("text", "--output", help="Output format: text or json"),
+    checkpoint: str = typer.Option("", "--checkpoint", metavar="PATH", help="Optional path to checkpoint .json for time-in-state estimates"),
+) -> None:
+    """Display unified lifecycle dashboard for a pipeline."""
+    from cobuilder.pipeline.dashboard import parse_file, load_checkpoint, compute_dashboard, render_dashboard
+
+    try:
+        data = parse_file(file)
+    except FileNotFoundError:
+        typer.echo(f"Error: File not found: {file}", err=True)
+        raise typer.Exit(1)
+    except Exception as e:
+        typer.echo(f"Error parsing {file}: {e}", err=True)
+        raise typer.Exit(1)
+
+    checkpoint_data = load_checkpoint(checkpoint)
+    dashboard = compute_dashboard(data, checkpoint_data)
+
+    if output == "json":
+        typer.echo(json.dumps(dashboard, indent=2))
+    else:
+        typer.echo(render_dashboard(dashboard))
+
+
+# ---------------------------------------------------------------------------
+# Init promise
+# ---------------------------------------------------------------------------
+
+
+@pipeline_app.command("init-promise")
+def pipeline_init_promise(
+    file: str = typer.Argument(..., help="Path to pipeline .dot file"),
+    json_output: bool = typer.Option(False, "--json", help="Output structured JSON instead of shell commands"),
+    execute: bool = typer.Option(False, "--execute", help="Execute the initialization commands"),
+) -> None:
+    """Generate cs-promise initialization commands from pipeline.dot."""
+    from cobuilder.pipeline.init_promise import parse_file, extract_promise_info, generate_shell_commands, generate_json_output
+
+    try:
+        data = parse_file(file)
+    except FileNotFoundError:
+        typer.echo(f"Error: File not found: {file}", err=True)
+        raise typer.Exit(1)
+    except Exception as e:
+        typer.echo(f"Error parsing {file}: {e}", err=True)
+        raise typer.Exit(1)
+
+    info = extract_promise_info(data)
+
+    if not info["codergen_nodes"]:
+        typer.echo(
+            "Warning: No codergen nodes found in pipeline. "
+            "Promise will have no task-derived ACs.",
+            err=True,
+        )
+
+    if json_output:
+        result = generate_json_output(info)
+        typer.echo(json.dumps(result, indent=2))
+    else:
+        commands = generate_shell_commands(info)
+        output_text = "\n".join(commands)
+        typer.echo(output_text)
+
+        if execute:
+            import re
+            import subprocess
+            typer.echo("\n# --- Executing initialization commands ---", err=True)
+
+            slug = re.sub(r"[^a-z0-9]+", "-", info["prd_ref"].lower()).strip("-")
+
+            typer.echo(f"Executing: cs-init --initiative {slug}", err=True)
+            result_proc = subprocess.run(
+                ["cs-init", "--initiative", slug],
+                capture_output=True,
+                text=True,
+            )
+            if result_proc.returncode != 0:
+                typer.echo(f"cs-init failed: {result_proc.stderr}", err=True)
+                raise typer.Exit(1)
+            if result_proc.stdout.strip():
+                typer.echo(f"cs-init output: {result_proc.stdout.strip()}", err=True)
+
+            label = info["graph_label"] or info["prd_ref"]
+            create_cmd = ["cs-promise", "--create", label]
+            for cg in info["codergen_nodes"]:
+                ac_desc = cg.get("acceptance") or cg.get("label", "")
+                if ac_desc:
+                    create_cmd.extend(["--ac", ac_desc])
+            create_cmd.extend(["--ac", "All pipeline nodes validated (triple-gate verification)"])
+
+            typer.echo("Executing: cs-promise --create ...", err=True)
+            result_proc = subprocess.run(
+                create_cmd,
+                capture_output=True,
+                text=True,
+            )
+            if result_proc.returncode != 0:
+                typer.echo(f"cs-promise --create failed: {result_proc.stderr}", err=True)
+                raise typer.Exit(1)
+            typer.echo(f"cs-promise output: {result_proc.stdout.strip()}", err=True)
+
+            typer.echo("\nInitialization complete.", err=True)
+            typer.echo("Run the validation gate commands as tasks complete.", err=True)
+
+
+# ---------------------------------------------------------------------------
+# Annotate
+# ---------------------------------------------------------------------------
+
+
+@pipeline_app.command("annotate")
+def pipeline_annotate(
+    file: str = typer.Argument(..., help="Path to pipeline .dot file"),
+    output: Optional[str] = typer.Option(None, "--output", help="Output file path (default: overwrite input file)"),
+    beads_json: Optional[str] = typer.Option(None, "--beads-json", help="Path to JSON file with beads data (default: runs bd list --json)"),
+    json_output: bool = typer.Option(False, "--json", help="Output changes as JSON"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would change without writing"),
+    verbose: bool = typer.Option(False, "--verbose", help="Show unmatched nodes"),
+) -> None:
+    """Annotate pipeline.dot with beads data (status, bead_id, acceptance criteria)."""
+    from cobuilder.pipeline.annotate import get_beads_data, annotate_pipeline
+    import os
+
+    try:
+        with open(file, "r") as f:
+            dot_content = f.read()
+    except FileNotFoundError:
+        typer.echo(f"Error: File not found: {file}", err=True)
+        raise typer.Exit(1)
+
+    beads = get_beads_data(beads_json or "")
+    if not beads:
+        typer.echo("Error: No beads data available.", err=True)
+        typer.echo(
+            "Provide --beads-json <file> or ensure 'bd list --json' works.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    updated, changes = annotate_pipeline(dot_content, beads, verbose=verbose)
+
+    if json_output:
+        result = {
+            "file": file,
+            "total_changes": len(changes),
+            "bead_id_updates": sum(1 for c in changes if c.get("updated_bead_id")),
+            "status_updates": sum(1 for c in changes if c.get("updated_status")),
+            "acceptance_adds": sum(1 for c in changes if c.get("added_acceptance")),
+            "changes": changes,
+        }
+        typer.echo(json.dumps(result, indent=2))
+    else:
+        if not changes:
+            typer.echo("No changes: no nodes could be matched to beads.")
+        else:
+            typer.echo(f"Annotated {len(changes)} node(s):")
+            for c in changes:
+                updates = []
+                if c.get("updated_bead_id"):
+                    updates.append(f"bead_id: {c['old_bead_id']} -> {c['bead_id']}")
+                if c.get("updated_status"):
+                    updates.append(f"status: {c['old_status']} -> {c['new_status']}")
+                if c.get("added_acceptance"):
+                    updates.append("acceptance: added")
+                if updates:
+                    typer.echo(f"  {c['node_id']}: {'; '.join(updates)}")
+                else:
+                    typer.echo(f"  {c['node_id']}: already up to date")
+
+    if not dry_run and changes:
+        output_path = output or file
+        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+        with open(output_path, "w") as f:
+            f.write(updated)
+        if not json_output:
+            typer.echo(f"\nWritten: {output_path}")
+    elif dry_run and not json_output:
+        typer.echo("\n(dry-run: no changes written)")

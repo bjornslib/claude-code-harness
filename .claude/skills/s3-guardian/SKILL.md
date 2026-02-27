@@ -883,7 +883,7 @@ When multiple DOT nodes have no dependency relationship, spawn orchestrators in 
 
 ```bash
 # Check edges to confirm independence before parallel dispatch
-python3 .claude/scripts/attractor/cli.py edge "${PIPELINE}" list --output json
+cobuilder pipeline edge-list "${PIPELINE}" --output json
 
 # Spawn each independent node as a separate orchestrator
 for NODE_ID in node1 node2 node3; do
@@ -1131,13 +1131,13 @@ When a node passes, advance its status using the attractor CLI:
 
 ```bash
 # Transition node to 'validated' status
-python3 .claude/scripts/attractor/cli.py transition .claude/attractor/pipelines/<pipeline>.dot <node_id> validated
+cobuilder pipeline transition .claude/attractor/pipelines/<pipeline>.dot <node_id> validated
 
 # If validation fails, transition to 'failed'
-python3 .claude/scripts/attractor/cli.py transition .claude/attractor/pipelines/<pipeline>.dot <node_id> failed
+cobuilder pipeline transition .claude/attractor/pipelines/<pipeline>.dot <node_id> failed
 
 # Save checkpoint after any transition
-python3 .claude/scripts/attractor/cli.py checkpoint save .claude/attractor/pipelines/<pipeline>.dot
+cobuilder pipeline checkpoint-save .claude/attractor/pipelines/<pipeline>.dot
 ```
 
 **Guardian workflow for DOT pipelines:**
@@ -1165,8 +1165,8 @@ def validate_dot_pipeline_node(node_id: str, node_attrs: dict):
 
     # 5. Advance pipeline status
     status = "validated" if result.verdict == "PASS" else "failed"
-    run(f"python3 .claude/scripts/attractor/cli.py transition .claude/attractor/pipelines/<pipeline>.dot {node_id} {status}")
-    run(f"python3 .claude/scripts/attractor/cli.py checkpoint save .claude/attractor/pipelines/<pipeline>.dot")
+    run(f"cobuilder pipeline transition .claude/attractor/pipelines/<pipeline>.dot {node_id} {status}")
+    run(f"cobuilder pipeline checkpoint-save .claude/attractor/pipelines/<pipeline>.dot")
 
     # 6. Meet completion promise AC
     if result.verdict == "PASS":
