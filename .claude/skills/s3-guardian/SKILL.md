@@ -147,8 +147,8 @@ Before writing the PRD, understand the current codebase structure using CoBuilde
 # Generate structured YAML codebase context filtered to the relevant PRD scope
 cobuilder repomap context --name <repo-name> --prd PRD-{ID}
 
-# For SD-optimized output (recommended when delegating to solution-design-architect):
-cobuilder repomap context --name <repo-name> --prd PRD-{ID} --format sd-injection
+# For agent-consumable output (recommended when delegating to solution-design-architect):
+cobuilder repomap context --name <repo-name> --prd PRD-{ID} --format yaml
 ```
 
 The command outputs structured YAML with module relevance, dependency graph, and protected files:
@@ -228,7 +228,7 @@ When delegating SD creation to a `solution-design-architect`, inject the RepoMap
 ```python
 # Generate RepoMap context (capture output as string)
 context_yaml = Bash(
-    f"cobuilder repomap context --name {repo_name} --prd {prd_id} --format sd-injection"
+    f"cobuilder repomap context --name {repo_name} --prd {prd_id} --format yaml"
 )
 
 # Inject into solution-design-architect prompt
@@ -255,7 +255,7 @@ Task(
 )
 ```
 
-> **Note on `--format sd-injection`**: This flag produces output pre-formatted for direct paste into SD prompts — it omits summary statistics and uses concise field names optimized for LLM consumption. Use the default YAML format (no flag) when reviewing context yourself; use `--format sd-injection` when the output is consumed by another agent.
+> **Note on `--format yaml`**: This is the default format and produces structured YAML with module info, dependency graph, and key interfaces. Use `--format yaml` (or omit the flag) when reviewing context yourself or when the output is consumed by another agent or for LLM injection.
 
 ### Step 0.2: Create DOT Pipeline
 

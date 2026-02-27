@@ -57,7 +57,19 @@ def pipeline_create(
     taskmaster_tasks = {}
     if not skip_taskmaster:
         typer.echo("[3/7] Running TaskMaster parse...")
-        taskmaster_tasks = run_taskmaster_parse(str(sd_path.resolve()), str(project_root.resolve()))
+        # Fetch RepoMap context for enriched task decomposition
+        repomap_ctx = ""
+        try:
+            from cobuilder.bridge import get_repomap_context
+            repomap_ctx = get_repomap_context(repo, project_root=project_root)
+            typer.echo("      RepoMap context injected into TaskMaster input")
+        except (KeyError, FileNotFoundError):
+            typer.echo("      (RepoMap context unavailable — run 'cobuilder repomap sync' first)")
+        taskmaster_tasks = run_taskmaster_parse(
+            str(sd_path.resolve()),
+            str(project_root.resolve()),
+            repomap_context=repomap_ctx,
+        )
     else:
         typer.echo("[3/7] Skipping TaskMaster parse (--skip-taskmaster)")
 
