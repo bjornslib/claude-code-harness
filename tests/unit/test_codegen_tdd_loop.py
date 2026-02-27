@@ -7,8 +7,8 @@ from uuid import uuid4
 
 import pytest
 
-from zerorepo.codegen.state import GenerationState, GenerationStatus
-from zerorepo.codegen.tdd_loop import (
+from cobuilder.repomap.codegen.state import GenerationState, GenerationStatus
+from cobuilder.repomap.codegen.tdd_loop import (
     DebugDiagnoser,
     DiagnosisResult,
     ImplementationGenerator,
@@ -19,8 +19,8 @@ from zerorepo.codegen.tdd_loop import (
     TDDLoopResult,
     TestGenerator,
 )
-from zerorepo.models.enums import InterfaceType, NodeLevel, NodeType
-from zerorepo.models.node import RPGNode
+from cobuilder.repomap.models.enums import InterfaceType, NodeLevel, NodeType
+from cobuilder.repomap.models.node import RPGNode
 
 
 # --------------------------------------------------------------------------- #

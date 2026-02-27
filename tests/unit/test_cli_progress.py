@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from rich.console import Console
 
-from zerorepo.cli.progress import (
+from cobuilder.repomap.cli.progress import (
     ProgressDisplay,
     StatusDisplay,
     progress_bar,
@@ -110,14 +110,14 @@ class TestConvenienceFunctions:
     def test_progress_spinner(self) -> None:
         """Convenience spinner works."""
         # Reset the default display to avoid stale state
-        import zerorepo.cli.progress as mod
+        import cobuilder.repomap.cli.progress as mod
         mod._default_display = None
         with progress_spinner("Test"):
             pass
 
     def test_progress_bar(self) -> None:
         """Convenience bar works."""
-        import zerorepo.cli.progress as mod
+        import cobuilder.repomap.cli.progress as mod
         mod._default_display = None
         with progress_bar(5, "Test") as progress:
             assert progress is not None

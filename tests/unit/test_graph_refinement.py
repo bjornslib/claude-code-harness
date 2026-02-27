@@ -24,15 +24,15 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
-from zerorepo.llm.models import ModelTier
-from zerorepo.ontology.models import FeatureNode
-from zerorepo.graph_construction.dependencies import DependencyEdge
-from zerorepo.graph_construction.metrics import (
+from cobuilder.repomap.llm.models import ModelTier
+from cobuilder.repomap.ontology.models import FeatureNode
+from cobuilder.repomap.graph_construction.dependencies import DependencyEdge
+from cobuilder.repomap.graph_construction.metrics import (
     MetricsConfig,
     PartitionMetrics,
 )
-from zerorepo.graph_construction.partitioner import ModuleSpec
-from zerorepo.graph_construction.refinement import (
+from cobuilder.repomap.graph_construction.partitioner import ModuleSpec
+from cobuilder.repomap.graph_construction.refinement import (
     ActionType,
     GraphRefinement,
     RefinementAction,
@@ -850,7 +850,7 @@ class TestImports:
     """Tests for module imports."""
 
     def test_import_from_package(self) -> None:
-        from zerorepo.graph_construction import (
+        from cobuilder.repomap.graph_construction import (
             ActionType,
             GraphRefinement,
             RefinementAction,
@@ -861,7 +861,7 @@ class TestImports:
         assert GraphRefinement is not None
 
     def test_import_from_module(self) -> None:
-        from zerorepo.graph_construction.refinement import (
+        from cobuilder.repomap.graph_construction.refinement import (
             ActionType,
             GraphRefinement,
             RefinementAction,

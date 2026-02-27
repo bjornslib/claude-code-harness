@@ -7,13 +7,13 @@ from uuid import UUID
 
 import pytest
 
-from zerorepo.models.edge import RPGEdge
-from zerorepo.models.enums import EdgeType, NodeLevel, NodeType
-from zerorepo.models.graph import RPGGraph
-from zerorepo.models.node import RPGNode
-from zerorepo.rpg_enrichment.file_encoder import FileEncoder
-from zerorepo.rpg_enrichment.folder_encoder import FolderEncoder
-from zerorepo.rpg_enrichment.ordering_encoder import IntraModuleOrderEncoder
+from cobuilder.repomap.models.edge import RPGEdge
+from cobuilder.repomap.models.enums import EdgeType, NodeLevel, NodeType
+from cobuilder.repomap.models.graph import RPGGraph
+from cobuilder.repomap.models.node import RPGNode
+from cobuilder.repomap.rpg_enrichment.file_encoder import FileEncoder
+from cobuilder.repomap.rpg_enrichment.folder_encoder import FolderEncoder
+from cobuilder.repomap.rpg_enrichment.ordering_encoder import IntraModuleOrderEncoder
 
 
 # ---------------------------------------------------------------------------
@@ -259,7 +259,7 @@ class TestIntraModuleOrderInPipeline:
     """Test the ordering encoder in a full pipeline."""
 
     def test_folder_file_ordering_pipeline(self) -> None:
-        from zerorepo.rpg_enrichment.pipeline import RPGBuilder
+        from cobuilder.repomap.rpg_enrichment.pipeline import RPGBuilder
 
         graph = RPGGraph()
         ids: dict[str, UUID] = {}

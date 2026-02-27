@@ -10,9 +10,9 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from zerorepo.models.edge import RPGEdge
-from zerorepo.models.enums import EdgeType, InterfaceType, NodeLevel, NodeType
-from zerorepo.models.node import RPGNode
+from cobuilder.repomap.models.edge import RPGEdge
+from cobuilder.repomap.models.enums import EdgeType, InterfaceType, NodeLevel, NodeType
+from cobuilder.repomap.models.node import RPGNode
 
 
 pytestmark = pytest.mark.functional

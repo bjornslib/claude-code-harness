@@ -22,10 +22,10 @@ from unittest.mock import MagicMock
 import networkx as nx
 import pytest
 
-from zerorepo.llm.models import ModelTier
-from zerorepo.ontology.models import FeatureNode
-from zerorepo.graph_construction.partitioner import ModuleSpec
-from zerorepo.graph_construction.dependencies import (
+from cobuilder.repomap.llm.models import ModelTier
+from cobuilder.repomap.ontology.models import FeatureNode
+from cobuilder.repomap.graph_construction.partitioner import ModuleSpec
+from cobuilder.repomap.graph_construction.dependencies import (
     DependencyConfig,
     DependencyEdge,
     DependencyInference,
@@ -529,7 +529,7 @@ class TestImports:
     """Tests for module imports."""
 
     def test_import_from_package(self) -> None:
-        from zerorepo.graph_construction import (
+        from cobuilder.repomap.graph_construction import (
             DependencyConfig,
             DependencyEdge,
             DependencyInference,
@@ -538,7 +538,7 @@ class TestImports:
         assert DependencyInference is not None
 
     def test_import_from_module(self) -> None:
-        from zerorepo.graph_construction.dependencies import (
+        from cobuilder.repomap.graph_construction.dependencies import (
             DependencyConfig,
             DependencyEdge,
             DependencyInference,

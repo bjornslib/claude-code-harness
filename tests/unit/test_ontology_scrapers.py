@@ -14,16 +14,16 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from zerorepo.ontology.models import FeatureNode
-from zerorepo.ontology.scrapers.base import SeedGenerator
-from zerorepo.ontology.scrapers.build_ontology import (
+from cobuilder.repomap.ontology.models import FeatureNode
+from cobuilder.repomap.ontology.scrapers.base import SeedGenerator
+from cobuilder.repomap.ontology.scrapers.build_ontology import (
     CSV_COLUMNS,
     OntologyBuilder,
     build_ontology,
 )
-from zerorepo.ontology.scrapers.github_topics import GitHubTopicsGenerator
-from zerorepo.ontology.scrapers.library_docs import LibraryDocsGenerator
-from zerorepo.ontology.scrapers.stackoverflow_tags import StackOverflowTagsGenerator
+from cobuilder.repomap.ontology.scrapers.github_topics import GitHubTopicsGenerator
+from cobuilder.repomap.ontology.scrapers.library_docs import LibraryDocsGenerator
+from cobuilder.repomap.ontology.scrapers.stackoverflow_tags import StackOverflowTagsGenerator
 
 
 # ---------------------------------------------------------------------------
@@ -751,21 +751,21 @@ class TestTaxonomyExpander:
 
     def test_expander_name(self) -> None:
         """Expander has correct name."""
-        from zerorepo.ontology.scrapers.expander import TaxonomyExpander
+        from cobuilder.repomap.ontology.scrapers.expander import TaxonomyExpander
 
         exp = TaxonomyExpander(target_count=100)
         assert exp.name == "Taxonomy Expander"
 
     def test_expander_prefix(self) -> None:
         """Expander has correct source prefix."""
-        from zerorepo.ontology.scrapers.expander import TaxonomyExpander
+        from cobuilder.repomap.ontology.scrapers.expander import TaxonomyExpander
 
         exp = TaxonomyExpander(target_count=100)
         assert exp.source_prefix == "exp"
 
     def test_expander_respects_target_count(self) -> None:
         """Expander respects the target_count limit."""
-        from zerorepo.ontology.scrapers.expander import TaxonomyExpander
+        from cobuilder.repomap.ontology.scrapers.expander import TaxonomyExpander
 
         exp = TaxonomyExpander(target_count=500)
         nodes = exp.generate()
@@ -773,7 +773,7 @@ class TestTaxonomyExpander:
 
     def test_expander_produces_valid_nodes(self) -> None:
         """Expander produces valid FeatureNode instances."""
-        from zerorepo.ontology.scrapers.expander import TaxonomyExpander
+        from cobuilder.repomap.ontology.scrapers.expander import TaxonomyExpander
 
         exp = TaxonomyExpander(target_count=200)
         nodes = exp.generate()
@@ -782,7 +782,7 @@ class TestTaxonomyExpander:
 
     def test_expander_no_orphans(self) -> None:
         """Expander produces no orphan nodes."""
-        from zerorepo.ontology.scrapers.expander import TaxonomyExpander
+        from cobuilder.repomap.ontology.scrapers.expander import TaxonomyExpander
 
         exp = TaxonomyExpander(target_count=500)
         nodes = exp.generate()
@@ -795,7 +795,7 @@ class TestTaxonomyExpander:
 
     def test_expander_unique_ids(self) -> None:
         """Expander produces unique IDs."""
-        from zerorepo.ontology.scrapers.expander import TaxonomyExpander
+        from cobuilder.repomap.ontology.scrapers.expander import TaxonomyExpander
 
         exp = TaxonomyExpander(target_count=1000)
         nodes = exp.generate()
@@ -804,7 +804,7 @@ class TestTaxonomyExpander:
 
     def test_expander_has_metadata(self) -> None:
         """Expanded nodes have proper metadata."""
-        from zerorepo.ontology.scrapers.expander import TaxonomyExpander
+        from cobuilder.repomap.ontology.scrapers.expander import TaxonomyExpander
 
         exp = TaxonomyExpander(target_count=100)
         nodes = exp.generate()
@@ -878,8 +878,8 @@ class TestScrapersPackageImports:
     """Test that the scrapers package exports all expected symbols."""
 
     def test_import_from_package(self) -> None:
-        """All public symbols importable from zerorepo.ontology.scrapers."""
-        from zerorepo.ontology.scrapers import (
+        """All public symbols importable from cobuilder.repomap.ontology.scrapers."""
+        from cobuilder.repomap.ontology.scrapers import (
             GitHubTopicsGenerator,
             LibraryDocsGenerator,
             OntologyBuilder,
@@ -897,6 +897,6 @@ class TestScrapersPackageImports:
 
     def test_import_base(self) -> None:
         """SeedGenerator is importable from base module."""
-        from zerorepo.ontology.scrapers.base import SeedGenerator
+        from cobuilder.repomap.ontology.scrapers.base import SeedGenerator
 
         assert SeedGenerator is not None

@@ -15,8 +15,8 @@ import time
 
 import pytest
 
-from zerorepo.evaluation.models import ProfilingData, TokenStats
-from zerorepo.evaluation.profiling import ProfilingCollector
+from cobuilder.repomap.evaluation.models import ProfilingData, TokenStats
+from cobuilder.repomap.evaluation.profiling import ProfilingCollector
 
 
 # ---------------------------------------------------------------------------

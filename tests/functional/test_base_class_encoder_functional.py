@@ -9,12 +9,12 @@ from __future__ import annotations
 
 import pytest
 
-from zerorepo.models.edge import RPGEdge
-from zerorepo.models.enums import EdgeType, InterfaceType, NodeLevel, NodeType
-from zerorepo.models.graph import RPGGraph
-from zerorepo.models.node import RPGNode
-from zerorepo.rpg_enrichment.baseclass_encoder import BaseClassEncoder
-from zerorepo.rpg_enrichment.pipeline import RPGBuilder
+from cobuilder.repomap.models.edge import RPGEdge
+from cobuilder.repomap.models.enums import EdgeType, InterfaceType, NodeLevel, NodeType
+from cobuilder.repomap.models.graph import RPGGraph
+from cobuilder.repomap.models.node import RPGNode
+from cobuilder.repomap.rpg_enrichment.baseclass_encoder import BaseClassEncoder
+from cobuilder.repomap.rpg_enrichment.pipeline import RPGBuilder
 
 
 # ---------------------------------------------------------------------------

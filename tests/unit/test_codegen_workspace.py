@@ -14,12 +14,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from zerorepo.codegen.file_writer import BatchedFileWriter
-from zerorepo.codegen.progress import ProgressLogger
-from zerorepo.codegen.reindexer import SerenaReindexer
-from zerorepo.codegen.repo_state import RepositoryStateManager
-from zerorepo.codegen.signal_handler import GracefulShutdownHandler
-from zerorepo.serena.exceptions import MCPError
+from cobuilder.repomap.codegen.file_writer import BatchedFileWriter
+from cobuilder.repomap.codegen.progress import ProgressLogger
+from cobuilder.repomap.codegen.reindexer import SerenaReindexer
+from cobuilder.repomap.codegen.repo_state import RepositoryStateManager
+from cobuilder.repomap.codegen.signal_handler import GracefulShutdownHandler
+from cobuilder.repomap.serena.exceptions import MCPError
 
 
 # =====================================================================
@@ -101,7 +101,7 @@ class TestBatchedFileWriter:
         target = tmp_path / "fail.py"
 
         # Patch os.rename to fail, simulating an error after writing
-        with patch("zerorepo.codegen.file_writer.os.rename", side_effect=OSError("rename failed")):
+        with patch("cobuilder.repomap.codegen.file_writer.os.rename", side_effect=OSError("rename failed")):
             writer.queue_write(target, "content")
             with pytest.raises(OSError, match="rename failed"):
                 writer.flush()

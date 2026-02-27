@@ -19,9 +19,9 @@ from typing import Any
 import numpy as np
 import pytest
 
-from zerorepo.ontology.models import FeatureNode
-from zerorepo.graph_construction.partitioner import ModuleSpec
-from zerorepo.graph_construction.metrics import (
+from cobuilder.repomap.ontology.models import FeatureNode
+from cobuilder.repomap.graph_construction.partitioner import ModuleSpec
+from cobuilder.repomap.graph_construction.metrics import (
     CohesionResult,
     CouplingResult,
     MetricsConfig,
@@ -585,7 +585,7 @@ class TestImports:
     """Tests for module imports."""
 
     def test_import_from_package(self) -> None:
-        from zerorepo.graph_construction import (
+        from cobuilder.repomap.graph_construction import (
             CohesionResult,
             CouplingResult,
             MetricsConfig,
@@ -599,7 +599,7 @@ class TestImports:
         assert compute_all_metrics is not None
 
     def test_import_from_module(self) -> None:
-        from zerorepo.graph_construction.metrics import (
+        from cobuilder.repomap.graph_construction.metrics import (
             compute_feature_modularity,
         )
         assert compute_feature_modularity is not None

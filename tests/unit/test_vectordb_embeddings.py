@@ -10,8 +10,8 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from zerorepo.vectordb.embeddings import EmbeddingGenerator
-from zerorepo.vectordb.exceptions import EmbeddingError
+from cobuilder.repomap.vectordb.embeddings import EmbeddingGenerator
+from cobuilder.repomap.vectordb.exceptions import EmbeddingError
 
 
 def _mock_model(dim: int = 384) -> MagicMock:
@@ -85,7 +85,7 @@ class TestEmbeddingGeneratorEmbed:
         v2 = gen.embed("goodbye")
         assert v1 != v2
 
-    @patch("zerorepo.vectordb.embeddings.EmbeddingGenerator._load_model")
+    @patch("cobuilder.repomap.vectordb.embeddings.EmbeddingGenerator._load_model")
     def test_embed_triggers_lazy_load(self, mock_load: MagicMock) -> None:
         gen = EmbeddingGenerator()
         gen._model = _mock_model()  # Set after init to bypass lazy load

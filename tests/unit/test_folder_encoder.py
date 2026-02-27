@@ -7,16 +7,16 @@ from uuid import UUID
 
 import pytest
 
-from zerorepo.models.edge import RPGEdge
-from zerorepo.models.enums import (
+from cobuilder.repomap.models.edge import RPGEdge
+from cobuilder.repomap.models.enums import (
     EdgeType,
     InterfaceType,
     NodeLevel,
     NodeType,
 )
-from zerorepo.models.graph import RPGGraph
-from zerorepo.models.node import RPGNode
-from zerorepo.rpg_enrichment.folder_encoder import FolderEncoder, _to_package_name
+from cobuilder.repomap.models.graph import RPGGraph
+from cobuilder.repomap.models.node import RPGNode
+from cobuilder.repomap.rpg_enrichment.folder_encoder import FolderEncoder, _to_package_name
 
 
 # ---------------------------------------------------------------------------
@@ -423,7 +423,7 @@ class TestFolderEncoderInPipeline:
     """Test FolderEncoder works correctly in RPGBuilder pipeline."""
 
     def test_encode_then_validate_in_pipeline(self) -> None:
-        from zerorepo.rpg_enrichment.pipeline import RPGBuilder
+        from cobuilder.repomap.rpg_enrichment.pipeline import RPGBuilder
 
         graph, _ = _build_tree_graph()
         builder = RPGBuilder()

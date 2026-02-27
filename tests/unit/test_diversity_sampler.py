@@ -18,8 +18,8 @@ from typing import Any
 
 import pytest
 
-from zerorepo.ontology.models import FeatureNode, FeaturePath
-from zerorepo.selection.diversity_sampler import (
+from cobuilder.repomap.ontology.models import FeatureNode, FeaturePath
+from cobuilder.repomap.selection.diversity_sampler import (
     DiversityConfig,
     DiversityMetrics,
     DiversitySampler,
@@ -410,7 +410,7 @@ class TestImports:
     """Tests for module imports."""
 
     def test_import_from_package(self) -> None:
-        from zerorepo.selection import (
+        from cobuilder.repomap.selection import (
             DiversityConfig,
             DiversityMetrics,
             DiversitySampler,
@@ -419,7 +419,7 @@ class TestImports:
         assert DiversitySampler is not None
 
     def test_import_from_module(self) -> None:
-        from zerorepo.selection.diversity_sampler import (
+        from cobuilder.repomap.selection.diversity_sampler import (
             DiversityConfig,
             DiversityMetrics,
             DiversitySampler,

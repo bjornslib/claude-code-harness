@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from zerorepo.codegen.regression_detector import (
+from cobuilder.repomap.codegen.regression_detector import (
     Regression,
     RegressionDetector,
     RegressionDetectorConfig,

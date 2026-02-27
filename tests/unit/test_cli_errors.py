@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from zerorepo.cli.errors import (
+from cobuilder.repomap.cli.errors import (
     EXIT_CONFIG_ERROR,
     EXIT_GENERAL_ERROR,
     EXIT_SUCCESS,

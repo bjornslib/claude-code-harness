@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 import pytest
 from pydantic import ValidationError
 
-from zerorepo.spec_parser.models import (
+from cobuilder.repomap.spec_parser.models import (
     Component,
     Constraint,
     ConstraintPriority,

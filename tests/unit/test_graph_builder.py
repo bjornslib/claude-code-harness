@@ -24,15 +24,15 @@ import networkx as nx
 import numpy as np
 import pytest
 
-from zerorepo.llm.models import ModelTier
-from zerorepo.ontology.models import FeatureNode
-from zerorepo.graph_construction.builder import (
+from cobuilder.repomap.llm.models import ModelTier
+from cobuilder.repomap.ontology.models import FeatureNode
+from cobuilder.repomap.graph_construction.builder import (
     BuilderConfig,
     FunctionalityGraph,
     FunctionalityGraphBuilder,
 )
-from zerorepo.graph_construction.dependencies import DependencyEdge
-from zerorepo.graph_construction.partitioner import ModuleSpec, PartitionerConfig
+from cobuilder.repomap.graph_construction.dependencies import DependencyEdge
+from cobuilder.repomap.graph_construction.partitioner import ModuleSpec, PartitionerConfig
 
 
 # ---------------------------------------------------------------------------
@@ -239,7 +239,7 @@ class TestToJson:
         assert len(data["modules"]) == 3
 
     def test_json_with_metrics(self) -> None:
-        from zerorepo.graph_construction.metrics import (
+        from cobuilder.repomap.graph_construction.metrics import (
             MetricsConfig,
             ModularityResult,
             PartitionMetrics,
@@ -497,7 +497,7 @@ class TestImports:
     """Tests for module imports."""
 
     def test_import_from_package(self) -> None:
-        from zerorepo.graph_construction import (
+        from cobuilder.repomap.graph_construction import (
             BuilderConfig,
             FunctionalityGraph,
             FunctionalityGraphBuilder,
@@ -505,7 +505,7 @@ class TestImports:
         assert FunctionalityGraphBuilder is not None
 
     def test_import_from_module(self) -> None:
-        from zerorepo.graph_construction.builder import (
+        from cobuilder.repomap.graph_construction.builder import (
             BuilderConfig,
             FunctionalityGraph,
             FunctionalityGraphBuilder,

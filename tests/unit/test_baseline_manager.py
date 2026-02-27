@@ -7,11 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from zerorepo.models.enums import EdgeType, NodeLevel, NodeType
-from zerorepo.models.edge import RPGEdge
-from zerorepo.models.graph import RPGGraph
-from zerorepo.models.node import RPGNode
-from zerorepo.serena.baseline import BaselineManager
+from cobuilder.repomap.models.enums import EdgeType, NodeLevel, NodeType
+from cobuilder.repomap.models.edge import RPGEdge
+from cobuilder.repomap.models.graph import RPGGraph
+from cobuilder.repomap.models.node import RPGNode
+from cobuilder.repomap.serena.baseline import BaselineManager
 
 
 # ---------------------------------------------------------------------------

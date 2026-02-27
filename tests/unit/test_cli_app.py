@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 from typer.testing import CliRunner
 
-from zerorepo.cli.app import app
+from cobuilder.repomap.cli.app import app
 
 
 runner = CliRunner()

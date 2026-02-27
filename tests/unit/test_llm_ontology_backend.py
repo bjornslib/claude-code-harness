@@ -14,18 +14,18 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import ValidationError
 
-from zerorepo.llm.exceptions import LLMGatewayError
-from zerorepo.llm.gateway import LLMGateway
-from zerorepo.llm.models import GatewayConfig, ModelTier
-from zerorepo.llm.prompt_templates import PromptTemplate
-from zerorepo.ontology.backend import OntologyBackend
-from zerorepo.ontology.llm_backend import (
+from cobuilder.repomap.llm.exceptions import LLMGatewayError
+from cobuilder.repomap.llm.gateway import LLMGateway
+from cobuilder.repomap.llm.models import GatewayConfig, ModelTier
+from cobuilder.repomap.llm.prompt_templates import PromptTemplate
+from cobuilder.repomap.ontology.backend import OntologyBackend
+from cobuilder.repomap.ontology.llm_backend import (
     LLMBackendConfig,
     LLMFeatureNodeResponse,
     LLMOntologyBackend,
     LLMOntologyResponse,
 )
-from zerorepo.ontology.models import FeatureNode, FeaturePath, OntologyStats
+from cobuilder.repomap.ontology.models import FeatureNode, FeaturePath, OntologyStats
 
 
 # ---------------------------------------------------------------------------
@@ -954,15 +954,15 @@ class TestLLMBackendPackageImports:
     """Test that the LLM backend is importable from the ontology package."""
 
     def test_import_from_package(self) -> None:
-        """LLM backend classes are importable from zerorepo.ontology."""
-        from zerorepo.ontology import LLMBackendConfig, LLMOntologyBackend
+        """LLM backend classes are importable from cobuilder.repomap.ontology."""
+        from cobuilder.repomap.ontology import LLMBackendConfig, LLMOntologyBackend
 
         assert LLMOntologyBackend is not None
         assert LLMBackendConfig is not None
 
     def test_import_from_module(self) -> None:
         """LLM backend classes are importable from the module."""
-        from zerorepo.ontology.llm_backend import (
+        from cobuilder.repomap.ontology.llm_backend import (
             LLMBackendConfig,
             LLMFeatureNodeResponse,
             LLMOntologyBackend,

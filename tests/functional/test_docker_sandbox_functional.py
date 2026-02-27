@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from zerorepo.sandbox import (
+from cobuilder.repomap.sandbox import (
     DockerError,
     DockerSandbox,
     ExecutionResult,
@@ -30,7 +30,7 @@ from zerorepo.sandbox import (
 @pytest.fixture
 def mock_docker():
     """Fixture that patches the docker module used by sandbox.py."""
-    with patch("zerorepo.sandbox.sandbox.docker") as mock_mod:
+    with patch("cobuilder.repomap.sandbox.sandbox.docker") as mock_mod:
         mock_client = MagicMock()
         mock_mod.from_env.return_value = mock_client
         mock_mod.DockerClient = MagicMock

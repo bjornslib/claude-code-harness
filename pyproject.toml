@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "zerorepo"
+name = "cobuilder"
 version = "0.1.0"
-description = "ZeroRepo - Repository Planning Graph (RPG) for generating complete software repositories"
+description = "CoBuilder: unified codebase intelligence (repomap + pipeline + agents)"
 requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2.0,<3.0",
@@ -17,7 +17,8 @@ dependencies = [
 ]
 
 [project.scripts]
-zerorepo = "zerorepo.cli.app:app"
+cobuilder = "cobuilder.__main__:main"
+zerorepo = "cobuilder.repomap.cli.app:app"
 
 [project.optional-dependencies]
 dev = [
@@ -40,4 +41,4 @@ markers = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/zerorepo"]
+packages = ["cobuilder"]

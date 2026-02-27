@@ -27,7 +27,7 @@ from uuid import uuid4
 import pytest
 import typer
 
-from zerorepo.spec_parser.models import (
+from cobuilder.repomap.spec_parser.models import (
     Constraint,
     ConstraintPriority,
     ConflictSeverity,
@@ -107,7 +107,7 @@ class TestReadInput:
     """Tests for _read_input helper."""
 
     def test_read_existing_file(self, tmp_path: Path) -> None:
-        from zerorepo.cli.spec import _read_input
+        from cobuilder.repomap.cli.spec import _read_input
 
         f = tmp_path / "test.txt"
         f.write_text("hello world content", encoding="utf-8")
@@ -116,19 +116,19 @@ class TestReadInput:
         assert content == "hello world content"
 
     def test_read_nonexistent_file(self, tmp_path: Path) -> None:
-        from zerorepo.cli.spec import _read_input
+        from cobuilder.repomap.cli.spec import _read_input
 
         with pytest.raises(typer.BadParameter, match="not found"):
             _read_input(tmp_path / "missing.txt")
 
     def test_read_directory(self, tmp_path: Path) -> None:
-        from zerorepo.cli.spec import _read_input
+        from cobuilder.repomap.cli.spec import _read_input
 
         with pytest.raises(typer.BadParameter, match="Not a file"):
             _read_input(tmp_path)
 
     def test_read_empty_file(self, tmp_path: Path) -> None:
-        from zerorepo.cli.spec import _read_input
+        from cobuilder.repomap.cli.spec import _read_input
 
         f = tmp_path / "empty.txt"
         f.write_text("", encoding="utf-8")
@@ -137,7 +137,7 @@ class TestReadInput:
             _read_input(f)
 
     def test_read_whitespace_only(self, tmp_path: Path) -> None:
-        from zerorepo.cli.spec import _read_input
+        from cobuilder.repomap.cli.spec import _read_input
 
         f = tmp_path / "whitespace.txt"
         f.write_text("   \n\t  ", encoding="utf-8")
@@ -152,7 +152,7 @@ class TestLoadSpec:
     def test_load_valid_spec(
         self, spec_json_file: Path, sample_spec: RepositorySpec
     ) -> None:
-        from zerorepo.cli.spec import _load_spec
+        from cobuilder.repomap.cli.spec import _load_spec
 
         loaded = _load_spec(spec_json_file)
         assert loaded.description == sample_spec.description
@@ -160,7 +160,7 @@ class TestLoadSpec:
         assert len(loaded.constraints) == 2
 
     def test_load_invalid_json(self, tmp_path: Path) -> None:
-        from zerorepo.cli.spec import _load_spec
+        from cobuilder.repomap.cli.spec import _load_spec
 
         f = tmp_path / "bad.json"
         f.write_text("{invalid json}", encoding="utf-8")
@@ -169,7 +169,7 @@ class TestLoadSpec:
             _load_spec(f)
 
     def test_load_nonexistent(self, tmp_path: Path) -> None:
-        from zerorepo.cli.spec import _load_spec
+        from cobuilder.repomap.cli.spec import _load_spec
 
         with pytest.raises(typer.BadParameter, match="not found"):
             _load_spec(tmp_path / "missing.json")
@@ -181,7 +181,7 @@ class TestWriteSpec:
     def test_write_spec(
         self, tmp_path: Path, sample_spec: RepositorySpec
     ) -> None:
-        from zerorepo.cli.spec import _write_spec
+        from cobuilder.repomap.cli.spec import _write_spec
 
         output = tmp_path / "output.json"
         _write_spec(sample_spec, output)
@@ -193,7 +193,7 @@ class TestWriteSpec:
     def test_write_creates_parent_dirs(
         self, tmp_path: Path, sample_spec: RepositorySpec
     ) -> None:
-        from zerorepo.cli.spec import _write_spec
+        from cobuilder.repomap.cli.spec import _write_spec
 
         output = tmp_path / "nested" / "dir" / "spec.json"
         _write_spec(sample_spec, output)
@@ -211,12 +211,12 @@ class TestPrintSpecSummary:
 
     def test_summary_doesnt_crash(self, sample_spec: RepositorySpec) -> None:
         """Just verify it doesn't raise."""
-        from zerorepo.cli.spec import _print_spec_summary
+        from cobuilder.repomap.cli.spec import _print_spec_summary
 
         _print_spec_summary(sample_spec)  # Should not raise
 
     def test_summary_with_conflicts(self, sample_spec: RepositorySpec) -> None:
-        from zerorepo.cli.spec import _print_spec_summary
+        from cobuilder.repomap.cli.spec import _print_spec_summary
 
         sample_spec.conflicts = [
             SpecConflict(
@@ -228,7 +228,7 @@ class TestPrintSpecSummary:
         _print_spec_summary(sample_spec)  # Should not raise
 
     def test_summary_minimal_spec(self) -> None:
-        from zerorepo.cli.spec import _print_spec_summary
+        from cobuilder.repomap.cli.spec import _print_spec_summary
 
         minimal = RepositorySpec(
             description="A simple test app for running unit tests against code"
@@ -240,7 +240,7 @@ class TestBuildSummaryText:
     """Tests for _build_summary_text."""
 
     def test_summary_text(self, sample_spec: RepositorySpec) -> None:
-        from zerorepo.cli.spec import _build_summary_text
+        from cobuilder.repomap.cli.spec import _build_summary_text
 
         text = _build_summary_text(sample_spec)
 
@@ -251,7 +251,7 @@ class TestBuildSummaryText:
         assert "MUST_HAVE" in text
 
     def test_summary_with_quality(self, sample_spec: RepositorySpec) -> None:
-        from zerorepo.cli.spec import _build_summary_text
+        from cobuilder.repomap.cli.spec import _build_summary_text
 
         text = _build_summary_text(sample_spec)
 
@@ -260,7 +260,7 @@ class TestBuildSummaryText:
         assert "Scalability" in text
 
     def test_summary_with_conflicts(self, sample_spec: RepositorySpec) -> None:
-        from zerorepo.cli.spec import _build_summary_text
+        from cobuilder.repomap.cli.spec import _build_summary_text
 
         sample_spec.conflicts = [
             SpecConflict(
@@ -274,7 +274,7 @@ class TestBuildSummaryText:
         assert "WARNING" in text
 
     def test_summary_minimal_spec(self) -> None:
-        from zerorepo.cli.spec import _build_summary_text
+        from cobuilder.repomap.cli.spec import _build_summary_text
 
         minimal = RepositorySpec(
             description="A simple test app for running unit tests against code"
@@ -295,7 +295,7 @@ class TestExportCommand:
         self, spec_json_file: Path, tmp_path: Path
     ) -> None:
         from typer.testing import CliRunner
-        from zerorepo.cli.spec import spec_app
+        from cobuilder.repomap.cli.spec import spec_app
 
         runner = CliRunner()
         output = tmp_path / "exported.json"
@@ -316,7 +316,7 @@ class TestExportCommand:
         self, spec_json_file: Path, tmp_path: Path
     ) -> None:
         from typer.testing import CliRunner
-        from zerorepo.cli.spec import spec_app
+        from cobuilder.repomap.cli.spec import spec_app
 
         runner = CliRunner()
         output = tmp_path / "summary.txt"
@@ -342,7 +342,7 @@ class TestExportCommand:
         self, spec_json_file: Path, tmp_path: Path
     ) -> None:
         from typer.testing import CliRunner
-        from zerorepo.cli.spec import spec_app
+        from cobuilder.repomap.cli.spec import spec_app
 
         runner = CliRunner()
         output = tmp_path / "out.txt"
@@ -368,7 +368,7 @@ class TestHistoryCommand:
 
     def test_history_empty(self, spec_json_file: Path) -> None:
         from typer.testing import CliRunner
-        from zerorepo.cli.spec import spec_app
+        from cobuilder.repomap.cli.spec import spec_app
 
         runner = CliRunner()
         result = runner.invoke(spec_app, ["history", str(spec_json_file)])
@@ -379,7 +379,7 @@ class TestHistoryCommand:
         self, tmp_path: Path, sample_spec: RepositorySpec
     ) -> None:
         from typer.testing import CliRunner
-        from zerorepo.cli.spec import spec_app
+        from cobuilder.repomap.cli.spec import spec_app
 
         sample_spec.refinement_history = [
             RefinementEntry(
@@ -405,7 +405,7 @@ class TestHistoryCommand:
         self, tmp_path: Path, sample_spec: RepositorySpec
     ) -> None:
         from typer.testing import CliRunner
-        from zerorepo.cli.spec import spec_app
+        from cobuilder.repomap.cli.spec import spec_app
 
         sample_spec.refinement_history = [
             RefinementEntry(
@@ -439,7 +439,7 @@ class TestConflictsCommand:
     def test_conflicts_no_conflicts(self, spec_json_file: Path) -> None:
         """No conflicts on a valid spec."""
         from typer.testing import CliRunner
-        from zerorepo.cli.spec import spec_app
+        from cobuilder.repomap.cli.spec import spec_app
 
         runner = CliRunner()
         result = runner.invoke(
@@ -452,7 +452,7 @@ class TestConflictsCommand:
     def test_conflicts_detects_scope_mismatch(self, tmp_path: Path) -> None:
         """Detects BACKEND_ONLY + React conflict."""
         from typer.testing import CliRunner
-        from zerorepo.cli.spec import spec_app
+        from cobuilder.repomap.cli.spec import spec_app
 
         # Create a spec with a known conflict
         conflicting_spec = RepositorySpec(
@@ -477,7 +477,7 @@ class TestConflictsCommand:
     def test_conflicts_json_output(self, tmp_path: Path) -> None:
         """JSON output format for conflicts command."""
         from typer.testing import CliRunner
-        from zerorepo.cli.spec import spec_app
+        from cobuilder.repomap.cli.spec import spec_app
 
         conflicting_spec = RepositorySpec(
             description="Build a backend-only API service with Python and React for user management",
@@ -507,7 +507,7 @@ class TestConflictsCommand:
     def test_conflicts_attach_saves_to_file(self, tmp_path: Path) -> None:
         """--attach flag saves conflicts to the spec file."""
         from typer.testing import CliRunner
-        from zerorepo.cli.spec import spec_app
+        from cobuilder.repomap.cli.spec import spec_app
 
         conflicting_spec = RepositorySpec(
             description="Build a backend-only API service with Python and React for user management",
@@ -535,7 +535,7 @@ class TestConflictsCommand:
     def test_conflicts_nonexistent_file(self, tmp_path: Path) -> None:
         """Error on nonexistent spec file."""
         from typer.testing import CliRunner
-        from zerorepo.cli.spec import spec_app
+        from cobuilder.repomap.cli.spec import spec_app
 
         runner = CliRunner()
         result = runner.invoke(
@@ -555,12 +555,12 @@ class TestImports:
     """Tests for CLI module imports."""
 
     def test_import_spec_app(self) -> None:
-        from zerorepo.cli.spec import spec_app
+        from cobuilder.repomap.cli.spec import spec_app
 
         assert spec_app is not None
 
     def test_spec_app_has_commands(self) -> None:
-        from zerorepo.cli.spec import spec_app
+        from cobuilder.repomap.cli.spec import spec_app
 
         # Verify all expected commands are registered
         command_names = {
@@ -571,14 +571,14 @@ class TestImports:
         assert expected.issubset(command_names)
 
     def test_main_app_has_spec(self) -> None:
-        from zerorepo.cli.app import app
+        from cobuilder.repomap.cli.app import app
 
         # Check that spec is registered as a sub-command group
         group_names = {g.name for g in app.registered_groups if g.name}
         assert "spec" in group_names
 
     def test_main_app_has_ontology(self) -> None:
-        from zerorepo.cli.app import app
+        from cobuilder.repomap.cli.app import app
 
         group_names = {g.name for g in app.registered_groups if g.name}
         assert "ontology" in group_names

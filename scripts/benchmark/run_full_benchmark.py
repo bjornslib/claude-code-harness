@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
-from zerorepo.evaluation.models import (
+from cobuilder.repomap.evaluation.models import (
     BenchmarkResult,
     BenchmarkTask,
     ProfilingData,

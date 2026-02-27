@@ -13,12 +13,12 @@ from uuid import uuid4
 
 import pytest
 
-from zerorepo.vectordb.exceptions import (
+from cobuilder.repomap.vectordb.exceptions import (
     CollectionError,
     StoreNotInitializedError,
 )
-from zerorepo.vectordb.models import SearchResult, VectorStoreConfig
-from zerorepo.vectordb.store import VectorStore
+from cobuilder.repomap.vectordb.models import SearchResult, VectorStoreConfig
+from cobuilder.repomap.vectordb.store import VectorStore
 
 
 # ---------------------------------------------------------------------------
@@ -104,7 +104,7 @@ class TestVectorStoreInit:
         store = VectorStore(config=cfg)
         assert store._config.collection_name == "custom"
 
-    @patch("zerorepo.vectordb.store._CHROMADB_AVAILABLE", False)
+    @patch("cobuilder.repomap.vectordb.store._CHROMADB_AVAILABLE", False)
     def test_no_chromadb_raises(self) -> None:
         with pytest.raises(CollectionError, match="chromadb"):
             VectorStore()
@@ -113,8 +113,8 @@ class TestVectorStoreInit:
 class TestVectorStoreInitialize:
     """Tests for the initialize method."""
 
-    @patch("zerorepo.vectordb.store.chromadb")
-    @patch("zerorepo.vectordb.store.EmbeddingGenerator")
+    @patch("cobuilder.repomap.vectordb.store.chromadb")
+    @patch("cobuilder.repomap.vectordb.store.EmbeddingGenerator")
     def test_initialize_creates_collection(
         self, mock_emb_cls: MagicMock, mock_chroma: MagicMock, tmp_path: Path
     ) -> None:
@@ -127,8 +127,8 @@ class TestVectorStoreInitialize:
         assert store.is_initialized
         mock_client.get_or_create_collection.assert_called_once()
 
-    @patch("zerorepo.vectordb.store.chromadb")
-    @patch("zerorepo.vectordb.store.EmbeddingGenerator")
+    @patch("cobuilder.repomap.vectordb.store.chromadb")
+    @patch("cobuilder.repomap.vectordb.store.EmbeddingGenerator")
     def test_initialize_idempotent(
         self, mock_emb_cls: MagicMock, mock_chroma: MagicMock, tmp_path: Path
     ) -> None:
@@ -152,8 +152,8 @@ class TestVectorStoreInitialize:
         with pytest.raises(ValueError, match="existing directory"):
             store.initialize(f)
 
-    @patch("zerorepo.vectordb.store.chromadb")
-    @patch("zerorepo.vectordb.store.EmbeddingGenerator")
+    @patch("cobuilder.repomap.vectordb.store.chromadb")
+    @patch("cobuilder.repomap.vectordb.store.EmbeddingGenerator")
     def test_initialize_custom_embedding_model(
         self, mock_emb_cls: MagicMock, mock_chroma: MagicMock, tmp_path: Path
     ) -> None:
@@ -162,7 +162,7 @@ class TestVectorStoreInitialize:
         store.initialize(tmp_path, embedding_model="text-embedding-3-small")
         mock_emb_cls.assert_called_with(model_name="text-embedding-3-small")
 
-    @patch("zerorepo.vectordb.store.chromadb")
+    @patch("cobuilder.repomap.vectordb.store.chromadb")
     def test_initialize_chromadb_failure_raises(
         self, mock_chroma: MagicMock, tmp_path: Path
     ) -> None:

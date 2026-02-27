@@ -10,7 +10,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from zerorepo.codegen.state import (
+from cobuilder.repomap.codegen.state import (
     GenerationState,
     GenerationStatus,
     NodeGenerationState,

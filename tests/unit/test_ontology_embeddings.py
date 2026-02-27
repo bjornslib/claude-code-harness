@@ -14,14 +14,14 @@ import numpy as np
 import pytest
 from pydantic import ValidationError
 
-from zerorepo.ontology.embeddings import (
+from cobuilder.repomap.ontology.embeddings import (
     EmbedderConfig,
     EmbeddingResult,
     FeatureEmbedder,
 )
-from zerorepo.ontology.models import FeatureNode
-from zerorepo.vectordb.embeddings import EmbeddingGenerator
-from zerorepo.vectordb.exceptions import EmbeddingError
+from cobuilder.repomap.ontology.models import FeatureNode
+from cobuilder.repomap.vectordb.embeddings import EmbeddingGenerator
+from cobuilder.repomap.vectordb.exceptions import EmbeddingError
 
 
 # ---------------------------------------------------------------------------
@@ -520,8 +520,8 @@ class TestPackageImports:
     """Test that embedding classes are importable from the ontology package."""
 
     def test_import_from_package(self) -> None:
-        """All new symbols importable from zerorepo.ontology."""
-        from zerorepo.ontology import (
+        """All new symbols importable from cobuilder.repomap.ontology."""
+        from cobuilder.repomap.ontology import (
             EmbedderConfig,
             EmbeddingResult,
             FeatureEmbedder,
@@ -532,8 +532,8 @@ class TestPackageImports:
         assert FeatureEmbedder is not None
 
     def test_import_from_module(self) -> None:
-        """All symbols importable from zerorepo.ontology.embeddings."""
-        from zerorepo.ontology.embeddings import (
+        """All symbols importable from cobuilder.repomap.ontology.embeddings."""
+        from cobuilder.repomap.ontology.embeddings import (
             EmbedderConfig,
             EmbeddingResult,
             FeatureEmbedder,

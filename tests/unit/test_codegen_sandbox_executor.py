@@ -8,15 +8,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from zerorepo.codegen.sandbox_executor import (
+from cobuilder.repomap.codegen.sandbox_executor import (
     DockerSandboxExecutor,
     InProcessSandboxExecutor,
     SandboxExecutorConfig,
 )
-from zerorepo.codegen.tdd_loop import SandboxResult
-from zerorepo.models.enums import InterfaceType, NodeLevel, NodeType
-from zerorepo.models.node import RPGNode
-from zerorepo.sandbox.models import TestFailure, TestResult
+from cobuilder.repomap.codegen.tdd_loop import SandboxResult
+from cobuilder.repomap.models.enums import InterfaceType, NodeLevel, NodeType
+from cobuilder.repomap.models.node import RPGNode
+from cobuilder.repomap.sandbox.models import TestFailure, TestResult
 
 
 # --------------------------------------------------------------------------- #

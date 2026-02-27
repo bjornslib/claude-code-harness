@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from zerorepo.evaluation.models import BenchmarkTask, DifficultyLevel
+from cobuilder.repomap.evaluation.models import BenchmarkTask, DifficultyLevel
 
 # Handle import path for scripts/benchmark
 try:

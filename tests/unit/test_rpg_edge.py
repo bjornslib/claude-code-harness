@@ -6,8 +6,8 @@ from uuid import UUID, uuid4
 import pytest
 from pydantic import ValidationError
 
-from zerorepo.models.edge import RPGEdge
-from zerorepo.models.enums import EdgeType
+from cobuilder.repomap.models.edge import RPGEdge
+from cobuilder.repomap.models.enums import EdgeType
 
 
 class TestRPGEdgeCreation:

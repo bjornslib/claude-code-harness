@@ -27,8 +27,8 @@ from uuid import UUID, uuid4
 import pytest
 from pydantic import ValidationError
 
-from zerorepo.llm.models import ModelTier
-from zerorepo.spec_parser.models import (
+from cobuilder.repomap.llm.models import ModelTier
+from cobuilder.repomap.spec_parser.models import (
     Constraint,
     ConstraintPriority,
     DeploymentTarget,
@@ -38,7 +38,7 @@ from zerorepo.spec_parser.models import (
     ScopeType,
     TechnicalRequirement,
 )
-from zerorepo.spec_parser.refinement import (
+from cobuilder.repomap.spec_parser.refinement import (
     RefinerConfig,
     RefinementError,
     SpecRefiner,
@@ -1111,18 +1111,18 @@ class TestPackageImports:
     """Tests for spec_parser package exports."""
 
     def test_import_refiner(self) -> None:
-        from zerorepo.spec_parser import SpecRefiner
+        from cobuilder.repomap.spec_parser import SpecRefiner
         assert SpecRefiner is not None
 
     def test_import_config(self) -> None:
-        from zerorepo.spec_parser import RefinerConfig
+        from cobuilder.repomap.spec_parser import RefinerConfig
         assert RefinerConfig is not None
 
     def test_import_error(self) -> None:
-        from zerorepo.spec_parser import RefinementError
+        from cobuilder.repomap.spec_parser import RefinementError
         assert issubclass(RefinementError, Exception)
 
     def test_import_suggestion(self) -> None:
-        from zerorepo.spec_parser import Suggestion, SuggestionResponse
+        from cobuilder.repomap.spec_parser import Suggestion, SuggestionResponse
         assert Suggestion is not None
         assert SuggestionResponse is not None

@@ -12,17 +12,17 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from zerorepo.evaluation.caching import (
+from cobuilder.repomap.evaluation.caching import (
     BatchedFunctionGenerator,
     EmbeddingCache,
     LLMResponseCache,
 )
-from zerorepo.evaluation.failure_analysis import (
+from cobuilder.repomap.evaluation.failure_analysis import (
     FailureAnalyzer,
     PromptABTest,
     RECOMMENDATION_RULES,
 )
-from zerorepo.evaluation.models import (
+from cobuilder.repomap.evaluation.models import (
     ABTestResult,
     BenchmarkTask,
     ExecutionResult,
@@ -545,24 +545,24 @@ class TestPromptABTest:
 
 
 class TestPackageImports:
-    """Verify all classes are importable from zerorepo.evaluation package."""
+    """Verify all classes are importable from cobuilder.repomap.evaluation package."""
 
     def test_import_failure_analyzer(self) -> None:
-        from zerorepo.evaluation import FailureAnalyzer as FA
+        from cobuilder.repomap.evaluation import FailureAnalyzer as FA
         assert FA is FailureAnalyzer
 
     def test_import_prompt_ab_test(self) -> None:
-        from zerorepo.evaluation import PromptABTest as PAB
+        from cobuilder.repomap.evaluation import PromptABTest as PAB
         assert PAB is PromptABTest
 
     def test_import_embedding_cache(self) -> None:
-        from zerorepo.evaluation import EmbeddingCache as EC
+        from cobuilder.repomap.evaluation import EmbeddingCache as EC
         assert EC is EmbeddingCache
 
     def test_import_llm_response_cache(self) -> None:
-        from zerorepo.evaluation import LLMResponseCache as LRC
+        from cobuilder.repomap.evaluation import LLMResponseCache as LRC
         assert LRC is LLMResponseCache
 
     def test_import_batched_function_generator(self) -> None:
-        from zerorepo.evaluation import BatchedFunctionGenerator as BFG
+        from cobuilder.repomap.evaluation import BatchedFunctionGenerator as BFG
         assert BFG is BatchedFunctionGenerator

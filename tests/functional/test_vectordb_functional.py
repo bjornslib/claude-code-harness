@@ -14,17 +14,17 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from zerorepo.models.enums import NodeLevel, NodeType
-from zerorepo.models.node import RPGNode
-from zerorepo.vectordb.embeddings import EmbeddingGenerator
-from zerorepo.vectordb.exceptions import (
+from cobuilder.repomap.models.enums import NodeLevel, NodeType
+from cobuilder.repomap.models.node import RPGNode
+from cobuilder.repomap.vectordb.embeddings import EmbeddingGenerator
+from cobuilder.repomap.vectordb.exceptions import (
     CollectionError,
     EmbeddingError,
     StoreNotInitializedError,
     VectorStoreError,
 )
-from zerorepo.vectordb.models import SearchResult, VectorStoreConfig
-from zerorepo.vectordb.store import VectorStore
+from cobuilder.repomap.vectordb.models import SearchResult, VectorStoreConfig
+from cobuilder.repomap.vectordb.store import VectorStore
 
 
 # --------------------------------------------------------------------------- #
@@ -214,8 +214,8 @@ class TestVectorStoreLifecycle:
 class TestVectorStoreInitWorkflow:
     """Functional tests for initialization workflows."""
 
-    @patch("zerorepo.vectordb.store.chromadb")
-    @patch("zerorepo.vectordb.store.EmbeddingGenerator")
+    @patch("cobuilder.repomap.vectordb.store.chromadb")
+    @patch("cobuilder.repomap.vectordb.store.EmbeddingGenerator")
     def test_initialize_and_use(
         self, mock_emb_cls: MagicMock, mock_chroma: MagicMock, tmp_path: Path
     ) -> None:
@@ -241,8 +241,8 @@ class TestVectorStoreInitWorkflow:
         mock_embedder.embed.assert_called_once()
         mock_coll.upsert.assert_called_once()
 
-    @patch("zerorepo.vectordb.store.chromadb")
-    @patch("zerorepo.vectordb.store.EmbeddingGenerator")
+    @patch("cobuilder.repomap.vectordb.store.chromadb")
+    @patch("cobuilder.repomap.vectordb.store.EmbeddingGenerator")
     def test_initialize_with_custom_config(
         self, mock_emb_cls: MagicMock, mock_chroma: MagicMock, tmp_path: Path
     ) -> None:
@@ -270,8 +270,8 @@ class TestVectorStoreInitWorkflow:
         # Verify custom embedding model
         mock_emb_cls.assert_called_with(model_name="custom-embed-model")
 
-    @patch("zerorepo.vectordb.store.chromadb")
-    @patch("zerorepo.vectordb.store.EmbeddingGenerator")
+    @patch("cobuilder.repomap.vectordb.store.chromadb")
+    @patch("cobuilder.repomap.vectordb.store.EmbeddingGenerator")
     def test_initialize_override_embedding_model(
         self, mock_emb_cls: MagicMock, mock_chroma: MagicMock, tmp_path: Path
     ) -> None:
@@ -506,7 +506,7 @@ class TestVectorStoreErrorHandling:
         with pytest.raises(ValueError, match="must match|same length|length"):
             store.add_nodes_batch(nodes, paths=["only_one"])
 
-    @patch("zerorepo.vectordb.store.chromadb")
+    @patch("cobuilder.repomap.vectordb.store.chromadb")
     def test_chromadb_init_failure(
         self, mock_chroma: MagicMock, tmp_path: Path
     ) -> None:

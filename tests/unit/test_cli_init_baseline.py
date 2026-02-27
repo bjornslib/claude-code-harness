@@ -10,14 +10,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 from typer.testing import CliRunner
 
-from zerorepo.cli.app import app
-from zerorepo.models.enums import NodeLevel, NodeType
-from zerorepo.models.graph import RPGGraph
-from zerorepo.models.node import RPGNode
-from zerorepo.rpg_enrichment.base import RPGEncoder
-from zerorepo.rpg_enrichment.models import ValidationResult
-from zerorepo.rpg_enrichment.pipeline import RPGBuilder
-from zerorepo.serena.baseline import BaselineManager
+from cobuilder.repomap.cli.app import app
+from cobuilder.repomap.models.enums import NodeLevel, NodeType
+from cobuilder.repomap.models.graph import RPGGraph
+from cobuilder.repomap.models.node import RPGNode
+from cobuilder.repomap.rpg_enrichment.base import RPGEncoder
+from cobuilder.repomap.rpg_enrichment.models import ValidationResult
+from cobuilder.repomap.rpg_enrichment.pipeline import RPGBuilder
+from cobuilder.repomap.serena.baseline import BaselineManager
 
 
 runner = CliRunner()

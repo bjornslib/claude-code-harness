@@ -12,7 +12,7 @@ import textwrap
 from pathlib import Path
 from typing import Any
 
-from zerorepo.evaluation.models import BenchmarkTask, DifficultyLevel
+from cobuilder.repomap.evaluation.models import BenchmarkTask, DifficultyLevel
 
 logger = logging.getLogger(__name__)
 
