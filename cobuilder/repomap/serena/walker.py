@@ -256,9 +256,10 @@ class CodebaseWalker:
 
             full_path = current / py_file
 
-            # Compute relative paths, handling the root-is-a-package case
-            if current == root and is_package:
-                # Root is itself a package -- use the dir name as prefix
+            # Compute relative paths, handling the root-is-a-module case
+            if current == root:
+                # Root directory — use the dir name as prefix so that
+                # file_path always starts with folder_path.
                 rel_folder = current.name
                 rel_file = f"{current.name}/{py_file}"
             else:
@@ -304,8 +305,8 @@ class CodebaseWalker:
 
             full_path = current / ts_file
 
-            # Compute relative paths, handling the root-is-a-ts-dir case
-            if current == root and is_ts_dir:
+            # Compute relative paths, handling the root case
+            if current == root:
                 rel_folder = current.name
                 rel_file = f"{current.name}/{ts_file}"
             else:
