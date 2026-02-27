@@ -6,13 +6,14 @@ Provides the ``cobuilder repomap`` command group with subcommands:
 - ``sync``     — Walk codebase and save baseline + manifest
 - ``status``   — Show tracked repos and their sync status
 - ``context``  — Print repomap context string for LLM injection
+- ``refresh``  — Refresh baseline for specific files/folders only
 """
 
 from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import typer
 from rich.console import Console
@@ -205,3 +206,83 @@ def context_cmd(
     except (KeyError, FileNotFoundError, ValueError) as exc:
         console.print(f"[red]Error:[/red] {exc}")
         raise typer.Exit(1) from exc
+
+
+@app.command("refresh")
+def refresh_cmd(
+    name: str = typer.Argument(..., help="Repo name registered in .repomap/config.yaml"),
+    scope: Optional[List[str]] = typer.Option(
+        None,
+        "--scope",
+        "-s",
+        help="File or folder paths to re-scan (repeatable). Relative to repo root.",
+    ),
+    all_files: bool = typer.Option(
+        False,
+        "--all",
+        help="Re-scan the entire repository (alias for sync).",
+    ),
+    project_root: str = typer.Option(
+        ".", "--project-root", "-p", help="Root of the project that owns .repomap/"
+    ),
+) -> None:
+    """Refresh the baseline for specific files/folders only.
+
+    Uses scoped_refresh() to re-scan only the paths given via --scope and
+    merge them into the existing baseline.  Use --all to re-scan the full
+    repository (equivalent to ``cobuilder repomap sync``).
+
+    Examples::
+
+        cobuilder repomap refresh myrepo --scope cobuilder/bridge.py
+        cobuilder repomap refresh myrepo --scope src/auth/ --scope src/models.py
+        cobuilder repomap refresh myrepo --all
+    """
+    from cobuilder.bridge import scoped_refresh, sync_baseline
+
+    if all_files:
+        console.print(f"Re-scanning full repository [bold]{name}[/bold] …")
+        try:
+            entry = sync_baseline(name, project_root=Path(project_root))
+            console.print(
+                f"[green]✓[/green] Synced [bold]{name}[/bold]: "
+                f"{entry.get('node_count', 0)} nodes, "
+                f"{entry.get('file_count', 0)} files"
+            )
+        except (KeyError, FileNotFoundError) as exc:
+            console.print(f"[red]Error:[/red] {exc}")
+            raise typer.Exit(1) from exc
+        return
+
+    effective_scope = list(scope) if scope else []
+    if not effective_scope:
+        console.print(
+            "[yellow]Warning:[/yellow] No --scope paths provided. "
+            "Use --scope <path> or --all to refresh the full repository."
+        )
+        raise typer.Exit(1)
+
+    console.print(
+        f"Refreshing [bold]{name}[/bold] for {len(effective_scope)} path(s) …"
+    )
+    try:
+        result = scoped_refresh(
+            name,
+            scope=effective_scope,
+            project_root=Path(project_root),
+        )
+    except (KeyError, FileNotFoundError) as exc:
+        console.print(f"[red]Error:[/red] {exc}")
+        raise typer.Exit(1) from exc
+
+    if result.get("skipped"):
+        console.print(
+            f"[yellow]Skipped[/yellow] (debounced within {30}s window): "
+            f"{result}"
+        )
+    else:
+        console.print(
+            f"[green]✓[/green] Refreshed [bold]{result.get('refreshed_nodes', 0)}[/bold] "
+            f"nodes in [bold]{result.get('duration_seconds', 0):.1f}s[/bold]"
+        )
+        console.print(f"Hash: {result.get('baseline_hash', 'n/a')}")

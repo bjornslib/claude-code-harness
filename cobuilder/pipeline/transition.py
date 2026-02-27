@@ -19,11 +19,16 @@ import contextlib
 import datetime
 import fcntl
 import json
+import logging
 import os
 import re
 import sys
+import traceback
+from pathlib import Path
 
 from .parser import parse_file
+
+logger = logging.getLogger(__name__)
 
 
 # --- Valid transitions ---
@@ -422,6 +427,105 @@ def route_decision_cascade(
     return content, affected
 
 
+# ---------------------------------------------------------------------------
+# Post-validation hook helpers (E4-T1)
+# ---------------------------------------------------------------------------
+
+
+def _extract_node_scope(dot_content: str, node_id: str) -> list[str]:
+    """Extract file_path or folder_path from a node's attributes.
+
+    Returns list of paths (split on commas). Returns [] if neither attribute set.
+    """
+    from .parser import parse_dot
+
+    data = parse_dot(dot_content)
+    for node in data["nodes"]:
+        if node["id"] == node_id:
+            attrs = node["attrs"]
+            raw = attrs.get("file_path") or attrs.get("folder_path") or ""
+            if not raw:
+                return []
+            return [p.strip() for p in raw.split(",") if p.strip()]
+    return []
+
+
+def _extract_graph_repo_name(dot_content: str) -> str | None:
+    """Extract repo_name graph-level attribute from DOT content."""
+    m = re.search(r'graph\s*\[([^\]]+)\]', dot_content, re.DOTALL)
+    if not m:
+        return None
+    attrs_block = m.group(1)
+    name_m = re.search(r'repo_name\s*=\s*"([^"]+)"', attrs_block)
+    return name_m.group(1) if name_m else None
+
+
+def _infer_project_root(dot_file: str) -> "Path | None":
+    """Walk up from dot_file directory until .repomap/ is found (max 8 levels)."""
+    current = Path(dot_file).resolve().parent
+    for _ in range(8):
+        if (current / ".repomap").is_dir():
+            return current
+        if current.parent == current:
+            break
+        current = current.parent
+    return None
+
+
+def _fire_post_validated_hook(
+    dot_file: str,
+    node_id: str,
+    updated_content: str,
+    *,
+    project_root: "str | None" = None,
+) -> bool:
+    """Fire post-validation baseline refresh for a node that just reached 'validated'.
+
+    NON-FATAL — catches all exceptions. Never raises.
+    Returns True if refresh succeeded, False if skipped or failed.
+    """
+    try:
+        scope = _extract_node_scope(updated_content, node_id)
+        if not scope:
+            logger.warning(
+                "post_validated_hook: node '%s' has no file_path/folder_path — skipping refresh",
+                node_id,
+            )
+            return False
+
+        repo_name = _extract_graph_repo_name(updated_content)
+        if repo_name is None:
+            logger.warning(
+                "post_validated_hook: pipeline has no repo_name graph attribute — skipping refresh",
+            )
+            return False
+
+        resolved_root: "Path | None"
+        if project_root is not None:
+            resolved_root = Path(project_root)
+        else:
+            resolved_root = _infer_project_root(dot_file)
+
+        if resolved_root is None:
+            logger.warning(
+                "post_validated_hook: could not infer project_root from dot_file '%s' — "
+                "skipping refresh",
+                dot_file,
+            )
+            return False
+
+        from cobuilder.bridge import scoped_refresh
+
+        scoped_refresh(repo_name, scope, project_root=resolved_root)
+        return True
+    except Exception:
+        logger.error(
+            "post_validated_hook: unexpected error during scoped_refresh\n%s",
+            traceback.format_exc(),
+        )
+        return False
+
+
 def _find_node_block(content: str, node_id: str) -> tuple[int, int]:
     """Find the start and end positions of a node's definition block.
 
@@ -762,6 +866,14 @@ def _cmd_transition(args: argparse.Namespace, content: str) -> None:
             _sig = _write_finalize_signal(
                 args.file, args.node_id, args.new_status, _pre_node_attrs,
                 session_id=session_id,
+            )
+
+        # NEW: post-validated baseline refresh hook (E4-T1, F4.4)
+        if args.new_status == "validated":
+            _fire_post_validated_hook(
+                dot_file=args.file,
+                node_id=args.node_id,
+                updated_content=updated,
             )
 
         if output == "json":
