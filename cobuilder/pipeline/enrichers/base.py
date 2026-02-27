@@ -46,10 +46,12 @@ class BaseEnricher:
             return {}
 
         raw_yaml = match.group(1)
+        parse_error: str = ""
         try:
             return yaml.safe_load(raw_yaml) or {}
         except yaml.YAMLError as e:
-            logger.warning("YAML parse failed: %s", e)
+            parse_error = str(e)
+            logger.warning("YAML parse failed: %s", parse_error)
 
         # Retry: ask the LLM to fix the YAML
         for attempt in range(1, _retries + 1):
@@ -57,7 +59,7 @@ class BaseEnricher:
             fix_prompt = (
                 "The following YAML block failed to parse:\n\n"
                 f"```yaml\n{raw_yaml}```\n\n"
-                f"Parse error: {e}\n\n"
+                f"Parse error: {parse_error}\n\n"
                 "Please return ONLY the corrected YAML inside a ```yaml``` "
                 "code fence.  Make sure all string values containing colons "
                 "are quoted."
