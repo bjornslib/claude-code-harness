@@ -276,7 +276,7 @@ API Keys Workflow:
 ## Benefits Summary
 
 | Aspect | Without Harness | With Harness |
-|--------|----------------|--------------|
+| --- | --- | --- |
 | Configuration | Copy to each project | Symlink once |
 | Updates | Manual copying | `git pull` → all projects |
 | Consistency | Drift over time | Always synchronized |

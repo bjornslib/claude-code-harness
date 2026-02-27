@@ -781,3 +781,201 @@ def pipeline_annotate(
             typer.echo(f"\nWritten: {output_path}")
     elif dry_run and not json_output:
         typer.echo("\n(dry-run: no changes written)")
+
+
+# ---------------------------------------------------------------------------
+# Transition
+# ---------------------------------------------------------------------------
+
+
+@pipeline_app.command("transition")
+def pipeline_transition(
+    file: str = typer.Argument(..., help="Path to .dot file"),
+    node: str = typer.Argument(..., help="Node ID to transition"),
+    new_status: str = typer.Argument(..., help="Target status (pending, active, impl_complete, validated, failed)"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview without writing"),
+    force: bool = typer.Option(False, "--force", help="Skip finalize gate check (use with caution)"),
+) -> None:
+    """Apply a status transition to a pipeline node."""
+    from cobuilder.pipeline.transition import (
+        apply_transition,
+        check_finalize_gate,
+        _dot_file_lock,
+        _append_transition_jsonl,
+        _write_finalize_signal,
+    )
+    from cobuilder.pipeline.parser import parse_file as _parse_file
+
+    try:
+        content = Path(file).read_text()
+    except FileNotFoundError:
+        typer.echo(f"Error: File not found: {file}", err=True)
+        raise typer.Exit(1)
+
+    # Pre-fetch node attrs for signal file writing
+    try:
+        pre_data = _parse_file(file)
+    except Exception as e:
+        typer.echo(f"Error parsing {file}: {e}", err=True)
+        raise typer.Exit(1)
+
+    pre_node_attrs: dict = {}
+    for n in pre_data.get("nodes", []):
+        if n["id"] == node:
+            pre_node_attrs = n["attrs"]
+            break
+
+    try:
+        updated, log_msg = apply_transition(content, node, new_status)
+    except ValueError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+    if dry_run:
+        typer.echo(f"DRY RUN: {log_msg}")
+        typer.echo("(no changes written)")
+    else:
+        with _dot_file_lock(file):
+            Path(file).write_text(updated)
+
+            timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            _append_transition_jsonl(
+                file,
+                {
+                    "timestamp": timestamp,
+                    "file": file,
+                    "command": "transition",
+                    "node_id": node,
+                    "new_status": new_status,
+                    "log": log_msg,
+                },
+            )
+
+            sig = _write_finalize_signal(file, node, new_status, pre_node_attrs)
+
+        typer.echo(f"Transition applied: {log_msg}")
+        typer.echo(f"Updated: {file}")
+        if sig:
+            typer.echo(f"Signal written: {sig}")
+
+
+# ---------------------------------------------------------------------------
+# Status
+# ---------------------------------------------------------------------------
+
+
+@pipeline_app.command("status")
+def pipeline_status(
+    file: str = typer.Argument(..., help="Path to .dot file"),
+    filter_status: str = typer.Option("", "--filter", help="Filter by status (e.g. active, pending)"),
+    deps_met: bool = typer.Option(False, "--deps-met", help="Only show nodes whose upstream deps are all validated"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+    summary: bool = typer.Option(False, "--summary", help="Show only status summary counts"),
+) -> None:
+    """Display node status table for a pipeline."""
+    from cobuilder.pipeline.status import get_status_table, format_table, status_summary
+    from cobuilder.pipeline.parser import parse_file as _parse_file
+
+    try:
+        data = _parse_file(file)
+    except FileNotFoundError:
+        typer.echo(f"Error: File not found: {file}", err=True)
+        raise typer.Exit(1)
+    except Exception as e:
+        typer.echo(f"Error parsing {file}: {e}", err=True)
+        raise typer.Exit(1)
+
+    all_rows = get_status_table(data)
+    display_rows = get_status_table(data, filter_status=filter_status, deps_met=deps_met)
+    counts = status_summary(all_rows)
+
+    if json_output:
+        result: dict = {
+            "graph_name": data.get("graph_name", ""),
+            "prd_ref": data.get("graph_attrs", {}).get("prd_ref", ""),
+            "total_nodes": len(all_rows),
+            "summary": counts,
+        }
+        if deps_met:
+            result["deps_met_filter"] = True
+        if not summary:
+            result["nodes"] = display_rows
+        typer.echo(json.dumps(result, indent=2))
+    else:
+        graph_name = data.get("graph_name", "unknown")
+        prd = data.get("graph_attrs", {}).get("prd_ref", "")
+        typer.echo(f"Pipeline: {graph_name}")
+        if prd:
+            typer.echo(f"PRD: {prd}")
+        typer.echo(f"Total nodes: {len(all_rows)}")
+        typer.echo("")
+
+        if summary:
+            typer.echo("Status summary:")
+            for s, c in sorted(counts.items()):
+                typer.echo(f"  {s:20s}  {c}")
+        else:
+            active_filters = []
+            if filter_status:
+                active_filters.append(f"status={filter_status}")
+            if deps_met:
+                active_filters.append("deps-met (all predecessors validated)")
+            if active_filters:
+                typer.echo(f"Filter: {', '.join(active_filters)}")
+                typer.echo("")
+            typer.echo(format_table(display_rows))
+            typer.echo("")
+            typer.echo("Summary: " + ", ".join(f"{s}={c}" for s, c in sorted(counts.items())))
+
+
+# ---------------------------------------------------------------------------
+# Validate
+# ---------------------------------------------------------------------------
+
+
+@pipeline_app.command("validate")
+def pipeline_validate(
+    file: str = typer.Argument(..., help="Path to .dot file"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Validate a pipeline DOT file against schema rules."""
+    from cobuilder.pipeline.validator import validate_file
+
+    try:
+        issues = validate_file(file)
+    except FileNotFoundError:
+        typer.echo(f"Error: File not found: {file}", err=True)
+        raise typer.Exit(1)
+    except Exception as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+    errors = [i for i in issues if i.level == "error"]
+    warnings = [i for i in issues if i.level == "warning"]
+
+    if json_output:
+        result = {
+            "valid": len(errors) == 0,
+            "errors": [i.to_dict() for i in errors],
+            "warnings": [i.to_dict() for i in warnings],
+            "summary": f"{len(errors)} errors, {len(warnings)} warnings",
+        }
+        typer.echo(json.dumps(result, indent=2))
+    else:
+        if not issues:
+            typer.echo(f"VALID: {file} passes all validation rules.")
+        else:
+            if errors:
+                typer.echo(f"\nErrors ({len(errors)}):")
+                for e in errors:
+                    typer.echo(str(e))
+            if warnings:
+                typer.echo(f"\nWarnings ({len(warnings)}):")
+                for w in warnings:
+                    typer.echo(str(w))
+            typer.echo(f"\nSummary: {len(errors)} errors, {len(warnings)} warnings")
+            if errors:
+                typer.echo("INVALID: Pipeline has structural errors.")
+
+    if errors:
+        raise typer.Exit(1)
