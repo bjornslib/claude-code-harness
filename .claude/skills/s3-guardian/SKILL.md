@@ -910,6 +910,51 @@ Guardian ──monitors──► Orchestrator ──delegates──► Workers (
 
 Proceed to **Phase 3: Monitoring** after all orchestrators are spawned and running.
 
+### CoBuilder Boot Sequence for Orchestrators
+
+Every orchestrator session needs a functional RepoMap baseline before work begins.
+Since `.repomap/` is committed to git and worktrees are full git checkouts, the
+baseline is already present. The orchestrator only needs to verify it and know
+the refresh commands for post-node-validation use.
+
+Include these commands in the initial prompt sent to every orchestrator tmux session:
+
+```
+## CoBuilder Commands Available in This Session
+
+# Verify baseline exists and is recent
+cobuilder repomap status --name ${REPO_NAME}
+
+# After completing your work (automatic via post-validated hook, manual fallback):
+cobuilder repomap refresh --name ${REPO_NAME} --scope <file1> --scope <file2>
+
+# Full resync if you added many new files:
+cobuilder repomap sync --name ${REPO_NAME}
+```
+
+Set these environment variables in the tmux session alongside CLAUDE_SESSION_ID:
+
+```bash
+export COBUILDER_REPO_NAME="${REPO_NAME}"
+export COBUILDER_PIPELINE_DOT="${PIPELINE_DOT_PATH}"
+export COBUILDER_ENFORCE_FRESHNESS=1
+```
+
+The post-validation hook in `transition.py` handles per-node refresh automatically.
+Manual refresh is only needed if the hook missed files (nodes without `file_path`
+attributes) or if the hook logged an error.
+
+After the orchestrator completes, invoke cleanup explicitly:
+
+```bash
+python cobuilder/orchestration/spawn_orchestrator.py \
+    --node ${NODE_ID} \
+    --prd ${PRD_REF} \
+    --repo-root ${REPO_ROOT} \
+    --on-cleanup \
+    --repo-name ${REPO_NAME}
+```
+
 ---
 
 ## Phase 3: Monitoring

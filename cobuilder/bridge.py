@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,13 @@ from cobuilder.repomap.serena.walker import CodebaseWalker
 from cobuilder.repomap.serena.session import FileBasedCodebaseAnalyzer
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Scoped refresh debounce state (module-level, process-scoped)
+# ---------------------------------------------------------------------------
+
+_REFRESH_DEBOUNCE_SECONDS = 30.0
+_last_refresh_times: dict[str, float] = {}
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -445,6 +453,139 @@ def get_repomap_context(
     doc = {k: v for k, v in doc.items() if v is not None}
 
     return yaml.dump(doc, default_flow_style=False, allow_unicode=True, sort_keys=False)
+
+
+def scoped_refresh(
+    name: str,
+    scope: list[str],
+    *,
+    project_root: Path | str = Path("."),
+) -> dict[str, Any]:
+    """Re-scan only the specified files/folders and merge into the existing baseline.
+
+    Unlike :func:`sync_baseline` which re-scans the entire repository, this
+    function restricts the walk to the paths listed in *scope*.
+
+    A 30-second debounce window is enforced per repo name. If called again
+    within that window the function returns immediately with
+    ``{"skipped": True, ...}``.
+
+    Args:
+        name: Repository name (must already be registered via
+            :func:`init_repo`).
+        scope: List of file or folder paths to re-scan. Paths may be
+            absolute or relative to the repository root.
+        project_root: Root of the project that owns ``.repomap/``.
+
+    Returns:
+        Dict with keys:
+
+        - ``refreshed_nodes`` (int) — number of nodes in the scoped graph
+        - ``duration_seconds`` (float) — wall-clock time of the scan
+        - ``baseline_hash`` (str) — SHA-256 fingerprint of merged baseline
+        - ``skipped`` (bool) — True if the call was debounced
+
+    Raises:
+        KeyError: If *name* is not registered.
+        FileNotFoundError: If the repository path no longer exists.
+    """
+    # ------------------------------------------------------------------
+    # Debounce guard
+    # ------------------------------------------------------------------
+    now = time.monotonic()
+    if now - _last_refresh_times.get(name, 0.0) < _REFRESH_DEBOUNCE_SECONDS:
+        logger.debug("scoped_refresh debounced for '%s'", name)
+        return {
+            "skipped": True,
+            "refreshed_nodes": 0,
+            "duration_seconds": 0.0,
+            "baseline_hash": "",
+        }
+    _last_refresh_times[name] = now
+
+    # ------------------------------------------------------------------
+    # Load repo config
+    # ------------------------------------------------------------------
+    project_root = Path(project_root).resolve()
+    repomap_dir = _repomap_dir(project_root)
+    config = _load_config(repomap_dir)
+
+    entry = _find_repo_entry(config["repos"], name)
+    if entry is None:
+        raise KeyError(
+            f"Repository '{name}' is not registered. "
+            "Call init_repo() first."
+        )
+
+    target_dir = Path(entry["path"])
+    if not target_dir.exists():
+        raise FileNotFoundError(
+            f"Repository path no longer exists: {target_dir}"
+        )
+
+    # ------------------------------------------------------------------
+    # Resolve scope paths relative to target_dir
+    # ------------------------------------------------------------------
+    resolved_scope: list[Path] = []
+    for raw in scope:
+        p = Path(raw)
+        if not p.is_absolute():
+            p = (target_dir / p).resolve()
+        else:
+            p = p.resolve()
+        resolved_scope.append(p)
+
+    # ------------------------------------------------------------------
+    # Scoped walk
+    # ------------------------------------------------------------------
+    t0 = time.monotonic()
+    analyzer = FileBasedCodebaseAnalyzer()
+    analyzer.activate(target_dir)
+    walker = CodebaseWalker(analyzer=analyzer)
+    scoped_graph = walker.walk_paths(
+        paths=[str(p) for p in resolved_scope],
+        project_root=target_dir,
+    )
+    elapsed = time.monotonic() - t0
+
+    # ------------------------------------------------------------------
+    # Merge + save
+    # ------------------------------------------------------------------
+    manager = BaselineManager()
+    save_result = manager.scoped_save(
+        repo_name=name,
+        scoped=scoped_graph,
+        project_root=target_dir,
+        repomap_dir=repomap_dir,
+    )
+
+    # ------------------------------------------------------------------
+    # Update config.yaml with new last_synced + hash
+    # ------------------------------------------------------------------
+    entry.update(
+        {
+            "last_synced": datetime.now(timezone.utc).isoformat(),
+            "baseline_hash": save_result["baseline_hash"],
+            "node_count": save_result["node_count"],
+            "file_count": save_result["file_count"],
+        }
+    )
+    _save_config(repomap_dir, config)
+
+    logger.info(
+        "scoped_refresh '%s': %d nodes refreshed in %.2fs, hash=%s",
+        name,
+        len(scoped_graph.nodes),
+        elapsed,
+        save_result["baseline_hash"],
+    )
+
+    return {
+        "skipped": False,
+        "refreshed_nodes": len(scoped_graph.nodes),
+        "duration_seconds": elapsed,
+        "baseline_hash": save_result["baseline_hash"],
+    }
 
 
 def refresh_baseline(

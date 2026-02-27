@@ -415,6 +415,240 @@ class CodebaseWalker:
             )
             graph.add_edge(edge)
 
+    def walk_paths(
+        self,
+        paths: list[str | Path],
+        project_root: Path,
+        exclude_patterns: list[str] | None = None,
+    ) -> RPGGraph:
+        """Walk only the specified file/directory paths and return an RPGGraph.
+
+        Produces the same node structure as walk() but restricted to the
+        given paths. File paths are processed directly; directory paths
+        are walked recursively.
+
+        Args:
+            paths: List of relative or absolute file/directory paths to scan.
+            project_root: The project root for computing relative node IDs.
+            exclude_patterns: Optional patterns to exclude (same as walk()).
+
+        Returns:
+            RPGGraph containing nodes for the scoped paths only.
+        """
+        excludes = set(exclude_patterns or DEFAULT_EXCLUDE_PATTERNS)
+
+        # Activate the analyser for the project root
+        result = self.analyzer.activate(project_root)
+        if not result.success:
+            logger.warning(
+                "Analyser activation failed for %s: %s",
+                project_root,
+                result.details,
+            )
+            graph = RPGGraph()
+            graph.metadata["activation_error"] = result.details
+            return graph
+
+        graph = RPGGraph()
+        graph.metadata["baseline_generated_at"] = datetime.now(
+            timezone.utc
+        ).isoformat()
+        graph.metadata["project_root"] = str(project_root.resolve())
+
+        resolved_root = project_root.resolve()
+
+        _SCOPED_SOURCE_EXTENSIONS: frozenset[str] = frozenset(
+            [".py", ".ts", ".tsx", ".js", ".jsx"]
+        )
+
+        for raw_path in paths:
+            p = Path(raw_path)
+            # Resolve to absolute path
+            if not p.is_absolute():
+                p = (resolved_root / p).resolve()
+            else:
+                p = p.resolve()
+
+            if not p.exists():
+                logger.warning("walk_paths: path does not exist, skipping: %s", p)
+                continue
+
+            if p.is_dir():
+                # Recursively walk the directory with the existing helper
+                self._walk_directory(
+                    graph=graph,
+                    root=resolved_root,
+                    current=p,
+                    excludes=excludes,
+                    parent_node_id=None,
+                )
+            elif p.is_file():
+                suffix = p.suffix
+                if suffix not in _SCOPED_SOURCE_EXTENSIONS:
+                    logger.debug(
+                        "walk_paths: skipping non-source file: %s", p
+                    )
+                    continue
+
+                # Determine relative paths using the same logic as _walk_directory
+                parent_dir = p.parent
+                if parent_dir == resolved_root:
+                    rel_folder = resolved_root.name
+                    rel_file = f"{resolved_root.name}/{p.name}"
+                else:
+                    try:
+                        rel_file = str(p.relative_to(resolved_root))
+                        rel_folder = str(parent_dir.relative_to(resolved_root))
+                    except ValueError:
+                        # Path is outside project_root — use the filename only
+                        logger.warning(
+                            "walk_paths: file outside project_root, using name only: %s",
+                            p,
+                        )
+                        rel_file = p.name
+                        rel_folder = ""
+
+                if suffix == ".py":
+                    # Need a module node for the parent directory to satisfy
+                    # the COMPONENT parent_id requirement. We look for an
+                    # existing MODULE node with matching folder_path, or create
+                    # a synthetic one if needed.
+                    existing_module: RPGNode | None = None
+                    for node in graph.nodes.values():
+                        from cobuilder.repomap.models.enums import NodeLevel as _NL
+                        if (
+                            node.level == _NL.MODULE
+                            and node.folder_path == rel_folder
+                        ):
+                            existing_module = node
+                            break
+
+                    if existing_module is None:
+                        # Create a minimal MODULE node for this directory
+                        dir_name = parent_dir.name if rel_folder else resolved_root.name
+                        from cobuilder.repomap.models.enums import NodeLevel as _NL2
+                        from cobuilder.repomap.models.enums import NodeType as _NT2
+                        module_node = RPGNode(
+                            name=dir_name,
+                            level=_NL2.MODULE,
+                            node_type=_NT2.FUNCTIONALITY,
+                            folder_path=rel_folder,
+                            parent_id=None,
+                            serena_validated=True,
+                            metadata={
+                                "baseline": True,
+                                "is_package": (parent_dir / "__init__.py").exists(),
+                                "is_ts_dir": False,
+                                "scoped_synthetic": True,
+                            },
+                        )
+                        graph.add_node(module_node)
+                        module_node_id: Any = module_node.id
+                    else:
+                        module_node_id = existing_module.id
+
+                    component_node = RPGNode(
+                        name=p.stem,
+                        level=NodeLevel.COMPONENT,
+                        node_type=NodeType.FUNCTIONALITY,
+                        folder_path=rel_folder,
+                        file_path=rel_file,
+                        parent_id=module_node_id,
+                        serena_validated=True,
+                        metadata={"baseline": True},
+                    )
+                    graph.add_node(component_node)
+
+                    if module_node_id is not None:
+                        edge = RPGEdge(
+                            source_id=module_node_id,
+                            target_id=component_node.id,
+                            edge_type=EdgeType.HIERARCHY,
+                        )
+                        graph.add_edge(edge)
+
+                    # Extract features
+                    self._extract_features(
+                        graph=graph,
+                        root=resolved_root,
+                        file_path=p,
+                        rel_file=rel_file,
+                        rel_folder=rel_folder,
+                        component_node_id=component_node.id,
+                    )
+
+                elif suffix in TS_EXTENSIONS:
+                    # TypeScript/JS file — create MODULE + COMPONENT, no features
+                    existing_module_ts: RPGNode | None = None
+                    for node in graph.nodes.values():
+                        from cobuilder.repomap.models.enums import NodeLevel as _NL3
+                        if (
+                            node.level == _NL3.MODULE
+                            and node.folder_path == rel_folder
+                        ):
+                            existing_module_ts = node
+                            break
+
+                    if existing_module_ts is None:
+                        dir_name_ts = parent_dir.name if rel_folder else resolved_root.name
+                        from cobuilder.repomap.models.enums import NodeLevel as _NL4
+                        from cobuilder.repomap.models.enums import NodeType as _NT4
+                        module_node_ts = RPGNode(
+                            name=dir_name_ts,
+                            level=_NL4.MODULE,
+                            node_type=_NT4.FUNCTIONALITY,
+                            folder_path=rel_folder,
+                            parent_id=None,
+                            serena_validated=True,
+                            metadata={
+                                "baseline": True,
+                                "is_package": False,
+                                "is_ts_dir": True,
+                                "scoped_synthetic": True,
+                            },
+                        )
+                        graph.add_node(module_node_ts)
+                        module_node_ts_id: Any = module_node_ts.id
+                    else:
+                        module_node_ts_id = existing_module_ts.id
+
+                    component_node_ts = RPGNode(
+                        name=Path(p.name).stem,
+                        level=NodeLevel.COMPONENT,
+                        node_type=NodeType.FUNCTIONALITY,
+                        folder_path=rel_folder,
+                        file_path=rel_file,
+                        parent_id=module_node_ts_id,
+                        serena_validated=True,
+                        metadata={"baseline": True, "language": "typescript"},
+                    )
+                    graph.add_node(component_node_ts)
+
+                    edge_ts = RPGEdge(
+                        source_id=module_node_ts_id,
+                        target_id=component_node_ts.id,
+                        edge_type=EdgeType.HIERARCHY,
+                    )
+                    graph.add_edge(edge_ts)
+
+                    # Attempt feature extraction (no-op for TS with FileBasedAnalyzer)
+                    self._extract_features(
+                        graph=graph,
+                        root=resolved_root,
+                        file_path=p,
+                        rel_file=rel_file,
+                        rel_folder=rel_folder,
+                        component_node_id=component_node_ts.id,
+                    )
+
+        logger.info(
+            "Scoped walk complete: %d nodes, %d edges (from %d paths)",
+            graph.node_count,
+            graph.edge_count,
+            len(paths),
+        )
+        return graph
+
     @staticmethod
     def _should_exclude(name: str, excludes: set[str]) -> bool:
         """Check if a file/directory name matches any exclude pattern.
