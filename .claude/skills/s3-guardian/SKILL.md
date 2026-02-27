@@ -236,6 +236,46 @@ $CLI node modify pipeline.dot <node_id> --set bead_id=<real-bead-id>
 $CLI checkpoint save pipeline.dot
 ```
 
+### RepoMap Context Injection (Phase 0 Step 2.5)
+
+Before delegating SD creation to solution-design-architect, generate codebase context:
+
+```bash
+# Generate structured YAML context for the repo
+cobuilder repomap context --name <repo_name> --prd <prd_id>
+```
+
+Then inject into the solution-design-architect prompt:
+
+```python
+context_yaml = Bash("cobuilder repomap context --name {repo_name} --prd {prd_id}")
+
+Task(
+    subagent_type="solution-design-architect",
+    prompt=f"""
+    Create a Solution Design for Epic {epic_num} of {prd_id}.
+
+    ## PRD Reference
+    Read: {prd_path}
+
+    ## Codebase Context (RepoMap — read carefully before designing)
+    ```yaml
+    {context_yaml}
+    ```
+
+    Use this context to:
+    - Reference EXISTING modules by their actual file paths
+    - Scope MODIFIED modules to specific changes needed
+    - Design NEW modules with suggested structure from RepoMap
+    - Respect protected_files — do not include them in File Scope unless PRD requires changes
+    - Use key_interfaces for accurate API contracts in your design
+    """
+)
+```
+
+**When to use**: Any initiative targeting a codebase registered with `cobuilder repomap init`.
+**Skip when**: First-time setup (no baseline yet), or purely config/docs changes.
+
 ### Step 0.4: Design Challenge Protocol (MANDATORY)
 
 Before proceeding to Phase 1, the guardian MUST challenge its own PRD design by spawning a solution-architect agent that independently evaluates the design.
