@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from zerorepo.codegen.test_artifacts import (
+from cobuilder.repomap.codegen.test_artifacts import (
     ArtifactQuery,
     ArtifactStatus,
     ArtifactStoreConfig,

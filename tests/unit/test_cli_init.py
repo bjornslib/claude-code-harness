@@ -8,9 +8,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from zerorepo.cli.config import DEFAULT_CONFIG_DIR, DEFAULT_CONFIG_FILE
-from zerorepo.cli.errors import CLIError
-from zerorepo.cli.init_cmd import (
+from cobuilder.repomap.cli.config import DEFAULT_CONFIG_DIR, DEFAULT_CONFIG_FILE
+from cobuilder.repomap.cli.errors import CLIError
+from cobuilder.repomap.cli.init_cmd import (
     _create_project_structure,
     _is_git_repo,
     _write_default_config,
@@ -34,7 +34,7 @@ class TestIsGitRepo:
 
     def test_git_not_found(self, tmp_path: Path) -> None:
         """Handles missing git binary gracefully."""
-        with patch("zerorepo.cli.init_cmd.subprocess.run", side_effect=FileNotFoundError):
+        with patch("cobuilder.repomap.cli.init_cmd.subprocess.run", side_effect=FileNotFoundError):
             assert _is_git_repo(tmp_path) is False
 
 

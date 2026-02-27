@@ -8,13 +8,13 @@ from uuid import uuid4
 
 import pytest
 
-from zerorepo.codegen.impl_generator import (
+from cobuilder.repomap.codegen.impl_generator import (
     GeneratedCode,
     LLMImplementationGenerator,
     _strip_markdown_fences,
 )
-from zerorepo.models.enums import InterfaceType, NodeLevel, NodeType
-from zerorepo.models.node import RPGNode
+from cobuilder.repomap.models.enums import InterfaceType, NodeLevel, NodeType
+from cobuilder.repomap.models.node import RPGNode
 
 
 # --------------------------------------------------------------------------- #

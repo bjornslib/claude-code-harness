@@ -17,14 +17,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from zerorepo.evaluation.models import (
+from cobuilder.repomap.evaluation.models import (
     BenchmarkTask,
     FunctionSignature,
     ValidationResult,
     Vote,
     VoteResult,
 )
-from zerorepo.evaluation.semantic_validation import SemanticValidator
+from cobuilder.repomap.evaluation.semantic_validation import SemanticValidator
 
 
 def _make_task() -> BenchmarkTask:

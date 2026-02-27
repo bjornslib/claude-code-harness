@@ -8,7 +8,7 @@ from uuid import UUID
 import pytest
 from pydantic import ValidationError
 
-from zerorepo.llm.models import (
+from cobuilder.repomap.llm.models import (
     DEFAULT_TIER_MODELS,
     TOKEN_PRICING,
     GatewayConfig,

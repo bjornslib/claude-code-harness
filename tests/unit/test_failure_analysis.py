@@ -17,12 +17,12 @@ from typing import Any
 
 import pytest
 
-from zerorepo.evaluation.failure_analysis import (
+from cobuilder.repomap.evaluation.failure_analysis import (
     FailureAnalyzer,
     PromptABTest,
     RECOMMENDATION_RULES,
 )
-from zerorepo.evaluation.models import (
+from cobuilder.repomap.evaluation.models import (
     ABTestResult,
     BenchmarkTask,
     FailureCategory,

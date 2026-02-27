@@ -14,11 +14,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import ValidationError
 
-from zerorepo.llm.exceptions import LLMGatewayError
-from zerorepo.llm.gateway import LLMGateway
-from zerorepo.llm.models import ModelTier
-from zerorepo.llm.prompt_templates import PromptTemplate
-from zerorepo.spec_parser.conflict_detector import (
+from cobuilder.repomap.llm.exceptions import LLMGatewayError
+from cobuilder.repomap.llm.gateway import LLMGateway
+from cobuilder.repomap.llm.models import ModelTier
+from cobuilder.repomap.llm.prompt_templates import PromptTemplate
+from cobuilder.repomap.spec_parser.conflict_detector import (
     ConflictDetector,
     ConflictDetectorError,
     DetectorConfig,
@@ -26,7 +26,7 @@ from zerorepo.spec_parser.conflict_detector import (
     LLMConflictResponse,
     _normalize_severity,
 )
-from zerorepo.spec_parser.models import (
+from cobuilder.repomap.spec_parser.models import (
     ConflictSeverity,
     Constraint,
     ConstraintPriority,
@@ -1053,8 +1053,8 @@ class TestConflictDetectorPackageImports:
     """Test that the conflict detector is importable from the package."""
 
     def test_import_from_package(self) -> None:
-        """Conflict detector classes are importable from zerorepo.spec_parser."""
-        from zerorepo.spec_parser import (
+        """Conflict detector classes are importable from cobuilder.repomap.spec_parser."""
+        from cobuilder.repomap.spec_parser import (
             ConflictDetector,
             ConflictDetectorError,
             DetectorConfig,
@@ -1065,7 +1065,7 @@ class TestConflictDetectorPackageImports:
 
     def test_import_from_module(self) -> None:
         """Conflict detector classes are importable from the module."""
-        from zerorepo.spec_parser.conflict_detector import (
+        from cobuilder.repomap.spec_parser.conflict_detector import (
             ConflictDetector,
             ConflictDetectorError,
             DetectorConfig,

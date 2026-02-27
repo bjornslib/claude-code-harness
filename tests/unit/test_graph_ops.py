@@ -5,37 +5,37 @@ from __future__ import annotations
 import pytest
 from uuid import UUID, uuid4
 
-from zerorepo.models.enums import (
+from cobuilder.repomap.models.enums import (
     EdgeType,
     InterfaceType,
     NodeLevel,
     NodeType,
     TestStatus,
 )
-from zerorepo.models.edge import RPGEdge
-from zerorepo.models.graph import RPGGraph
-from zerorepo.models.node import RPGNode
+from cobuilder.repomap.models.edge import RPGEdge
+from cobuilder.repomap.models.graph import RPGGraph
+from cobuilder.repomap.models.node import RPGNode
 
-from zerorepo.graph_ops.exceptions import CycleDetectedError
-from zerorepo.graph_ops.topological import topological_sort, detect_cycles
-from zerorepo.graph_ops.subgraph import (
+from cobuilder.repomap.graph_ops.exceptions import CycleDetectedError
+from cobuilder.repomap.graph_ops.topological import topological_sort, detect_cycles
+from cobuilder.repomap.graph_ops.subgraph import (
     extract_subgraph_by_module,
     extract_subgraph_by_level,
     extract_subgraph_by_type,
 )
-from zerorepo.graph_ops.traversal import (
+from cobuilder.repomap.graph_ops.traversal import (
     get_ancestors,
     get_descendants,
     get_direct_dependencies,
 )
-from zerorepo.graph_ops.filtering import (
+from cobuilder.repomap.graph_ops.filtering import (
     filter_nodes,
     filter_by_status,
     filter_by_validation,
     filter_by_level,
 )
-from zerorepo.graph_ops.diff import diff_dependencies
-from zerorepo.graph_ops.serialization import serialize_graph, deserialize_graph
+from cobuilder.repomap.graph_ops.diff import diff_dependencies
+from cobuilder.repomap.graph_ops.serialization import serialize_graph, deserialize_graph
 
 
 # --------------------------------------------------------------------------- #

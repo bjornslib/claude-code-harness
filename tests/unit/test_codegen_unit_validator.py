@@ -8,8 +8,8 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from zerorepo.codegen.state import GenerationState, GenerationStatus
-from zerorepo.codegen.unit_validator import (
+from cobuilder.repomap.codegen.state import GenerationState, GenerationStatus
+from cobuilder.repomap.codegen.unit_validator import (
     SingleTestResult,
     TestOutcome,
     UnitValidator,

@@ -14,20 +14,20 @@ from uuid import uuid4
 
 import pytest
 
-from zerorepo.graph_construction.builder import FunctionalityGraph
-from zerorepo.graph_construction.converter import FunctionalityGraphConverter
-from zerorepo.graph_construction.dependencies import DependencyEdge
-from zerorepo.graph_construction.partitioner import ModuleSpec
-from zerorepo.models.edge import RPGEdge
-from zerorepo.models.enums import (
+from cobuilder.repomap.graph_construction.builder import FunctionalityGraph
+from cobuilder.repomap.graph_construction.converter import FunctionalityGraphConverter
+from cobuilder.repomap.graph_construction.dependencies import DependencyEdge
+from cobuilder.repomap.graph_construction.partitioner import ModuleSpec
+from cobuilder.repomap.models.edge import RPGEdge
+from cobuilder.repomap.models.enums import (
     DeltaStatus,
     EdgeType,
     NodeLevel,
     NodeType,
 )
-from zerorepo.models.graph import RPGGraph
-from zerorepo.models.node import RPGNode
-from zerorepo.spec_parser.parser import SpecParser
+from cobuilder.repomap.models.graph import RPGGraph
+from cobuilder.repomap.models.node import RPGNode
+from cobuilder.repomap.spec_parser.parser import SpecParser
 
 
 # ---------------------------------------------------------------------------

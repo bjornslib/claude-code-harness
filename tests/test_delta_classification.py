@@ -11,22 +11,22 @@ from __future__ import annotations
 
 import pytest
 
-from zerorepo.graph_construction.converter import FunctionalityGraphConverter
-from zerorepo.llm.prompt_templates import PromptTemplate
-from zerorepo.models.edge import RPGEdge
-from zerorepo.models.enums import (
+from cobuilder.repomap.graph_construction.converter import FunctionalityGraphConverter
+from cobuilder.repomap.llm.prompt_templates import PromptTemplate
+from cobuilder.repomap.models.edge import RPGEdge
+from cobuilder.repomap.models.enums import (
     DeltaStatus,
     EdgeType,
     NodeLevel,
     NodeType,
 )
-from zerorepo.models.graph import RPGGraph
-from zerorepo.models.node import RPGNode
-from zerorepo.spec_parser.models import (
+from cobuilder.repomap.models.graph import RPGGraph
+from cobuilder.repomap.models.node import RPGNode
+from cobuilder.repomap.spec_parser.models import (
     Component,
     DeltaClassification,
 )
-from zerorepo.spec_parser.parser import (
+from cobuilder.repomap.spec_parser.parser import (
     ParsedComponent,
     _normalize_components,
 )

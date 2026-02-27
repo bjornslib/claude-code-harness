@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from zerorepo.evaluation.models import BenchmarkTask, DifficultyLevel
+from cobuilder.repomap.evaluation.models import BenchmarkTask, DifficultyLevel
 
 
 GOLDEN_TASKS_PATH = Path(__file__).parent / "golden_tasks.json"

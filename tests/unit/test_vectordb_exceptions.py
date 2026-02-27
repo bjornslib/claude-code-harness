@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from zerorepo.vectordb.exceptions import (
+from cobuilder.repomap.vectordb.exceptions import (
     CollectionError,
     EmbeddingError,
     StoreNotInitializedError,

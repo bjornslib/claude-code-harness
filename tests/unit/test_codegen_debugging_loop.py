@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, call
 
 import pytest
 
-from zerorepo.codegen.debugging_loop import (
+from cobuilder.repomap.codegen.debugging_loop import (
     BASE_TEMPERATURE,
     DIAGNOSIS_ROUNDS,
     MAJORITY_THRESHOLD,
@@ -17,9 +17,9 @@ from zerorepo.codegen.debugging_loop import (
     DiagnosisResponse,
     MajorityVoteDiagnoser,
 )
-from zerorepo.codegen.tdd_loop import DiagnosisResult
-from zerorepo.models.enums import InterfaceType, NodeLevel, NodeType
-from zerorepo.models.node import RPGNode
+from cobuilder.repomap.codegen.tdd_loop import DiagnosisResult
+from cobuilder.repomap.models.enums import InterfaceType, NodeLevel, NodeType
+from cobuilder.repomap.models.node import RPGNode
 
 
 # --------------------------------------------------------------------------- #

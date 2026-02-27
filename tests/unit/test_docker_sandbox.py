@@ -12,14 +12,14 @@ from unittest.mock import MagicMock, PropertyMock, call, patch
 import pytest
 from pydantic import ValidationError
 
-from zerorepo.sandbox.exceptions import DockerError, SandboxTimeoutError
-from zerorepo.sandbox.models import (
+from cobuilder.repomap.sandbox.exceptions import DockerError, SandboxTimeoutError
+from cobuilder.repomap.sandbox.models import (
     ExecutionResult,
     SandboxConfig,
     TestFailure,
     TestResult,
 )
-from zerorepo.sandbox.sandbox import DockerSandbox
+from cobuilder.repomap.sandbox.sandbox import DockerSandbox
 
 
 # ---------------------------------------------------------------------------
@@ -209,7 +209,7 @@ class TestDockerSandboxInit:
 class TestDockerSandboxClient:
     """Tests for the Docker client property."""
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_client_creates_connection(self, mock_docker: MagicMock) -> None:
         mock_client = MagicMock()
         mock_docker.from_env.return_value = mock_client
@@ -222,7 +222,7 @@ class TestDockerSandboxClient:
         mock_client.ping.assert_called_once()
         assert client is mock_client
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_client_cached(self, mock_docker: MagicMock) -> None:
         mock_client = MagicMock()
         mock_docker.from_env.return_value = mock_client
@@ -235,7 +235,7 @@ class TestDockerSandboxClient:
         # from_env should only be called once
         mock_docker.from_env.assert_called_once()
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_client_raises_docker_error(
         self, mock_docker: MagicMock
     ) -> None:
@@ -252,7 +252,7 @@ class TestDockerSandboxClient:
 class TestDockerSandboxStart:
     """Tests for container start lifecycle."""
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_start_returns_container_id(
         self, mock_docker: MagicMock
     ) -> None:
@@ -271,7 +271,7 @@ class TestDockerSandboxStart:
         assert cid == "abc123"
         assert "abc123" in sandbox._active_containers
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_start_passes_resource_limits(
         self, mock_docker: MagicMock
     ) -> None:
@@ -292,7 +292,7 @@ class TestDockerSandboxStart:
         assert call_kwargs.kwargs["mem_limit"] == "1g"
         assert call_kwargs.kwargs["nano_cpus"] == 2_000_000_000
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_start_mounts_workspace(
         self, mock_docker: MagicMock
     ) -> None:
@@ -316,7 +316,7 @@ class TestDockerSandboxStart:
         assert volumes[resolved]["bind"] == "/workspace"
         assert volumes[resolved]["mode"] == "rw"
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_start_uses_label(self, mock_docker: MagicMock) -> None:
         mock_container = MagicMock()
         mock_container.id = "abc123"
@@ -333,7 +333,7 @@ class TestDockerSandboxStart:
         call_kwargs = mock_client.containers.run.call_args
         assert call_kwargs.kwargs["labels"] == {"zerorepo-sandbox": "true"}
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_start_raises_on_api_error(
         self, mock_docker: MagicMock
     ) -> None:
@@ -352,7 +352,7 @@ class TestDockerSandboxStart:
 class TestDockerSandboxStop:
     """Tests for container stop/removal."""
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_stop_removes_container(
         self, mock_docker: MagicMock
     ) -> None:
@@ -370,7 +370,7 @@ class TestDockerSandboxStop:
         mock_container.remove.assert_called_once_with(force=True)
         assert "abc123" not in sandbox._active_containers
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_stop_handles_not_found(
         self, mock_docker: MagicMock
     ) -> None:
@@ -391,7 +391,7 @@ class TestDockerSandboxStop:
 class TestDockerSandboxDependencies:
     """Tests for dependency installation methods."""
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_install_dependencies_success(
         self, mock_docker: MagicMock
     ) -> None:
@@ -407,7 +407,7 @@ class TestDockerSandboxDependencies:
 
         assert result is True
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_install_dependencies_failure(
         self, mock_docker: MagicMock
     ) -> None:
@@ -423,7 +423,7 @@ class TestDockerSandboxDependencies:
 
         assert result is False
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_install_empty_requirements(
         self, mock_docker: MagicMock
     ) -> None:
@@ -432,7 +432,7 @@ class TestDockerSandboxDependencies:
         result = sandbox.install_dependencies("abc123", [])
         assert result is True
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_install_from_file(
         self, mock_docker: MagicMock, tmp_path: Path
     ) -> None:
@@ -451,7 +451,7 @@ class TestDockerSandboxDependencies:
 
         assert result is True
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_install_from_missing_file(
         self, mock_docker: MagicMock
     ) -> None:
@@ -469,7 +469,7 @@ class TestDockerSandboxDependencies:
 class TestDockerSandboxCodeExecution:
     """Tests for code execution methods."""
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_run_code_success(self, mock_docker: MagicMock) -> None:
         mock_container = MagicMock()
         mock_container.exec_run.return_value = (
@@ -488,7 +488,7 @@ class TestDockerSandboxCodeExecution:
         assert result.exit_code == 0
         assert "Hello World" in result.stdout
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_run_code_with_custom_entrypoint(
         self, mock_docker: MagicMock
     ) -> None:
@@ -511,7 +511,7 @@ class TestDockerSandboxCodeExecution:
         )
         assert found_app_py
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_run_code_with_error(self, mock_docker: MagicMock) -> None:
         mock_container = MagicMock()
         mock_container.exec_run.return_value = (
@@ -529,7 +529,7 @@ class TestDockerSandboxCodeExecution:
         assert result.exit_code == 1
         assert "SyntaxError" in result.stderr
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_run_script(
         self, mock_docker: MagicMock, tmp_path: Path
     ) -> None:
@@ -549,7 +549,7 @@ class TestDockerSandboxCodeExecution:
         assert isinstance(result, ExecutionResult)
         assert result.exit_code == 0
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_run_script_missing_file(
         self, mock_docker: MagicMock
     ) -> None:
@@ -565,7 +565,7 @@ class TestDockerSandboxCodeExecution:
 class TestDockerSandboxTestExecution:
     """Tests for pytest execution and report parsing."""
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_run_tests_success(self, mock_docker: MagicMock) -> None:
         report = {
             "summary": {
@@ -614,7 +614,7 @@ class TestDockerSandboxTestExecution:
         assert len(result.failures) == 1
         assert result.failures[0].name == "test_example::test_fail"
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_run_tests_fallback_on_report_failure(
         self, mock_docker: MagicMock
     ) -> None:
@@ -703,7 +703,7 @@ class TestDockerSandboxTestExecution:
 class TestDockerSandboxFileOps:
     """Tests for file system operations."""
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_write_file(self, mock_docker: MagicMock) -> None:
         mock_container = MagicMock()
         mock_container.exec_run.return_value = (0, (b"", b""))
@@ -716,7 +716,7 @@ class TestDockerSandboxFileOps:
         # Should not raise
         sandbox.write_file("abc123", "/workspace/test.py", "print('hello')")
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_read_file_success(self, mock_docker: MagicMock) -> None:
         mock_container = MagicMock()
         mock_container.exec_run.return_value = (
@@ -733,7 +733,7 @@ class TestDockerSandboxFileOps:
 
         assert content == "file contents here"
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_read_file_not_found(self, mock_docker: MagicMock) -> None:
         mock_container = MagicMock()
         mock_container.exec_run.return_value = (
@@ -749,7 +749,7 @@ class TestDockerSandboxFileOps:
         with pytest.raises(DockerError, match="Failed to read"):
             sandbox.read_file("abc123", "/workspace/missing.py")
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_list_files(self, mock_docker: MagicMock) -> None:
         mock_container = MagicMock()
         mock_container.exec_run.return_value = (
@@ -768,7 +768,7 @@ class TestDockerSandboxFileOps:
         assert "/workspace/main.py" in files
         assert "/workspace/test.py" in files
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_list_files_empty(self, mock_docker: MagicMock) -> None:
         mock_container = MagicMock()
         mock_container.exec_run.return_value = (0, (b"", b""))
@@ -786,7 +786,7 @@ class TestDockerSandboxFileOps:
 class TestDockerSandboxCleanup:
     """Tests for cleanup and context manager."""
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_context_manager(self, mock_docker: MagicMock) -> None:
         mock_client = MagicMock()
         mock_client.containers.list.return_value = []
@@ -799,7 +799,7 @@ class TestDockerSandboxCleanup:
         # Cleanup should have been called
         mock_client.containers.list.assert_called()
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_cleanup_force_removes_labeled(
         self, mock_docker: MagicMock
     ) -> None:
@@ -824,7 +824,7 @@ class TestDockerSandboxCleanup:
         mock_container2.stop.assert_called_once()
         mock_container2.remove.assert_called_once_with(force=True)
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_cleanup_clears_active_containers(
         self, mock_docker: MagicMock
     ) -> None:
@@ -841,7 +841,7 @@ class TestDockerSandboxCleanup:
 
         assert sandbox._active_containers == []
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_cleanup_non_force_only_tracked(
         self, mock_docker: MagicMock
     ) -> None:
@@ -863,7 +863,7 @@ class TestDockerSandboxCleanup:
 class TestDockerSandboxExecHelpers:
     """Tests for internal execution helpers."""
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_exec_in_container_demux_tuple(
         self, mock_docker: MagicMock
     ) -> None:
@@ -885,7 +885,7 @@ class TestDockerSandboxExecHelpers:
         assert result.exit_code == 0
         assert result.duration_ms > 0
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_exec_in_container_bytes_output(
         self, mock_docker: MagicMock
     ) -> None:
@@ -902,7 +902,7 @@ class TestDockerSandboxExecHelpers:
         assert result.stdout == "raw bytes output"
         assert result.stderr == ""
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_exec_in_container_none_output(
         self, mock_docker: MagicMock
     ) -> None:
@@ -920,7 +920,7 @@ class TestDockerSandboxExecHelpers:
         assert result.stderr == ""
         assert result.exit_code == 0
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_exec_in_container_not_found(
         self, mock_docker: MagicMock
     ) -> None:
@@ -935,7 +935,7 @@ class TestDockerSandboxExecHelpers:
         with pytest.raises(DockerError, match="not found"):
             sandbox._exec_in_container("abc123", ["echo"])
 
-    @patch("zerorepo.sandbox.sandbox.docker")
+    @patch("cobuilder.repomap.sandbox.sandbox.docker")
     def test_exec_raw(self, mock_docker: MagicMock) -> None:
         mock_container = MagicMock()
         mock_container.exec_run.return_value = (0, (b"ok", b""))
@@ -957,7 +957,7 @@ class TestDockerSandboxImports:
     """Tests that the module's public API is correctly exported."""
 
     def test_import_from_package(self) -> None:
-        from zerorepo.sandbox import (
+        from cobuilder.repomap.sandbox import (
             DockerError,
             DockerSandbox,
             ExecutionResult,

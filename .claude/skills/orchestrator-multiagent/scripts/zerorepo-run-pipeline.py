@@ -74,7 +74,7 @@ def run_init(project_path: Path, exclude_patterns: str) -> int:
     print(f"Exclude patterns: {exclude_patterns}", flush=True)
 
     # Import after environment setup
-    from zerorepo.cli.app import app
+    from cobuilder.repomap.cli.app import app
 
     # Set up sys.argv for typer CLI
     sys.argv = [
@@ -129,7 +129,7 @@ def run_attractor_export(output_dir: Path, prd_ref: str = "") -> int:
         return 1
 
     try:
-        from zerorepo.models.graph import RPGGraph
+        from cobuilder.repomap.models.graph import RPGGraph
         content = rpg_json_path.read_text(encoding="utf-8")
         rpg = RPGGraph.model_validate(json.loads(content))
         print(
@@ -144,7 +144,7 @@ def run_attractor_export(output_dir: Path, prd_ref: str = "") -> int:
         return 1
 
     try:
-        from zerorepo.graph_construction.attractor_exporter import AttractorExporter
+        from cobuilder.repomap.graph_construction.attractor_exporter import AttractorExporter
         exporter = AttractorExporter(prd_ref=prd_ref or "PRD-UNKNOWN")
         dot_content = exporter.export(rpg)
         dot_output_path.write_text(dot_content, encoding="utf-8")
@@ -253,7 +253,7 @@ def run_generate(
         print(f"[WARNING] Failed to patch litellm.request_timeout: {e}", flush=True)
 
     # Import after all environment setup
-    from zerorepo.cli.app import app
+    from cobuilder.repomap.cli.app import app
 
     # Build sys.argv
     sys.argv = [

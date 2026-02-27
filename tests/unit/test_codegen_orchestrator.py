@@ -8,28 +8,28 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from zerorepo.codegen.codegen_orchestrator import (
+from cobuilder.repomap.codegen.codegen_orchestrator import (
     CodegenOrchestrator,
     NodeResult,
     OrchestratorConfig,
     OrchestratorResult,
 )
-from zerorepo.codegen.state import GenerationState, GenerationStatus
-from zerorepo.codegen.tdd_loop import (
+from cobuilder.repomap.codegen.state import GenerationState, GenerationStatus
+from cobuilder.repomap.codegen.tdd_loop import (
     DiagnosisResult,
     SandboxResult,
     TDDLoopResult,
 )
-from zerorepo.codegen.traversal import TraversalEngine
-from zerorepo.models.enums import (
+from cobuilder.repomap.codegen.traversal import TraversalEngine
+from cobuilder.repomap.models.enums import (
     EdgeType,
     InterfaceType,
     NodeLevel,
     NodeType,
 )
-from zerorepo.models.edge import RPGEdge
-from zerorepo.models.graph import RPGGraph
-from zerorepo.models.node import RPGNode
+from cobuilder.repomap.models.edge import RPGEdge
+from cobuilder.repomap.models.graph import RPGGraph
+from cobuilder.repomap.models.node import RPGNode
 
 
 # --------------------------------------------------------------------------- #

@@ -17,20 +17,20 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import BaseModel
 
-from zerorepo.llm.exceptions import (
+from cobuilder.repomap.llm.exceptions import (
     ConfigurationError,
     RetryExhaustedError,
     TemplateError,
 )
-from zerorepo.llm.models import (
+from cobuilder.repomap.llm.models import (
     DEFAULT_TIER_MODELS,
     TOKEN_PRICING,
     GatewayConfig,
     LLMLogEntry,
     ModelTier,
 )
-from zerorepo.llm.prompt_templates import PromptTemplate
-from zerorepo.llm.token_tracker import TokenTracker
+from cobuilder.repomap.llm.prompt_templates import PromptTemplate
+from cobuilder.repomap.llm.token_tracker import TokenTracker
 
 
 # ---------------------------------------------------------------------------
@@ -78,14 +78,14 @@ class ModulePlan(BaseModel):
 class TestGatewayEndToEnd:
     """Verify complete gateway workflows from model selection → completion → tracking."""
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_select_then_complete(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
         """select_model → complete → verify tracking and logging."""
-        from zerorepo.llm.gateway import LLMGateway
+        from cobuilder.repomap.llm.gateway import LLMGateway
 
         mock_completion.return_value = _mock_response(
             text="Feature: login page", prompt_tokens=50, completion_tokens=20
@@ -118,14 +118,14 @@ class TestGatewayEndToEnd:
         assert log.latency_ms >= 0
         assert log.cost_usd > 0
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_multi_model_session(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
         """Multiple completions with different models track independently."""
-        from zerorepo.llm.gateway import LLMGateway
+        from cobuilder.repomap.llm.gateway import LLMGateway
 
         gw = LLMGateway()
 
@@ -169,14 +169,14 @@ class TestGatewayEndToEnd:
 class TestGatewayJsonEndToEnd:
     """Verify JSON structured output end-to-end workflows."""
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_complete_json_with_complex_schema(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
         """complete_json parses complex Pydantic models correctly."""
-        from zerorepo.llm.gateway import LLMGateway
+        from cobuilder.repomap.llm.gateway import LLMGateway
 
         json_text = json.dumps({
             "name": "user-authentication",
@@ -201,14 +201,14 @@ class TestGatewayJsonEndToEnd:
         assert gw.tracker.get_total_tokens() == 50
         assert len(gw.logs) == 1
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_json_then_text_completions(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
         """Mixing JSON and text completions in the same session."""
-        from zerorepo.llm.gateway import LLMGateway
+        from cobuilder.repomap.llm.gateway import LLMGateway
 
         gw = LLMGateway()
 
@@ -246,10 +246,10 @@ class TestGatewayJsonEndToEnd:
 class TestGatewayRetryEndToEnd:
     """Verify retry logic works correctly in integration scenarios."""
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.time.sleep")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.time.sleep")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_retry_then_success_tracks_correctly(
         self,
         mock_completion: MagicMock,
@@ -257,7 +257,7 @@ class TestGatewayRetryEndToEnd:
         mock_litellm: MagicMock,
     ) -> None:
         """Retried request still tracks tokens and logs on eventual success."""
-        from zerorepo.llm.gateway import LLMGateway
+        from cobuilder.repomap.llm.gateway import LLMGateway
 
         mock_completion.side_effect = [
             TimeoutError("first attempt"),
@@ -277,10 +277,10 @@ class TestGatewayRetryEndToEnd:
         assert len(gw.logs) == 1
         assert gw.logs[0].tokens_prompt == 25
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.time.sleep")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.time.sleep")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_retry_exhaustion_no_tracking(
         self,
         mock_completion: MagicMock,
@@ -288,7 +288,7 @@ class TestGatewayRetryEndToEnd:
         mock_litellm: MagicMock,
     ) -> None:
         """Fully exhausted retries leave tracker and logs empty."""
-        from zerorepo.llm.gateway import LLMGateway
+        from cobuilder.repomap.llm.gateway import LLMGateway
 
         mock_completion.side_effect = TimeoutError("always fails")
         cfg = GatewayConfig(max_retries=2, base_retry_delay=0.01)
@@ -309,14 +309,14 @@ class TestGatewayRetryEndToEnd:
 class TestGatewayLogFilteringEndToEnd:
     """Verify log filtering works with real timestamps in integration."""
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_filter_logs_by_time_range(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
         """Time-filtered log retrieval returns correct subset."""
-        from zerorepo.llm.gateway import LLMGateway
+        from cobuilder.repomap.llm.gateway import LLMGateway
 
         mock_completion.return_value = _mock_response()
         gw = LLMGateway()
@@ -354,14 +354,14 @@ class TestGatewayLogFilteringEndToEnd:
 class TestCostTracking:
     """Verify cost tracking accuracy across multiple calls."""
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_aggregate_cost_accuracy(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
         """Total cost from tracker matches sum of individual log costs."""
-        from zerorepo.llm.gateway import LLMGateway
+        from cobuilder.repomap.llm.gateway import LLMGateway
 
         gw = LLMGateway()
 
@@ -400,14 +400,14 @@ class TestCostTracking:
 class TestTokenTrackerIntegration:
     """Verify TokenTracker accumulates correctly through gateway calls."""
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_tracker_reset_mid_session(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
         """Token tracker can be reset mid-session; new calls accumulate fresh."""
-        from zerorepo.llm.gateway import LLMGateway
+        from cobuilder.repomap.llm.gateway import LLMGateway
 
         mock_completion.return_value = _mock_response(
             prompt_tokens=100, completion_tokens=50
@@ -459,14 +459,14 @@ class TestPromptTemplateIntegration:
         assert "function_generation" in templates
         assert len(templates) >= 3
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_template_driven_completion(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
         """Full workflow: render template → select model → complete."""
-        from zerorepo.llm.gateway import LLMGateway
+        from cobuilder.repomap.llm.gateway import LLMGateway
 
         # Step 1: Render template
         pt = PromptTemplate()
@@ -498,9 +498,9 @@ class TestExceptionPropagation:
 
     def test_unsupported_model_error_message(self) -> None:
         """ConfigurationError contains the offending model name."""
-        with patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True), \
-             patch("zerorepo.llm.gateway.litellm"):
-            from zerorepo.llm.gateway import LLMGateway
+        with patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True), \
+             patch("cobuilder.repomap.llm.gateway.litellm"):
+            from cobuilder.repomap.llm.gateway import LLMGateway
 
             gw = LLMGateway()
             with pytest.raises(ConfigurationError) as exc_info:
@@ -528,14 +528,14 @@ class TestExceptionPropagation:
 class TestGatewayConfigVariations:
     """Verify gateway behaviour under different configurations."""
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_minimal_config(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
         """Gateway works with minimal default config."""
-        from zerorepo.llm.gateway import LLMGateway
+        from cobuilder.repomap.llm.gateway import LLMGateway
 
         mock_completion.return_value = _mock_response()
         gw = LLMGateway()
@@ -545,16 +545,16 @@ class TestGatewayConfigVariations:
         )
         assert isinstance(result, str)
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_custom_retry_config(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
         """Custom retry settings are respected."""
-        from zerorepo.llm.gateway import LLMGateway
+        from cobuilder.repomap.llm.gateway import LLMGateway
 
-        with patch("zerorepo.llm.gateway.time.sleep") as mock_sleep:
+        with patch("cobuilder.repomap.llm.gateway.time.sleep") as mock_sleep:
             mock_completion.side_effect = TimeoutError("fail")
             cfg = GatewayConfig(max_retries=1, base_retry_delay=0.5)
             gw = LLMGateway(config=cfg)
@@ -567,11 +567,11 @@ class TestGatewayConfigVariations:
             assert exc_info.value.attempts == 2  # 1 initial + 1 retry
             mock_sleep.assert_called_once_with(0.5)  # base * 2^0
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
     def test_empty_tier_model_config(self, mock_litellm: MagicMock) -> None:
         """Empty tier models raise ConfigurationError on select_model."""
-        from zerorepo.llm.gateway import LLMGateway
+        from cobuilder.repomap.llm.gateway import LLMGateway
 
         cfg = GatewayConfig(tier_models={})
         gw = LLMGateway(config=cfg)
@@ -635,7 +635,7 @@ class TestModelTierMapping:
 
     def test_all_default_models_are_supported(self) -> None:
         """Every model in DEFAULT_TIER_MODELS is in SUPPORTED_MODELS."""
-        from zerorepo.llm.gateway import SUPPORTED_MODELS
+        from cobuilder.repomap.llm.gateway import SUPPORTED_MODELS
 
         for tier in ModelTier:
             for provider, model in DEFAULT_TIER_MODELS[tier].items():

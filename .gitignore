@@ -61,6 +61,13 @@ tools/tmux-nav/tmux-nav
 # ZeroRepo analysis output (whole dir ignored)
 .zerorepo/
 
+# CoBuilder RepoMap — baseline JSON files are large machine data; keep config + manifests
+.repomap/baselines/*/baseline.json
+.repomap/baselines/*/baseline.prev.json
+# Keep directory structure
+!.repomap/baselines/.gitkeep
+!.repomap/manifests/.gitkeep
+
 # Worktree checkouts
 trees/
 

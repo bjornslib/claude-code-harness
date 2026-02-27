@@ -22,21 +22,21 @@ from typing import Any
 import networkx as nx
 import pytest
 
-from zerorepo.graph_construction.builder import FunctionalityGraph
-from zerorepo.graph_construction.dependencies import DependencyEdge
-from zerorepo.graph_construction.metrics import (
+from cobuilder.repomap.graph_construction.builder import FunctionalityGraph
+from cobuilder.repomap.graph_construction.dependencies import DependencyEdge
+from cobuilder.repomap.graph_construction.metrics import (
     ModularityResult,
     PartitionMetrics,
 )
-from zerorepo.graph_construction.partitioner import ModuleSpec
-from zerorepo.graph_construction.export import (
+from cobuilder.repomap.graph_construction.partitioner import ModuleSpec
+from cobuilder.repomap.graph_construction.export import (
     ExportConfig,
     ExportFormat,
     ExportResult,
     GraphExporter,
 )
-from zerorepo.models.enums import EdgeType, NodeLevel, NodeType
-from zerorepo.models.graph import RPGGraph
+from cobuilder.repomap.models.enums import EdgeType, NodeLevel, NodeType
+from cobuilder.repomap.models.graph import RPGGraph
 
 
 # ---------------------------------------------------------------------------
@@ -706,7 +706,7 @@ class TestImports:
     """Tests for module imports."""
 
     def test_import_from_package(self) -> None:
-        from zerorepo.graph_construction import (
+        from cobuilder.repomap.graph_construction import (
             ExportConfig,
             ExportFormat,
             ExportResult,
@@ -715,7 +715,7 @@ class TestImports:
         assert GraphExporter is not None
 
     def test_import_from_module(self) -> None:
-        from zerorepo.graph_construction.export import (
+        from cobuilder.repomap.graph_construction.export import (
             ExportConfig,
             ExportFormat,
             ExportResult,

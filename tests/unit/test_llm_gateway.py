@@ -15,18 +15,18 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import BaseModel
 
-from zerorepo.llm.exceptions import (
+from cobuilder.repomap.llm.exceptions import (
     ConfigurationError,
     RetryExhaustedError,
 )
-from zerorepo.llm.gateway import (
+from cobuilder.repomap.llm.gateway import (
     SUPPORTED_MODELS,
     LLMGateway,
     _estimate_cost,
     _truncate,
     _truncate_messages,
 )
-from zerorepo.llm.models import GatewayConfig, ModelTier
+from cobuilder.repomap.llm.models import GatewayConfig, ModelTier
 
 
 # ---------------------------------------------------------------------------
@@ -149,21 +149,21 @@ class TestEstimateCost:
 class TestGatewayInit:
     """Tests for LLMGateway constructor."""
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
     def test_default_config(self, mock_litellm: MagicMock) -> None:
         gw = LLMGateway()
         assert gw.tracker is not None
         assert gw.logs == []
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
     def test_custom_config(self, mock_litellm: MagicMock) -> None:
         cfg = GatewayConfig(max_retries=2, base_retry_delay=0.5)
         gw = LLMGateway(config=cfg)
         assert gw._config.max_retries == 2
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", False)
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", False)
     def test_no_litellm_raises(self) -> None:
         with pytest.raises(ConfigurationError, match="litellm"):
             LLMGateway()
@@ -177,37 +177,37 @@ class TestGatewayInit:
 class TestSelectModel:
     """Tests for tier-based model selection."""
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
     def test_cheap_tier_default_is_openai(self, mock_litellm: MagicMock) -> None:
         gw = LLMGateway()
         model = gw.select_model(ModelTier.CHEAP)
         assert model == "gpt-5.2"
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
     def test_medium_tier_default_is_openai(self, mock_litellm: MagicMock) -> None:
         gw = LLMGateway()
         model = gw.select_model(ModelTier.MEDIUM)
         assert model == "gpt-5.2"
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
     def test_prefer_anthropic(self, mock_litellm: MagicMock) -> None:
         gw = LLMGateway()
         model = gw.select_model(ModelTier.CHEAP, provider_preference="anthropic")
         assert "claude" in model.lower()
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
     def test_prefer_unknown_provider_falls_back(self, mock_litellm: MagicMock) -> None:
         gw = LLMGateway()
         model = gw.select_model(ModelTier.CHEAP, provider_preference="nonexistent")
         # Should fall back to provider priority (openai first)
         assert model == "gpt-5.2"
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
     def test_empty_tier_raises(self, mock_litellm: MagicMock) -> None:
         cfg = GatewayConfig(tier_models={})
         gw = LLMGateway(config=cfg)
@@ -223,9 +223,9 @@ class TestSelectModel:
 class TestComplete:
     """Tests for the complete method."""
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_basic_completion(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
@@ -238,9 +238,9 @@ class TestComplete:
         assert result == "Hi there!"
         mock_completion.assert_called_once()
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_unsupported_model_raises(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
@@ -252,9 +252,9 @@ class TestComplete:
             )
         mock_completion.assert_not_called()
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_records_token_usage(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
@@ -268,9 +268,9 @@ class TestComplete:
         )
         assert gw.tracker.get_total_tokens() == 150
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_creates_log_entry(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
@@ -287,9 +287,9 @@ class TestComplete:
         assert log.tier == ModelTier.CHEAP
         assert log.latency_ms >= 0
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_multiple_completions_accumulate_logs(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
@@ -302,9 +302,9 @@ class TestComplete:
             )
         assert len(gw.logs) == 3
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_handles_none_content(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
@@ -319,9 +319,9 @@ class TestComplete:
         )
         assert result == ""
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_handles_none_usage(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
@@ -345,10 +345,10 @@ class TestComplete:
 class TestRetryLogic:
     """Tests for exponential backoff retry behaviour."""
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.time.sleep")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.time.sleep")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_retries_on_rate_limit(
         self,
         mock_completion: MagicMock,
@@ -371,10 +371,10 @@ class TestRetryLogic:
         assert result == "success after retry"
         assert mock_sleep.call_count == 1
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.time.sleep")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.time.sleep")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_retries_on_timeout(
         self,
         mock_completion: MagicMock,
@@ -394,10 +394,10 @@ class TestRetryLogic:
         )
         assert result == "recovered"
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.time.sleep")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.time.sleep")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_retry_exhausted_raises(
         self,
         mock_completion: MagicMock,
@@ -416,10 +416,10 @@ class TestRetryLogic:
         assert exc_info.value.attempts == 3  # initial + 2 retries
         assert isinstance(exc_info.value.last_error, TimeoutError)
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.time.sleep")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.time.sleep")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_no_retry_on_auth_error(
         self,
         mock_completion: MagicMock,
@@ -440,10 +440,10 @@ class TestRetryLogic:
             )
         mock_sleep.assert_not_called()
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.time.sleep")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.time.sleep")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_no_retry_on_bad_request(
         self,
         mock_completion: MagicMock,
@@ -464,10 +464,10 @@ class TestRetryLogic:
             )
         mock_sleep.assert_not_called()
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.time.sleep")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.time.sleep")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_exponential_backoff_delays(
         self,
         mock_completion: MagicMock,
@@ -486,10 +486,10 @@ class TestRetryLogic:
         delays = [call.args[0] for call in mock_sleep.call_args_list]
         assert delays == [1.0, 2.0, 4.0]  # 1*2^0, 1*2^1, 1*2^2
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.time.sleep")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.time.sleep")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_zero_retries_fails_immediately(
         self,
         mock_completion: MagicMock,
@@ -517,9 +517,9 @@ class TestRetryLogic:
 class TestCompleteJson:
     """Tests for structured JSON completion."""
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_returns_parsed_model(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
@@ -535,9 +535,9 @@ class TestCompleteJson:
         assert isinstance(result, AnswerSchema)
         assert result.answer == "42"
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_appends_schema_instruction(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
@@ -559,9 +559,9 @@ class TestCompleteJson:
         assert len(messages) == 2  # original + schema instruction
         assert "json" in messages[-1]["content"].lower()
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_invalid_json_raises_validation_error(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
@@ -577,9 +577,9 @@ class TestCompleteJson:
                 response_schema=AnswerSchema,
             )
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_sets_json_response_format(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
@@ -603,9 +603,9 @@ class TestCompleteJson:
 class TestGetLogs:
     """Tests for log filtering by time."""
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_get_all_logs(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
@@ -615,9 +615,9 @@ class TestGetLogs:
         gw.complete(messages=[{"role": "user", "content": "b"}], model="gpt-4o-mini")
         assert len(gw.get_logs()) == 2
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_filter_by_start_time(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
@@ -629,9 +629,9 @@ class TestGetLogs:
         filtered = gw.get_logs(start_time=future)
         assert len(filtered) == 0
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_filter_by_end_time(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
@@ -643,14 +643,14 @@ class TestGetLogs:
         filtered = gw.get_logs(end_time=past)
         assert len(filtered) == 0
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
     def test_empty_logs(self, mock_litellm: MagicMock) -> None:
         gw = LLMGateway()
         assert gw.get_logs() == []
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
     def test_logs_property_returns_copy(self, mock_litellm: MagicMock) -> None:
         """The logs property returns a copy, not the internal list."""
         gw = LLMGateway()
@@ -699,9 +699,9 @@ class TestSupportedModels:
 class TestCompleteAdditional:
     """Additional completion edge cases."""
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_forwards_extra_kwargs(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
@@ -718,9 +718,9 @@ class TestCompleteAdditional:
         assert call_kwargs.get("temperature") == 0.7
         assert call_kwargs.get("max_tokens") == 200
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_all_supported_models_accepted(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
@@ -734,9 +734,9 @@ class TestCompleteAdditional:
             )
             assert isinstance(result, str)
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_log_tier_none_when_not_specified(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
@@ -749,9 +749,9 @@ class TestCompleteAdditional:
         )
         assert gw.logs[0].tier is None
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_log_response_field(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
@@ -764,9 +764,9 @@ class TestCompleteAdditional:
         )
         assert gw.logs[0].response == "answer text"
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_log_cost_for_known_model(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
@@ -781,9 +781,9 @@ class TestCompleteAdditional:
         )
         assert gw.logs[0].cost_usd > 0
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_log_cost_zero_for_unknown_model(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
@@ -798,9 +798,9 @@ class TestCompleteAdditional:
         )
         assert gw.logs[0].cost_usd == 0.0
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_log_truncates_long_content(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
@@ -818,9 +818,9 @@ class TestCompleteAdditional:
         assert len(log.response) <= 1001
         assert log.response.endswith("…")
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_exact_1000_chars_not_truncated(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
@@ -838,10 +838,10 @@ class TestCompleteAdditional:
 class TestRetryAdditional:
     """Additional retry edge cases."""
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.time.sleep")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.time.sleep")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_no_log_on_failure(
         self,
         mock_completion: MagicMock,
@@ -859,10 +859,10 @@ class TestRetryAdditional:
             )
         assert len(gw.logs) == 0
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.time.sleep")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.time.sleep")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_no_tracker_update_on_failure(
         self,
         mock_completion: MagicMock,
@@ -880,10 +880,10 @@ class TestRetryAdditional:
             )
         assert gw.tracker.get_total_tokens() == 0
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.time.sleep")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.time.sleep")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_success_on_last_retry_attempt(
         self,
         mock_completion: MagicMock,
@@ -905,10 +905,10 @@ class TestRetryAdditional:
         assert result == "last chance"
         assert mock_completion.call_count == 3
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.time.sleep")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.time.sleep")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_retries_on_connection_error(
         self,
         mock_completion: MagicMock,
@@ -934,9 +934,9 @@ class TestRetryAdditional:
 class TestCostAccuracy:
     """Verify cost calculations within ±1% of expected."""
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_gpt4o_mini_cost_1pct(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
@@ -952,9 +952,9 @@ class TestCostAccuracy:
         actual = gw.logs[0].cost_usd
         assert abs(actual - expected) / expected < 0.01
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_gpt4o_cost_1pct(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
@@ -970,9 +970,9 @@ class TestCostAccuracy:
         actual = gw.logs[0].cost_usd
         assert abs(actual - expected) / expected < 0.01
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
-    @patch("zerorepo.llm.gateway.litellm_completion")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway.litellm_completion")
     def test_tracker_cost_matches_log_cost(
         self, mock_completion: MagicMock, mock_litellm: MagicMock
     ) -> None:
@@ -997,11 +997,11 @@ class TestCostAccuracy:
 class TestSelectModelAdditional:
     """Additional model selection edge cases."""
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
     def test_all_tier_provider_combos(self, mock_litellm: MagicMock) -> None:
         """Every tier+provider returns the correct model."""
-        from zerorepo.llm.models import DEFAULT_TIER_MODELS
+        from cobuilder.repomap.llm.models import DEFAULT_TIER_MODELS
 
         gw = LLMGateway()
         expected = {
@@ -1016,8 +1016,8 @@ class TestSelectModelAdditional:
         for (tier, provider), model in expected.items():
             assert gw.select_model(tier, provider) == model
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
     def test_custom_tier_mapping(self, mock_litellm: MagicMock) -> None:
         """Custom tier mapping overrides defaults."""
         custom = {ModelTier.CHEAP: {"custom": "my-model"}}
@@ -1025,8 +1025,8 @@ class TestSelectModelAdditional:
         gw = LLMGateway(config=cfg)
         assert gw.select_model(ModelTier.CHEAP, "custom") == "my-model"
 
-    @patch("zerorepo.llm.gateway._LITELLM_AVAILABLE", True)
-    @patch("zerorepo.llm.gateway.litellm")
+    @patch("cobuilder.repomap.llm.gateway._LITELLM_AVAILABLE", True)
+    @patch("cobuilder.repomap.llm.gateway.litellm")
     def test_select_each_tier_no_preference(self, mock_litellm: MagicMock) -> None:
         """Each tier returns a string model without provider preference."""
         gw = LLMGateway()

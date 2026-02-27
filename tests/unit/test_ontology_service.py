@@ -22,15 +22,15 @@ from unittest.mock import MagicMock, patch, PropertyMock
 
 import pytest
 
-from zerorepo.ontology.chromadb_store import OntologyChromaStore, OntologyStoreConfig
-from zerorepo.ontology.embeddings import EmbeddingResult, FeatureEmbedder
-from zerorepo.ontology.extension import (
+from cobuilder.repomap.ontology.chromadb_store import OntologyChromaStore, OntologyStoreConfig
+from cobuilder.repomap.ontology.embeddings import EmbeddingResult, FeatureEmbedder
+from cobuilder.repomap.ontology.extension import (
     ConflictResolution,
     ExtensionResult,
     OntologyExtensionAPI,
 )
-from zerorepo.ontology.models import FeatureNode, FeaturePath, OntologyStats
-from zerorepo.ontology.service import (
+from cobuilder.repomap.ontology.models import FeatureNode, FeaturePath, OntologyStats
+from cobuilder.repomap.ontology.service import (
     BuildError,
     BuildResult,
     OntologyService,
@@ -531,7 +531,7 @@ class TestOntologyServicePassthrough:
 class TestOntologyServiceBuild:
     """Tests for build method."""
 
-    @patch("zerorepo.ontology.scrapers.build_ontology.build_ontology")
+    @patch("cobuilder.repomap.ontology.scrapers.build_ontology.build_ontology")
     def test_build_basic(self, mock_build_fn: MagicMock) -> None:
         store = _mock_store()
         embedder = _mock_embedder()
@@ -560,7 +560,7 @@ class TestOntologyServiceBuild:
         assert result.embedding_result is not None
         assert service.is_built is True
 
-    @patch("zerorepo.ontology.scrapers.build_ontology.build_ontology")
+    @patch("cobuilder.repomap.ontology.scrapers.build_ontology.build_ontology")
     def test_build_no_embed(self, mock_build_fn: MagicMock) -> None:
         store = _mock_store()
         config = OntologyServiceConfig(auto_embed_on_build=False)
@@ -578,7 +578,7 @@ class TestOntologyServiceBuild:
 
         assert result.embedding_result is None
 
-    @patch("zerorepo.ontology.scrapers.build_ontology.build_ontology")
+    @patch("cobuilder.repomap.ontology.scrapers.build_ontology.build_ontology")
     def test_build_failure_raises(self, mock_build_fn: MagicMock) -> None:
         store = _mock_store()
         mock_build_fn.side_effect = RuntimeError("Generator failed")
@@ -614,7 +614,7 @@ class TestPackageImports:
     """Tests for package-level imports."""
 
     def test_import_service(self) -> None:
-        from zerorepo.ontology.service import (
+        from cobuilder.repomap.ontology.service import (
             BuildResult,
             OntologyService,
             OntologyServiceConfig,
@@ -627,7 +627,7 @@ class TestPackageImports:
         assert SearchResult is not None
 
     def test_import_errors(self) -> None:
-        from zerorepo.ontology.service import (
+        from cobuilder.repomap.ontology.service import (
             BuildError,
             OntologyServiceError,
             SearchError,

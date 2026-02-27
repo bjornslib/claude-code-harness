@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch, PropertyMock
 import numpy as np
 import pytest
 
-from zerorepo.evaluation.models import (
+from cobuilder.repomap.evaluation.models import (
     BenchmarkTask,
     CodeStats,
     DifficultyLevel,
@@ -27,11 +27,11 @@ from zerorepo.evaluation.models import (
     Vote,
     VoteResult,
 )
-from zerorepo.evaluation.execution_testing import ExecutionTester
-from zerorepo.evaluation.localization import FunctionLocalizer
-from zerorepo.evaluation.metrics import MetricsCalculator
-from zerorepo.evaluation.pipeline import EvaluationPipeline
-from zerorepo.evaluation.semantic_validation import SemanticValidator
+from cobuilder.repomap.evaluation.execution_testing import ExecutionTester
+from cobuilder.repomap.evaluation.localization import FunctionLocalizer
+from cobuilder.repomap.evaluation.metrics import MetricsCalculator
+from cobuilder.repomap.evaluation.pipeline import EvaluationPipeline
+from cobuilder.repomap.evaluation.semantic_validation import SemanticValidator
 
 
 # ---------------------------------------------------------------------------
@@ -89,22 +89,22 @@ def _make_function(
 class TestFunctionLocalizer:
     """Tests for FunctionLocalizer."""
 
-    @patch("zerorepo.evaluation.localization._ST_AVAILABLE", True)
-    @patch("zerorepo.evaluation.localization.SentenceTransformer")
+    @patch("cobuilder.repomap.evaluation.localization._ST_AVAILABLE", True)
+    @patch("cobuilder.repomap.evaluation.localization.SentenceTransformer")
     def test_init_success(self, mock_st: MagicMock) -> None:
         """Localizer initializes when sentence-transformers is available."""
         localizer = FunctionLocalizer()
         assert localizer._model_name == "all-MiniLM-L6-v2"
         assert localizer._model is None
 
-    @patch("zerorepo.evaluation.localization._ST_AVAILABLE", False)
+    @patch("cobuilder.repomap.evaluation.localization._ST_AVAILABLE", False)
     def test_init_missing_dependency(self) -> None:
         """Raises ImportError when sentence-transformers is missing."""
         with pytest.raises(ImportError, match="sentence-transformers"):
             FunctionLocalizer()
 
-    @patch("zerorepo.evaluation.localization._ST_AVAILABLE", True)
-    @patch("zerorepo.evaluation.localization.SentenceTransformer")
+    @patch("cobuilder.repomap.evaluation.localization._ST_AVAILABLE", True)
+    @patch("cobuilder.repomap.evaluation.localization.SentenceTransformer")
     def test_lazy_model_loading(self, mock_st_cls: MagicMock) -> None:
         """Model is loaded lazily on first access."""
         localizer = FunctionLocalizer()
@@ -112,8 +112,8 @@ class TestFunctionLocalizer:
         _ = localizer.model
         mock_st_cls.assert_called_once_with("all-MiniLM-L6-v2")
 
-    @patch("zerorepo.evaluation.localization._ST_AVAILABLE", True)
-    @patch("zerorepo.evaluation.localization.SentenceTransformer")
+    @patch("cobuilder.repomap.evaluation.localization._ST_AVAILABLE", True)
+    @patch("cobuilder.repomap.evaluation.localization.SentenceTransformer")
     def test_extract_functions_from_synthetic_repo(
         self, mock_st: MagicMock, tmp_path: Path
     ) -> None:
@@ -134,8 +134,8 @@ class TestFunctionLocalizer:
         assert "add" in names
         assert "subtract" in names
 
-    @patch("zerorepo.evaluation.localization._ST_AVAILABLE", True)
-    @patch("zerorepo.evaluation.localization.SentenceTransformer")
+    @patch("cobuilder.repomap.evaluation.localization._ST_AVAILABLE", True)
+    @patch("cobuilder.repomap.evaluation.localization.SentenceTransformer")
     def test_extract_functions_skips_test_files(
         self, mock_st: MagicMock, tmp_path: Path
     ) -> None:
@@ -148,8 +148,8 @@ class TestFunctionLocalizer:
         assert "test_foo" not in names
         assert "real_func" in names
 
-    @patch("zerorepo.evaluation.localization._ST_AVAILABLE", True)
-    @patch("zerorepo.evaluation.localization.SentenceTransformer")
+    @patch("cobuilder.repomap.evaluation.localization._ST_AVAILABLE", True)
+    @patch("cobuilder.repomap.evaluation.localization.SentenceTransformer")
     def test_extract_functions_skips_test_dirs(
         self, mock_st: MagicMock, tmp_path: Path
     ) -> None:
@@ -164,8 +164,8 @@ class TestFunctionLocalizer:
         assert "helper" not in names
         assert "main" in names
 
-    @patch("zerorepo.evaluation.localization._ST_AVAILABLE", True)
-    @patch("zerorepo.evaluation.localization.SentenceTransformer")
+    @patch("cobuilder.repomap.evaluation.localization._ST_AVAILABLE", True)
+    @patch("cobuilder.repomap.evaluation.localization.SentenceTransformer")
     def test_extract_functions_handles_syntax_error(
         self, mock_st: MagicMock, tmp_path: Path
     ) -> None:
@@ -177,8 +177,8 @@ class TestFunctionLocalizer:
         names = [f.name for f in funcs]
         assert "bar" in names
 
-    @patch("zerorepo.evaluation.localization._ST_AVAILABLE", True)
-    @patch("zerorepo.evaluation.localization.SentenceTransformer")
+    @patch("cobuilder.repomap.evaluation.localization._ST_AVAILABLE", True)
+    @patch("cobuilder.repomap.evaluation.localization.SentenceTransformer")
     def test_extract_functions_empty_repo(
         self, mock_st: MagicMock, tmp_path: Path
     ) -> None:
@@ -187,8 +187,8 @@ class TestFunctionLocalizer:
         funcs = localizer.extract_functions(tmp_path)
         assert funcs == []
 
-    @patch("zerorepo.evaluation.localization._ST_AVAILABLE", True)
-    @patch("zerorepo.evaluation.localization.SentenceTransformer")
+    @patch("cobuilder.repomap.evaluation.localization._ST_AVAILABLE", True)
+    @patch("cobuilder.repomap.evaluation.localization.SentenceTransformer")
     def test_extract_class_methods(
         self, mock_st: MagicMock, tmp_path: Path
     ) -> None:
@@ -205,8 +205,8 @@ class TestFunctionLocalizer:
         predict_func = [f for f in funcs if f.name == "predict"][0]
         assert "MyModel" in predict_func.module
 
-    @patch("zerorepo.evaluation.localization._ST_AVAILABLE", True)
-    @patch("zerorepo.evaluation.localization.SentenceTransformer")
+    @patch("cobuilder.repomap.evaluation.localization._ST_AVAILABLE", True)
+    @patch("cobuilder.repomap.evaluation.localization.SentenceTransformer")
     def test_extract_async_functions(
         self, mock_st: MagicMock, tmp_path: Path
     ) -> None:
@@ -220,8 +220,8 @@ class TestFunctionLocalizer:
         assert funcs[0].name == "fetch_data"
         assert "async def" in funcs[0].signature
 
-    @patch("zerorepo.evaluation.localization._ST_AVAILABLE", True)
-    @patch("zerorepo.evaluation.localization.SentenceTransformer")
+    @patch("cobuilder.repomap.evaluation.localization._ST_AVAILABLE", True)
+    @patch("cobuilder.repomap.evaluation.localization.SentenceTransformer")
     def test_build_signature(self, mock_st: MagicMock, tmp_path: Path) -> None:
         """_build_signature creates a valid FunctionSignature with correct fields."""
         (tmp_path / "sig_test.py").write_text(
@@ -242,8 +242,8 @@ class TestFunctionLocalizer:
         assert sig.start_line > 0
         assert sig.end_line >= sig.start_line
 
-    @patch("zerorepo.evaluation.localization._ST_AVAILABLE", True)
-    @patch("zerorepo.evaluation.localization.SentenceTransformer")
+    @patch("cobuilder.repomap.evaluation.localization._ST_AVAILABLE", True)
+    @patch("cobuilder.repomap.evaluation.localization.SentenceTransformer")
     def test_localize_returns_top_k(self, mock_st_cls: MagicMock) -> None:
         """Localize returns results sorted by score descending, limited by top_k."""
         mock_model = MagicMock()
@@ -270,8 +270,8 @@ class TestFunctionLocalizer:
         assert results[0][0].name == "high_sim"
         assert results[0][1] > results[1][1]
 
-    @patch("zerorepo.evaluation.localization._ST_AVAILABLE", True)
-    @patch("zerorepo.evaluation.localization.SentenceTransformer")
+    @patch("cobuilder.repomap.evaluation.localization._ST_AVAILABLE", True)
+    @patch("cobuilder.repomap.evaluation.localization.SentenceTransformer")
     def test_localize_empty_functions(self, mock_st_cls: MagicMock) -> None:
         """Localize with no functions returns empty list."""
         localizer = FunctionLocalizer()
@@ -279,8 +279,8 @@ class TestFunctionLocalizer:
         results = localizer.localize(task, "/fake/path", functions=[])
         assert results == []
 
-    @patch("zerorepo.evaluation.localization._ST_AVAILABLE", True)
-    @patch("zerorepo.evaluation.localization.SentenceTransformer")
+    @patch("cobuilder.repomap.evaluation.localization._ST_AVAILABLE", True)
+    @patch("cobuilder.repomap.evaluation.localization.SentenceTransformer")
     def test_localize_top_k_limit(self, mock_st_cls: MagicMock) -> None:
         """Localize respects top_k parameter."""
         mock_model = MagicMock()

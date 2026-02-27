@@ -19,20 +19,20 @@ from uuid import UUID
 
 import pytest
 
-from zerorepo.models.edge import RPGEdge
-from zerorepo.models.enums import (
+from cobuilder.repomap.models.edge import RPGEdge
+from cobuilder.repomap.models.enums import (
     DeltaStatus,
     EdgeType,
     InterfaceType,
     NodeLevel,
     NodeType,
 )
-from zerorepo.models.graph import RPGGraph
-from zerorepo.models.node import RPGNode
-from zerorepo.serena.baseline import BaselineManager
-from zerorepo.serena.delta_report import DeltaReportGenerator, DeltaSummary
-from zerorepo.serena.session import FileBasedCodebaseAnalyzer
-from zerorepo.serena.walker import CodebaseWalker
+from cobuilder.repomap.models.graph import RPGGraph
+from cobuilder.repomap.models.node import RPGNode
+from cobuilder.repomap.serena.baseline import BaselineManager
+from cobuilder.repomap.serena.delta_report import DeltaReportGenerator, DeltaSummary
+from cobuilder.repomap.serena.session import FileBasedCodebaseAnalyzer
+from cobuilder.repomap.serena.walker import CodebaseWalker
 
 
 # ---------------------------------------------------------------------------
@@ -666,7 +666,7 @@ class TestEnrichmentWithBaseline:
         requires a trailing colon.  An enriched baseline stores colon-terminated
         signatures, so we add the colon when building the enriched baseline.
         """
-        from zerorepo.rpg_enrichment.interface_design_encoder import (
+        from cobuilder.repomap.rpg_enrichment.interface_design_encoder import (
             InterfaceDesignEncoder,
         )
 
@@ -737,7 +737,7 @@ class TestEnrichmentWithBaseline:
         self, zerorepo_baseline_graph: RPGGraph
     ) -> None:
         """FolderEncoder should use baseline folder_path/file_path for existing nodes."""
-        from zerorepo.rpg_enrichment.folder_encoder import FolderEncoder
+        from cobuilder.repomap.rpg_enrichment.folder_encoder import FolderEncoder
 
         encoder = FolderEncoder()
 
@@ -770,7 +770,7 @@ class TestEnrichmentWithBaseline:
         self, zerorepo_baseline_graph: RPGGraph
     ) -> None:
         """DataFlowEncoder should handle a real baseline without errors."""
-        from zerorepo.rpg_enrichment.dataflow_encoder import DataFlowEncoder
+        from cobuilder.repomap.rpg_enrichment.dataflow_encoder import DataFlowEncoder
 
         encoder = DataFlowEncoder()
 
@@ -1004,7 +1004,7 @@ class TestEndToEndPipeline:
         tmp_path: Path,
     ) -> None:
         """Full pipeline with mock LLM: walk -> save -> load -> enrich subset."""
-        from zerorepo.rpg_enrichment.interface_design_encoder import (
+        from cobuilder.repomap.rpg_enrichment.interface_design_encoder import (
             InterfaceDesignEncoder,
         )
 
@@ -1125,7 +1125,7 @@ class TestCLIInitBaseline:
         """init --project-path walks the codebase and saves a baseline file."""
         _skip_if_no_source()
         from typer.testing import CliRunner
-        from zerorepo.cli.app import app
+        from cobuilder.repomap.cli.app import app
 
         runner = CliRunner()
         result = runner.invoke(
@@ -1159,7 +1159,7 @@ class TestCLIInitBaseline:
         """init --project-path --exclude should skip excluded patterns."""
         _skip_if_no_source()
         from typer.testing import CliRunner
-        from zerorepo.cli.app import app
+        from cobuilder.repomap.cli.app import app
 
         runner = CliRunner()
         result = runner.invoke(
@@ -1199,7 +1199,7 @@ class TestCLIInitBaseline:
         """init --project-path --output writes to specified path."""
         _skip_if_no_source()
         from typer.testing import CliRunner
-        from zerorepo.cli.app import app
+        from cobuilder.repomap.cli.app import app
 
         custom_output = tmp_path / "custom_baseline.json"
         runner = CliRunner()
@@ -1252,7 +1252,7 @@ class TestCLIGenerateWithBaseline:
     def test_generate_help(self) -> None:
         """generate --help shows expected options."""
         from typer.testing import CliRunner
-        from zerorepo.cli.app import app
+        from cobuilder.repomap.cli.app import app
 
         runner = CliRunner()
         result = runner.invoke(app, ["generate", "--help"])
@@ -1263,7 +1263,7 @@ class TestCLIGenerateWithBaseline:
 
     def _make_mock_spec(self) -> Any:
         """Create a valid mock RepositorySpec with epics/components."""
-        from zerorepo.spec_parser.models import Component, Epic, RepositorySpec
+        from cobuilder.repomap.spec_parser.models import Component, Epic, RepositorySpec
 
         return RepositorySpec(
             description="A TODO application with task management and authentication",
@@ -1293,13 +1293,13 @@ class TestCLIGenerateWithBaseline:
     ) -> None:
         """generate with --skip-enrichment and no baseline produces output."""
         from typer.testing import CliRunner
-        from zerorepo.cli.app import app
+        from cobuilder.repomap.cli.app import app
 
         output_dir = tmp_path / "output"
         runner = CliRunner()
 
         with patch(
-            "zerorepo.spec_parser.parser.SpecParser.parse"
+            "cobuilder.repomap.spec_parser.parser.SpecParser.parse"
         ) as mock_parse:
             mock_parse.return_value = self._make_mock_spec()
 
@@ -1330,13 +1330,13 @@ class TestCLIGenerateWithBaseline:
     ) -> None:
         """generate --baseline loads the baseline and threads it through."""
         from typer.testing import CliRunner
-        from zerorepo.cli.app import app
+        from cobuilder.repomap.cli.app import app
 
         output_dir = tmp_path / "output-with-baseline"
         runner = CliRunner()
 
         with patch(
-            "zerorepo.spec_parser.parser.SpecParser.parse"
+            "cobuilder.repomap.spec_parser.parser.SpecParser.parse"
         ) as mock_parse:
             mock_parse.return_value = self._make_mock_spec()
 
@@ -1367,7 +1367,7 @@ class TestCLIGenerateWithBaseline:
     ) -> None:
         """generate --baseline with non-existent file fails gracefully."""
         from typer.testing import CliRunner
-        from zerorepo.cli.app import app
+        from cobuilder.repomap.cli.app import app
 
         runner = CliRunner()
         result = runner.invoke(
@@ -1394,7 +1394,7 @@ class TestRegressionNoBaseline:
     @staticmethod
     def _make_regression_spec() -> Any:
         """Create a simple RepositorySpec for regression tests."""
-        from zerorepo.spec_parser.models import Component, Epic, RepositorySpec
+        from cobuilder.repomap.spec_parser.models import Component, Epic, RepositorySpec
 
         return RepositorySpec(
             description="Test spec for regression testing of pipeline behaviour",
@@ -1413,8 +1413,8 @@ class TestRegressionNoBaseline:
 
     def test_converter_without_baseline_no_delta_metadata(self) -> None:
         """converter.convert() without baseline produces nodes with no delta_status."""
-        from zerorepo.graph_construction.builder import FunctionalityGraphBuilder
-        from zerorepo.graph_construction.converter import FunctionalityGraphConverter
+        from cobuilder.repomap.graph_construction.builder import FunctionalityGraphBuilder
+        from cobuilder.repomap.graph_construction.converter import FunctionalityGraphConverter
 
         spec = self._make_regression_spec()
         builder = FunctionalityGraphBuilder()
@@ -1433,8 +1433,8 @@ class TestRegressionNoBaseline:
 
     def test_converter_with_baseline_has_delta_metadata(self) -> None:
         """converter.convert() with baseline produces nodes WITH delta_status."""
-        from zerorepo.graph_construction.builder import FunctionalityGraphBuilder
-        from zerorepo.graph_construction.converter import FunctionalityGraphConverter
+        from cobuilder.repomap.graph_construction.builder import FunctionalityGraphBuilder
+        from cobuilder.repomap.graph_construction.converter import FunctionalityGraphConverter
 
         spec = self._make_regression_spec()
         builder = FunctionalityGraphBuilder()
@@ -1456,11 +1456,11 @@ class TestRegressionNoBaseline:
 
     def test_spec_parser_without_baseline_no_baseline_context(self) -> None:
         """SpecParser.parse() without baseline doesn't inject baseline context."""
-        from zerorepo.spec_parser.parser import SpecParser, ParserConfig
+        from cobuilder.repomap.spec_parser.parser import SpecParser, ParserConfig
 
         # Use a mock to capture what prompt is sent
         with patch(
-            "zerorepo.spec_parser.parser.SpecParser._call_llm"
+            "cobuilder.repomap.spec_parser.parser.SpecParser._call_llm"
         ) as mock_llm:
             mock_llm.return_value = '{"description": "test"}'
 
@@ -1478,8 +1478,8 @@ class TestRegressionNoBaseline:
         self,
     ) -> None:
         """RPGGraph produced without baseline has same schema as with baseline."""
-        from zerorepo.graph_construction.builder import FunctionalityGraphBuilder
-        from zerorepo.graph_construction.converter import FunctionalityGraphConverter
+        from cobuilder.repomap.graph_construction.builder import FunctionalityGraphBuilder
+        from cobuilder.repomap.graph_construction.converter import FunctionalityGraphConverter
 
         spec = self._make_regression_spec()
         builder = FunctionalityGraphBuilder()
@@ -1513,7 +1513,7 @@ class TestRegressionNoBaseline:
         self,
     ) -> None:
         """Enrichment encoders work identically when baseline=None."""
-        from zerorepo.rpg_enrichment import (
+        from cobuilder.repomap.rpg_enrichment import (
             DataFlowEncoder,
             FileEncoder,
             FolderEncoder,
@@ -1559,9 +1559,9 @@ class TestRegressionNoBaseline:
         self,
     ) -> None:
         """Two independent runs without baseline produce identical graph structure."""
-        from zerorepo.graph_construction.builder import FunctionalityGraphBuilder
-        from zerorepo.graph_construction.converter import FunctionalityGraphConverter
-        from zerorepo.spec_parser.models import Component, Epic, RepositorySpec
+        from cobuilder.repomap.graph_construction.builder import FunctionalityGraphBuilder
+        from cobuilder.repomap.graph_construction.converter import FunctionalityGraphConverter
+        from cobuilder.repomap.spec_parser.models import Component, Epic, RepositorySpec
 
         spec = RepositorySpec(
             description="Idempotency test for pipeline regression verification",

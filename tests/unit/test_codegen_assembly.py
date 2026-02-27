@@ -23,25 +23,25 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from zerorepo.models.enums import (
+from cobuilder.repomap.models.enums import (
     EdgeType,
     InterfaceType,
     NodeLevel,
     NodeType,
     TestStatus,
 )
-from zerorepo.models.edge import RPGEdge
-from zerorepo.models.graph import RPGGraph
-from zerorepo.models.node import RPGNode
+from cobuilder.repomap.models.edge import RPGEdge
+from cobuilder.repomap.models.graph import RPGGraph
+from cobuilder.repomap.models.node import RPGNode
 
-from zerorepo.codegen.exceptions import (
+from cobuilder.repomap.codegen.exceptions import (
     AssemblyError,
     CircularImportError,
     FileStructureError,
     ImportResolutionError,
     MetadataExtractionError,
 )
-from zerorepo.codegen.models import (
+from cobuilder.repomap.codegen.models import (
     CoverageReport,
     DirectoryEntry,
     FileEntry,
@@ -52,41 +52,41 @@ from zerorepo.codegen.models import (
     RequirementEntry,
     SubgraphCoverage,
 )
-from zerorepo.codegen.state import GenerationStatus
-from zerorepo.codegen.file_structure import (
+from cobuilder.repomap.codegen.state import GenerationStatus
+from cobuilder.repomap.codegen.file_structure import (
     build_file_map,
     create_directory_structure,
     extract_directories,
     extract_file_entries,
     validate_file_structure,
 )
-from zerorepo.codegen.init_generator import (
+from cobuilder.repomap.codegen.init_generator import (
     collect_init_files,
     generate_init_content,
 )
-from zerorepo.codegen.import_manager import (
+from cobuilder.repomap.codegen.import_manager import (
     classify_import,
     detect_circular_imports,
     render_import_block,
     resolve_imports_for_file,
 )
-from zerorepo.codegen.requirements_generator import (
+from cobuilder.repomap.codegen.requirements_generator import (
     detect_requirements,
     render_requirements_dev_txt,
     render_requirements_txt,
     scan_node_imports,
 )
-from zerorepo.codegen.project_generator import (
+from cobuilder.repomap.codegen.project_generator import (
     extract_project_metadata,
     render_pyproject_toml,
     render_setup_py,
 )
-from zerorepo.codegen.readme_generator import generate_readme
-from zerorepo.codegen.rpg_exporter import (
+from cobuilder.repomap.codegen.readme_generator import generate_readme
+from cobuilder.repomap.codegen.rpg_exporter import (
     export_rpg_artifact,
     export_rpg_summary,
 )
-from zerorepo.codegen.coverage_report import (
+from cobuilder.repomap.codegen.coverage_report import (
     build_coverage_report,
     render_coverage_markdown,
 )
@@ -1066,14 +1066,14 @@ class TestRenderCoverageMarkdown:
 # =================================================================
 
 class TestPackageExports:
-    """Test that all public API is available from zerorepo.codegen."""
+    """Test that all public API is available from cobuilder.repomap.codegen."""
 
     def test_assembly_error_exported(self) -> None:
-        from zerorepo.codegen import AssemblyError
+        from cobuilder.repomap.codegen import AssemblyError
         assert AssemblyError is not None
 
     def test_file_structure_functions_exported(self) -> None:
-        from zerorepo.codegen import (
+        from cobuilder.repomap.codegen import (
             extract_directories,
             extract_file_entries,
             build_file_map,
@@ -1083,7 +1083,7 @@ class TestPackageExports:
         assert callable(extract_directories)
 
     def test_import_management_exported(self) -> None:
-        from zerorepo.codegen import (
+        from cobuilder.repomap.codegen import (
             classify_import,
             resolve_imports_for_file,
             render_import_block,
@@ -1092,7 +1092,7 @@ class TestPackageExports:
         assert callable(classify_import)
 
     def test_project_generation_exported(self) -> None:
-        from zerorepo.codegen import (
+        from cobuilder.repomap.codegen import (
             extract_project_metadata,
             render_pyproject_toml,
             render_setup_py,
@@ -1100,11 +1100,11 @@ class TestPackageExports:
         assert callable(render_pyproject_toml)
 
     def test_readme_exported(self) -> None:
-        from zerorepo.codegen import generate_readme
+        from cobuilder.repomap.codegen import generate_readme
         assert callable(generate_readme)
 
     def test_requirements_exported(self) -> None:
-        from zerorepo.codegen import (
+        from cobuilder.repomap.codegen import (
             detect_requirements,
             render_requirements_txt,
             render_requirements_dev_txt,
@@ -1112,15 +1112,15 @@ class TestPackageExports:
         assert callable(detect_requirements)
 
     def test_rpg_export_functions_exported(self) -> None:
-        from zerorepo.codegen import export_rpg_artifact, export_rpg_summary
+        from cobuilder.repomap.codegen import export_rpg_artifact, export_rpg_summary
         assert callable(export_rpg_artifact)
 
     def test_coverage_functions_exported(self) -> None:
-        from zerorepo.codegen import build_coverage_report, render_coverage_markdown
+        from cobuilder.repomap.codegen import build_coverage_report, render_coverage_markdown
         assert callable(build_coverage_report)
 
     def test_models_exported(self) -> None:
-        from zerorepo.codegen import (
+        from cobuilder.repomap.codegen import (
             CoverageReport,
             DirectoryEntry,
             FileEntry,

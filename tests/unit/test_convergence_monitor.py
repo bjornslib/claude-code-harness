@@ -19,7 +19,7 @@ from typing import Any
 
 import pytest
 
-from zerorepo.selection.convergence import (
+from cobuilder.repomap.selection.convergence import (
     ConvergenceConfig,
     ConvergenceMonitor,
     ConvergenceSnapshot,
@@ -408,7 +408,7 @@ class TestImports:
     """Tests for module imports."""
 
     def test_import_from_package(self) -> None:
-        from zerorepo.selection import (
+        from cobuilder.repomap.selection import (
             ConvergenceConfig,
             ConvergenceMonitor,
             ConvergenceSnapshot,
@@ -416,7 +416,7 @@ class TestImports:
         assert ConvergenceMonitor is not None
 
     def test_import_from_module(self) -> None:
-        from zerorepo.selection.convergence import (
+        from cobuilder.repomap.selection.convergence import (
             ConvergenceConfig,
             ConvergenceMonitor,
             ConvergenceSnapshot,

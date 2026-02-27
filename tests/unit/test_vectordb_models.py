@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from zerorepo.vectordb.models import SearchResult, VectorStoreConfig
+from cobuilder.repomap.vectordb.models import SearchResult, VectorStoreConfig
 
 
 class TestVectorStoreConfig:

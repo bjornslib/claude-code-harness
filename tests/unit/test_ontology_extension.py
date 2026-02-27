@@ -15,9 +15,9 @@ import numpy as np
 import pytest
 from pydantic import ValidationError
 
-from zerorepo.ontology.chromadb_store import OntologyChromaStore
-from zerorepo.ontology.embeddings import EmbeddingResult, FeatureEmbedder
-from zerorepo.ontology.extension import (
+from cobuilder.repomap.ontology.chromadb_store import OntologyChromaStore
+from cobuilder.repomap.ontology.embeddings import EmbeddingResult, FeatureEmbedder
+from cobuilder.repomap.ontology.extension import (
     ALL_COLUMNS,
     CSVParseError,
     ConflictResolution,
@@ -27,8 +27,8 @@ from zerorepo.ontology.extension import (
     parse_csv_file,
     parse_csv_to_nodes,
 )
-from zerorepo.ontology.models import FeatureNode
-from zerorepo.vectordb.exceptions import CollectionError
+from cobuilder.repomap.ontology.models import FeatureNode
+from cobuilder.repomap.vectordb.exceptions import CollectionError
 
 
 # ---------------------------------------------------------------------------
@@ -702,8 +702,8 @@ class TestPackageImports:
     """Test that extension classes are importable."""
 
     def test_import_from_package(self) -> None:
-        """Main symbols importable from zerorepo.ontology."""
-        from zerorepo.ontology import (
+        """Main symbols importable from cobuilder.repomap.ontology."""
+        from cobuilder.repomap.ontology import (
             ConflictResolution,
             ExtensionResult,
             OntologyExtensionAPI,
@@ -714,8 +714,8 @@ class TestPackageImports:
         assert OntologyExtensionAPI is not None
 
     def test_import_from_module(self) -> None:
-        """All symbols importable from zerorepo.ontology.extension."""
-        from zerorepo.ontology.extension import (
+        """All symbols importable from cobuilder.repomap.ontology.extension."""
+        from cobuilder.repomap.ontology.extension import (
             ALL_COLUMNS,
             CSVParseError,
             ConflictResolution,

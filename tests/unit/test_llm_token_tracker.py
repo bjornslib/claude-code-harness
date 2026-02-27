@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from zerorepo.llm.token_tracker import TokenTracker
+from cobuilder.repomap.llm.token_tracker import TokenTracker
 
 
 class TestTokenTrackerRecord:

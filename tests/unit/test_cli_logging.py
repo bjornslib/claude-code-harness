@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 import pytest
 from rich.logging import RichHandler
 
-from zerorepo.cli.logging_setup import setup_logging
+from cobuilder.repomap.cli.logging_setup import setup_logging
 
 
 class TestSetupLogging:

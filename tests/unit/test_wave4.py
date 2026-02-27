@@ -12,15 +12,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from zerorepo.evaluation.models import (
+from cobuilder.repomap.evaluation.models import (
     BenchmarkResult,
     BenchmarkTask,
     ProfilingData,
     RepositoryResult,
     TokenStats,
 )
-from zerorepo.evaluation.profiling import ProfilingCollector
-from zerorepo.evaluation.report import PAPER_METRICS, ReportGenerator
+from cobuilder.repomap.evaluation.profiling import ProfilingCollector
+from cobuilder.repomap.evaluation.report import PAPER_METRICS, ReportGenerator
 from scripts.benchmark.run_full_benchmark import (
     BenchmarkConfig,
     BenchmarkRunner,
@@ -689,8 +689,8 @@ class TestProfilingReportIntegration:
 
     def test_import_from_package(self) -> None:
         """Verify ProfilingCollector and ReportGenerator are importable from package."""
-        from zerorepo.evaluation import ProfilingCollector as PC
-        from zerorepo.evaluation import ReportGenerator as RG
+        from cobuilder.repomap.evaluation import ProfilingCollector as PC
+        from cobuilder.repomap.evaluation import ReportGenerator as RG
 
         assert PC is ProfilingCollector
         assert RG is ReportGenerator

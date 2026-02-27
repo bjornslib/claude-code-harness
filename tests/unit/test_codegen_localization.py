@@ -13,28 +13,28 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from zerorepo.codegen.localization import (
+from cobuilder.repomap.codegen.localization import (
     DependencyExplorer,
     LocalizationTracker,
     RPGFuzzySearch,
     RepositoryCodeView,
 )
-from zerorepo.codegen.localization_models import (
+from cobuilder.repomap.codegen.localization_models import (
     DependencyMap,
     LocalizationExhaustedError,
     LocalizationResult,
 )
-from zerorepo.models.edge import RPGEdge
-from zerorepo.models.enums import (
+from cobuilder.repomap.models.edge import RPGEdge
+from cobuilder.repomap.models.enums import (
     EdgeType,
     InterfaceType,
     NodeLevel,
     NodeType,
     TestStatus,
 )
-from zerorepo.models.graph import RPGGraph
-from zerorepo.models.node import RPGNode
-from zerorepo.vectordb.models import SearchResult
+from cobuilder.repomap.models.graph import RPGGraph
+from cobuilder.repomap.models.node import RPGNode
+from cobuilder.repomap.vectordb.models import SearchResult
 
 
 # --------------------------------------------------------------------------- #

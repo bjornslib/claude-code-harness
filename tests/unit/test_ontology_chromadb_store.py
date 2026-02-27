@@ -16,12 +16,12 @@ import numpy as np
 import pytest
 from pydantic import ValidationError
 
-from zerorepo.ontology.chromadb_store import (
+from cobuilder.repomap.ontology.chromadb_store import (
     OntologyChromaStore,
     OntologyStoreConfig,
 )
-from zerorepo.ontology.models import FeatureNode, FeaturePath, OntologyStats
-from zerorepo.vectordb.exceptions import (
+from cobuilder.repomap.ontology.models import FeatureNode, FeaturePath, OntologyStats
+from cobuilder.repomap.vectordb.exceptions import (
     CollectionError,
     StoreNotInitializedError,
 )
@@ -171,7 +171,7 @@ class TestOntologyChromaStoreInitialize:
 
     def test_initialize_success(self, tmp_path: Path) -> None:
         """Initialize creates ChromaDB client and collection."""
-        with patch("zerorepo.ontology.chromadb_store.chromadb") as mock_chroma:
+        with patch("cobuilder.repomap.ontology.chromadb_store.chromadb") as mock_chroma:
             mock_client = MagicMock()
             mock_client.get_or_create_collection.return_value = _mock_collection()
             mock_chroma.PersistentClient.return_value = mock_client
@@ -794,15 +794,15 @@ class TestPackageImports:
     """Test that ChromaDB store classes are importable."""
 
     def test_import_from_package(self) -> None:
-        """Symbols importable from zerorepo.ontology."""
-        from zerorepo.ontology import OntologyChromaStore, OntologyStoreConfig
+        """Symbols importable from cobuilder.repomap.ontology."""
+        from cobuilder.repomap.ontology import OntologyChromaStore, OntologyStoreConfig
 
         assert OntologyChromaStore is not None
         assert OntologyStoreConfig is not None
 
     def test_import_from_module(self) -> None:
-        """Symbols importable from zerorepo.ontology.chromadb_store."""
-        from zerorepo.ontology.chromadb_store import (
+        """Symbols importable from cobuilder.repomap.ontology.chromadb_store."""
+        from cobuilder.repomap.ontology.chromadb_store import (
             OntologyChromaStore,
             OntologyStoreConfig,
         )

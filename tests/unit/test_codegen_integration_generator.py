@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import pytest
 
-from zerorepo.codegen.integration_generator import (
+from cobuilder.repomap.codegen.integration_generator import (
     DependencyEdge,
     IntegrationGenerator,
     IntegrationGeneratorConfig,

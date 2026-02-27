@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import pytest
 
-from zerorepo.codegen.majority_vote import (
+from cobuilder.repomap.codegen.majority_vote import (
     MajorityVoteConfig,
     MajorityVoter,
     NodeVoteResult,

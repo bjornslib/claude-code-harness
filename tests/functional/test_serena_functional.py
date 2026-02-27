@@ -17,7 +17,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from zerorepo.serena import (
+from cobuilder.repomap.serena import (
     DependencyExtractor,
     MCPClient,
     MCPError,
@@ -251,7 +251,7 @@ class TestPyrightConfigurationFlow:
         assert data["include"] == ["src/**/*.py"]
 
         # Step 2: Start server with pyright config
-        with patch("zerorepo.serena.server.subprocess.Popen") as mock_popen:
+        with patch("cobuilder.repomap.serena.server.subprocess.Popen") as mock_popen:
             mock_process = MagicMock()
             mock_process.pid = 99999
             mock_process.poll.return_value = None
@@ -292,7 +292,7 @@ class TestServerLifecycleFlow:
     @pytest.mark.functional
     def test_context_manager_full_flow(self, tmp_path: Path) -> None:
         """Context manager should start and stop cleanly."""
-        with patch("zerorepo.serena.server.subprocess.Popen") as mock_popen:
+        with patch("cobuilder.repomap.serena.server.subprocess.Popen") as mock_popen:
             mock_process = MagicMock()
             mock_process.pid = 12345
             mock_process.poll.return_value = None
@@ -308,7 +308,7 @@ class TestServerLifecycleFlow:
     @pytest.mark.functional
     def test_restart_after_stop(self, tmp_path: Path) -> None:
         """Server should be restartable after stopping."""
-        with patch("zerorepo.serena.server.subprocess.Popen") as mock_popen:
+        with patch("cobuilder.repomap.serena.server.subprocess.Popen") as mock_popen:
             mock_process1 = MagicMock()
             mock_process1.pid = 111
             mock_process1.poll.return_value = None

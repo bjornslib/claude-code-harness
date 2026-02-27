@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 from scripts.benchmark.harvest_tests import TestHarvester
-from zerorepo.evaluation.models import BenchmarkTask, DifficultyLevel
+from cobuilder.repomap.evaluation.models import BenchmarkTask, DifficultyLevel
 
 
 @pytest.fixture()

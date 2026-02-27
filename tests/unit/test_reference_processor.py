@@ -19,12 +19,12 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from zerorepo.spec_parser.models import (
+from cobuilder.repomap.spec_parser.models import (
     ReferenceMaterial,
     ReferenceMaterialType,
     RepositorySpec,
 )
-from zerorepo.spec_parser.reference_processor import (
+from cobuilder.repomap.spec_parser.reference_processor import (
     CodeContentExtractor,
     ConceptExtractionError,
     ConceptExtractionResponse,
@@ -875,7 +875,7 @@ class TestPackageImports:
 
     def test_import_from_module(self) -> None:
         """All public symbols importable from reference_processor."""
-        from zerorepo.spec_parser.reference_processor import (
+        from cobuilder.repomap.spec_parser.reference_processor import (
             CodeContentExtractor,
             ConceptExtractionError,
             ConceptExtractionResponse,

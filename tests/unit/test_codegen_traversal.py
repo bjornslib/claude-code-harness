@@ -5,19 +5,19 @@ from __future__ import annotations
 import pytest
 from uuid import UUID, uuid4
 
-from zerorepo.codegen.state import GenerationState, GenerationStatus
-from zerorepo.codegen.traversal import TraversalEngine, TraversalReport
-from zerorepo.graph_ops.exceptions import CycleDetectedError
-from zerorepo.models.enums import (
+from cobuilder.repomap.codegen.state import GenerationState, GenerationStatus
+from cobuilder.repomap.codegen.traversal import TraversalEngine, TraversalReport
+from cobuilder.repomap.graph_ops.exceptions import CycleDetectedError
+from cobuilder.repomap.models.enums import (
     EdgeType,
     InterfaceType,
     NodeLevel,
     NodeType,
     TestStatus,
 )
-from zerorepo.models.edge import RPGEdge
-from zerorepo.models.graph import RPGGraph
-from zerorepo.models.node import RPGNode
+from cobuilder.repomap.models.edge import RPGEdge
+from cobuilder.repomap.models.graph import RPGGraph
+from cobuilder.repomap.models.node import RPGNode
 
 
 # --------------------------------------------------------------------------- #
