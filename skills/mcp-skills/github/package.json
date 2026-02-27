@@ -1,8 +1,0 @@
-{
-  "name": "skill-github",
-  "version": "1.0.0",
-  "description": "Claude Skill wrapper for github MCP server",
-  "scripts": {
-    "setup": "pip install mcp"
-  }
-}

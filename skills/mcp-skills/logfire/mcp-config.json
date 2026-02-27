@@ -1,9 +1,0 @@
-{
-  "name": "logfire",
-  "type": "stdio",
-  "command": "uvx",
-  "args": ["logfire-mcp@latest"],
-  "env": {
-    "LOGFIRE_READ_TOKEN": "${LOGFIRE_READ_TOKEN}"
-  }
-}

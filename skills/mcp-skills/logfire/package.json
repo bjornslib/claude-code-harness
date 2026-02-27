@@ -1,8 +1,0 @@
-{
-  "name": "skill-logfire",
-  "version": "1.0.0",
-  "description": "Claude Skill wrapper for logfire MCP server",
-  "scripts": {
-    "setup": "pip install mcp"
-  }
-}

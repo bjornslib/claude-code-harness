@@ -1,8 +1,0 @@
-{
-  "name": "skill-@magicuidesign/mcp",
-  "version": "1.0.0",
-  "description": "Claude Skill wrapper for @magicuidesign/mcp MCP server",
-  "scripts": {
-    "setup": "pip install mcp"
-  }
-}

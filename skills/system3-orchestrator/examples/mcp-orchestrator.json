@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "hindsight": {
-      "url": "http://localhost:8888/mcp/claude-code-agencheck/mcp",
-      "description": "Shared bank for project knowledge (read/write access)"
-    }
-  }
-}

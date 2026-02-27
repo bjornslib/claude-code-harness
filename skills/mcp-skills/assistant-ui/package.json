@@ -1,8 +1,0 @@
-{
-  "name": "skill-assistant-ui",
-  "version": "1.0.0",
-  "description": "Claude Skill wrapper for assistant-ui MCP server",
-  "scripts": {
-    "setup": "pip install mcp"
-  }
-}
