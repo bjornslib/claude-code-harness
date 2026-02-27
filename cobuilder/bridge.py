@@ -97,7 +97,8 @@ def _graph_hash(graph: RPGGraph) -> str:
 
 def _walk_codebase(target_dir: Path) -> RPGGraph:
     """Walk *target_dir* and return an RPGGraph baseline."""
-    analyzer = FileBasedCodebaseAnalyzer(root=target_dir)
+    analyzer = FileBasedCodebaseAnalyzer()
+    analyzer.activate(target_dir)
     walker = CodebaseWalker(analyzer=analyzer)
     graph = walker.walk(project_root=target_dir)
     return graph
