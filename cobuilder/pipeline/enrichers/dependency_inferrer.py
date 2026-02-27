@@ -61,6 +61,7 @@ class DependencyInferrer(BaseEnricher):
         )
         response = self._call_llm(prompt)
         parsed = self._parse_yaml(response)
+        self._warn_if_empty(parsed, "dependencies", node.get("title", ""))
         node["dependencies"] = parsed.get("dependencies", [])
         return node
 

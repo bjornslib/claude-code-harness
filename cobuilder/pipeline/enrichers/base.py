@@ -74,6 +74,16 @@ class BaseEnricher:
         )
         return msg.content[0].text
 
+    def _warn_if_empty(self, parsed: dict, required_key: str, node_title: str) -> None:
+        """Log a warning if the parsed result is missing the expected key."""
+        if not parsed or required_key not in parsed:
+            logger.warning(
+                "[%s] Enrichment returned no '%s' for node '%s' — using defaults",
+                self.__class__.__name__,
+                required_key,
+                node_title,
+            )
+
     def _parse_yaml(self, text: str, *, _retries: int = 1) -> dict:
         """Extract YAML block from response text with sanitization and retry.
 

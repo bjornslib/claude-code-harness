@@ -641,11 +641,16 @@ def generate_pipeline_dot(
             node_id_raw = node.get("node_id", "")
             title = node.get("title", "Untitled")
 
-            # Stable DOT identifier derived from title (or fallback to node_id slice)
+            # Stable DOT identifier derived from title (or fallback to module-derived suffix)
             dot_node_id = f"impl_{sanitize_node_id(title)}"
             existing_ids = {t["dot_node_id"] for t in task_nodes}
             if dot_node_id in existing_ids:
-                dot_node_id = f"{dot_node_id}_{sanitize_node_id(node_id_raw[-8:] if node_id_raw else 'x')}"
+                module_raw = node.get("module", "") or node.get("folder_path", "") or node_id_raw[-6:]
+                module_slug = sanitize_node_id(module_raw.split("/")[0])
+                dot_node_id = f"impl_{sanitize_node_id(title)}_{module_slug}"
+                if dot_node_id in existing_ids:
+                    counter = sum(1 for nid in existing_ids if nid.startswith(f"impl_{sanitize_node_id(title)}"))
+                    dot_node_id = f"impl_{sanitize_node_id(title)}_{module_slug}_{counter}"
 
             # Determine worker_type: prefer explicit field, else infer from title
             worker_type = node.get("worker_type") or infer_worker_type(title)
@@ -727,8 +732,10 @@ def generate_pipeline_dot(
                 lines.append(
                     f'        change_summary="{escape_dot_string(task["change_summary"][:120])}"'
                 )
+            feature_id = task.get("feature_id", "")
             if solution_design:
-                lines.append(f'        solution_design="{escape_dot_string(solution_design)}"')
+                sd_ref = f"{solution_design}#{feature_id}" if feature_id else solution_design
+                lines.append(f'        solution_design="{escape_dot_string(sd_ref)}"')
 
             lines.append("        style=filled")
             lines.append(f'        fillcolor={task["fillcolor"]}')
