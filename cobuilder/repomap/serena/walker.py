@@ -24,6 +24,9 @@ from cobuilder.repomap.serena.session import CodebaseAnalyzerProtocol, SymbolEnt
 
 logger = logging.getLogger(__name__)
 
+# File extensions treated as TypeScript/JavaScript source files
+TS_EXTENSIONS: frozenset[str] = frozenset([".ts", ".tsx", ".js", ".jsx"])
+
 # Default directories/patterns to exclude
 DEFAULT_EXCLUDE_PATTERNS: list[str] = [
     "__pycache__",
@@ -38,6 +41,11 @@ DEFAULT_EXCLUDE_PATTERNS: list[str] = [
     "dist",
     "build",
     ".eggs",
+    ".next",
+    ".nuxt",
+    "out",
+    ".turbo",
+    ".swc",
 ]
 
 
@@ -45,8 +53,16 @@ class CodebaseWalker:
     """Walk a codebase and produce an RPGGraph baseline.
 
     Uses a :class:`CodebaseAnalyzerProtocol` implementation to discover
-    Python packages, modules, and symbols.  Constructs a three-level
-    hierarchy: MODULE (packages) → COMPONENT (files) → FEATURE (symbols).
+    packages, modules, and symbols.  Constructs a three-level hierarchy:
+    MODULE (packages/directories) → COMPONENT (files) → FEATURE (symbols).
+
+    Supported file types:
+    - **Python** (``.py``): full symbol extraction via the analyser.
+    - **TypeScript/React** (``.ts``, ``.tsx``): component nodes created;
+      symbol extraction is a no-op with ``FileBasedCodebaseAnalyzer`` (which
+      only parses Python AST) but will work transparently with a Serena-backed
+      analyser that understands TypeScript.
+    - **JavaScript** (``.js``, ``.jsx``): treated the same as TypeScript.
 
     Args:
         analyzer: An implementation of ``CodebaseAnalyzerProtocol``.
@@ -64,10 +80,12 @@ class CodebaseWalker:
 
         Algorithm:
         1. Activate the analyser for the project root.
-        2. Discover Python source directories (skip excluded patterns).
-        3. For each package directory → create a MODULE node.
-        4. For each ``.py`` file → create a COMPONENT node.
-        5. For each class/function in a file → create a FEATURE node.
+        2. Discover source directories (skip excluded patterns).
+        3. For each Python package or TS/JS directory → create a MODULE node.
+        4. For each ``.py`` / ``.ts`` / ``.tsx`` / ``.js`` / ``.jsx`` file
+           → create a COMPONENT node.
+        5. For each class/function in a ``.py`` file → create a FEATURE node.
+           (Symbol extraction is a no-op for TS/JS with the default analyser.)
         6. Create HIERARCHY edges: MODULE → COMPONENT → FEATURE.
         7. Mark all nodes with ``serena_validated: True`` in metadata.
         8. Store metadata: ``baseline_generated_at``, ``project_root``.
@@ -153,6 +171,11 @@ class CodebaseWalker:
     ) -> None:
         """Recursively walk directories, creating MODULE/COMPONENT/FEATURE nodes.
 
+        Supports Python packages (``.py`` files in directories with
+        ``__init__.py``) and TypeScript/JavaScript source files (``.ts``,
+        ``.tsx``, ``.js``, ``.jsx``).  A directory becomes a MODULE node if it
+        is a Python package **or** if it directly contains TS/JS source files.
+
         Args:
             graph: The RPGGraph being constructed.
             root: The project root (for computing relative paths).
@@ -168,9 +191,10 @@ class CodebaseWalker:
         # Check if this directory is a Python package
         is_package = "__init__.py" in entries
 
-        # Determine subdirectories and .py files
+        # Determine subdirectories, .py files, and TypeScript/JS files
         subdirs: list[str] = []
         py_files: list[str] = []
+        ts_files: list[str] = []
 
         for entry in entries:
             if self._should_exclude(entry, excludes):
@@ -178,14 +202,20 @@ class CodebaseWalker:
             full_path = current / entry
             if full_path.is_dir():
                 subdirs.append(entry)
-            elif entry.endswith(".py") and full_path.is_file():
-                py_files.append(entry)
+            elif full_path.is_file():
+                if entry.endswith(".py"):
+                    py_files.append(entry)
+                elif Path(entry).suffix in TS_EXTENSIONS:
+                    ts_files.append(entry)
 
-        # If this is a Python package, create a MODULE node for it
+        # A TypeScript directory is any non-excluded directory with TS/JS files
+        is_ts_dir = bool(ts_files)
+
+        # Create a MODULE node for Python packages OR TypeScript directories
         module_node_id = parent_node_id
-        if is_package:
+        if is_package or is_ts_dir:
             if current == root:
-                # The project root itself is a package -- use the dir name
+                # The project root itself is a module -- use the dir name
                 # as the module name and an empty-string-safe folder_path.
                 rel_path = current.name
                 module_name = current.name
@@ -200,7 +230,11 @@ class CodebaseWalker:
                 folder_path=rel_path,
                 parent_id=parent_node_id,
                 serena_validated=True,
-                metadata={"baseline": True, "is_package": True},
+                metadata={
+                    "baseline": True,
+                    "is_package": is_package,
+                    "is_ts_dir": is_ts_dir,
+                },
             )
             graph.add_node(module_node)
             module_node_id = module_node.id
@@ -262,11 +296,58 @@ class CodebaseWalker:
                 component_node_id=component_node.id,
             )
 
+        # Process TypeScript/JavaScript files as COMPONENT nodes
+        for ts_file in ts_files:
+            if module_node_id is None:
+                # No module context (shouldn't happen if is_ts_dir is True)
+                continue
+
+            full_path = current / ts_file
+
+            # Compute relative paths, handling the root-is-a-ts-dir case
+            if current == root and is_ts_dir:
+                rel_folder = current.name
+                rel_file = f"{current.name}/{ts_file}"
+            else:
+                rel_file = str(full_path.relative_to(root))
+                rel_folder = str(current.relative_to(root))
+
+            # Use the stem (e.g. "App" from "App.tsx", "index" from "index.ts")
+            component_name = Path(ts_file).stem
+
+            component_node = RPGNode(
+                name=component_name,
+                level=NodeLevel.COMPONENT,
+                node_type=NodeType.FUNCTIONALITY,
+                folder_path=rel_folder,
+                file_path=rel_file,
+                parent_id=module_node_id,
+                serena_validated=True,
+                metadata={"baseline": True, "language": "typescript"},
+            )
+            graph.add_node(component_node)
+
+            # HIERARCHY edge from MODULE to COMPONENT
+            edge = RPGEdge(
+                source_id=module_node_id,
+                target_id=component_node.id,
+                edge_type=EdgeType.HIERARCHY,
+            )
+            graph.add_edge(edge)
+
+            # Attempt feature extraction; gracefully returns [] for non-.py files
+            self._extract_features(
+                graph=graph,
+                root=root,
+                file_path=full_path,
+                rel_file=rel_file,
+                rel_folder=rel_folder,
+                component_node_id=component_node.id,
+            )
+
         # Recurse into subdirectories
         for subdir in subdirs:
             subdir_path = current / subdir
-            # Only recurse into Python packages (dirs with __init__.py)
-            # or directories that may contain packages
             self._walk_directory(
                 graph=graph,
                 root=root,
