@@ -82,6 +82,11 @@ def pipeline_create(
         typer.echo("[5/7] Running LLM enrichment pipeline (5 enrichers)...")
         pipeline = EnrichmentPipeline()
         nodes = pipeline.enrich(nodes, {}, sd_content)
+        worker_types = {}
+        for n in nodes:
+            wt = n.get("worker_type", "unknown")
+            worker_types[wt] = worker_types.get(wt, 0) + 1
+        typer.echo(f"      Worker type distribution: {worker_types}")
     else:
         typer.echo("[5/7] Skipping LLM enrichment (--skip-enrichment)")
 

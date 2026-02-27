@@ -64,6 +64,7 @@ class WorkerSelector(BaseEnricher):
         )
         response = self._call_llm(prompt)
         parsed = self._parse_yaml(response)
+        self._warn_if_empty(parsed, "worker_type", node.get("title", ""))
 
         worker_type = parsed.get("worker_type", _DEFAULT_WORKER)
         if worker_type not in _VALID_WORKER_TYPES:

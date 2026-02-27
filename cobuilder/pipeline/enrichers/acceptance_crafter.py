@@ -36,5 +36,6 @@ class AcceptanceCrafter(BaseEnricher):
         )
         response = self._call_llm(prompt)
         parsed = self._parse_yaml(response)
+        self._warn_if_empty(parsed, "acceptance_criteria", node.get("title", ""))
         node["acceptance_criteria"] = parsed.get("acceptance_criteria", [])
         return node

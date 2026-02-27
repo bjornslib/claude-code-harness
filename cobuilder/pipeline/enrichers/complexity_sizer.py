@@ -49,6 +49,7 @@ class ComplexitySizer(BaseEnricher):
         )
         response = self._call_llm(prompt)
         parsed = self._parse_yaml(response)
+        self._warn_if_empty(parsed, "complexity", node.get("title", ""))
 
         complexity = parsed.get("complexity", "medium")
         if complexity not in {"low", "medium", "high"}:

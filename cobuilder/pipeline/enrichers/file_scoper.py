@@ -45,5 +45,6 @@ class FileScoper(BaseEnricher):
         )
         response = self._call_llm(prompt)
         parsed = self._parse_yaml(response)
+        self._warn_if_empty(parsed, "file_scope", node.get("title", ""))
         node["file_scope"] = parsed.get("file_scope", _DEFAULT_FILE_SCOPE.copy())
         return node
