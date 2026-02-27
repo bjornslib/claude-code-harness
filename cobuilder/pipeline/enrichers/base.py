@@ -7,6 +7,46 @@ import yaml
 logger = logging.getLogger(__name__)
 
 
+def _sanitize_yaml(raw: str) -> str:
+    """Attempt to fix common LLM-generated YAML issues.
+
+    The most frequent failure mode is unquoted string values that contain
+    colons (e.g. ``globals: true`` inside a longer description).  This
+    function quotes such values so ``yaml.safe_load`` can parse them.
+    """
+    lines: list[str] = []
+    for line in raw.splitlines():
+        # Skip blank lines, comments, list-only lines
+        stripped = line.lstrip()
+        if not stripped or stripped.startswith("#") or stripped.startswith("-"):
+            # For list items like "- some: value: thing", check for issues
+            if stripped.startswith("- "):
+                item = stripped[2:]
+                # If the list item itself looks like "key: value" with extra
+                # colons in the value portion, quote the value.
+                m = re.match(r'^(\s*-\s*)(\w[\w\s]*?):\s+(.+)$', line)
+                if m:
+                    prefix, key, val = m.group(1), m.group(2), m.group(3)
+                    # If the value contains an unquoted colon, quote it
+                    if ':' in val and not (val.startswith('"') or val.startswith("'")):
+                        line = f'{prefix}{key}: "{val}"'
+            lines.append(line)
+            continue
+
+        # Match "key: value" pattern
+        m = re.match(r'^(\s*)(\w[\w\s]*?):\s+(.+)$', line)
+        if m:
+            indent, key, val = m.group(1), m.group(2), m.group(3)
+            # If the value contains a colon and isn't already quoted, quote it
+            if ':' in val and not (val.startswith('"') or val.startswith("'")):
+                # Escape any existing double quotes in the value
+                val_escaped = val.replace('"', '\\"')
+                line = f'{indent}{key}: "{val_escaped}"'
+        lines.append(line)
+
+    return "\n".join(lines)
+
+
 class BaseEnricher:
     """Base class for all node enrichers.
 
@@ -34,35 +74,48 @@ class BaseEnricher:
         )
         return msg.content[0].text
 
-    def _parse_yaml(self, text: str, *, _retries: int = 2) -> dict:
-        """Extract YAML block from response text with retry on parse failure.
+    def _parse_yaml(self, text: str, *, _retries: int = 1) -> dict:
+        """Extract YAML block from response text with sanitization and retry.
 
-        If the YAML block cannot be parsed, sends the raw response back to the
-        LLM with the parse error and asks for a corrected version.  Retries up
-        to *_retries* times before returning ``{}``.
+        Parse strategy (in order):
+        1. Try ``yaml.safe_load`` on the raw extracted block.
+        2. If that fails, sanitize the YAML (quote unquoted string values
+           containing colons) and try again.
+        3. If that also fails, ask the LLM to fix the YAML (*_retries* times).
+        4. Return ``{}`` if all attempts fail.
         """
         match = re.search(r"```yaml\n(.*?)```", text, re.DOTALL)
         if not match:
             return {}
 
         raw_yaml = match.group(1)
-        parse_error: str = ""
+
+        # --- Attempt 1: raw parse ---
         try:
             return yaml.safe_load(raw_yaml) or {}
+        except yaml.YAMLError:
+            pass  # fall through to sanitization
+
+        # --- Attempt 2: sanitize and parse ---
+        sanitized = _sanitize_yaml(raw_yaml)
+        try:
+            result = yaml.safe_load(sanitized) or {}
+            if result:
+                logger.info("YAML sanitization succeeded")
+                return result
         except yaml.YAMLError as e:
             parse_error = str(e)
-            logger.warning("YAML parse failed: %s", parse_error)
+            logger.warning("YAML parse failed after sanitization: %s", parse_error)
 
-        # Retry: ask the LLM to fix the YAML
+        # --- Attempt 3: LLM retry ---
         for attempt in range(1, _retries + 1):
-            logger.info("Retrying YAML parse (attempt %d/%d)", attempt, _retries)
+            logger.info("Retrying YAML via LLM (attempt %d/%d)", attempt, _retries)
             fix_prompt = (
                 "The following YAML block failed to parse:\n\n"
                 f"```yaml\n{raw_yaml}```\n\n"
                 f"Parse error: {parse_error}\n\n"
-                "Please return ONLY the corrected YAML inside a ```yaml``` "
-                "code fence.  Make sure all string values containing colons "
-                "are quoted."
+                "Return ONLY the corrected YAML inside a ```yaml``` code fence. "
+                "All string values containing colons MUST be wrapped in double quotes."
             )
             try:
                 fixed_text = self._call_llm(fix_prompt)
@@ -70,10 +123,10 @@ class BaseEnricher:
                 if fixed_match:
                     result = yaml.safe_load(fixed_match.group(1))
                     if result:
-                        logger.info("YAML fix succeeded on attempt %d", attempt)
+                        logger.info("YAML LLM fix succeeded on attempt %d", attempt)
                         return result
             except (yaml.YAMLError, Exception) as retry_err:
-                logger.warning("YAML fix attempt %d failed: %s", attempt, retry_err)
+                logger.warning("YAML LLM fix attempt %d failed: %s", attempt, retry_err)
 
-        logger.error("YAML parse failed after %d retries, returning empty dict", _retries)
+        logger.error("YAML parse failed after all attempts, returning empty dict")
         return {}
