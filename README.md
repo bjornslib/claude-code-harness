@@ -19,20 +19,25 @@ Instead of duplicating `.claude/` configuration in every project, maintain it on
 
 ## 🏗️ Architecture
 
-This harness provides a 3-level agent hierarchy for sophisticated multi-agent development:
+This harness provides a Guardian-led agent hierarchy for sophisticated multi-agent development in SDK mode:
 
 ```
-System 3 (Meta-Orchestrator)
+S3 Guardian (User-facing terminal session)
+    ↓ (SDK mode: spawns Runner)
+Runner (Fault-tolerant orchestrator lifecycle)
     ↓
-Orchestrators (Feature coordination)
+Orchestrator (Feature coordination)
     ↓
-Workers (Implementation)
+Workers (Implementation specialists)
 ```
 
 **Key Components**:
-- **Output Styles**: Auto-loaded agent behaviors (system3, orchestrator)
+- **S3 Guardian**: The single user-facing session — sets OKRs, validates outcomes, enforces stop hook
+- **Runner**: SDK-mode-only layer that manages orchestrator reliability (auto-restart on failure)
+- **CoBuilder Package**: Python package formalising pipeline execution, identity tracking, merge queue
+- **Output Styles**: Auto-loaded agent behaviors (guardian, orchestrator)
 - **Skills**: 20+ specialized capabilities (orchestration, testing, design, etc.)
-- **Hooks**: Lifecycle automation (session start, stop gates, validation)
+- **Hooks**: Lifecycle automation (session start, stop gates, validation — enforced at Guardian layer)
 - **MCP Integration**: 9+ MCP servers with progressive disclosure wrappers
 - **Task Master**: PRD → Task decomposition and tracking
 
@@ -146,6 +151,11 @@ Symlink this if you want shared MCP server configurations across projects:
 - hindsight
 - beads
 
+### The `cobuilder/` Package
+
+A Python package providing programmatic orchestration. Clone the harness and
+`cobuilder/` is included — it powers the Runner and pipeline management in SDK mode.
+
 **When NOT to symlink `.mcp.json`**:
 - Your project needs different API keys
 - You need project-specific MCP servers
@@ -216,24 +226,25 @@ All projects using the symlink immediately get the updates. No manual copying ne
 
 ### Launch Commands
 
-| Level | Command | Purpose |
-|-------|---------|---------|
-| System 3 | `ccsystem3` | Meta-orchestrator for strategic planning |
-| Orchestrator | `launchorchestrator [epic]` | Feature coordination |
+| Role | Command | Purpose |
+|------|---------|---------|
+| Guardian | `ccsystem3` | User-facing session: OKRs, acceptance tests, validation |
+| Orchestrator (tmux) | `launchorchestrator [epic]` | Feature coordination via tmux |
+| Runner + Orchestrator | Spawned by Guardian in SDK mode | Fault-tolerant execution |
 | Worker | `launchcc` | Implementation in tmux session |
 
 ### Common Workflows
 
-**Start a new feature**:
+**Start a new feature (SDK mode)**:
 ```bash
 ccsystem3
-# In System 3 session: Define OKRs, spawn orchestrator
+# Guardian writes acceptance tests, spawns Runner → Orchestrator → Workers
 ```
 
-**Work on existing tasks**:
+**Work on existing tasks (tmux mode)**:
 ```bash
 launchorchestrator feature-auth
-# Orchestrator delegates to workers via tmux
+# Orchestrator delegates to workers via native Agent Teams
 ```
 
 **Implement a specific task**:

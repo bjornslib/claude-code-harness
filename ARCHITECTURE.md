@@ -12,9 +12,10 @@ Visual guide to understanding how the harness works across multiple projects.
 │  │  ├── output-styles/    ← Agent behaviors                   │  │
 │  │  ├── skills/           ← 20+ capabilities                  │  │
 │  │  ├── hooks/            ← Lifecycle automation              │  │
-│  │  ├── scripts/          ← CLI utilities                     │  │
+│  │  ├── scripts/          ← CLI utilities + Attractor         │  │
 │  │  └── settings.json     ← Base configuration                │  │
 │  │                                                             │  │
+│  │  cobuilder/            ← Orchestration Python package      │  │
 │  │  .mcp.json             ← Your API keys                     │  │
 │  └────────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────┘
@@ -37,40 +38,55 @@ Visual guide to understanding how the harness works across multiple projects.
         central harness    ──────────────────────────────────────────►
 ```
 
-## Three-Level Agent Hierarchy
+## Agent Architecture (SDK Mode)
+
+The harness uses a **Guardian-led hierarchy** in SDK mode. Layers 0 and 1 have
+collapsed into a single S3 Guardian role — the terminal-based session users
+interact with directly.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  LEVEL 1: System 3 (Meta-Orchestrator)                          │
+│  S3 GUARDIAN (User-Facing Terminal Session)                     │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │  • Strategic planning and OKR tracking                    │  │
-│  │  • Spawns orchestrators for epics/initiatives             │  │
-│  │  • Business outcome validation                            │  │
-│  │  • Independent validation coordinator                     │  │
+│  │  • Strategic planning, OKR tracking, acceptance tests     │  │
+│  │  • Validates business outcomes (stop hook at this layer)  │  │
+│  │  • In SDK mode: spawns Runner → which spawns Orchestrator │  │
+│  │  • Can also spawn another Guardian for monitoring         │  │
+│  │  • UUID-based completion promises (multi-session aware)   │  │
 │  │                                                            │  │
-│  │  Output Style: system3-meta-orchestrator.md               │  │
-│  │  Skills: system3-orchestrator/, completion-promise        │  │
+│  │  Skills: s3-guardian/, completion-promise                 │  │
 │  └───────────────────────────────────────────────────────────┘  │
 │                              │                                   │
-│                              │ spawns & coordinates              │
+│                              │ (SDK mode only)                   │
 │                              ▼                                   │
 ├─────────────────────────────────────────────────────────────────┤
-│  LEVEL 2: Orchestrators                                         │
+│  RUNNER (SDK Mode Only)                                         │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │  • Manages orchestrator lifecycle and reliability         │  │
+│  │  • Spawned by Guardian; does NOT run in tmux              │  │
+│  │  • Provides fault-tolerant orchestrator execution         │  │
+│  │  • Reports back to Guardian on completion or failure      │  │
+│  │                                                            │  │
+│  │  Package: cobuilder/orchestration/pipeline_runner.py      │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                              │                                   │
+│                              │ spawns                            │
+│                              ▼                                   │
+├─────────────────────────────────────────────────────────────────┤
+│  ORCHESTRATOR                                                   │
 │  ┌───────────────────────────────────────────────────────────┐  │
 │  │  • Feature coordination and task breakdown                │  │
 │  │  • Investigate: Read/Grep/Glob                            │  │
-│  │  • Delegate: Launch workers via tmux                      │  │
-│  │  • Monitor: Track worker progress                         │  │
+│  │  • Delegate to workers via native Agent Teams             │  │
 │  │  • NEVER: Edit/Write/MultiEdit directly                   │  │
 │  │                                                            │  │
-│  │  Output Style: orchestrator.md                            │  │
 │  │  Skills: orchestrator-multiagent/                         │  │
 │  └───────────────────────────────────────────────────────────┘  │
 │                              │                                   │
-│                              │ delegates via tmux                │
+│                              │ delegates via native teams        │
 │                              ▼                                   │
 ├─────────────────────────────────────────────────────────────────┤
-│  LEVEL 3: Workers (Specialists)                                 │
+│  WORKERS (Specialists)                                          │
 │  ┌───────────────┬───────────────┬───────────────────────────┐  │
 │  │ Frontend Dev  │ Backend Eng   │ TDD Test Engineer        │  │
 │  │               │               │                          │  │
@@ -80,6 +96,86 @@ Visual guide to understanding how the harness works across multiple projects.
 │  │ • Edit/Write  │ • Edit/Write  │ • API testing            │  │
 │  └───────────────┴───────────────┴───────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
+```
+
+### Guardian → Runner Reliability Pattern
+
+In SDK mode, the Guardian does not call the Orchestrator directly. Instead it
+spawns a **Runner** subagent. This indirection dramatically increases
+reliability: if an orchestrator crashes or stalls, the Runner can detect the
+failure and restart it without the Guardian needing to intervene.
+
+```
+Guardian
+  │
+  ├── SDK mode ──► Runner ──► Orchestrator ──► Workers
+  │                  │
+  │                  └── On failure: restarts Orchestrator automatically
+  │
+  └── Monitor ──► Guardian (validation subagent, runs in background)
+```
+
+## CoBuilder Package
+
+The `cobuilder/` Python package formalises the orchestration patterns that
+were previously implicit in harness scripts:
+
+```
+cobuilder/
+├── orchestration/              ← Agent coordination layer
+│   ├── pipeline_runner.py      ← Manages full pipeline execution (Runner)
+│   ├── identity_registry.py    ← Tracks agent identities across sessions
+│   ├── spawn_orchestrator.py   ← Programmatic orchestrator spawning
+│   ├── runner_hooks.py         ← Hook lifecycle management
+│   ├── runner_models.py        ← Data models for pipeline state
+│   ├── runner_tools.py         ← Tool wrappers for orchestrators
+│   └── adapters/
+│       ├── native_teams.py     ← Native Agent Teams adapter
+│       └── stdout.py           ← Stdout capture adapter
+│
+├── pipeline/                   ← Pipeline stage implementations
+│   ├── generate.py             ← Code generation stage
+│   ├── validate.py             ← Validation stage
+│   ├── checkpoint.py           ← Save/restore pipeline state
+│   ├── dashboard.py            ← Real-time progress display
+│   ├── signal_protocol.py      ← Agent-to-agent signalling
+│   ├── transition.py           ← State machine transitions
+│   └── ...                     ← node_ops, edge_ops, annotate, etc.
+│
+└── repomap/                    ← Repository mapping (from zerorepo)
+    └── cli/                    ← CLI commands: init, sync, status
+```
+
+## Session Resilience System
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  Attractor System (.claude/scripts/attractor/ + cobuilder/)      │
+│                                                                   │
+│  IdentityRegistry ─── Tracks agent identities & health          │
+│         │                                                         │
+│  MergeQueue ──────── Serialises concurrent code changes          │
+│         │                                                         │
+│  HookManager ─────── Central hook dispatch (pre/post tool)       │
+│         │                                                         │
+│  SignalProtocol ──── Agent-to-agent messaging                    │
+│         │                                                         │
+│  GuardianAgent ───── Validation subagent (monitoring mode)       │
+│         │                                                         │
+│  RunnerAgent ─────── Executes pipeline stages (SDK mode only)    │
+└──────────────────────────────────────────────────────────────────┘
+
+Cyclic Validation Pattern (Guardian monitors Runner/Orchestrator):
+────────────────────────────────────────────────────────────────────
+
+Guardian                 Monitor Guardian               Orchestrator
+   │                           │                              │
+   │  Launch monitor ─────────►│                              │
+   │                           │◄── Poll task state ──────────│
+   │                           │    Validate work...          │
+   │◄──── COMPLETE ────────────│                              │
+   │  Handle result            │                              │
+   │  Re-launch monitor ──────►│  (cycle repeats)             │
 ```
 
 ## Core Systems Integration
@@ -92,8 +188,6 @@ Visual guide to understanding how the harness works across multiple projects.
 │  │  2. Analyze complexity ─→ Expand tasks                     │  │
 │  │  3. Track status ─→ Next task recommendation              │  │
 │  │  4. Sync to Beads ─→ Issue tracking                        │  │
-│  │                                                             │  │
-│  │  Commands: /project:tm/*                                   │  │
 │  └────────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────┘
 
@@ -133,9 +227,9 @@ PreCompact (Before context compression)
     │
     └─→ Reload MCP skills (preserve after compaction)
 
-Stop (Before session end)
+Stop (Before session end — enforced at Guardian layer)
     │
-    ├─→ Validate completion promise
+    ├─→ Validate completion promise (UUID-based, multi-session)
     ├─→ Check open tasks
     ├─→ Confirm user intent to stop
     └─→ Allow/block stop based on state
@@ -145,51 +239,26 @@ Notification (On notifications)
     └─→ Forward to webhook for external alerting
 ```
 
-## Skills System (20+ Capabilities)
-
-```
-Orchestration:
-├── system3-orchestrator      ─→ Strategic planning
-├── orchestrator-multiagent   ─→ Worker delegation
-├── completion-promise        ─→ Session goal tracking
-Development:
-├── frontend-design           ─→ React/UI patterns
-├── backend-solutions         ─→ Python/API patterns
-├── tdd-test-engineer         ─→ Test-driven development
-└── solution-architect        ─→ Architecture design
-
-Workflows:
-├── research-first            ─→ Context7 + Perplexity
-├── explore-first-navigation  ─→ Codebase exploration
-├── design-to-code            ─→ Figma → React
-└── codebase-quality          ─→ Code review automation
-
-Utilities:
-├── worktree-manager          ─→ Git worktree management
-├── setup-harness             ─→ Symlink automation
-├── mcp-skills                ─→ MCP server wrappers
-└── using-tmux                ─→ Interactive command patterns
-```
-
-## Workflow Example: New Feature Implementation
+## Workflow: New Feature (SDK Mode)
 
 ```
 1. User defines feature in PRD
         ↓
-2. System 3 receives request
+2. Guardian receives request; writes blind acceptance tests (s3-guardian)
         ↓
-3. System 3 parses PRD with Task Master
+3. Guardian parses PRD with Task Master
         PRD ─→ tasks.json ─→ Beads issues
         ↓
-4. System 3 spawns Orchestrator for epic
-        worktree creation
+4. Guardian spawns Runner (SDK mode)
+        CoBuilder: IdentityRegistry.register()
+        CoBuilder: PipelineRunner.start()
         ↓
-5. Orchestrator investigates
-        Read/Grep/Glob to understand codebase
-        Analyzes dependencies
-        Creates task structure
+5. Runner spawns Orchestrator (with automatic restart on failure)
         ↓
-6. Orchestrator delegates to Workers via tmux
+6. Orchestrator investigates codebase
+        Read/Grep/Glob, analyzes dependencies
+        ↓
+7. Orchestrator delegates to Workers (native Agent Teams)
         ┌──────────────┬──────────────┬──────────────┐
         │ Frontend     │ Backend      │ TDD Engineer │
         │ Worker       │ Worker       │              │
@@ -198,14 +267,12 @@ Utilities:
         │ UI           │ API          │ Validates    │
         └──────────────┴──────────────┴──────────────┘
         ↓
-7. Workers report completion to Orchestrator
+8. Workers report completion; CoBuilder MergeQueue serialises changes
         ↓
-8. Orchestrator validates with validation-agent
+9. Guardian Monitor validates work (background subagent, cyclic pattern)
         Unit tests + API tests + E2E browser tests
         ↓
-9. Orchestrator reports to System 3
-        ↓
-10. System 3 validates business outcomes
+10. Guardian validates business outcomes against acceptance tests
         Feature complete! ✓
 ```
 
@@ -217,60 +284,17 @@ your-project/
 │   ├── output-styles/          ← Auto-loaded from harness
 │   ├── skills/                 ← All skills available
 │   ├── hooks/                  ← Lifecycle automation
+│   ├── scripts/attractor/      ← Session resilience scripts
 │   ├── scripts/                ← CLI utilities
 │   └── settings.json           ← Base configuration
 │
+├── cobuilder/                  ─→ Orchestration Python package
+│   ├── orchestration/          ← Pipeline runner, identity, spawner
+│   └── pipeline/               ← Generate, validate, checkpoint
+│
 ├── .mcp.json                   ─→ Symlink or copy from harness
-│
 ├── .claude/settings.local.json ─→ Project-specific overrides
-│                                  (created by you, gitignored)
-│
-├── .claude-local/              ─→ Project-specific additions
-│   └── skills/                    (optional, for custom skills)
-│
 └── your-code/                  ─→ Your actual application code
-```
-
-## Update Propagation
-
-```
-Central Harness Update:
-─────────────────────────
-
-cd ~/claude-harness
-git pull
-    │
-    └─→ Updates .claude/ directory
-            │
-            ├─→ Project A sees update immediately (symlink)
-            ├─→ Project B sees update immediately (symlink)
-            ├─→ Project C sees update immediately (symlink)
-            └─→ Project N sees update immediately (symlink)
-
-No manual copying needed!
-All projects automatically get improvements.
-```
-
-## Security Model
-
-```
-┌─────────────────────────────────────┐
-│  Central Harness (Version Control)  │
-│  ✓ Skills, hooks, documentation     │
-│  ✓ Base settings.json               │
-│  ✓ .mcp.json.example (template)     │
-│  ✗ .mcp.json (gitignored)           │ ← Your API keys, not committed
-│  ✗ settings.local.json (gitignored) │ ← User preferences
-│  ✗ Runtime state (gitignored)       │ ← Session-specific data
-└─────────────────────────────────────┘
-
-API Keys Workflow:
-──────────────────
-1. Clone harness
-2. cp .mcp.json.example .mcp.json
-3. Add your API keys to .mcp.json
-4. .mcp.json is gitignored ✓
-5. Symlink or copy to projects
 ```
 
 ## Benefits Summary
@@ -282,9 +306,11 @@ API Keys Workflow:
 | Consistency | Drift over time | Always synchronized |
 | Team sharing | Manual distribution | `git clone` → ready |
 | Version control | Per-project chaos | Single source of truth |
-| Maintenance | N projects × updates | 1 harness × updates |
+| Resilience | Single-agent, fragile | Multi-session, identity-tracked |
+| Pipeline state | Implicit / lost on crash | Checkpoint & resume via CoBuilder |
+| Reliability | Manual restarts | Runner auto-restarts Orchestrators |
 
 ---
 
-**Architecture Version**: 1.0.0
-**Last Updated**: January 23, 2026
+**Architecture Version**: 2.0.0
+**Last Updated**: February 27, 2026
