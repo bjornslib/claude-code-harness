@@ -34,12 +34,44 @@ class BaseEnricher:
         )
         return msg.content[0].text
 
-    def _parse_yaml(self, text: str) -> dict:
-        """Extract YAML block from response text. Returns {} on failure."""
+    def _parse_yaml(self, text: str, *, _retries: int = 2) -> dict:
+        """Extract YAML block from response text with retry on parse failure.
+
+        If the YAML block cannot be parsed, sends the raw response back to the
+        LLM with the parse error and asks for a corrected version.  Retries up
+        to *_retries* times before returning ``{}``.
+        """
         match = re.search(r"```yaml\n(.*?)```", text, re.DOTALL)
-        if match:
+        if not match:
+            return {}
+
+        raw_yaml = match.group(1)
+        try:
+            return yaml.safe_load(raw_yaml) or {}
+        except yaml.YAMLError as e:
+            logger.warning("YAML parse failed: %s", e)
+
+        # Retry: ask the LLM to fix the YAML
+        for attempt in range(1, _retries + 1):
+            logger.info("Retrying YAML parse (attempt %d/%d)", attempt, _retries)
+            fix_prompt = (
+                "The following YAML block failed to parse:\n\n"
+                f"```yaml\n{raw_yaml}```\n\n"
+                f"Parse error: {e}\n\n"
+                "Please return ONLY the corrected YAML inside a ```yaml``` "
+                "code fence.  Make sure all string values containing colons "
+                "are quoted."
+            )
             try:
-                return yaml.safe_load(match.group(1)) or {}
-            except yaml.YAMLError as e:
-                logger.warning("YAML parse failed: %s", e)
+                fixed_text = self._call_llm(fix_prompt)
+                fixed_match = re.search(r"```yaml\n(.*?)```", fixed_text, re.DOTALL)
+                if fixed_match:
+                    result = yaml.safe_load(fixed_match.group(1))
+                    if result:
+                        logger.info("YAML fix succeeded on attempt %d", attempt)
+                        return result
+            except (yaml.YAMLError, Exception) as retry_err:
+                logger.warning("YAML fix attempt %d failed: %s", attempt, retry_err)
+
+        logger.error("YAML parse failed after %d retries, returning empty dict", _retries)
         return {}

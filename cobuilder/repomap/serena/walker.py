@@ -46,6 +46,8 @@ DEFAULT_EXCLUDE_PATTERNS: list[str] = [
     "out",
     ".turbo",
     ".swc",
+    "trees",
+    "worktrees",
 ]
 
 
