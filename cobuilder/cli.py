@@ -29,6 +29,7 @@ def pipeline_create(
     target_dir: str = typer.Option("", "--target-dir", help="Implementation repo root"),
     skip_enrichment: bool = typer.Option(False, "--skip-enrichment", help="Skip LLM enrichment"),
     skip_taskmaster: bool = typer.Option(False, "--skip-taskmaster", help="Skip TaskMaster parse"),
+    dot_pipeline: str = typer.Option("", "--dot-pipeline", help="Path to existing .dot pipeline file for context injection"),
 ) -> None:
     """Create an Attractor DOT pipeline from a Solution Design + RepoMap baseline."""
     from cobuilder.pipeline.generate import ensure_baseline, collect_repomap_nodes, filter_nodes_by_sd_relevance, cross_reference_beads, generate_pipeline_dot
@@ -69,7 +70,10 @@ def pipeline_create(
             str(sd_path.resolve()),
             str(project_root.resolve()),
             repomap_context=repomap_ctx,
+            dot_pipeline_path=dot_pipeline,
         )
+        if dot_pipeline:
+            typer.echo(f"      DOT pipeline context injected: {dot_pipeline}")
     else:
         typer.echo("[3/7] Skipping TaskMaster parse (--skip-taskmaster)")
 
