@@ -78,6 +78,9 @@ def main() -> None:
                         help="Target working directory for the runner")
     parser.add_argument("--bead-id", default=None, dest="bead_id",
                         help="Beads issue/task identifier")
+    parser.add_argument("--mode", choices=["sdk", "tmux"], default="tmux", dest="mode",
+                        help="Launch mode forwarded to runner_agent.py and spawn_orchestrator.py "
+                             "(sdk: no --worktree; tmux: default with --worktree)")
 
     args = parser.parse_args()
 
@@ -112,7 +115,8 @@ def main() -> None:
            "--node", args.node_id,
            "--prd", args.prd_ref,
            "--session", f"orch-{args.node_id}",
-           "--target-dir", args.target_dir]
+           "--target-dir", args.target_dir,
+           "--mode", args.mode]
 
     if args.solution_design:
         cmd += ["--solution-design", args.solution_design]

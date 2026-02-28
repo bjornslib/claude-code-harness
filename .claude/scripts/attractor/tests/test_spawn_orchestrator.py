@@ -488,5 +488,231 @@ class TestRespawnWisdomInjection(unittest.TestCase):
         )
 
 
+# ---------------------------------------------------------------------------
+# TestModeFlag — AC: --mode sdk|tmux controls --worktree usage
+# ---------------------------------------------------------------------------
+
+
+class TestModeFlag(unittest.TestCase):
+    """Tests for --mode sdk|tmux behaviour in main() and respawn_orchestrator()."""
+
+    # ---- helpers -------------------------------------------------------
+
+    def _run_main_capture(self, extra_args: list[str]) -> tuple[str, int]:
+        """Run main() with given extra args and capture stdout + exit code."""
+        import io
+        from contextlib import redirect_stdout
+
+        base = ["spawn_orchestrator.py",
+                "--node", "impl_auth",
+                "--prd", "PRD-AUTH-001",
+                "--worktree", "/tmp/work"]
+        argv = base + extra_args
+        buf = io.StringIO()
+        exit_code = 0
+        with patch("sys.argv", argv), \
+             patch("spawn_orchestrator.subprocess.run") as mock_run, \
+             patch("spawn_orchestrator.time.sleep"), \
+             patch("spawn_orchestrator.check_orchestrator_alive", return_value=True), \
+             patch("spawn_orchestrator._tmux_send") as mock_send:
+            mock_run.return_value = MagicMock(returncode=0)
+            try:
+                with redirect_stdout(buf):
+                    main()
+            except SystemExit as e:
+                exit_code = e.code if e.code is not None else 0
+        return buf.getvalue(), exit_code, mock_send
+
+    # ---- sdk mode: no --worktree in ccorch command ----------------------
+
+    def test_sdk_mode_ccorch_has_no_worktree(self) -> None:
+        """--mode sdk → ccorch command must NOT contain --worktree."""
+        _, _, mock_send = self._run_main_capture(["--mode", "sdk"])
+        # Collect all text args sent to _tmux_send
+        ccorch_calls = [c.args[1] for c in mock_send.call_args_list
+                        if "ccorch" in str(c.args[1] if c.args else "")]
+        self.assertTrue(ccorch_calls, "Expected at least one ccorch _tmux_send call")
+        for cmd in ccorch_calls:
+            self.assertNotIn("--worktree", cmd,
+                             f"sdk mode must NOT pass --worktree, but got: {cmd!r}")
+
+    def test_sdk_mode_ccorch_is_bare_ccorch(self) -> None:
+        """--mode sdk → ccorch command is exactly 'unset CLAUDECODE && ccorch'."""
+        _, _, mock_send = self._run_main_capture(["--mode", "sdk"])
+        ccorch_calls = [c.args[1] for c in mock_send.call_args_list
+                        if "ccorch" in str(c.args[1] if c.args else "")]
+        self.assertTrue(ccorch_calls)
+        self.assertEqual(ccorch_calls[0].strip(), "unset CLAUDECODE && ccorch")
+
+    # ---- tmux mode (default): --worktree present -------------------------
+
+    def test_tmux_mode_ccorch_has_worktree(self) -> None:
+        """--mode tmux (default) → ccorch command MUST contain --worktree <node_id>."""
+        _, _, mock_send = self._run_main_capture(["--mode", "tmux"])
+        ccorch_calls = [c.args[1] for c in mock_send.call_args_list
+                        if "ccorch" in str(c.args[1] if c.args else "")]
+        self.assertTrue(ccorch_calls, "Expected at least one ccorch _tmux_send call")
+        for cmd in ccorch_calls:
+            self.assertIn("--worktree", cmd,
+                          f"tmux mode must pass --worktree, but got: {cmd!r}")
+
+    def test_default_mode_is_tmux_with_worktree(self) -> None:
+        """When --mode is not specified, defaults to tmux which includes --worktree."""
+        # Run without --mode at all
+        import io
+        from contextlib import redirect_stdout
+        argv = ["spawn_orchestrator.py",
+                "--node", "impl_auth",
+                "--prd", "PRD-AUTH-001",
+                "--worktree", "/tmp/work"]
+        buf = io.StringIO()
+        with patch("sys.argv", argv), \
+             patch("spawn_orchestrator.subprocess.run") as mock_run, \
+             patch("spawn_orchestrator.time.sleep"), \
+             patch("spawn_orchestrator.check_orchestrator_alive", return_value=True), \
+             patch("spawn_orchestrator._tmux_send") as mock_send:
+            mock_run.return_value = MagicMock(returncode=0)
+            try:
+                with redirect_stdout(buf):
+                    main()
+            except SystemExit:
+                pass
+        ccorch_calls = [c.args[1] for c in mock_send.call_args_list
+                        if "ccorch" in str(c.args[1] if c.args else "")]
+        self.assertTrue(ccorch_calls)
+        self.assertIn("--worktree", ccorch_calls[0])
+
+    # ---- sdk mode: identity worktree is empty string ---------------------
+
+    def test_sdk_mode_identity_worktree_is_empty(self) -> None:
+        """--mode sdk → identity_registry.create_identity called with worktree=''."""
+        import io
+        from contextlib import redirect_stdout
+        argv = ["spawn_orchestrator.py",
+                "--node", "impl_auth",
+                "--prd", "PRD-AUTH-001",
+                "--worktree", "/tmp/work",
+                "--mode", "sdk"]
+        buf = io.StringIO()
+        with patch("sys.argv", argv), \
+             patch("spawn_orchestrator.subprocess.run") as mock_run, \
+             patch("spawn_orchestrator.time.sleep"), \
+             patch("spawn_orchestrator.check_orchestrator_alive", return_value=True), \
+             patch("spawn_orchestrator._tmux_send"), \
+             patch("spawn_orchestrator.identity_registry.create_identity") as mock_identity:
+            mock_run.return_value = MagicMock(returncode=0)
+            mock_identity.return_value = {"agent_id": "test-id"}
+            try:
+                with redirect_stdout(buf):
+                    main()
+            except SystemExit:
+                pass
+        # identity_registry.create_identity should have been called with worktree=""
+        self.assertTrue(mock_identity.called, "create_identity should have been called")
+        call_kwargs = mock_identity.call_args.kwargs
+        self.assertEqual(call_kwargs.get("worktree", "UNSET"), "",
+                         f"sdk mode must set worktree='', got: {call_kwargs!r}")
+
+    def test_tmux_mode_identity_worktree_has_path(self) -> None:
+        """--mode tmux → identity worktree should be '.claude/worktrees/<node_id>'."""
+        import io
+        from contextlib import redirect_stdout
+        argv = ["spawn_orchestrator.py",
+                "--node", "impl_auth",
+                "--prd", "PRD-AUTH-001",
+                "--worktree", "/tmp/work",
+                "--mode", "tmux"]
+        buf = io.StringIO()
+        with patch("sys.argv", argv), \
+             patch("spawn_orchestrator.subprocess.run") as mock_run, \
+             patch("spawn_orchestrator.time.sleep"), \
+             patch("spawn_orchestrator.check_orchestrator_alive", return_value=True), \
+             patch("spawn_orchestrator._tmux_send"), \
+             patch("spawn_orchestrator.identity_registry.create_identity") as mock_identity:
+            mock_run.return_value = MagicMock(returncode=0)
+            mock_identity.return_value = {"agent_id": "test-id"}
+            try:
+                with redirect_stdout(buf):
+                    main()
+            except SystemExit:
+                pass
+        self.assertTrue(mock_identity.called)
+        call_kwargs = mock_identity.call_args.kwargs
+        self.assertEqual(call_kwargs.get("worktree"), ".claude/worktrees/impl_auth")
+
+    # ---- mode parameter propagates to respawn_orchestrator() -------------
+
+    def test_mode_propagates_to_respawn_orchestrator_sdk(self) -> None:
+        """When main() triggers respawn, mode=sdk is forwarded to respawn_orchestrator()."""
+        import io
+        from contextlib import redirect_stdout
+
+        # alive_sequence: first call (main) → False (dead), second (respawn) → False (proceed)
+        alive_sequence = [False, False]
+        alive_iter = iter(alive_sequence)
+
+        def mock_alive(session: str) -> bool:
+            try:
+                return next(alive_iter)
+            except StopIteration:
+                return True
+
+        argv = ["spawn_orchestrator.py",
+                "--node", "impl_auth",
+                "--prd", "PRD-AUTH-001",
+                "--worktree", "/tmp/work",
+                "--mode", "sdk"]
+        buf = io.StringIO()
+        with patch("sys.argv", argv), \
+             patch("spawn_orchestrator.subprocess.run") as mock_run, \
+             patch("spawn_orchestrator.time.sleep"), \
+             patch("spawn_orchestrator.check_orchestrator_alive", side_effect=mock_alive), \
+             patch("spawn_orchestrator._tmux_send") as mock_send, \
+             patch("spawn_orchestrator.respawn_orchestrator",
+                   wraps=spawn_orchestrator.respawn_orchestrator) as mock_respawn:
+            mock_run.return_value = MagicMock(returncode=0)
+            try:
+                with redirect_stdout(buf):
+                    main()
+            except SystemExit:
+                pass
+        # respawn_orchestrator should have been called with mode="sdk"
+        if mock_respawn.called:
+            call_kwargs = mock_respawn.call_args.kwargs
+            self.assertEqual(call_kwargs.get("mode", "tmux"), "sdk",
+                             f"mode='sdk' must be forwarded to respawn_orchestrator, got: {call_kwargs!r}")
+
+    def test_sdk_mode_respawn_no_worktree_in_command(self) -> None:
+        """respawn_orchestrator(mode='sdk') → ccorch command has no --worktree."""
+        with patch("spawn_orchestrator.check_orchestrator_alive", return_value=False), \
+             patch("spawn_orchestrator.subprocess.run") as mock_run, \
+             patch("spawn_orchestrator.time.sleep"), \
+             patch("spawn_orchestrator._tmux_send") as mock_send, \
+             patch("spawn_orchestrator.hook_manager.read_hook", return_value=None):
+            mock_run.return_value = MagicMock(returncode=0)
+            result = respawn_orchestrator("orch-auth", "/tmp", "auth", None, 0, 3, mode="sdk")
+        self.assertEqual(result["status"], "respawned")
+        ccorch_calls = [c.args[1] for c in mock_send.call_args_list
+                        if "ccorch" in str(c.args[1] if c.args else "")]
+        self.assertTrue(ccorch_calls)
+        self.assertNotIn("--worktree", ccorch_calls[0])
+
+    def test_tmux_mode_respawn_has_worktree_in_command(self) -> None:
+        """respawn_orchestrator(mode='tmux') → ccorch command includes --worktree."""
+        with patch("spawn_orchestrator.check_orchestrator_alive", return_value=False), \
+             patch("spawn_orchestrator.subprocess.run") as mock_run, \
+             patch("spawn_orchestrator.time.sleep"), \
+             patch("spawn_orchestrator._tmux_send") as mock_send, \
+             patch("spawn_orchestrator.hook_manager.read_hook", return_value=None):
+            mock_run.return_value = MagicMock(returncode=0)
+            result = respawn_orchestrator("orch-auth", "/tmp", "auth", None, 0, 3, mode="tmux")
+        self.assertEqual(result["status"], "respawned")
+        ccorch_calls = [c.args[1] for c in mock_send.call_args_list
+                        if "ccorch" in str(c.args[1] if c.args else "")]
+        self.assertTrue(ccorch_calls)
+        self.assertIn("--worktree", ccorch_calls[0])
+        self.assertIn("auth", ccorch_calls[0])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
