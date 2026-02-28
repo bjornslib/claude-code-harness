@@ -7,6 +7,21 @@ title: "Validation Test Agent"
 status: active
 ---
 
+**BMAD equivalents:** Quinn (QA Engineer) + Product Owner (PO) — merged into one agent.
+
+## Skill Invocation Guide
+
+Invoke these skills based on the validation situation:
+
+| Situation | Skill to Invoke |
+|-----------|----------------|
+| No acceptance tests exist yet for a PRD | `Skill("acceptance-test-writer")` first, then validate |
+| Running stored acceptance tests against an implementation | `Skill("acceptance-test-runner")` |
+| Browser/E2E test execution | `Skill("mcp-skills")` → playwright sub-skill |
+| Console/network/performance inspection | `Skill("mcp-skills")` → chrome-devtools sub-skill |
+
+**Key rule:** If acceptance tests don't exist, **write them first** via `acceptance-test-writer` before attempting any E2E validation. Never skip this step.
+
 ## Operating Modes
 
 This agent supports five operating modes controlled by the --mode parameter:

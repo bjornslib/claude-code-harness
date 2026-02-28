@@ -1,6 +1,6 @@
 ---
 name: s3-guardian
-description: This skill should be used when System 3 needs to act as an independent guardian angel — designing PRDs with ZeroRepo analysis, challenging designs via parallel solutioning, spawning orchestrators in tmux, creating blind Gherkin acceptance tests and executable browser test scripts from PRDs, monitoring orchestrator progress, independently validating claims against acceptance criteria using gradient confidence scoring (0.0-1.0), and setting session promises. Use when asked to "spawn and monitor an orchestrator", "create acceptance tests for a PRD", "validate orchestrator claims", "act as guardian angel", "independently verify implementation work", or "design and challenge a PRD".
+description: This skill should be used when System 3 needs to act as an independent guardian angel — designing PRDs with CoBuilder RepoMap context injection, challenging designs via parallel solutioning, spawning orchestrators in tmux, creating blind Gherkin acceptance tests and executable browser test scripts from PRDs, monitoring orchestrator progress, independently validating claims against acceptance criteria using gradient confidence scoring (0.0-1.0), and setting session promises. Use when asked to "spawn and monitor an orchestrator", "create acceptance tests for a PRD", "validate orchestrator claims", "act as guardian angel", "independently verify implementation work", or "design and challenge a PRD".
 version: 0.1.0
 title: "S3 Guardian"
 status: active
@@ -13,7 +13,7 @@ The guardian angel pattern provides independent, blind validation of System 3 me
 ```
 Guardian (this session, config repo)
     |
-    |-- Designs PRDs with ZeroRepo codebase analysis (Phase 0)
+    |-- Designs PRDs with CoBuilder RepoMap context (Phase 0)
     |-- Challenges own designs via parallel-solutioning + research-first (Phase 0)
     |-- Creates blind Gherkin acceptance tests (stored here, NOT in impl repo)
     |-- Generates executable browser test scripts for UX prototypes
@@ -139,19 +139,72 @@ When the guardian is initiating a new initiative (rather than validating an exis
 
 **Skip Phase 0 if**: A finalized PRD already exists at the implementation repo's `docs/prds/PRD-{ID}.md` and has been reviewed. Proceed directly to Phase 1.
 
-### Step 0.1: PRD Authoring with ZeroRepo Analysis
+### Step 0.1: PRD Authoring with CoBuilder RepoMap Context
 
-Before writing the PRD, understand the current codebase structure:
+Before writing the PRD, understand the current codebase structure using CoBuilder's RepoMap context command:
 
 ```bash
-# If impl repo has ZeroRepo baseline, run analysis
-if [ -d "/path/to/impl-repo/.zerorepo" ]; then
-    zerorepo generate --project-path /path/to/impl-repo
-    # Output: node/edge graph showing existing modules, dependencies, delta status
-fi
+# Generate structured YAML codebase context filtered to the relevant PRD scope
+cobuilder repomap context --name <repo-name> --prd PRD-{ID}
 
-# Also gather domain context from Hindsight
+# For agent-consumable output (recommended when delegating to solution-design-architect):
+cobuilder repomap context --name <repo-name> --prd PRD-{ID} --format yaml
 ```
+
+The command outputs structured YAML with module relevance, dependency graph, and protected files:
+
+```yaml
+# Example output of: cobuilder repomap context --name agencheck --prd PRD-AUTH-001
+
+repository: agencheck
+snapshot_date: 2026-02-27T10:00:00Z
+total_nodes: 3037
+total_files: 312
+
+modules_relevant_to_epic:
+  - name: src/auth/
+    delta: existing          # existing | modified | new
+    files: 8
+    summary: |
+      Authentication module with JWT handling.
+      Fully implemented — no changes needed for this epic.
+    key_interfaces:
+      - signature: "authenticate(token: str) -> User"
+        file: src/auth/middleware.py
+        line: 42
+
+  - name: src/api/routes/
+    delta: modified
+    files: 12
+    summary: |
+      API route handlers for all endpoints.
+      Needs new refresh token endpoint added.
+    change_summary: "Add POST /auth/refresh route handler"
+
+  - name: src/email/
+    delta: new
+    files: 0
+    summary: |
+      Email notification service — does not exist yet.
+      Needs to be created from scratch.
+    suggested_structure:
+      - email_service/__init__.py
+      - email_service/sender.py
+
+dependency_graph:
+  - from: src/api/routes/
+    to: src/auth/
+    type: invokes
+    description: "Route handlers call authenticate()"
+
+protected_files:
+  - path: src/database/models.py
+    reason: "Core data models — shared across all modules"
+  - path: src/auth/jwt.py
+    reason: "JWT utilities — security-critical, modify with care"
+```
+
+Also gather domain context from Hindsight:
 
 ```python
 PROJECT_BANK = os.environ.get("CLAUDE_PROJECT_BANK", "claude-harness-setup")
@@ -162,11 +215,47 @@ domain_context = mcp__hindsight__reflect(
 )
 ```
 
-Using ZeroRepo output and Hindsight context, write the PRD to `docs/prds/PRD-{ID}.md` in the impl repo. The PRD must include:
+Using RepoMap context and Hindsight context, write the PRD to `docs/prds/PRD-{ID}.md` in the impl repo. The PRD must include:
 - YAML frontmatter with `prd_id`, `title`, `status`, `created`
 - Goals section (maps to journey tests)
 - Epic breakdown with acceptance criteria per epic
-- Technical approach (informed by ZeroRepo delta analysis — what's new vs existing)
+- Technical approach (informed by RepoMap delta analysis — what's `new` vs `existing` vs `modified`)
+
+#### Injecting RepoMap Context into SD Creation
+
+When delegating SD creation to a `solution-design-architect`, inject the RepoMap YAML directly into the prompt. This ensures the SD references actual file paths, uses real interface signatures, and respects protected files:
+
+```python
+# Generate RepoMap context (capture output as string)
+context_yaml = Bash(
+    f"cobuilder repomap context --name {repo_name} --prd {prd_id} --format yaml"
+)
+
+# Inject into solution-design-architect prompt
+Task(
+    subagent_type="solution-design-architect",
+    prompt=f"""
+    Create a Solution Design for Epic {epic_num} of {prd_id}.
+
+    ## PRD Reference
+    Read: {prd_path}
+
+    ## Codebase Context (RepoMap — read carefully before designing)
+    ```yaml
+    {context_yaml}
+    ```
+
+    Use this context to:
+    - Reference EXISTING modules by their actual file paths
+    - Scope MODIFIED modules to specific changes needed
+    - Design NEW modules with suggested structure from RepoMap
+    - Respect protected_files — do not include them in File Scope unless PRD requires changes
+    - Use key_interfaces for accurate API contracts in your design
+    """
+)
+```
+
+> **Note on `--format yaml`**: This is the default format and produces structured YAML with module info, dependency graph, and key interfaces. Use `--format yaml` (or omit the flag) when reviewing context yourself or when the output is consumed by another agent or for LLM injection.
 
 ### Step 0.2: Create DOT Pipeline
 
@@ -235,6 +324,46 @@ for n in data.get('nodes', []):
 $CLI node modify pipeline.dot <node_id> --set bead_id=<real-bead-id>
 $CLI checkpoint save pipeline.dot
 ```
+
+### RepoMap Context Injection (Phase 0 Step 2.5)
+
+Before delegating SD creation to solution-design-architect, generate codebase context:
+
+```bash
+# Generate structured YAML context for the repo
+cobuilder repomap context --name <repo_name> --prd <prd_id>
+```
+
+Then inject into the solution-design-architect prompt:
+
+```python
+context_yaml = Bash("cobuilder repomap context --name {repo_name} --prd {prd_id}")
+
+Task(
+    subagent_type="solution-design-architect",
+    prompt=f"""
+    Create a Solution Design for Epic {epic_num} of {prd_id}.
+
+    ## PRD Reference
+    Read: {prd_path}
+
+    ## Codebase Context (RepoMap — read carefully before designing)
+    ```yaml
+    {context_yaml}
+    ```
+
+    Use this context to:
+    - Reference EXISTING modules by their actual file paths
+    - Scope MODIFIED modules to specific changes needed
+    - Design NEW modules with suggested structure from RepoMap
+    - Respect protected_files — do not include them in File Scope unless PRD requires changes
+    - Use key_interfaces for accurate API contracts in your design
+    """
+)
+```
+
+**When to use**: Any initiative targeting a codebase registered with `cobuilder repomap init`.
+**Skip when**: First-time setup (no baseline yet), or purely config/docs changes.
 
 ### Step 0.4: Design Challenge Protocol (MANDATORY)
 
@@ -754,7 +883,7 @@ When multiple DOT nodes have no dependency relationship, spawn orchestrators in 
 
 ```bash
 # Check edges to confirm independence before parallel dispatch
-python3 .claude/scripts/attractor/cli.py edge "${PIPELINE}" list --output json
+cobuilder pipeline edge-list "${PIPELINE}" --output json
 
 # Spawn each independent node as a separate orchestrator
 for NODE_ID in node1 node2 node3; do
@@ -780,6 +909,51 @@ Guardian ──monitors──► Orchestrator ──delegates──► Workers (
 | Answer AskUserQuestion | Whichever session shows the dialog | Immediately (blocks are time-critical) |
 
 Proceed to **Phase 3: Monitoring** after all orchestrators are spawned and running.
+
+### CoBuilder Boot Sequence for Orchestrators
+
+Every orchestrator session needs a functional RepoMap baseline before work begins.
+Since `.repomap/` is committed to git and worktrees are full git checkouts, the
+baseline is already present. The orchestrator only needs to verify it and know
+the refresh commands for post-node-validation use.
+
+Include these commands in the initial prompt sent to every orchestrator tmux session:
+
+```
+## CoBuilder Commands Available in This Session
+
+# Verify baseline exists and is recent
+cobuilder repomap status --name ${REPO_NAME}
+
+# After completing your work (automatic via post-validated hook, manual fallback):
+cobuilder repomap refresh --name ${REPO_NAME} --scope <file1> --scope <file2>
+
+# Full resync if you added many new files:
+cobuilder repomap sync --name ${REPO_NAME}
+```
+
+Set these environment variables in the tmux session alongside CLAUDE_SESSION_ID:
+
+```bash
+export COBUILDER_REPO_NAME="${REPO_NAME}"
+export COBUILDER_PIPELINE_DOT="${PIPELINE_DOT_PATH}"
+export COBUILDER_ENFORCE_FRESHNESS=1
+```
+
+The post-validation hook in `transition.py` handles per-node refresh automatically.
+Manual refresh is only needed if the hook missed files (nodes without `file_path`
+attributes) or if the hook logged an error.
+
+After the orchestrator completes, invoke cleanup explicitly:
+
+```bash
+python cobuilder/orchestration/spawn_orchestrator.py \
+    --node ${NODE_ID} \
+    --prd ${PRD_REF} \
+    --repo-root ${REPO_ROOT} \
+    --on-cleanup \
+    --repo-name ${REPO_NAME}
+```
 
 ---
 
@@ -808,6 +982,66 @@ tmux capture-pane -t "orch-{epic}" -p -S -100 | grep -iE "error|stuck|complete|f
 for SESSION in orch-epic1 orch-epic2 orch-epic3; do
     echo "=== $SESSION ===" && tmux capture-pane -t "$SESSION" -p -S -20 2>/dev/null || echo "(not running)"
 done
+```
+
+### Pause-and-Check Pattern (Blocking Task Agent)
+
+When the guardian is satisfied that an orchestrator is progressing well and doesn't need
+frequent intervention, use a blocking Task agent as a clean pause timer instead of
+bash sleep loops:
+
+```python
+# Pause for N seconds while orchestrator works
+Task(
+    subagent_type="general-purpose",
+    model="haiku",
+    description=f"Wait {wait_seconds}s for orchestrator to work",
+    prompt=f"Run: sleep {wait_seconds}. Then return 'PAUSE_COMPLETE'.",
+    run_in_background=False,  # BLOCKING — guardian waits in-context
+)
+# Guardian resumes here with full context intact
+```
+
+**Why this is better than `Bash("sleep 100")`:**
+- Status line shows "Waiting for task (esc to give additional instructions)" — user knows what's happening
+- User can press Esc to interrupt the pause and give S3 new instructions
+- No shell output cluttering the conversation context
+- S3 resumes with full context when the pause completes
+
+**When to use:**
+- After initial spawn verification (orchestrator is running, output style loaded)
+- When monitoring cadence is 120s+ (idle/waiting for workers)
+- Between monitoring check-ins when no intervention signals were found
+
+**When NOT to use:**
+- During active intervention (errors detected, guidance needed)
+- When AskUserQuestion blocks are likely (use 30s tmux polling instead)
+- For the first 5 minutes after spawn (use active monitoring to catch boot failures)
+
+**Recommended cadence:**
+
+| Phase | Pause Duration | Rationale |
+|-------|---------------|-----------|
+| Post-spawn (first 5 min) | Don't use — active poll at 30s | Catch boot failures early |
+| Active implementation | 60-90s | Check frequently but not constantly |
+| Investigation/planning | 120-180s | Orchestrator is thinking, less likely to block |
+| Worker execution (steady state) | 180-300s | Workers are running, minimal intervention needed |
+
+**Combined pattern — pause then check:**
+```python
+while not orchestrator_complete:
+    # Pause
+    Task(
+        subagent_type="general-purpose", model="haiku",
+        description=f"Wait {pause_seconds}s for {epic_name}",
+        prompt=f"Sleep {pause_seconds} seconds, then return PAUSE_COMPLETE.",
+    )
+
+    # Check
+    output = Bash(f'tmux capture-pane -t "orch-{epic}" -p -S -50')
+    if "COMPLETE" in output or "error" in output.lower():
+        break
+    # Adjust pause_seconds based on signals found
 ```
 
 ### Intervention Triggers
@@ -1002,13 +1236,13 @@ When a node passes, advance its status using the attractor CLI:
 
 ```bash
 # Transition node to 'validated' status
-python3 .claude/scripts/attractor/cli.py transition .claude/attractor/pipelines/<pipeline>.dot <node_id> validated
+cobuilder pipeline transition .claude/attractor/pipelines/<pipeline>.dot <node_id> validated
 
 # If validation fails, transition to 'failed'
-python3 .claude/scripts/attractor/cli.py transition .claude/attractor/pipelines/<pipeline>.dot <node_id> failed
+cobuilder pipeline transition .claude/attractor/pipelines/<pipeline>.dot <node_id> failed
 
 # Save checkpoint after any transition
-python3 .claude/scripts/attractor/cli.py checkpoint save .claude/attractor/pipelines/<pipeline>.dot
+cobuilder pipeline checkpoint-save .claude/attractor/pipelines/<pipeline>.dot
 ```
 
 **Guardian workflow for DOT pipelines:**
@@ -1036,8 +1270,8 @@ def validate_dot_pipeline_node(node_id: str, node_attrs: dict):
 
     # 5. Advance pipeline status
     status = "validated" if result.verdict == "PASS" else "failed"
-    run(f"python3 .claude/scripts/attractor/cli.py transition .claude/attractor/pipelines/<pipeline>.dot {node_id} {status}")
-    run(f"python3 .claude/scripts/attractor/cli.py checkpoint save .claude/attractor/pipelines/<pipeline>.dot")
+    run(f"cobuilder pipeline transition .claude/attractor/pipelines/<pipeline>.dot {node_id} {status}")
+    run(f"cobuilder pipeline checkpoint-save .claude/attractor/pipelines/<pipeline>.dot")
 
     # 6. Meet completion promise AC
     if result.verdict == "PASS":

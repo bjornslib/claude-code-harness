@@ -23,12 +23,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import re
 import shlex
 import subprocess
 import sys
 import os
 import time
+from pathlib import Path
 
 # Ensure this file's directory is importable regardless of invocation CWD.
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -37,6 +39,8 @@ if _THIS_DIR not in sys.path:
 
 import identity_registry
 import hook_manager
+
+logger = logging.getLogger(__name__)
 
 
 def _tmux_send(session: str, text: str, pause: float = 2.0) -> None:
@@ -153,6 +157,67 @@ def respawn_orchestrator(
     }
 
 
+def cleanup_orchestrator(
+    session_name: str,
+    repo_name: str,
+    work_dir: str,
+    *,
+    project_root: str | None = None,
+) -> dict:
+    """Run post-completion cleanup for an orchestrator session.
+
+    Discovers files changed during the session via git diff (HEAD~50..HEAD),
+    refreshes the RepoMap baseline for those files, and returns a summary.
+    Non-fatal — never raises.
+
+    Args:
+        session_name: tmux session name (used for log messages).
+        repo_name: Repo name in .repomap/config.yaml.
+        work_dir: Working directory of the orchestrator session (git repo root).
+        project_root: Optional override for the project root path.
+
+    Returns:
+        Dict with: changed_files (list), refreshed_nodes (int), duration_seconds (float)
+    """
+    _project_root = Path(project_root or work_dir)
+
+    # Get files changed by this session
+    try:
+        result = subprocess.run(
+            ["git", "-C", work_dir, "diff", "--name-only", "HEAD~50..HEAD"],
+            capture_output=True, text=True, timeout=10,
+        )
+        changed_files = [f.strip() for f in result.stdout.splitlines() if f.strip()]
+    except subprocess.SubprocessError as exc:
+        logger.warning("cleanup_orchestrator: git diff failed: %s", exc)
+        changed_files = []
+
+    if not changed_files:
+        logger.info("cleanup_orchestrator[%s]: no changed files detected", session_name)
+        return {"changed_files": [], "refreshed_nodes": 0, "duration_seconds": 0.0}
+
+    try:
+        from cobuilder.bridge import scoped_refresh
+        refresh_result = scoped_refresh(
+            name=repo_name,
+            scope=changed_files,
+            project_root=_project_root,
+        )
+        logger.info(
+            "cleanup_orchestrator[%s]: refreshed %d nodes in %.1fs",
+            session_name,
+            refresh_result.get("refreshed_nodes", 0),
+            refresh_result.get("duration_seconds", 0.0),
+        )
+        return {
+            "changed_files": changed_files,
+            **refresh_result,
+        }
+    except Exception as exc:
+        logger.error("cleanup_orchestrator[%s]: refresh failed: %s", session_name, exc)
+        return {"changed_files": changed_files, "refreshed_nodes": 0, "error": str(exc)}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="spawn_orchestrator.py",
@@ -171,8 +236,25 @@ def main() -> None:
                         help="Maximum respawn attempts if session dies (default: 3)")
     parser.add_argument("--predecessor-id", default=None, dest="predecessor_id",
                         help="agent_id of the previous orchestrator instance (for respawn tracking)")
+    parser.add_argument("--on-cleanup", action="store_true", dest="on_cleanup",
+                        help="Run cleanup mode (refresh baseline for session-changed files) instead of spawning")
+    parser.add_argument("--repo-name", default="", dest="repo_name",
+                        help="Repo name in .repomap/config.yaml (required for --on-cleanup)")
+    parser.add_argument("--promise-id", default="", dest="promise_id",
+                        help="Completion promise ID to inject baseline freshness AC into")
 
     args = parser.parse_args()
+
+    # --on-cleanup: refresh RepoMap for session-changed files, then exit.
+    if args.on_cleanup:
+        cleanup_session = getattr(args, "session_name", None) or "unknown"
+        result = cleanup_orchestrator(
+            session_name=cleanup_session,
+            repo_name=args.repo_name,
+            work_dir=args.repo_root or str(Path.cwd()),
+        )
+        print(json.dumps(result))
+        return
 
     session_name = args.session_name or f"orch-{args.node}"
     # Support both --repo-root (new) and --worktree (deprecated, same meaning now)
@@ -314,6 +396,13 @@ def main() -> None:
                 "message": f"Session created but failed to send prompt: {error_msg}",
             }))
             sys.exit(1)
+
+    # Inject baseline freshness AC into completion promise if requested.
+    if getattr(args, "promise_id", ""):
+        subprocess.run([
+            "cs-promise", "--add-ac", args.promise_id,
+            "RepoMap baseline refreshed for all validated nodes (scoped_refresh called after each validated transition)",
+        ], check=False)
 
     print(json.dumps({
         "status": "ok",

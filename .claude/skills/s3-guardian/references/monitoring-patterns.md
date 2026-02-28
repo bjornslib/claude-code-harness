@@ -301,6 +301,10 @@ Watch for:
 - One operator's output referencing another's work (scope boundary violation)
 - Shared resource contention (database, API rate limits)
 
+### Blocking Pause Agent
+
+For longer monitoring intervals (120s+), consider using a blocking Task agent instead of bash sleep loops. This keeps S3's context clean and gives the user an interruptible status line. See [SKILL.md Phase 3: Pause-and-Check Pattern](../SKILL.md#pause-and-check-pattern-blocking-task-agent) for the full pattern.
+
 ---
 
 **Reference Version**: 0.1.0

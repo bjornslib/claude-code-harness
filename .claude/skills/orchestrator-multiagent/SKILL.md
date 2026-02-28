@@ -376,14 +376,14 @@ git add acceptance-tests/ && git commit -m "test(PRD-AUTH-001): add acceptance t
 
 # 7.5. Generate DOT pipeline from beads (beads must exist from step 5)
 # Set solution_design attribute on each codergen node to point to its SD file
-python3 .claude/scripts/attractor/cli.py generate \
+cobuilder pipeline create \
     --prd PRD-AUTH-001 \
     --output .claude/attractor/pipelines/auth-001.dot
 # Set SD reference on nodes (so Runner can brief orchestrators with full context):
-python3 .claude/scripts/attractor/cli.py node auth-001.dot modify impl_login \
+cobuilder pipeline node-modify auth-001.dot impl_login \
     --set solution_design=.taskmaster/docs/SD-AUTH-001-login.md
 # Validate
-python3 .claude/scripts/attractor/cli.py validate \
+cobuilder pipeline validate \
     .claude/attractor/pipelines/auth-001.dot
 
 # 8. Review hierarchy (filter by uber-epic)
@@ -780,13 +780,13 @@ After building and validating a pipeline graph, orchestrators track execution pr
 
 ```bash
 # Full status overview with node distribution
-python3 .claude/scripts/attractor/cli.py status pipeline.dot --json --summary
+cobuilder pipeline status pipeline.dot --json --summary
 
 # Human-readable status table
-python3 .claude/scripts/attractor/cli.py status pipeline.dot
+cobuilder pipeline status pipeline.dot
 
 # JSON output for programmatic consumption
-python3 .claude/scripts/attractor/cli.py status pipeline.dot --json
+cobuilder pipeline status pipeline.dot --json
 ```
 
 #### Transition Commands
@@ -795,16 +795,16 @@ Advance nodes through the lifecycle: `pending` → `active` → `impl_complete` 
 
 ```bash
 # Mark a node as active (implementation started)
-python3 .claude/scripts/attractor/cli.py transition pipeline.dot impl_auth active
+cobuilder pipeline transition pipeline.dot impl_auth active
 
 # Mark implementation complete (triggers paired validation gate)
-python3 .claude/scripts/attractor/cli.py transition pipeline.dot impl_auth impl_complete
+cobuilder pipeline transition pipeline.dot impl_auth impl_complete
 
 # Mark validated after passing acceptance criteria
-python3 .claude/scripts/attractor/cli.py transition pipeline.dot val_auth validated
+cobuilder pipeline transition pipeline.dot val_auth validated
 
 # Retry on failure — transition back to active
-python3 .claude/scripts/attractor/cli.py transition pipeline.dot impl_auth active
+cobuilder pipeline transition pipeline.dot impl_auth active
 ```
 
 #### Checkpoint Commands
@@ -813,17 +813,17 @@ Save and restore graph state as a safety net during complex transitions.
 
 ```bash
 # Save current state before a batch of transitions
-python3 .claude/scripts/attractor/cli.py checkpoint save pipeline.dot
+cobuilder pipeline checkpoint-save pipeline.dot
 
 # Checkpoint after every transition (recommended)
-python3 .claude/scripts/attractor/cli.py transition pipeline.dot node_x active && \
-python3 .claude/scripts/attractor/cli.py checkpoint save pipeline.dot
+cobuilder pipeline transition pipeline.dot node_x active && \
+cobuilder pipeline checkpoint-save pipeline.dot
 ```
 
 #### Transition Best Practices
 
 - **Always checkpoint** after transitions — enables rollback if downstream work fails
-- **Validate after transitions**: `python3 .claude/scripts/attractor/cli.py validate pipeline.dot`
+- **Validate after transitions**: `cobuilder pipeline validate pipeline.dot`
 - **Check status before dispatch**: Ensure upstream dependencies are `validated` before transitioning a node to `active`
 - **Report transitions to System 3** after `impl_complete` (via `bd update <bd-id> --status=impl_complete`)
 
@@ -833,10 +833,10 @@ Use the dashboard for a unified view of initiative progress across all lifecycle
 
 ```bash
 # Human-readable progress table
-python3 .claude/scripts/attractor/cli.py status pipeline.dot --summary
+cobuilder pipeline status pipeline.dot --summary
 
 # JSON output for programmatic consumption
-python3 .claude/scripts/attractor/cli.py status pipeline.dot --json --summary
+cobuilder pipeline status pipeline.dot --json --summary
 ```
 
 #### Dashboard Output Includes
@@ -854,14 +854,14 @@ python3 .claude/scripts/attractor/cli.py status pipeline.dot --json --summary
 
 ```bash
 # Check if all validation gates are validated (finalize-ready)
-python3 .claude/scripts/attractor/cli.py status pipeline.dot --json | \
+cobuilder pipeline status pipeline.dot --json | \
   python3 -c "import sys,json; d=json.load(sys.stdin); print('READY' if all(n['status']=='validated' for n in d.get('nodes',[]) if n.get('shape')=='hexagon') else 'NOT_READY')"
 ```
 
 #### Progress Tracking Across Sessions
 
 Status is persisted in the DOT file itself. After context compaction or session restart:
-1. Re-read pipeline status: `python3 .claude/scripts/attractor/cli.py status pipeline.dot --summary`
+1. Re-read pipeline status: `cobuilder pipeline status pipeline.dot --summary`
 2. Resume from last checkpoint if needed
 3. Continue dispatching from where the previous session left off
 

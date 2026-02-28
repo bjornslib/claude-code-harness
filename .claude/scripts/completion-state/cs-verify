@@ -140,6 +140,69 @@ add_beads_comment() {
         }
 }
 
+# --- RepoMap freshness check (Epic 4) ---
+check_repomap_freshness() {
+    local pipeline_dot="${COBUILDER_PIPELINE_DOT:-}"
+    local repo_name="${COBUILDER_REPO_NAME:-}"
+
+    # Skip if pipeline or repo not configured
+    if [ -z "$pipeline_dot" ] || [ -z "$repo_name" ]; then
+        return 0
+    fi
+
+    local transitions_file="${pipeline_dot}.transitions.jsonl"
+    if [ ! -f "$transitions_file" ]; then
+        return 0  # No transitions yet, nothing to check
+    fi
+
+    # Find last validated transition timestamp
+    local last_validated
+    last_validated=$(grep '"new_status": "validated"' "$transitions_file" 2>/dev/null | \
+        tail -1 | python3 -c 'import sys,json; d=json.loads(sys.stdin.read()); print(d.get("timestamp",""))' 2>/dev/null)
+
+    if [ -z "$last_validated" ]; then
+        return 0  # No validated transitions yet
+    fi
+
+    # Find baseline last_synced
+    local config_file="${CLAUDE_PROJECT_DIR:-$(pwd)}/.repomap/config.yaml"
+    if [ ! -f "$config_file" ]; then
+        return 0  # No .repomap/ — not enforcing
+    fi
+
+    local last_synced
+    last_synced=$(python3 -c "
+import yaml, sys
+with open('$config_file') as f:
+    cfg = yaml.safe_load(f)
+for repo in cfg.get('repos', []):
+    if repo.get('name') == '$repo_name':
+        print(repo.get('last_synced', ''))
+        break
+" 2>/dev/null)
+
+    if [ -z "$last_synced" ]; then
+        echo "WARNING: RepoMap baseline for '$repo_name' has never been synced" >&2
+        return 0
+    fi
+
+    # Compare timestamps (ISO 8601 strings sort lexicographically)
+    if [[ "$last_synced" < "$last_validated" ]]; then
+        echo "REPOMAP_FRESHNESS_CHECK: STALE" >&2
+        echo "  Last node validated:  $last_validated" >&2
+        echo "  Baseline last synced: $last_synced" >&2
+        echo "  Run: cobuilder repomap refresh --name $repo_name" >&2
+        if [ "${COBUILDER_ENFORCE_FRESHNESS:-0}" = "1" ]; then
+            return 1  # Blocking
+        fi
+    else
+        if [ "$VERBOSE" = true ]; then
+            echo "REPOMAP_FRESHNESS_CHECK: OK (synced $last_synced after validated $last_validated)"
+        fi
+    fi
+    return 0
+}
+
 # Handle --check mode (for StopHook)
 if [ "$CHECK_MODE" = true ]; then
     require_session_id
@@ -302,6 +365,11 @@ if [ "$CHECK_MODE" = true ]; then
         echo ""
         echo "WARNING: $ORPHAN_COUNT orphaned in_progress promise(s) detected."
         echo "Consider adopting or investigating crashed sessions."
+    fi
+
+    # --- RepoMap freshness check (Epic 4) ---
+    if ! check_repomap_freshness; then
+        IN_PROGRESS_COUNT=$((IN_PROGRESS_COUNT + 1))
     fi
 
     # Exit 2 to block stop
