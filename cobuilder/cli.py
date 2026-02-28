@@ -1001,3 +1001,107 @@ def pipeline_validate(
 
     if errors:
         raise typer.Exit(1)
+
+
+@pipeline_app.command("run")
+def pipeline_run(
+    file: str = typer.Argument(..., help="Path to .dot pipeline file to execute"),
+    resume: Optional[str] = typer.Option(
+        None,
+        "--resume",
+        help="Resume from an existing run directory (path to the run-<timestamp> dir)",
+    ),
+    pipelines_dir: Optional[str] = typer.Option(
+        None,
+        "--pipelines-dir",
+        help="Parent directory for run directories (default: .claude/attractor/pipelines/)",
+    ),
+    max_visits: int = typer.Option(
+        10,
+        "--max-visits",
+        help="Maximum number of times any single node may be visited (loop guard)",
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit the final EngineCheckpoint as JSON on stdout",
+    ),
+) -> None:
+    """Execute a DOT pipeline from start node to exit node.
+
+    Runs the Attractor pipeline engine against FILE, executing each node's
+    handler in graph order.  Checkpoints are saved atomically after every node
+    so that ``--resume`` can pick up where a crashed run left off.
+
+    Examples:
+
+    \\b
+        # Fresh run
+        cobuilder pipeline run .claude/attractor/pipelines/my-pipeline.dot
+
+        # Resume a crashed run
+        cobuilder pipeline run .claude/attractor/pipelines/my-pipeline.dot \\
+            --resume .claude/attractor/pipelines/my-pipeline-run-20260228T120000Z
+
+        # Emit checkpoint JSON for scripting
+        cobuilder pipeline run my-pipeline.dot --json
+    """
+    import asyncio
+
+    from cobuilder.engine.checkpoint import CheckpointGraphMismatchError
+    from cobuilder.engine.exceptions import (
+        CheckpointVersionError,
+        HandlerError,
+        LoopDetectedError,
+        NoEdgeError,
+    )
+    from cobuilder.engine.parser import ParseError
+    from cobuilder.engine.runner import EngineRunner
+
+    if not Path(file).exists():
+        typer.echo(f"Error: File not found: {file}", err=True)
+        raise typer.Exit(1)
+
+    runner = EngineRunner(
+        dot_path=file,
+        run_dir=resume,
+        pipelines_dir=pipelines_dir,
+        max_node_visits=max_visits,
+    )
+
+    try:
+        checkpoint = asyncio.run(runner.run())
+    except ParseError as exc:
+        typer.echo(f"Parse error: {exc}", err=True)
+        raise typer.Exit(2)
+    except CheckpointVersionError as exc:
+        typer.echo(f"Checkpoint version mismatch: {exc}", err=True)
+        raise typer.Exit(3)
+    except CheckpointGraphMismatchError as exc:
+        typer.echo(f"Pipeline DOT changed since checkpoint: {exc}", err=True)
+        raise typer.Exit(3)
+    except LoopDetectedError as exc:
+        typer.echo(f"Loop detected: {exc}", err=True)
+        raise typer.Exit(4)
+    except NoEdgeError as exc:
+        typer.echo(f"No edge: {exc}", err=True)
+        raise typer.Exit(5)
+    except HandlerError as exc:
+        typer.echo(f"Handler error: {exc}", err=True)
+        raise typer.Exit(6)
+    except NotImplementedError as exc:
+        typer.echo(f"Not implemented: {exc}", err=True)
+        raise typer.Exit(7)
+    except Exception as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1)
+
+    if json_output:
+        typer.echo(checkpoint.model_dump_json(indent=2))
+    else:
+        completed = len(checkpoint.completed_nodes)
+        typer.echo(
+            f"Pipeline '{checkpoint.pipeline_id}' complete — "
+            f"{completed} node(s) executed.  "
+            f"Run dir: {checkpoint.run_dir}"
+        )
