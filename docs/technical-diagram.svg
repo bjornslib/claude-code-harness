@@ -1,0 +1,238 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" width="1200" height="760">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0F172A"/>
+      <stop offset="100%" style="stop-color:#1E293B"/>
+    </linearGradient>
+    <linearGradient id="guardianGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#7C3AED;stop-opacity:0.22"/>
+      <stop offset="100%" style="stop-color:#5B21B6;stop-opacity:0.08"/>
+    </linearGradient>
+    <linearGradient id="hindsightGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#DB2777;stop-opacity:0.28"/>
+      <stop offset="100%" style="stop-color:#9D174D;stop-opacity:0.1"/>
+    </linearGradient>
+    <linearGradient id="runnerGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#0891B2;stop-opacity:0.22"/>
+      <stop offset="100%" style="stop-color:#0E7490;stop-opacity:0.08"/>
+    </linearGradient>
+    <linearGradient id="orchGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#2563EB;stop-opacity:0.22"/>
+      <stop offset="100%" style="stop-color:#1D4ED8;stop-opacity:0.08"/>
+    </linearGradient>
+    <linearGradient id="workerGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#059669;stop-opacity:0.22"/>
+      <stop offset="100%" style="stop-color:#047857;stop-opacity:0.08"/>
+    </linearGradient>
+    <linearGradient id="toolsGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#F97316;stop-opacity:0.22"/>
+      <stop offset="100%" style="stop-color:#EA580C;stop-opacity:0.08"/>
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="3" stdDeviation="6" flood-color="#000" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="760" fill="url(#bg)"/>
+  <!-- Top accent -->
+  <rect x="0" y="0" width="1200" height="4" fill="#F97316"/>
+
+  <!-- Title -->
+  <text x="600" y="48" font-family="system-ui,-apple-system,sans-serif" font-size="25" font-weight="700" fill="#F8FAFC" text-anchor="middle" letter-spacing="-0.3">Claude Code Harness — Technical Setup (SDK Mode)</text>
+  <text x="600" y="71" font-family="system-ui,-apple-system,sans-serif" font-size="13" fill="#94A3B8" text-anchor="middle">Clone once · Symlink everywhere · Multi-agent with session resilience</text>
+
+  <!-- ─── LAYER: S3 GUARDIAN ─── -->
+  <rect x="60" y="88" width="860" height="112" rx="13" fill="url(#guardianGrad)" stroke="#7C3AED" stroke-width="1.5" filter="url(#shadow)"/>
+  <!-- Label pill -->
+  <rect x="76" y="99" width="155" height="25" rx="6" fill="#7C3AED" opacity="0.85"/>
+  <text x="153" y="116" font-family="system-ui,-apple-system,sans-serif" font-size="11" font-weight="700" fill="white" text-anchor="middle" letter-spacing="1">S3 GUARDIAN</text>
+  <!-- Description -->
+  <text x="250" y="116" font-family="system-ui,-apple-system,sans-serif" font-size="14" font-weight="600" fill="#E2E8F0">User-Facing Terminal Session</text>
+  <text x="250" y="134" font-family="system-ui,-apple-system,sans-serif" font-size="11" fill="#A5B4FC">Sets goals &amp; acceptance criteria · Writes blind tests · Validates business outcomes</text>
+  <!-- Attribute chips -->
+  <rect x="76" y="150" width="112" height="19" rx="5" fill="#4C1D95" opacity="0.7"/>
+  <text x="132" y="163" font-family="system-ui,-apple-system,sans-serif" font-size="9.5" fill="#DDD6FE" text-anchor="middle">s3-guardian skill</text>
+
+  <rect x="196" y="150" width="145" height="19" rx="5" fill="#4C1D95" opacity="0.7"/>
+  <text x="268" y="163" font-family="system-ui,-apple-system,sans-serif" font-size="9.5" fill="#DDD6FE" text-anchor="middle">UUID completion promises</text>
+
+  <rect x="349" y="150" width="142" height="19" rx="5" fill="#4C1D95" opacity="0.7"/>
+  <text x="420" y="163" font-family="system-ui,-apple-system,sans-serif" font-size="9.5" fill="#DDD6FE" text-anchor="middle">Stop hook enforced here</text>
+
+  <rect x="499" y="150" width="170" height="19" rx="5" fill="#4C1D95" opacity="0.7"/>
+  <text x="584" y="163" font-family="system-ui,-apple-system,sans-serif" font-size="9.5" fill="#DDD6FE" text-anchor="middle">Monitoring Guardian (background)</text>
+
+  <!-- ─── HINDSIGHT: Long-term Memory (right sidebar spanning most layers) ─── -->
+  <rect x="936" y="88" width="204" height="480" rx="13" fill="url(#hindsightGrad)" stroke="#DB2777" stroke-width="1.5" filter="url(#shadow)"/>
+  <!-- Label -->
+  <rect x="951" y="99" width="174" height="25" rx="6" fill="#DB2777" opacity="0.85"/>
+  <text x="1038" y="116" font-family="system-ui,-apple-system,sans-serif" font-size="11" font-weight="700" fill="white" text-anchor="middle" letter-spacing="1">HINDSIGHT</text>
+  <!-- Sub-label -->
+  <text x="1038" y="142" font-family="system-ui,-apple-system,sans-serif" font-size="12" font-weight="600" fill="#FBCFE8" text-anchor="middle">Per-Repo</text>
+  <text x="1038" y="158" font-family="system-ui,-apple-system,sans-serif" font-size="12" font-weight="600" fill="#FBCFE8" text-anchor="middle">Long-Term Memory</text>
+  <!-- Divider -->
+  <line x1="951" y1="172" x2="1125" y2="172" stroke="#9D174D" stroke-width="1" opacity="0.5"/>
+  <!-- Memory operations -->
+  <text x="1038" y="196" font-family="system-ui,-apple-system,sans-serif" font-size="11" font-weight="600" fill="#F9A8D4" text-anchor="middle">RECALL</text>
+  <text x="1038" y="212" font-family="system-ui,-apple-system,sans-serif" font-size="10" fill="#94A3B8" text-anchor="middle">Retrieve past decisions,</text>
+  <text x="1038" y="226" font-family="system-ui,-apple-system,sans-serif" font-size="10" fill="#94A3B8" text-anchor="middle">patterns &amp; solutions</text>
+
+  <line x1="971" y1="238" x2="1105" y2="238" stroke="#9D174D" stroke-width="0.8" opacity="0.4"/>
+
+  <text x="1038" y="258" font-family="system-ui,-apple-system,sans-serif" font-size="11" font-weight="600" fill="#F9A8D4" text-anchor="middle">REFLECT</text>
+  <text x="1038" y="274" font-family="system-ui,-apple-system,sans-serif" font-size="10" fill="#94A3B8" text-anchor="middle">Analyse patterns across</text>
+  <text x="1038" y="288" font-family="system-ui,-apple-system,sans-serif" font-size="10" fill="#94A3B8" text-anchor="middle">sessions, surface insights</text>
+
+  <line x1="971" y1="302" x2="1105" y2="302" stroke="#9D174D" stroke-width="0.8" opacity="0.4"/>
+
+  <text x="1038" y="322" font-family="system-ui,-apple-system,sans-serif" font-size="11" font-weight="600" fill="#F9A8D4" text-anchor="middle">STORE</text>
+  <text x="1038" y="338" font-family="system-ui,-apple-system,sans-serif" font-size="10" fill="#94A3B8" text-anchor="middle">Save learnings after</text>
+  <text x="1038" y="352" font-family="system-ui,-apple-system,sans-serif" font-size="10" fill="#94A3B8" text-anchor="middle">each session</text>
+
+  <line x1="951" y1="368" x2="1125" y2="368" stroke="#9D174D" stroke-width="1" opacity="0.5"/>
+
+  <text x="1038" y="390" font-family="system-ui,-apple-system,sans-serif" font-size="10" fill="#64748B" text-anchor="middle">Available to Guardian,</text>
+  <text x="1038" y="405" font-family="system-ui,-apple-system,sans-serif" font-size="10" fill="#64748B" text-anchor="middle">Orchestrators &amp; Workers</text>
+  <text x="1038" y="425" font-family="system-ui,-apple-system,sans-serif" font-size="10" fill="#64748B" text-anchor="middle">HTTP server on</text>
+  <text x="1038" y="440" font-family="system-ui,-apple-system,sans-serif" font-size="10" fill="#64748B" text-anchor="middle">localhost:8888</text>
+
+  <!-- Memory icon -->
+  <text x="1038" y="520" font-family="system-ui,-apple-system,sans-serif" font-size="38" fill="#DB2777" text-anchor="middle" opacity="0.35">⬡</text>
+
+  <!-- Arrow Guardian ↔ Hindsight (bidirectional) -->
+  <line x1="924" y1="140" x2="935" y2="140" stroke="#DB2777" stroke-width="1.5" stroke-dasharray="3,2" opacity="0.7"/>
+  <polygon points="935,135 942,140 935,145" fill="#DB2777" opacity="0.7"/>
+
+  <!-- Arrow Guardian → Runner -->
+  <line x1="460" y1="200" x2="460" y2="222" stroke="#475569" stroke-width="2"/>
+  <polygon points="454,222 466,222 460,232" fill="#475569"/>
+  <text x="480" y="215" font-family="system-ui,-apple-system,sans-serif" font-size="9.5" fill="#64748B">spawns (SDK mode)</text>
+
+  <!-- ─── LAYER: RUNNER ─── -->
+  <rect x="60" y="233" width="860" height="94" rx="13" fill="url(#runnerGrad)" stroke="#0891B2" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="76" y="244" width="72" height="25" rx="6" fill="#0891B2" opacity="0.85"/>
+  <text x="112" y="261" font-family="system-ui,-apple-system,sans-serif" font-size="11" font-weight="700" fill="white" text-anchor="middle" letter-spacing="1">RUNNER</text>
+  <text x="164" y="258" font-family="system-ui,-apple-system,sans-serif" font-size="14" font-weight="600" fill="#E2E8F0">Pipeline Runner — SDK Mode Only</text>
+  <text x="164" y="276" font-family="system-ui,-apple-system,sans-serif" font-size="11" fill="#67E8F9">Manages orchestrator lifecycle · Auto-restarts on failure · Reports to Guardian</text>
+  <!-- Chips -->
+  <rect x="76" y="296" width="174" height="19" rx="5" fill="#164E63" opacity="0.8"/>
+  <text x="163" y="309" font-family="system-ui,-apple-system,sans-serif" font-size="9.5" fill="#A5F3FC" text-anchor="middle">cobuilder/orchestration/pipeline_runner.py</text>
+
+  <rect x="258" y="296" width="142" height="19" rx="5" fill="#164E63" opacity="0.8"/>
+  <text x="329" y="309" font-family="system-ui,-apple-system,sans-serif" font-size="9.5" fill="#A5F3FC" text-anchor="middle">IdentityRegistry tracks agents</text>
+
+  <rect x="408" y="296" width="136" height="19" rx="5" fill="#164E63" opacity="0.8"/>
+  <text x="476" y="309" font-family="system-ui,-apple-system,sans-serif" font-size="9.5" fill="#A5F3FC" text-anchor="middle">MergeQueue for changes</text>
+
+  <!-- Arrow Runner → Orchestrator -->
+  <line x1="460" y1="327" x2="460" y2="349" stroke="#475569" stroke-width="2"/>
+  <polygon points="454,349 466,349 460,359" fill="#475569"/>
+  <text x="480" y="342" font-family="system-ui,-apple-system,sans-serif" font-size="9.5" fill="#64748B">spawns</text>
+
+  <!-- ─── LAYER: ORCHESTRATOR ─── -->
+  <rect x="60" y="360" width="860" height="94" rx="13" fill="url(#orchGrad)" stroke="#2563EB" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="76" y="371" width="113" height="25" rx="6" fill="#2563EB" opacity="0.85"/>
+  <text x="132" y="388" font-family="system-ui,-apple-system,sans-serif" font-size="11" font-weight="700" fill="white" text-anchor="middle" letter-spacing="1">ORCHESTRATOR</text>
+  <text x="204" y="386" font-family="system-ui,-apple-system,sans-serif" font-size="14" font-weight="600" fill="#E2E8F0">Feature Coordinator</text>
+  <text x="204" y="404" font-family="system-ui,-apple-system,sans-serif" font-size="11" fill="#93C5FD">Investigates codebase · Breaks down tasks · Delegates to workers · Never edits directly</text>
+  <!-- Chips -->
+  <rect x="76" y="424" width="152" height="19" rx="5" fill="#1E3A8A" opacity="0.8"/>
+  <text x="152" y="437" font-family="system-ui,-apple-system,sans-serif" font-size="9.5" fill="#BFDBFE" text-anchor="middle">orchestrator-multiagent skill</text>
+
+  <rect x="236" y="424" width="162" height="19" rx="5" fill="#1E3A8A" opacity="0.8"/>
+  <text x="317" y="437" font-family="system-ui,-apple-system,sans-serif" font-size="9.5" fill="#BFDBFE" text-anchor="middle">native Agent Teams delegation</text>
+
+  <rect x="406" y="424" width="138" height="19" rx="5" fill="#1E3A8A" opacity="0.8"/>
+  <text x="475" y="437" font-family="system-ui,-apple-system,sans-serif" font-size="9.5" fill="#BFDBFE" text-anchor="middle">Read/Grep/Glob only</text>
+
+  <!-- Arrow Orchestrator → Workers -->
+  <line x1="460" y1="454" x2="460" y2="476" stroke="#475569" stroke-width="2"/>
+  <polygon points="454,476 466,476 460,486" fill="#475569"/>
+  <text x="480" y="469" font-family="system-ui,-apple-system,sans-serif" font-size="9.5" fill="#64748B">delegates via native teams</text>
+
+  <!-- ─── LAYER: WORKERS ─── -->
+  <rect x="60" y="487" width="860" height="82" rx="13" fill="url(#workerGrad)" stroke="#059669" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="76" y="498" width="78" height="25" rx="6" fill="#059669" opacity="0.85"/>
+  <text x="115" y="515" font-family="system-ui,-apple-system,sans-serif" font-size="11" font-weight="700" fill="white" text-anchor="middle" letter-spacing="1">WORKERS</text>
+
+  <!-- Worker boxes -->
+  <rect x="76" y="530" width="158" height="30" rx="7" fill="#064E3B" opacity="0.8"/>
+  <text x="155" y="540" font-family="system-ui,-apple-system,sans-serif" font-size="10.5" font-weight="600" fill="#6EE7B7" text-anchor="middle">Frontend Dev Expert</text>
+  <text x="155" y="554" font-family="system-ui,-apple-system,sans-serif" font-size="9.5" fill="#94A3B8" text-anchor="middle">React · Next.js · Tailwind</text>
+
+  <rect x="244" y="530" width="158" height="30" rx="7" fill="#064E3B" opacity="0.8"/>
+  <text x="323" y="540" font-family="system-ui,-apple-system,sans-serif" font-size="10.5" font-weight="600" fill="#6EE7B7" text-anchor="middle">Backend Solutions Eng</text>
+  <text x="323" y="554" font-family="system-ui,-apple-system,sans-serif" font-size="9.5" fill="#94A3B8" text-anchor="middle">Python · FastAPI · PydanticAI</text>
+
+  <rect x="412" y="530" width="158" height="30" rx="7" fill="#064E3B" opacity="0.8"/>
+  <text x="491" y="540" font-family="system-ui,-apple-system,sans-serif" font-size="10.5" font-weight="600" fill="#6EE7B7" text-anchor="middle">TDD Test Engineer</text>
+  <text x="491" y="554" font-family="system-ui,-apple-system,sans-serif" font-size="9.5" fill="#94A3B8" text-anchor="middle">Red-Green-Refactor · E2E</text>
+
+  <rect x="580" y="530" width="158" height="30" rx="7" fill="#064E3B" opacity="0.8"/>
+  <text x="659" y="540" font-family="system-ui,-apple-system,sans-serif" font-size="10.5" font-weight="600" fill="#6EE7B7" text-anchor="middle">Solution Architect</text>
+  <text x="659" y="554" font-family="system-ui,-apple-system,sans-serif" font-size="9.5" fill="#94A3B8" text-anchor="middle">Design · ADRs · Review</text>
+
+  <rect x="748" y="530" width="162" height="30" rx="7" fill="#064E3B" opacity="0.8"/>
+  <text x="829" y="540" font-family="system-ui,-apple-system,sans-serif" font-size="10.5" font-weight="600" fill="#6EE7B7" text-anchor="middle">Custom Workers</text>
+  <text x="829" y="554" font-family="system-ui,-apple-system,sans-serif" font-size="9.5" fill="#94A3B8" text-anchor="middle">Extensible via subagent_type</text>
+
+  <!-- ─── TOOLS STRIP ─── -->
+  <rect x="60" y="587" width="1080" height="56" rx="11" fill="url(#toolsGrad)" stroke="#F97316" stroke-width="1.2"/>
+  <rect x="76" y="597" width="82" height="19" rx="5" fill="#7C2D12" opacity="0.8"/>
+  <text x="117" y="610" font-family="system-ui,-apple-system,sans-serif" font-size="9.5" fill="#FED7AA" text-anchor="middle">Task Master</text>
+
+  <rect x="166" y="597" width="58" height="19" rx="5" fill="#7C2D12" opacity="0.8"/>
+  <text x="195" y="610" font-family="system-ui,-apple-system,sans-serif" font-size="9.5" fill="#FED7AA" text-anchor="middle">Context7</text>
+
+  <rect x="232" y="597" width="62" height="19" rx="5" fill="#7C2D12" opacity="0.8"/>
+  <text x="263" y="610" font-family="system-ui,-apple-system,sans-serif" font-size="9.5" fill="#FED7AA" text-anchor="middle">Perplexity</text>
+
+  <rect x="302" y="597" width="66" height="19" rx="5" fill="#7C2D12" opacity="0.8"/>
+  <text x="335" y="610" font-family="system-ui,-apple-system,sans-serif" font-size="9.5" fill="#FED7AA" text-anchor="middle">Brave Search</text>
+
+  <rect x="376" y="597" width="48" height="19" rx="5" fill="#7C2D12" opacity="0.8"/>
+  <text x="400" y="610" font-family="system-ui,-apple-system,sans-serif" font-size="9.5" fill="#FED7AA" text-anchor="middle">Serena</text>
+
+  <rect x="432" y="597" width="60" height="19" rx="5" fill="#7C2D12" opacity="0.8"/>
+  <text x="462" y="610" font-family="system-ui,-apple-system,sans-serif" font-size="9.5" fill="#FED7AA" text-anchor="middle">Playwright</text>
+
+  <rect x="500" y="597" width="80" height="19" rx="5" fill="#7C2D12" opacity="0.8"/>
+  <text x="540" y="610" font-family="system-ui,-apple-system,sans-serif" font-size="9.5" fill="#FED7AA" text-anchor="middle">Chrome DevTools</text>
+
+  <rect x="588" y="597" width="52" height="19" rx="5" fill="#7C2D12" opacity="0.8"/>
+  <text x="614" y="610" font-family="system-ui,-apple-system,sans-serif" font-size="9.5" fill="#FED7AA" text-anchor="middle">GitHub</text>
+
+  <rect x="648" y="597" width="64" height="19" rx="5" fill="#7C2D12" opacity="0.8"/>
+  <text x="680" y="610" font-family="system-ui,-apple-system,sans-serif" font-size="9.5" fill="#FED7AA" text-anchor="middle">CoBuilder</text>
+
+  <rect x="720" y="597" width="52" height="19" rx="5" fill="#7C2D12" opacity="0.8"/>
+  <text x="746" y="610" font-family="system-ui,-apple-system,sans-serif" font-size="9.5" fill="#FED7AA" text-anchor="middle">20+ Skills</text>
+
+  <rect x="780" y="597" width="44" height="19" rx="5" fill="#7C2D12" opacity="0.8"/>
+  <text x="802" y="610" font-family="system-ui,-apple-system,sans-serif" font-size="9.5" fill="#FED7AA" text-anchor="middle">Hooks</text>
+
+  <rect x="832" y="597" width="50" height="19" rx="5" fill="#7C2D12" opacity="0.8"/>
+  <text x="857" y="610" font-family="system-ui,-apple-system,sans-serif" font-size="9.5" fill="#FED7AA" text-anchor="middle">Beads</text>
+
+  <!-- Symlink callout chip (right) -->
+  <rect x="894" y="595" width="232" height="36" rx="8" fill="#1C1917" stroke="#F97316" stroke-width="1" stroke-dasharray="3,2"/>
+  <text x="1010" y="610" font-family="system-ui,-apple-system,sans-serif" font-size="9.5" font-weight="600" fill="#FB923C" text-anchor="middle">Symlinked from harness</text>
+  <text x="1010" y="624" font-family="system-ui,-apple-system,sans-serif" font-size="9" fill="#78716C" text-anchor="middle">git pull → all projects update instantly</text>
+
+  <!-- Hindsight connections (dashed lines to other layers) -->
+  <!-- Line from Hindsight left edge to Runner layer right edge -->
+  <line x1="924" y1="270" x2="935" y2="270" stroke="#DB2777" stroke-width="1" stroke-dasharray="3,2" opacity="0.5"/>
+  <!-- Line from Hindsight left edge to Orchestrator layer right edge -->
+  <line x1="924" y1="400" x2="935" y2="400" stroke="#DB2777" stroke-width="1" stroke-dasharray="3,2" opacity="0.5"/>
+  <!-- Line from Hindsight left edge to Workers layer right edge -->
+  <line x1="924" y1="525" x2="935" y2="525" stroke="#DB2777" stroke-width="1" stroke-dasharray="3,2" opacity="0.5"/>
+
+  <!-- Bottom tagline -->
+  <line x1="60" y1="660" x2="1140" y2="660" stroke="#334155" stroke-width="1"/>
+  <text x="600" y="683" font-family="system-ui,-apple-system,sans-serif" font-size="12.5" fill="#64748B" text-anchor="middle">Guardian-led · Session resilient · Symlinked configuration · Per-repo long-term memory</text>
+  <text x="600" y="703" font-family="system-ui,-apple-system,sans-serif" font-size="12" font-weight="600" fill="#F97316" text-anchor="middle">Claude Code Harness · github.com/bjornslib/claude-code-harness</text>
+
+  <!-- Bottom accent -->
+  <rect x="0" y="756" width="1200" height="4" fill="#F97316"/>
+</svg>
