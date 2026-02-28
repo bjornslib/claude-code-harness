@@ -21,7 +21,7 @@ import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
@@ -256,7 +256,7 @@ class CheckpointManager:
 
     # ── save ───────────────────────────────────────────────────────────────
 
-    def save(self, checkpoint: EngineCheckpoint) -> None:
+    def save(self, checkpoint: EngineCheckpoint, emitter: Any = None) -> None:
         """Atomically persist *checkpoint* to ``checkpoint.json``.
 
         Uses write-to-tmp-then-rename pattern for crash safety.  If the rename
@@ -267,20 +267,30 @@ class CheckpointManager:
         The ``last_updated_at`` field is refreshed to the current UTC time
         before writing so that the file always reflects when it was last written.
 
+        After a successful atomic write, emits a ``checkpoint.saved`` event via
+        *emitter* if provided.  The emit call is fire-and-forget (errors are
+        logged, not raised) to preserve the non-fatal guarantee.
+
         Args:
             checkpoint: The ``EngineCheckpoint`` to persist.
+            emitter:    Optional EventEmitter.  When provided, a
+                        ``checkpoint.saved`` event is emitted after the atomic
+                        write succeeds.  ``None`` disables event emission (Epic 1
+                        behaviour).
         """
         # Refresh timestamp
         updated = checkpoint.model_copy(
             update={"last_updated_at": datetime.now(timezone.utc)}
         )
 
+        write_succeeded = False
         try:
             self.run_dir.mkdir(parents=True, exist_ok=True)
             payload = updated.model_dump_json(indent=2)
             self._tmp_path.write_text(payload, encoding="utf-8")
             # Atomic rename (POSIX guarantees atomicity on same filesystem)
             os.replace(self._tmp_path, self.checkpoint_path)
+            write_succeeded = True
             logger.debug(
                 "Checkpoint saved: node=%s completed=%d",
                 updated.current_node_id,
@@ -297,6 +307,31 @@ class CheckpointManager:
                 self._tmp_path.unlink(missing_ok=True)
             except OSError:
                 pass
+
+        # Emit checkpoint.saved event if write succeeded and emitter is present.
+        if write_succeeded and emitter is not None:
+            import asyncio
+            try:
+                from cobuilder.engine.events.types import EventBuilder
+                event = EventBuilder.checkpoint_saved(
+                    pipeline_id=updated.pipeline_id,
+                    node_id=updated.current_node_id or "",
+                    checkpoint_path=str(self.checkpoint_path),
+                )
+                # Emit is async; schedule it if an event loop is running.
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        asyncio.ensure_future(emitter.emit(event))
+                    else:
+                        loop.run_until_complete(emitter.emit(event))
+                except RuntimeError:
+                    # No event loop available — skip emission.
+                    pass
+            except Exception as emit_exc:
+                logger.warning(
+                    "checkpoint.saved emit failed (non-fatal): %s", emit_exc
+                )
 
     # ── Internal helpers ────────────────────────────────────────────────────
 

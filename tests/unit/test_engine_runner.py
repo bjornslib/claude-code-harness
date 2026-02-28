@@ -550,8 +550,8 @@ class TestEngineRunnerCheckpointIntegration:
 
         original_save = CheckpointManager.save
 
-        def _spy_save(self_mgr, checkpoint):
-            original_save(self_mgr, checkpoint)
+        def _spy_save(self_mgr, checkpoint, **kwargs):
+            original_save(self_mgr, checkpoint, **kwargs)
             raw = (self_mgr.checkpoint_path).read_text()
             saved_states.append(json.loads(raw))
 
