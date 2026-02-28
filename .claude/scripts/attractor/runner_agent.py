@@ -92,6 +92,7 @@ def build_system_prompt(
     scripts_dir: str,
     check_interval: int,
     stuck_threshold: int,
+    mode: str = "tmux",
 ) -> str:
     """Return the system prompt that instructs the Claude agent how to monitor.
 
@@ -103,6 +104,7 @@ def build_system_prompt(
         scripts_dir: Absolute path to the attractor scripts directory.
         check_interval: Polling interval in seconds.
         stuck_threshold: Seconds of no progress before raising ORCHESTRATOR_STUCK.
+        mode: Launch mode the orchestrator was started with (``"sdk"`` or ``"tmux"``).
 
     Returns:
         Formatted system prompt string.
@@ -118,6 +120,7 @@ Your role: Monitor an orchestrator tmux session and signal the Guardian at decis
 - PRD Reference: {prd_ref}
 - tmux Session: {session_name}
 - Acceptance Criteria: {acceptance or "See DOT file"}
+- Orchestrator mode: {mode} ({"sdk: guardian runs in worktree, no nested --worktree created" if mode == "sdk" else "tmux: ccorch created .claude/worktrees/" + node_id})
 
 ## Tools Available (via Bash)
 All tool scripts are in {scripts_dir}:
@@ -203,6 +206,7 @@ Update your work phase at each lifecycle transition so that respawned sessions c
 
 When you start an orchestrator session (after running spawn_orchestrator.py):
 ```bash
+python3 {scripts_dir}/spawn_orchestrator.py --node {node_id} --prd {prd_ref} --repo-root <repo_root> --mode {mode}
 python3 {scripts_dir}/hook_manager.py update-phase runner {node_id} executing
 ```
 
@@ -371,6 +375,8 @@ Examples:
                         help="Override signals directory path")
     parser.add_argument("--dry-run", action="store_true", dest="dry_run",
                         help="Log config without spawning the SDK agent (for testing)")
+    parser.add_argument("--mode", choices=["sdk", "tmux"], default="tmux", dest="mode",
+                        help="Orchestrator launch mode: sdk (no --worktree) or tmux (default)")
 
     args = parser.parse_args(argv)
 
@@ -543,6 +549,7 @@ def main(argv: list[str] | None = None) -> None:
             scripts_dir=scripts_dir,
             check_interval=args.check_interval,
             stuck_threshold=args.stuck_threshold,
+            mode=args.mode,
         )
 
         initial_prompt = build_initial_prompt(
@@ -578,6 +585,7 @@ def main(argv: list[str] | None = None) -> None:
                 "stuck_threshold": args.stuck_threshold,
                 "max_turns": args.max_turns,
                 "model": args.model,
+                "mode": args.mode,
                 "signals_dir": args.signals_dir,
                 "scripts_dir": scripts_dir,
                 "system_prompt_length": len(system_prompt),

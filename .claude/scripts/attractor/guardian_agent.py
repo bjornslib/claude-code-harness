@@ -140,7 +140,7 @@ All scripts are in {scripts_dir}:
 - python3 {scripts_dir}/respond_to_runner.py GUIDANCE --node <id> --message <text>            # Guide
 - python3 {scripts_dir}/respond_to_runner.py KILL_ORCHESTRATOR --node <id> --reason <text>    # Abort
 - python3 {scripts_dir}/escalate_to_terminal.py --pipeline {pipeline_id} --issue <text>   # Escalate
-- python3 {scripts_dir}/spawn_runner.py --node <id> --prd <prd_ref> [--acceptance <text>] [--bead-id <id>]{target_dir_flag}  # Launch runner
+- python3 {scripts_dir}/spawn_runner.py --node <id> --prd <prd_ref> [--acceptance <text>] [--bead-id <id>] --mode sdk{target_dir_flag}  # Launch runner
 
 ## Pipeline Execution Flow
 
@@ -161,7 +161,7 @@ All scripts are in {scripts_dir}:
    b. Save checkpoint:
       python3 {scripts_dir}/cli.py checkpoint save {dot_path}
    c. Spawn Runner:
-      python3 {scripts_dir}/spawn_runner.py --node <node_id> --prd <prd_ref> --acceptance "<ac>" --bead-id <bead_id>{target_dir_flag}
+      python3 {scripts_dir}/spawn_runner.py --node <node_id> --prd <prd_ref> --acceptance "<ac>" --bead-id <bead_id> --mode sdk{target_dir_flag}
 6. For each ready wait.human node:
    a. Determine if you can validate autonomously (technical gate) or need human (business/manual gate)
    b. If autonomous: transition directly to validated after reviewing acceptance criteria

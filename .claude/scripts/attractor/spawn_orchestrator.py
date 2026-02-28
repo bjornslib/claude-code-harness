@@ -79,6 +79,7 @@ def respawn_orchestrator(
     prompt: str | None,
     respawn_count: int,
     max_respawn: int,
+    mode: str = "tmux",
 ) -> dict:
     """Attempt to respawn a dead orchestrator tmux session.
 
@@ -89,6 +90,7 @@ def respawn_orchestrator(
         prompt: Optional initial prompt to send after launching Claude.
         respawn_count: Current number of respawn attempts made so far.
         max_respawn: Maximum allowed respawn attempts.
+        mode: Launch mode — ``"sdk"`` (no --worktree) or ``"tmux"`` (default, with --worktree).
 
     Returns:
         Dict with status:
@@ -125,21 +127,22 @@ def respawn_orchestrator(
     subprocess.run(tmux_cmd, check=True, capture_output=True, text=True)
 
     time.sleep(2)
-    _tmux_send(
-        session_name,
-        f"unset CLAUDECODE && ccorch --worktree {shlex.quote(node_id)}",
-        pause=8.0,
-    )
+    if mode == "sdk":
+        ccorch_cmd = "unset CLAUDECODE && ccorch"
+    else:
+        ccorch_cmd = f"unset CLAUDECODE && ccorch --worktree {shlex.quote(node_id)}"
+    _tmux_send(session_name, ccorch_cmd, pause=8.0)
     _tmux_send(session_name, "/output-style orchestrator", pause=3.0)
     if prompt:
         _tmux_send(session_name, prompt, pause=2.0)
 
     # Register new identity for the respawned instance
+    worktree = "" if mode == "sdk" else f".claude/worktrees/{node_id}"
     identity = identity_registry.create_identity(
         role="orchestrator",
         name=node_id,
         session_id=session_name,
-        worktree=f".claude/worktrees/{node_id}",
+        worktree=worktree,
         predecessor_id=None,  # caller may set via --predecessor-id if needed
     )
 
@@ -242,6 +245,9 @@ def main() -> None:
                         help="Repo name in .repomap/config.yaml (required for --on-cleanup)")
     parser.add_argument("--promise-id", default="", dest="promise_id",
                         help="Completion promise ID to inject baseline freshness AC into")
+    parser.add_argument("--mode", choices=["sdk", "tmux"], default="tmux", dest="mode",
+                        help="Launch mode: sdk (no --worktree, guardian already in worktree) "
+                             "or tmux (default, ccorch creates --worktree <node_id>)")
 
     args = parser.parse_args()
 
@@ -328,6 +334,7 @@ def main() -> None:
             prompt=args.prompt,
             respawn_count=respawn_count,
             max_respawn=args.max_respawn,
+            mode=args.mode,
         )
         if respawn_result["status"] == "error":
             print(json.dumps(respawn_result))
@@ -344,11 +351,16 @@ def main() -> None:
 
     # Unset CLAUDECODE to avoid nested-session error, then launch via ccorch
     # which sets env vars (CLAUDE_OUTPUT_STYLE, CLAUDE_SESSION_ID, etc.)
-    # --worktree is forwarded to claude via ccorch's "$@"
+    # In sdk mode, guardian already runs in a worktree — no --worktree needed.
+    # In tmux mode (default), ccorch creates .claude/worktrees/<node_id>/ via --worktree.
+    if args.mode == "sdk":
+        ccorch_launch_cmd = "unset CLAUDECODE && ccorch"
+    else:
+        ccorch_launch_cmd = f"unset CLAUDECODE && ccorch --worktree {shlex.quote(args.node)}"
     try:
         _tmux_send(
             session_name,
-            f"unset CLAUDECODE && ccorch --worktree {shlex.quote(args.node)}",
+            ccorch_launch_cmd,
             pause=8.0,
         )
     except subprocess.CalledProcessError as exc:
@@ -371,11 +383,13 @@ def main() -> None:
         sys.exit(1)
 
     # Register agent identity after successful launch
+    # In sdk mode, guardian already runs in a worktree so no separate worktree is created.
+    orch_worktree = "" if args.mode == "sdk" else f".claude/worktrees/{args.node}"
     identity = identity_registry.create_identity(
         role="orchestrator",
         name=args.node,
         session_id=session_name,
-        worktree=f".claude/worktrees/{args.node}",
+        worktree=orch_worktree,
         predecessor_id=getattr(args, "predecessor_id", None),
     )
 

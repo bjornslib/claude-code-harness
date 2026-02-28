@@ -21,6 +21,12 @@ def build_predecessors(data: dict) -> dict[str, set[str]]:
     for node in data.get("nodes", []):
         predecessors[node["id"]] = set()
     for edge in data.get("edges", []):
+        attrs = edge.get("attrs", {})
+        # Skip retry back-edges (condition=fail or style=dashed) to avoid cycles
+        if attrs.get("condition") == "fail":
+            continue
+        if "dashed" in attrs.get("style", ""):
+            continue
         dst = edge["dst"]
         src = edge["src"]
         if dst not in predecessors:
