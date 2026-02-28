@@ -169,3 +169,54 @@ def test_extract_task_ids_multiple_matches():
     assert 1 in ids
     assert 2 in ids
     assert 3 not in ids
+
+
+def test_create_enriched_input_with_pipeline_context(tmp_path):
+    """When dot_pipeline_context is provided, Pipeline Context block appears in output."""
+    sd_file = tmp_path / "sd.md"
+    sd_file.write_text("# SD\n")
+    result = create_enriched_input(str(sd_file), "repomap: data\n", "pipeline content here")
+    assert "Pipeline Context" in result
+    assert "pipeline content here" in result
+    assert "PENDING nodes" in result
+
+
+def test_create_enriched_input_without_pipeline_context(tmp_path):
+    """When dot_pipeline_context is empty, no Pipeline Context block in output."""
+    sd_file = tmp_path / "sd.md"
+    sd_file.write_text("# SD\n")
+    result = create_enriched_input(str(sd_file), "repomap: data\n")
+    assert "Pipeline Context" not in result
+
+
+def test_run_taskmaster_parse_calls_get_pipeline_context(tmp_path):
+    """When dot_pipeline_path is provided, get_pipeline_context is called."""
+    sd_file = tmp_path / "sd.md"
+    sd_file.write_text("# SD\n")
+    tasks_json = tmp_path / ".taskmaster" / "tasks" / "tasks.json"
+    tasks_json.parent.mkdir(parents=True)
+    tasks_json.write_text('{"tasks": []}')
+
+    with patch("subprocess.run") as mock_run, \
+         patch("cobuilder.pipeline.taskmaster_bridge.get_pipeline_context", return_value="pipeline ctx") as mock_gpc:
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        result = run_taskmaster_parse(str(sd_file), str(tmp_path), dot_pipeline_path="pipeline.dot")
+
+    mock_gpc.assert_called_once_with("pipeline.dot")
+    assert result == {"tasks": []}
+
+
+def test_run_taskmaster_parse_no_pipeline_path_skips_get_pipeline_context(tmp_path):
+    """When dot_pipeline_path is empty, get_pipeline_context is not called."""
+    sd_file = tmp_path / "sd.md"
+    sd_file.write_text("# SD\n")
+    tasks_json = tmp_path / ".taskmaster" / "tasks" / "tasks.json"
+    tasks_json.parent.mkdir(parents=True)
+    tasks_json.write_text('{"tasks": []}')
+
+    with patch("subprocess.run") as mock_run, \
+         patch("cobuilder.pipeline.taskmaster_bridge.get_pipeline_context") as mock_gpc:
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        run_taskmaster_parse(str(sd_file), str(tmp_path))
+
+    mock_gpc.assert_not_called()
