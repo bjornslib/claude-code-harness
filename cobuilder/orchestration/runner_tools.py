@@ -579,6 +579,26 @@ def _tool_spawn_orchestrator(
         _send(f"unset CLAUDECODE && ccorch --worktree {node_quoted}", pause=8.0)
         _send("/output-style orchestrator", pause=3.0)
 
+        # Send scoped prompt telling the orchestrator what to work on
+        ac_text = acceptance_criteria or "See the Solution Design document for this node."
+        scoped_prompt = (
+            f"You are assigned to implement pipeline node {shlex.quote(node_id)}.\n"
+            f"\n"
+            f"## Scope\n"
+            f"- Node: {node_id}\n"
+            f"- Worker type: {worker_type or 'general'}\n"
+            f"- Bead: {bead_id or 'N/A'}\n"
+            f"\n"
+            f"## Acceptance Criteria\n"
+            f"{ac_text}\n"
+            f"\n"
+            f"## IMPORTANT\n"
+            f"You are responsible for THIS NODE ONLY. Do not work on other pipeline nodes.\n"
+            f"Focus exclusively on meeting the acceptance criteria above.\n"
+            f"Use the orchestrator-multiagent skill to delegate implementation to workers."
+        )
+        _send(scoped_prompt, pause=2.0)
+
         return json.dumps({
             "success": True,
             "session_name": session_name,
