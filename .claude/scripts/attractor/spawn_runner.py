@@ -81,6 +81,8 @@ def main() -> None:
     parser.add_argument("--mode", choices=["sdk", "tmux"], default="tmux", dest="mode",
                         help="Launch mode forwarded to runner_agent.py and spawn_orchestrator.py "
                              "(sdk: no --worktree; tmux: default with --worktree)")
+    parser.add_argument("--dot-file", default=None, dest="dot_file",
+                        help="Path to pipeline .dot file; enables state machine monitoring mode")
 
     args = parser.parse_args()
 
@@ -122,6 +124,8 @@ def main() -> None:
         cmd += ["--solution-design", args.solution_design]
     if args.bead_id:
         cmd += ["--bead-id", args.bead_id]
+    if args.dot_file:
+        cmd += ["--dot-file", args.dot_file]
 
     # 4. Launch with cleaned environment (no CLAUDECODE token)
     env = os.environ.copy()
@@ -164,6 +168,7 @@ def main() -> None:
                 "acceptance_criteria": args.acceptance,
                 "target_dir": args.target_dir,
                 "bead_id": args.bead_id,
+                "dot_file": args.dot_file,
             },
         }
 

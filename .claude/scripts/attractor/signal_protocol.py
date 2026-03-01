@@ -61,6 +61,9 @@ MERGE_READY    = "MERGE_READY"    # payload: {node_id, branch}
 MERGE_COMPLETE = "MERGE_COMPLETE" # payload: {node_id, branch, entry_id}
 MERGE_FAILED   = "MERGE_FAILED"   # payload: {node_id, branch, error}
 
+# Runner lifecycle signals (runner → guardian) — Epic: Mode-Switching Runner
+RUNNER_EXITED  = "RUNNER_EXITED"  # payload: {node_id, prd_ref, mode, reason}
+
 # Agent lifecycle signals (any → guardian) — Epic 1: Identity Registry
 AGENT_REGISTERED = "AGENT_REGISTERED"  # payload: {agent_id, role, name, session_id, worktree}
 AGENT_CRASHED    = "AGENT_CRASHED"     # payload: {agent_id, role, name, crashed_at}
@@ -304,6 +307,43 @@ def wait_for_signal(
 # ---------------------------------------------------------------------------
 # Agent lifecycle signal helpers
 # ---------------------------------------------------------------------------
+
+
+def write_runner_exited(
+    node_id: str,
+    prd_ref: str,
+    mode: str,
+    reason: str,
+    signals_dir: Optional[str] = None,
+) -> str:
+    """Write a RUNNER_EXITED signal to the guardian.
+
+    Called by RunnerStateMachine's safety net (try/finally) when the runner
+    exits without reaching the COMPLETE mode. This allows the guardian to
+    detect and handle unexpected runner terminations.
+
+    Args:
+        node_id: Pipeline node identifier being monitored by the runner.
+        prd_ref: PRD reference string (e.g., "PRD-AUTH-001").
+        mode: Final mode the runner was in when it exited (e.g., "FAILED").
+        reason: Human-readable reason for the exit (e.g., "max_cycles_exceeded").
+        signals_dir: Override the default signals directory.
+
+    Returns:
+        Absolute path to the written signal file.
+    """
+    return write_signal(
+        source="runner",
+        target="guardian",
+        signal_type=RUNNER_EXITED,
+        payload={
+            "node_id": node_id,
+            "prd_ref": prd_ref,
+            "mode": mode,
+            "reason": reason,
+        },
+        signals_dir=signals_dir,
+    )
 
 
 def write_agent_registered(

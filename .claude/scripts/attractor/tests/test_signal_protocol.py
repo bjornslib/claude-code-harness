@@ -27,6 +27,7 @@ from signal_protocol import (  # noqa: E402
     AGENT_CRASHED,
     AGENT_REGISTERED,
     AGENT_TERMINATED,
+    RUNNER_EXITED,
     list_signals,
     move_to_processed,
     read_signal,
@@ -34,6 +35,7 @@ from signal_protocol import (  # noqa: E402
     write_agent_crashed,
     write_agent_registered,
     write_agent_terminated,
+    write_runner_exited,
     write_signal,
 )
 
@@ -555,3 +557,146 @@ class TestAgentLifecycleSignals:
         assert AGENT_REGISTERED == "AGENT_REGISTERED"
         assert AGENT_CRASHED == "AGENT_CRASHED"
         assert AGENT_TERMINATED == "AGENT_TERMINATED"
+
+
+# ---------------------------------------------------------------------------
+# TestRunnerExitedSignal (Task #2 — RUNNER_EXITED constant + write_runner_exited)
+# ---------------------------------------------------------------------------
+
+
+class TestRunnerExitedSignal:
+    """Tests for RUNNER_EXITED constant and write_runner_exited()."""
+
+    def test_runner_exited_constant_value(self):
+        """RUNNER_EXITED constant must be the string 'RUNNER_EXITED'."""
+        assert RUNNER_EXITED == "RUNNER_EXITED"
+
+    def test_write_runner_exited_creates_file(self, tmp_path):
+        """write_runner_exited() creates a signal file in the signals directory."""
+        signals_dir = str(tmp_path / "signals")
+        path = write_runner_exited(
+            node_id="impl_auth",
+            prd_ref="PRD-AUTH-001",
+            mode="FAILED",
+            reason="max_cycles_exceeded",
+            signals_dir=signals_dir,
+        )
+        assert os.path.exists(path)
+
+    def test_write_runner_exited_returns_absolute_path(self, tmp_path):
+        """write_runner_exited() returns an absolute path."""
+        signals_dir = str(tmp_path / "signals")
+        path = write_runner_exited(
+            node_id="impl_auth",
+            prd_ref="PRD-AUTH-001",
+            mode="FAILED",
+            reason="max_cycles_exceeded",
+            signals_dir=signals_dir,
+        )
+        assert os.path.isabs(path)
+
+    def test_write_runner_exited_signal_type(self, tmp_path):
+        """write_runner_exited() writes a signal with type RUNNER_EXITED."""
+        signals_dir = str(tmp_path / "signals")
+        path = write_runner_exited(
+            node_id="impl_auth",
+            prd_ref="PRD-AUTH-001",
+            mode="FAILED",
+            reason="max_cycles_exceeded",
+            signals_dir=signals_dir,
+        )
+        data = read_signal(path)
+        assert data["signal_type"] == RUNNER_EXITED
+
+    def test_write_runner_exited_source_is_runner(self, tmp_path):
+        """write_runner_exited() writes a signal sourced from 'runner'."""
+        signals_dir = str(tmp_path / "signals")
+        path = write_runner_exited(
+            node_id="impl_auth",
+            prd_ref="PRD-AUTH-001",
+            mode="FAILED",
+            reason="max_cycles_exceeded",
+            signals_dir=signals_dir,
+        )
+        data = read_signal(path)
+        assert data["source"] == "runner"
+
+    def test_write_runner_exited_target_is_guardian(self, tmp_path):
+        """write_runner_exited() targets the guardian layer."""
+        signals_dir = str(tmp_path / "signals")
+        path = write_runner_exited(
+            node_id="impl_auth",
+            prd_ref="PRD-AUTH-001",
+            mode="FAILED",
+            reason="max_cycles_exceeded",
+            signals_dir=signals_dir,
+        )
+        data = read_signal(path)
+        assert data["target"] == "guardian"
+
+    def test_write_runner_exited_payload_fields(self, tmp_path):
+        """write_runner_exited() embeds all required payload fields."""
+        signals_dir = str(tmp_path / "signals")
+        path = write_runner_exited(
+            node_id="impl_payments",
+            prd_ref="PRD-PAY-007",
+            mode="MONITOR",
+            reason="runner_exited_without_complete",
+            signals_dir=signals_dir,
+        )
+        data = read_signal(path)
+        payload = data["payload"]
+        assert payload["node_id"] == "impl_payments"
+        assert payload["prd_ref"] == "PRD-PAY-007"
+        assert payload["mode"] == "MONITOR"
+        assert payload["reason"] == "runner_exited_without_complete"
+
+    def test_write_runner_exited_mode_complete(self, tmp_path):
+        """write_runner_exited() works with any mode string including COMPLETE."""
+        signals_dir = str(tmp_path / "signals")
+        path = write_runner_exited(
+            node_id="impl_auth",
+            prd_ref="PRD-AUTH-001",
+            mode="COMPLETE",
+            reason="unexpected_complete_in_safety_net",
+            signals_dir=signals_dir,
+        )
+        data = read_signal(path)
+        assert data["payload"]["mode"] == "COMPLETE"
+
+    def test_write_runner_exited_filename_contains_runner_exited(self, tmp_path):
+        """Signal filename should contain RUNNER_EXITED signal type."""
+        signals_dir = str(tmp_path / "signals")
+        path = write_runner_exited(
+            node_id="impl_auth",
+            prd_ref="PRD-AUTH-001",
+            mode="FAILED",
+            reason="max_cycles_exceeded",
+            signals_dir=signals_dir,
+        )
+        fname = os.path.basename(path)
+        assert "RUNNER_EXITED" in fname
+
+    def test_write_runner_exited_no_tmp_file_left(self, tmp_path):
+        """No .tmp file is left behind after write_runner_exited()."""
+        signals_dir = str(tmp_path / "signals")
+        path = write_runner_exited(
+            node_id="impl_auth",
+            prd_ref="PRD-AUTH-001",
+            mode="FAILED",
+            reason="max_cycles_exceeded",
+            signals_dir=signals_dir,
+        )
+        assert not os.path.exists(path + ".tmp")
+
+    def test_write_runner_exited_creates_processed_subdir(self, tmp_path):
+        """write_runner_exited() creates the processed/ subdirectory."""
+        signals_dir = str(tmp_path / "signals")
+        write_runner_exited(
+            node_id="impl_auth",
+            prd_ref="PRD-AUTH-001",
+            mode="FAILED",
+            reason="max_cycles_exceeded",
+            signals_dir=signals_dir,
+        )
+        assert os.path.isdir(os.path.join(signals_dir, "processed"))
