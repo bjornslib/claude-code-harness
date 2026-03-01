@@ -213,6 +213,18 @@ All scripts are in {scripts_dir}:
    - Save checkpoint
    - Respond: python3 {scripts_dir}/respond_to_runner.py VALIDATION_PASSED --node <id>
 
+   RUNNER_EXITED (state machine runner exited without completing):
+   - Read payload.mode to understand why: FAILED, MONITOR (unexpected exit mid-cycle)
+   - Read payload.reason for human-readable explanation
+   - Check payload.node_id against the current pipeline state
+   - Determine if retry is safe:
+     * If retries remain: re-spawn runner with same parameters
+       python3 {scripts_dir}/spawn_runner.py --node <node_id> --prd <prd_ref> --mode sdk --target-dir {target_dir_flag.strip()}
+     * If max retries exceeded: escalate to Terminal
+       python3 {scripts_dir}/escalate_to_terminal.py --pipeline {pipeline_id} --issue "Runner exited in mode <mode>: <reason>"
+   - If mode=FAILED and the node is genuinely failed in the DOT file:
+     * Escalate to Terminal immediately with context about what failed
+
    MERGE_READY (node branch is ready for sequential merge into main):
    - Call the merge queue to process the next pending entry:
      ```python

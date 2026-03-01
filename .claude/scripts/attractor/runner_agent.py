@@ -420,6 +420,226 @@ def build_env_config() -> dict[str, str]:
 
 
 # ---------------------------------------------------------------------------
+# Mode-switching runner — RunnerMode + RunnerStateMachine
+# ---------------------------------------------------------------------------
+
+
+class RunnerMode:
+    """Mode constants for RunnerStateMachine.
+
+    Modes represent the current operational state of the runner:
+        MONITOR  — active monitoring cycle, querying the LLM about pipeline status
+        COMPLETE — terminal success state; node reached a validated/done state
+        FAILED   — terminal failure state; node failed or max cycles exceeded
+    """
+
+    MONITOR = "MONITOR"
+    COMPLETE = "COMPLETE"
+    FAILED = "FAILED"
+
+
+def build_monitor_prompt(
+    pipeline_path: str,
+    node_id: str,
+    prd_ref: str,
+    scripts_dir: str,
+) -> str:
+    """Build the monitoring analysis prompt for the RunnerStateMachine.
+
+    Constructs a user-turn prompt that describes the pipeline and asks the
+    LLM to output a STATUS: line indicating whether the target node has
+    completed, failed, or is still in progress.
+
+    Args:
+        pipeline_path: Absolute path to the pipeline .dot file.
+        node_id: Pipeline node identifier being monitored.
+        prd_ref: PRD reference string (e.g. "PRD-AUTH-001").
+        scripts_dir: Absolute path to the attractor scripts directory.
+
+    Returns:
+        Formatted prompt string ready for the SDK query() call.
+    """
+    with logfire.span("runner.build_monitor_prompt", node_id=node_id, prd_ref=prd_ref):
+        return (
+            f"Analyse the current state of the pipeline and determine whether "
+            f"the target node has completed, failed, or is still in progress.\n\n"
+            f"## Pipeline Details\n"
+            f"- Path: {pipeline_path}\n"
+            f"- Scripts directory: {scripts_dir}\n"
+            f"- Target Node: {node_id}\n"
+            f"- PRD Reference: {prd_ref}\n\n"
+            f"## Instructions\n"
+            f"Check the pipeline status using the available tools, then determine "
+            f"the state of the target node '{node_id}'.\n\n"
+            f"Respond with exactly ONE status line at the end of your analysis:\n"
+            f"- STATUS: COMPLETED   — if the node is validated or all pipeline "
+            f"nodes are validated\n"
+            f"- STATUS: FAILED      — if the node has failed with no path to "
+            f"recovery\n"
+            f"- STATUS: IN_PROGRESS — if monitoring should continue\n\n"
+            f"Your analysis:"
+        )
+
+
+class RunnerStateMachine:
+    """Mode-switching runner that uses the Claude Code SDK for pipeline monitoring.
+
+    The state machine transitions between MONITOR and terminal modes based on
+    LLM analysis of the pipeline .dot file. It integrates with the signal
+    protocol to notify the guardian of unexpected exits (RUNNER_EXITED).
+
+    Attributes:
+        mode: Current operational mode (RunnerMode constant).
+    """
+
+    def __init__(
+        self,
+        node_id: str,
+        prd_ref: str,
+        session_name: str,
+        target_dir: str,
+        dot_file: str | None = None,
+        signals_dir: str | None = None,
+        model: str = DEFAULT_MODEL,
+        max_turns: int = DEFAULT_MAX_TURNS,
+        max_cycles: int = 10,
+    ) -> None:
+        """Initialise the state machine.
+
+        Args:
+            node_id: Pipeline node identifier being monitored.
+            prd_ref: PRD reference string (e.g. "PRD-AUTH-001").
+            session_name: tmux session name (used for monitor prompt context).
+            target_dir: Working directory for the SDK agent.
+            dot_file: Optional path to the pipeline .dot file; when provided,
+                enables pipeline-state-aware monitoring via the CLI tools.
+            signals_dir: Override for the signal protocol directory.
+            model: Claude model to use for monitoring queries.
+            max_turns: Maximum SDK turns per monitor cycle.
+            max_cycles: Maximum monitoring cycles before exiting as FAILED.
+        """
+        import signal_protocol as _sp
+        self._signal_protocol = _sp
+
+        self.node_id = node_id
+        self.prd_ref = prd_ref
+        self.session_name = session_name
+        self.target_dir = target_dir
+        self.dot_file = dot_file
+        self.signals_dir = signals_dir
+        self.model = model
+        self.max_turns = max_turns
+        self.max_cycles = max_cycles
+        self.mode: str = RunnerMode.MONITOR
+        self._scripts_dir = resolve_scripts_dir()
+
+    def _do_monitor_mode(self) -> str:
+        """Run one SDK monitoring cycle and return the status string.
+
+        Uses asyncio.run() with the Claude Code SDK to query the LLM using
+        the monitor prompt. Text blocks from all AssistantMessage turns are
+        accumulated into a single string and scanned for a STATUS: line.
+
+        Returns:
+            One of "COMPLETED", "FAILED", or "IN_PROGRESS".
+        """
+        pipeline_path = self.dot_file or ""
+        prompt = build_monitor_prompt(
+            pipeline_path=pipeline_path,
+            node_id=self.node_id,
+            prd_ref=self.prd_ref,
+            scripts_dir=self._scripts_dir,
+        )
+
+        system_prompt = (
+            "You are a pipeline monitoring assistant. Analyse the pipeline "
+            "state and output a STATUS: line as instructed. Be concise."
+        )
+        options = build_options(
+            system_prompt=system_prompt,
+            cwd=self.target_dir,
+            model=self.model,
+            max_turns=self.max_turns,
+        )
+
+        # Accumulate text blocks by reference — the inner coroutine populates
+        # this list so we can read it after asyncio.run() returns.
+        text_blocks: list[str] = []
+
+        async def _run_with_capture() -> None:
+            """Run SDK query and accumulate LLM text blocks."""
+            from claude_code_sdk import (
+                query,
+                AssistantMessage,
+                TextBlock,
+            )
+            async for message in query(prompt, options=options):
+                if isinstance(message, AssistantMessage):
+                    for block in message.content:
+                        if isinstance(block, TextBlock) and block.text:
+                            text_blocks.append(block.text)
+
+        asyncio.run(_run_with_capture())
+
+        full_text = "\n".join(text_blocks)
+        if "STATUS: COMPLETED" in full_text:
+            return "COMPLETED"
+        if "STATUS: FAILED" in full_text:
+            return "FAILED"
+        return "IN_PROGRESS"
+
+    def _write_safety_net_if_needed(self) -> None:
+        """Write a RUNNER_EXITED signal if the mode is not COMPLETE.
+
+        Called from the finally block in run() to ensure the guardian always
+        learns when the runner exits without completing its work. Signal
+        write failures are silently swallowed to prevent masking the original
+        exception.
+        """
+        if self.mode != RunnerMode.COMPLETE:
+            try:
+                self._signal_protocol.write_runner_exited(
+                    node_id=self.node_id,
+                    prd_ref=self.prd_ref,
+                    mode=self.mode,
+                    reason="runner_exited_without_complete",
+                    signals_dir=self.signals_dir,
+                )
+            except Exception:  # noqa: BLE001
+                pass
+
+    def run(self) -> str:
+        """Run the state machine until completion or failure.
+
+        Iterates the MONITOR cycle until the LLM reports COMPLETED or FAILED,
+        or until max_cycles is exceeded. A try/finally ensures the safety net
+        signal is always written unless the mode reaches COMPLETE.
+
+        Returns:
+            Final mode string (RunnerMode.COMPLETE or RunnerMode.FAILED).
+        """
+        try:
+            cycles = 0
+            while self.mode == RunnerMode.MONITOR:
+                cycles += 1
+                if cycles > self.max_cycles:
+                    self.mode = RunnerMode.FAILED
+                    break
+
+                status = self._do_monitor_mode()
+                if status == "COMPLETED":
+                    self.mode = RunnerMode.COMPLETE
+                elif status == "FAILED":
+                    self.mode = RunnerMode.FAILED
+                # else: IN_PROGRESS — continue monitoring
+
+        finally:
+            self._write_safety_net_if_needed()
+
+        return self.mode
+
+
+# ---------------------------------------------------------------------------
 # Async agent runner
 # ---------------------------------------------------------------------------
 
@@ -606,28 +826,67 @@ def main(argv: list[str] | None = None) -> None:
         # Create a persistent hook for this runner
         hook_manager.create_hook(role="runner", name=node_id)
 
-        # Live run: invoke the Agent SDK.
-        try:
-            asyncio.run(_run_agent(initial_prompt, options))
-            # Clean shutdown
+        # Live run: choose between state machine (--dot-file) and legacy tmux monitoring.
+        if args.dot_file:
+            # Mode-switching path: use RunnerStateMachine for pipeline-aware monitoring.
+            print(
+                f"[Runner] State machine mode (dot_file={args.dot_file})",
+                flush=True,
+            )
             try:
-                identity_registry.mark_terminated(role="runner", name=node_id)
-            except Exception:
-                pass
-        except KeyboardInterrupt:
-            print("[Runner] Interrupted by user.", flush=True)
+                machine = RunnerStateMachine(
+                    node_id=node_id,
+                    prd_ref=args.prd,
+                    session_name=args.session,
+                    target_dir=cwd,
+                    dot_file=args.dot_file,
+                    signals_dir=args.signals_dir,
+                    model=args.model,
+                    max_turns=args.max_turns,
+                )
+                final_mode = machine.run()
+                print(f"[Runner] State machine exited with mode: {final_mode}", flush=True)
+                try:
+                    identity_registry.mark_terminated(role="runner", name=node_id)
+                except Exception:
+                    pass
+            except KeyboardInterrupt:
+                print("[Runner] Interrupted by user.", flush=True)
+                try:
+                    identity_registry.mark_terminated(role="runner", name=node_id)
+                except Exception:
+                    pass
+                sys.exit(130)
+            except Exception as exc:
+                print(f"[Runner error] {exc}", file=sys.stderr, flush=True)
+                try:
+                    identity_registry.mark_crashed(role="runner", name=node_id)
+                except Exception:
+                    pass
+                sys.exit(1)
+        else:
+            # Legacy tmux monitoring path: invoke the Agent SDK loop.
             try:
-                identity_registry.mark_terminated(role="runner", name=node_id)
-            except Exception:
-                pass
-            sys.exit(130)
-        except Exception as exc:
-            print(f"[Runner error] {exc}", file=sys.stderr, flush=True)
-            try:
-                identity_registry.mark_crashed(role="runner", name=node_id)
-            except Exception:
-                pass
-            sys.exit(1)
+                asyncio.run(_run_agent(initial_prompt, options))
+                # Clean shutdown
+                try:
+                    identity_registry.mark_terminated(role="runner", name=node_id)
+                except Exception:
+                    pass
+            except KeyboardInterrupt:
+                print("[Runner] Interrupted by user.", flush=True)
+                try:
+                    identity_registry.mark_terminated(role="runner", name=node_id)
+                except Exception:
+                    pass
+                sys.exit(130)
+            except Exception as exc:
+                print(f"[Runner error] {exc}", file=sys.stderr, flush=True)
+                try:
+                    identity_registry.mark_crashed(role="runner", name=node_id)
+                except Exception:
+                    pass
+                sys.exit(1)
 
 
 if __name__ == "__main__":
