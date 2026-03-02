@@ -131,13 +131,30 @@ def main() -> None:
     env = os.environ.copy()
     env.pop("CLAUDECODE", None)
 
+    # Redirect runner stdout/stderr to log files instead of PIPE to avoid
+    # pipe buffer deadlock (PIPE is never read since we detach immediately).
+    try:
+        log_dir = _runner_state_dir()
+        os.makedirs(log_dir, exist_ok=True)
+        timestamp_log = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        stdout_log_path = os.path.join(log_dir, f"{timestamp_log}-{args.node_id}-stdout.log")
+        stderr_log_path = os.path.join(log_dir, f"{timestamp_log}-{args.node_id}-stderr.log")
+        stdout_log = open(stdout_log_path, "w", encoding="utf-8")
+        stderr_log = open(stderr_log_path, "w", encoding="utf-8")
+    except Exception:
+        # Fallback to DEVNULL if log files can't be created
+        stdout_log_path = None
+        stderr_log_path = None
+        stdout_log = subprocess.DEVNULL
+        stderr_log = subprocess.DEVNULL
+
     try:
         proc = subprocess.Popen(
             cmd,
             env=env,
             cwd=args.target_dir,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=stdout_log,
+            stderr=stderr_log,
         )
     except Exception as exc:
         print(json.dumps({"status": "error", "message": f"Failed to launch runner: {exc}"}))
@@ -170,6 +187,8 @@ def main() -> None:
                 "bead_id": args.bead_id,
                 "dot_file": args.dot_file,
             },
+            "stdout_log": stdout_log_path,
+            "stderr_log": stderr_log_path,
         }
 
         tmp_path = state_path + ".tmp"

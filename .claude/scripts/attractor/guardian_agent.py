@@ -157,7 +157,7 @@ All scripts are in {scripts_dir}:
 - python3 {scripts_dir}/respond_to_runner.py GUIDANCE --node <id> --message <text>            # Guide
 - python3 {scripts_dir}/respond_to_runner.py KILL_ORCHESTRATOR --node <id> --reason <text>    # Abort
 - python3 {scripts_dir}/escalate_to_terminal.py --pipeline {pipeline_id} --issue <text>   # Escalate
-- python3 {scripts_dir}/spawn_runner.py --node <id> --prd <prd_ref> [--acceptance <text>] [--bead-id <id>] --mode sdk{target_dir_flag}  # Launch runner
+- python3 {scripts_dir}/spawn_runner.py --node <id> --prd <prd_ref> [--acceptance <text>] [--bead-id <id>] --mode sdk{target_dir_flag} --dot-file {dot_path}  # Launch runner
 
 ## Pipeline Execution Flow
 
@@ -178,7 +178,7 @@ All scripts are in {scripts_dir}:
    b. Save checkpoint:
       python3 {scripts_dir}/cli.py checkpoint save {dot_path}
    c. Spawn Runner:
-      python3 {scripts_dir}/spawn_runner.py --node <node_id> --prd <prd_ref> --acceptance "<ac>" --bead-id <bead_id> --mode sdk{target_dir_flag}
+      python3 {scripts_dir}/spawn_runner.py --node <node_id> --prd <prd_ref> --acceptance "<ac>" --bead-id <bead_id> --mode sdk{target_dir_flag} --dot-file {dot_path}
 6. For each ready wait.human node:
    a. Determine if you can validate autonomously (technical gate) or need human (business/manual gate)
    b. If autonomous: transition directly to validated after reviewing acceptance criteria
@@ -236,11 +236,29 @@ All scripts are in {scripts_dir}:
    - Check payload.node_id against the current pipeline state
    - Determine if retry is safe:
      * If retries remain: re-spawn runner with same parameters
-       python3 {scripts_dir}/spawn_runner.py --node <node_id> --prd <prd_ref> --mode sdk --target-dir {target_dir_flag.strip()}
+       python3 {scripts_dir}/spawn_runner.py --node <node_id> --prd <prd_ref> --mode sdk --target-dir {target_dir_flag.strip()} --dot-file {dot_path}
      * If max retries exceeded: escalate to Terminal
        python3 {scripts_dir}/escalate_to_terminal.py --pipeline {pipeline_id} --issue "Runner exited in mode <mode>: <reason>"
    - If mode=FAILED and the node is genuinely failed in the DOT file:
      * Escalate to Terminal immediately with context about what failed
+
+   SIGNAL_TIMEOUT or wait_for_signal exits with no signal:
+   - The wait timed out — this usually means the runner process crashed silently.
+   - Check if the runner process is still alive:
+     ```bash
+     # Find runner state files for active nodes
+     ls -la {target_dir_flag.strip()}/.claude/attractor/runner-state/ | grep "$(date -u +%Y%m%d)"
+     # Check runner stderr log for crash info
+     cat {target_dir_flag.strip()}/.claude/attractor/runner-state/*-stderr.log 2>/dev/null | tail -50
+     ```
+   - Check identity registry for stale runners:
+     python3 {scripts_dir}/identity_registry.py --find-stale --role runner
+   - If runner is dead (no process, stale identity):
+     * Mark identity as crashed: python3 -c "import identity_registry; identity_registry.mark_crashed(role='runner', name='<node_id>')"
+     * Re-spawn runner (if retries remain):
+       python3 {scripts_dir}/spawn_runner.py --node <node_id> --prd <prd_ref> --mode sdk --target-dir {target_dir_flag.strip()} --dot-file {dot_path}
+     * If max retries exceeded: escalate to Terminal
+   - If runner is alive but stuck, send a guidance signal and wait again
 
    MERGE_READY (node branch is ready for sequential merge into main):
    - Call the merge queue to process the next pending entry:

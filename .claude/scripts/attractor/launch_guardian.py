@@ -47,6 +47,8 @@ import asyncio
 import json
 import os
 import sys
+import time
+from pathlib import Path
 from typing import Any, Optional
 
 # Ensure this file's directory is importable regardless of invocation CWD.
@@ -253,7 +255,24 @@ async def _run_agent(initial_prompt: str, options: Any) -> None:
 
     import logfire
 
+    # Gracefully handle missing Logfire project credentials:
+    # When running in an impl repo without .logfire/, logfire.configure()
+    # triggers an interactive prompt that crashes non-interactive contexts.
+    # Detect this and disable sending rather than crashing.
+    _send_to_logfire = os.environ.get("LOGFIRE_SEND_TO_LOGFIRE", "").lower()
+    if _send_to_logfire == "false":
+        _logfire_enabled = False
+    elif _send_to_logfire == "true":
+        _logfire_enabled = True
+    else:
+        # Auto-detect: check for .logfire/ credentials in cwd or LOGFIRE_TOKEN
+        _logfire_enabled = (
+            Path(".logfire").is_dir()
+            or bool(os.environ.get("LOGFIRE_TOKEN"))
+        )
+
     logfire.configure(
+        send_to_logfire=_logfire_enabled,
         inspect_arguments=False,
         scrubbing=logfire.ScrubbingOptions(callback=lambda m: m.value),
     )
@@ -826,22 +845,38 @@ def main(argv: list[str] | None = None) -> None:
         worktree=os.getcwd(),
     )
 
-    # Live run: launch the Guardian agent.
-    result = launch_guardian(
-        dot_path=dot_path,
-        project_root=cwd,
-        pipeline_id=args.pipeline_id,
-        model=args.model,
-        max_turns=args.max_turns,
-        signal_timeout=args.signal_timeout,
-        max_retries=args.max_retries,
-        signals_dir=args.signals_dir,
-        target_dir=target_dir,
-    )
-    print(json.dumps(result, indent=2))
+    # Live run: launch the Guardian agent with retry loop.
+    # If the guardian SDK session crashes or times out, retry up to max_retries times.
+    guardian_retries = args.max_retries
+    attempt = 0
+    while True:
+        attempt += 1
+        print(f"[Layer 0] Launching guardian (attempt {attempt}/{guardian_retries + 1})", flush=True)
+        result = launch_guardian(
+            dot_path=dot_path,
+            project_root=cwd,
+            pipeline_id=args.pipeline_id,
+            model=args.model,
+            max_turns=args.max_turns,
+            signal_timeout=args.signal_timeout,
+            max_retries=args.max_retries,
+            signals_dir=args.signals_dir,
+            target_dir=target_dir,
+        )
+        print(json.dumps(result, indent=2))
 
-    if result.get("status") != "ok":
-        sys.exit(1)
+        status = result.get("status", "error")
+        if status == "ok":
+            break  # Guardian completed successfully
+
+        # Check if we should retry
+        if attempt > guardian_retries:
+            print(f"[Layer 0] Guardian failed after {attempt} attempts. Giving up.", file=sys.stderr, flush=True)
+            sys.exit(1)
+
+        # Retry on timeout or error (guardian SDK crash)
+        print(f"[Layer 0] Guardian returned status={status}. Retrying in 5s...", flush=True)
+        time.sleep(5)
 
 
 if __name__ == "__main__":

@@ -617,7 +617,7 @@ class RunnerStateMachine:
                 AssistantMessage,
                 TextBlock,
             )
-            async for message in query(prompt, options=options):
+            async for message in query(prompt=prompt, options=options):
                 if isinstance(message, AssistantMessage):
                     for block in message.content:
                         if isinstance(block, TextBlock) and block.text:
@@ -717,7 +717,7 @@ async def _run_agent(initial_prompt: str, options: Any) -> None:
     start_time = _time.time()
 
     with logfire.span("runner.run_agent") as agent_span:
-        async for message in query(initial_prompt, options=options):
+        async for message in query(prompt=initial_prompt, options=options):
             if isinstance(message, AssistantMessage):
                 turn_count += 1
                 for block in message.content:
@@ -860,15 +860,27 @@ def main(argv: list[str] | None = None) -> None:
 
         # Register runner identity before starting the agent loop
         node_id = args.node
-        identity_registry.create_identity(
-            role="runner",
-            name=node_id,
-            session_id=f"runner-{node_id}",
-            worktree="",
-        )
+        try:
+            identity_registry.create_identity(
+                role="runner",
+                name=node_id,
+                session_id=f"runner-{node_id}",
+                worktree="",
+            )
+        except Exception as exc:
+            print(f"[Runner error] Identity registration failed: {exc}", file=sys.stderr, flush=True)
+            sys.exit(1)
 
-        # Create a persistent hook for this runner
-        hook_manager.create_hook(role="runner", name=node_id)
+        try:
+            # Create a persistent hook for this runner
+            hook_manager.create_hook(role="runner", name=node_id)
+        except Exception as exc:
+            print(f"[Runner error] Hook creation failed: {exc}", file=sys.stderr, flush=True)
+            try:
+                identity_registry.mark_crashed(role="runner", name=node_id)
+            except Exception:
+                pass
+            sys.exit(1)
 
         # Live run: choose between state machine (--dot-file) and legacy tmux monitoring.
         if args.dot_file:
