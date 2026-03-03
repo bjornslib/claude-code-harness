@@ -1,0 +1,18 @@
+digraph test_e2e {
+  graph [pipeline_id="test-e2e-001"]
+
+  start [shape=Mdiamond label="BEGIN"]
+  check [shape=box label="validate input" handler="tool"]
+  decide [shape=diamond label="check status"]
+  process [shape=box label="process data" handler="tool"]
+  retry_node [shape=box label="retry handler" handler="tool" max_retries="2"]
+  done [shape=Msquare label="END"]
+
+  start -> check
+  check -> decide [label="ok" condition="$last_status = success"]
+  check -> retry_node [label="retry" condition="$last_status != success"]
+  decide -> process [label="success" condition="$last_status = success"]
+  decide -> done [label="fail" condition="$last_status != success"]
+  process -> done
+  retry_node -> decide [label="retry_back"]
+}
