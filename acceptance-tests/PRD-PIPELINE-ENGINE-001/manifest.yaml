@@ -102,14 +102,23 @@ features:
       - "S8_validation_models"
     scenario_file: "scenarios-epic2.feature"
 
-  # === Epic 3+5: Condition Expression Language + Loop Detection ===
+  # === Epic 3: Condition Expression Language ===
+  # Detailed per-AC scenarios in scenarios-epic3.feature (primary for E3 validation)
+  # High-level scenarios remain in scenarios-epic3-5.feature (summary view)
   - name: "F9 — Condition Expression Lexer and Parser"
     epic: 3
     weight: 0.07
     validation_method: code-analysis
     scenarios:
       - "S9_condition_parser"
-    scenario_file: "scenarios-epic3-5.feature"
+      - "S9.1a_lexer_token_types"
+      - "S9.1b_all_18_tokens"
+      - "S9.1c_lexer_errors"
+      - "S9.2a_simple_comparison"
+      - "S9.2b_precedence"
+      - "S9.2c_not_parentheses"
+      - "S9.2d_parser_errors"
+    scenario_file: "scenarios-epic3.feature"
 
   - name: "F10 — Condition Evaluator"
     epic: 3
@@ -117,7 +126,14 @@ features:
     validation_method: code-analysis
     scenarios:
       - "S10_condition_evaluator"
-    scenario_file: "scenarios-epic3-5.feature"
+      - "S10.1a_basic_eval"
+      - "S10.1b_dotted_vars"
+      - "S10.1c_missing_vars"
+      - "S10.1d_type_coercion"
+      - "S10.1e_short_circuit"
+      - "S10.2a_validate_syntax"
+      - "S10.2b_bare_word_compat"
+    scenario_file: "scenarios-epic3.feature"
 
   - name: "F11 — Condition Error Hierarchy"
     epic: 3
@@ -125,7 +141,21 @@ features:
     validation_method: code-analysis
     scenarios:
       - "S11_condition_errors"
-    scenario_file: "scenarios-epic3-5.feature"
+      - "S11.1a_hierarchy"
+      - "S11.1b_context_fields"
+    scenario_file: "scenarios-epic3.feature"
+
+  - name: "F10-Integration — Edge Selector and Validator Integration"
+    epic: 3
+    weight: 0.06
+    validation_method: code-analysis
+    scenarios:
+      - "S10.3a_edge_selector"
+      - "S10.3b_rule7_validation"
+      - "S10.3c_performance"
+    scenario_file: "scenarios-epic3.feature"
+
+  # === Epic 5: Loop Detection ===
 
   - name: "F12 — Loop Detection and Retry Policy"
     epic: 5
