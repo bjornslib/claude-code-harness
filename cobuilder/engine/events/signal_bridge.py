@@ -121,7 +121,7 @@ class SignalBridge:
                         "visit_count": event.data.get("visit_count"),
                         "limit": event.data.get("limit"),
                         "duration": None,
-                        "last_output": event.data.get("pattern_detected"),
+                        "last_output": event.data.get("pattern"),
                     },
                     signals_dir=self._signals_dir,
                 )

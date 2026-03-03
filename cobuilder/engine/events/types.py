@@ -379,7 +379,7 @@ class EventBuilder:
         node_id: str,
         visit_count: int,
         limit: int,
-        pattern_detected: str | None = None,
+        pattern: str | None = None,
     ) -> PipelineEvent:
         """Emit when a node visit limit is exceeded."""
         return cls._build(
@@ -389,7 +389,7 @@ class EventBuilder:
             {
                 "visit_count": visit_count,
                 "limit": limit,
-                "pattern_detected": pattern_detected,
+                "pattern": pattern,
             },
         )
 

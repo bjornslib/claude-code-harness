@@ -78,11 +78,12 @@ except ImportError:
 
 # Signal protocol — optional; graceful degradation if pipeline pkg absent.
 try:
-    from cobuilder.pipeline.signal_protocol import ORCHESTRATOR_CRASHED, write_signal
+    from cobuilder.pipeline.signal_protocol import ORCHESTRATOR_CRASHED, ORCHESTRATOR_STUCK, write_signal
     _SIGNAL_PROTOCOL_AVAILABLE = True
 except ImportError:
     _SIGNAL_PROTOCOL_AVAILABLE = False
     ORCHESTRATOR_CRASHED = "ORCHESTRATOR_CRASHED"  # type: ignore[assignment]
+    ORCHESTRATOR_STUCK = "ORCHESTRATOR_STUCK"  # type: ignore[assignment]
     write_signal = None  # type: ignore[assignment]
 
 # Epic 5: Loop detection — graceful degradation if module absent.
@@ -325,6 +326,24 @@ class EngineRunner:
                 except Exception as sig_exc:
                     logger.warning("Failed to write ORCHESTRATOR_CRASHED signal: %s", sig_exc)
 
+            # Write ORCHESTRATOR_STUCK signal when a LoopDetectedError occurs.
+            if isinstance(fatal_exc, LoopDetectedError) and _SIGNAL_PROTOCOL_AVAILABLE and write_signal is not None:
+                try:
+                    write_signal(
+                        source="runner",
+                        target="guardian",
+                        signal_type=ORCHESTRATOR_STUCK,
+                        payload={
+                            "node_id": fatal_exc.node_id,
+                            "error": str(fatal_exc),
+                            "visit_count": fatal_exc.visit_count,
+                            "max_retries": fatal_exc.max_retries,
+                        },
+                        signals_dir=str(run_dir),
+                    )
+                except Exception as sig_exc:
+                    logger.warning("Failed to write ORCHESTRATOR_STUCK signal: %s", sig_exc)
+
             # Emit pipeline.failed before propagating.
             if _EVENTS_AVAILABLE and EventBuilder is not None:
                 try:
@@ -492,7 +511,9 @@ class EngineRunner:
                 loop_detector.sync_to_context(context)
                 if not loop_result.allowed:
                     await self._handle_loop_detected(
-                        loop_result, node, context
+                        loop_result, node, context,
+                        emitter=emitter,
+                        pipeline_id=pipeline_id,
                     )
 
             # --- Record execution and advance checkpoint ----------------
@@ -589,6 +610,8 @@ class EngineRunner:
         result: Any,
         node: Node,
         context: PipelineContext,
+        emitter: Any = None,
+        pipeline_id: str = "",
     ) -> None:
         """Handle a LoopDetectionResult with allowed=False.
 
@@ -603,9 +626,16 @@ class EngineRunner:
         and LoopDetectedError catches. This avoids duplicate signal writes.
         """
         # 1. Emit loop.detected event
-        if _EVENTS_AVAILABLE and EventBuilder is not None:
+        if _EVENTS_AVAILABLE and EventBuilder is not None and emitter is not None:
             try:
-                pass  # EventBuilder.loop_detected not yet defined; skip gracefully
+                pattern_str = ",".join(result.pattern) if result.pattern else None
+                await emitter.emit(EventBuilder.loop_detected(
+                    pipeline_id=pipeline_id,
+                    node_id=result.node_id,
+                    visit_count=result.visit_count,
+                    limit=result.limit if result.limit is not None else self.max_node_visits,
+                    pattern=pattern_str,
+                ))
             except Exception as emit_exc:
                 logger.warning("Failed to emit loop.detected: %s", emit_exc)
 
