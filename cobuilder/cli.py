@@ -1050,6 +1050,21 @@ def pipeline_run(
         "--skip-validation",
         help="Skip pre-execution pipeline validation",
     ),
+    no_logfire: bool = typer.Option(
+        False,
+        "--no-logfire",
+        help="Disable the Logfire event emitter backend",
+    ),
+    no_signals: bool = typer.Option(
+        False,
+        "--no-signals",
+        help="Disable the signal bridge event backend",
+    ),
+    events_file: Optional[str] = typer.Option(
+        None,
+        "--events-file",
+        help="Custom path for the JSONL pipeline events log file",
+    ),
 ) -> None:
     """Execute a DOT pipeline from start node to exit node.
 
@@ -1106,12 +1121,21 @@ def pipeline_run(
             typer.echo(f"Error: Pipelines directory does not exist: {_pdir}", err=True)
             raise typer.Exit(1)
 
+    from cobuilder.engine.events.emitter import EventBusConfig
+
+    event_bus_config = EventBusConfig(
+        logfire_enabled=not no_logfire,
+        signal_bridge_enabled=not no_signals,
+        jsonl_path=events_file,
+    )
+
     runner = EngineRunner(
         dot_path=file,
         run_dir=resume,
         pipelines_dir=pipelines_dir,
         max_node_visits=max_visits,
         skip_validation=skip_validation,
+        event_bus_config=event_bus_config,
     )
 
     try:

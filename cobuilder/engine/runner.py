@@ -150,6 +150,7 @@ class EngineRunner:
         handler_registry: "HandlerRegistry | None" = None,
         initial_context: dict[str, Any] | None = None,
         skip_validation: bool = False,
+        event_bus_config: "EventBusConfig | None" = None,
     ) -> None:
         self.dot_path = Path(dot_path).resolve()
         self._pipelines_dir = Path(pipelines_dir) if pipelines_dir else None
@@ -159,6 +160,7 @@ class EngineRunner:
         self._registry = handler_registry or HandlerRegistry.default()
         self._initial_context = dict(initial_context or {})
         self._skip_validation = skip_validation
+        self._event_bus_config: "EventBusConfig | None" = event_bus_config
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -220,6 +222,7 @@ class EngineRunner:
             emitter = build_emitter(
                 pipeline_id=pipeline_id,
                 run_dir=str(run_dir),
+                config=self._event_bus_config,
             )
         else:
             # Fallback: no-op stub so existing code paths are unchanged.
