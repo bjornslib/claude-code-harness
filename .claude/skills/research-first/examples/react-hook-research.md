@@ -27,7 +27,7 @@ Task(
     Steps:
     1. Use mcp__context7__resolve-library-id for "react"
     2. Use mcp__context7__query-docs for "custom hooks form validation useActionState"
-    3. Use mcp__perplexity-ask__perplexity_ask to validate:
+    3. Use mcp__perplexity__perplexity_ask to validate:
        - Is useActionState the right choice for client+server validation?
        - Should I use react-hook-form or build custom?
        - Any gotchas with React 19 form handling?

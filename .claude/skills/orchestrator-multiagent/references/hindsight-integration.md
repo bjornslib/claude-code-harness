@@ -90,7 +90,7 @@ mcp__hindsight__reflect(
 )
 
 # 3. Validate with Perplexity (MANDATORY)
-mcp__perplexity-ask__perplexity_ask(
+mcp__perplexity__perplexity_ask(
     messages=[{
         "role": "user",
         "content": "I'm seeing repeated failures with [issue]. My hypothesis is [reflection output]. Is this assessment correct? What approaches should I consider?"
@@ -127,7 +127,7 @@ mcp__hindsight__reflect(
 )
 
 # 2. Validate prevention approach with Perplexity
-mcp__perplexity-ask__perplexity_ask(
+mcp__perplexity__perplexity_ask(
     messages=[{
         "role": "user",
         "content": "My tests passed but feature failed because [gap]. How should I improve my testing approach to catch this?"

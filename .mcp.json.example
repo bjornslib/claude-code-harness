@@ -31,15 +31,16 @@
         "@upstash/context7-mcp@latest"
       ]
     },
-    "perplexity-ask": {
+    "perplexity": {
       "type": "stdio",
       "command": "npx",
       "args": [
         "-y",
-        "server-perplexity-ask"
+        "@perplexity-ai/mcp-server"
       ],
       "env": {
-        "PERPLEXITY_API_KEY": "your-perplexity-api-key-here"
+        "PERPLEXITY_API_KEY": "your-perplexity-api-key-here",
+        "PERPLEXITY_TIMEOUT_MS": "600000"
       }
     },
     "brave-search": {

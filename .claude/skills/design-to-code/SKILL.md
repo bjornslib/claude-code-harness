@@ -104,11 +104,10 @@ Use **mcp__shadcn** to verify:
 ```
 
 #### 2d. Research UI Patterns (if needed)
-Use **mcp__perplexity-ask__perplexity_ask** for:
+Use **Perplexity tools** for UI research:
 ```
-- Best practices for specific UI patterns
-- Accessibility considerations
-- Performance optimization techniques
+- mcp__perplexity__perplexity_ask — quick pattern lookups
+- mcp__perplexity__perplexity_reason — comparing UI framework approaches
 ```
 
 #### 2e. Framework Documentation (if needed)
@@ -216,7 +215,8 @@ Production-ready React components with proper typing.
 | `mcp__@magicuidesign/mcp__getUIComponents` | Browse Magic UI catalog | Finding animation/effect components |
 | `mcp__@magicuidesign/mcp__getAnimations` | Animation library | Adding motion to UI |
 | `mcp__shadcn` | Component CLI | Check/install shadcn components |
-| `mcp__perplexity-ask__perplexity_ask` | Research patterns | Complex UI patterns, accessibility |
+| `mcp__perplexity__perplexity_ask` | Quick pattern lookups | UI patterns, accessibility |
+| `mcp__perplexity__perplexity_reason` | Compare approaches | UI framework tradeoffs |
 | `mcp__context7__get-library-docs` | Framework docs | Next.js/React/Tailwind specifics |
 
 ## Invocation Patterns

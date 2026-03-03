@@ -531,6 +531,79 @@ They complement each other:
 
 ---
 
+## Validation Response Workflow (Gate 2)
+
+Gate 2 of `cs-verify` checks that **every acceptance criterion** has a corresponding validation file with a passing verdict.
+
+### Storing Validation Results
+
+Use `cs-store-validation` to write a validation response for a specific acceptance criterion:
+
+```bash
+cs-store-validation --promise <promise-id> --ac-id AC-1 --response '{
+  "verdict": "PASS",
+  "reasoning": "All 5 test cases passed with expected output",
+  "criteria_results": [
+    {
+      "criterion_id": "AC-1",
+      "status": "PASS",
+      "evidence": "pytest tests/test_auth.py: 5/5 passed"
+    }
+  ]
+}'
+```
+
+### Validation JSON Schema
+
+Each validation file follows this structure:
+
+```json
+{
+  "verdict": "PASS",
+  "reasoning": "Human-readable explanation of the verdict",
+  "criteria_results": [
+    {
+      "criterion_id": "AC-1",
+      "status": "PASS|FAIL",
+      "evidence": "Description of evidence or test output"
+    }
+  ]
+}
+```
+
+### Valid Verdicts
+
+| Verdict | Meaning | Gate 2 Result |
+|---------|---------|---------------|
+| `PASS` | Criterion fully met | Accepted |
+| `PARTIAL` | Criterion partially met (acceptable) | Accepted |
+| `FAIL` | Criterion not met | Blocked |
+| `BLOCKED` | Cannot validate (dependency issue) | Blocked |
+
+Verdicts are **case-insensitive** — `pass`, `Pass`, and `PASS` are all accepted.
+
+### Storage Location
+
+Validation files are stored at:
+
+```
+.claude/completion-state/validations/{promise-id}/{AC-X}-validation.json
+```
+
+### How Gate 2 Connects to cs-verify
+
+When you run `cs-verify --promise <id>`, Gate 2:
+
+1. Reads the promise's acceptance criteria from `session-state.json`
+2. For each criterion (`AC-1`, `AC-2`, etc.), looks for a validation file at the storage location above
+3. Reads the `verdict` field from each validation JSON
+4. **PASS** or **PARTIAL** → criterion accepted
+5. **FAIL** or **BLOCKED** → verification blocked with reason
+6. **Missing file** → verification blocked with "Missing validation" message
+7. All criteria must have accepted verdicts for Gate 2 to pass
+
+---
+
 **Version**: 2.0.0
 **Dependencies**: jq, bash
 **Integration**: system3-meta-orchestrator, stop-gate.py

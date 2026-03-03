@@ -181,7 +181,8 @@ All scripts are in {scripts_dir}:
    c. Run research agent (synchronous — completes in seconds):
       python3 {scripts_dir}/run_research.py --node <node_id> --prd <prd_ref> \
           --solution-design <solution_design_attr> --target-dir {target_dir} \
-          --frameworks <research_queries_attr>
+          --frameworks <research_queries_attr> \
+          --prd-path <prd_path_attr if present>
    d. Parse the JSON output from stdout
    e. If status=ok and sd_updated=true:
       - The SD has been updated with validated patterns
@@ -201,6 +202,43 @@ All scripts are in {scripts_dir}:
 
 Research nodes are dispatched BEFORE codergen nodes. The downstream codergen node's dependency
 on the research node is enforced by DOT edges — it won't appear in --deps-met until research
+is validated.
+
+### Phase 2a.5: Dispatch Refine Nodes (AFTER research, BEFORE codergen)
+4c. Find ready refine nodes:
+    python3 {scripts_dir}/cli.py status {dot_path} --filter=pending --deps-met --json
+    Filter output for nodes with handler="refine".
+4d. For each ready refine node:
+   a. Transition to active:
+      python3 {scripts_dir}/cli.py transition {dot_path} transition <node_id> active
+   b. Save checkpoint:
+      python3 {scripts_dir}/cli.py checkpoint save {dot_path}
+   c. Run refine agent (synchronous — uses Sonnet, takes ~30-60s):
+      python3 {scripts_dir}/run_refine.py --node <node_id> --prd <prd_ref> \
+          --solution-design <solution_design_attr> --target-dir {target_dir} \
+          --evidence-path <evidence_path_attr> \
+          --prd-path <prd_path_attr if present>
+   d. Parse the JSON output from stdout
+   e. If status=ok and sd_updated=true:
+      - The SD has been rewritten with research findings as first-class content
+      - All inline research annotations have been removed
+      - Transition refine node to validated:
+        python3 {scripts_dir}/cli.py transition {dot_path} transition <node_id> validated
+      - Save checkpoint
+      - Log: "Refine completed: rewrote N sections, patched M sections, removed K annotations"
+   f. If status=ok and sd_updated=false:
+      - SD needed no refinement beyond what research already did
+      - Transition refine node to validated:
+        python3 {scripts_dir}/cli.py transition {dot_path} transition <node_id> validated
+      - Save checkpoint
+   g. If status=error:
+      - Transition to failed:
+        python3 {scripts_dir}/cli.py transition {dot_path} transition <node_id> failed
+      - Escalate: python3 {scripts_dir}/escalate_to_terminal.py --pipeline {pipeline_id} --issue "Refine failed for <node_id>: <error>"
+
+Refine nodes run AFTER research and BEFORE codergen. They transform inline research
+annotations into production-quality SD content. The downstream codergen node's dependency
+on the refine node is enforced by DOT edges — it won't appear in --deps-met until refine
 is validated.
 
 ### Phase 2b: Dispatch Ready Codergen Nodes

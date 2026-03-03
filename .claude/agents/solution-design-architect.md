@@ -97,7 +97,9 @@ mcp__serena__switch_modes(["planning", "interactive"])
 
 2. **Research Protocol** (via `research-first` + context7):
    - `mcp__context7__get-library-docs` — official framework documentation (PREFERRED over Perplexity for API patterns)
-   - `mcp__perplexity-ask__perplexity_ask` — architectural best practices and design pattern validation
+   - `mcp__perplexity__perplexity_ask` — quick technical questions and API pattern validation
+   - `mcp__perplexity__perplexity_research` — comprehensive architecture research for complex designs
+   - `mcp__perplexity__perplexity_reason` — tradeoff analysis between competing approaches
    - `mcp__brave-search__brave_web_search` — current technology comparisons and real-world implementations
    - `mcp__serena__search_for_pattern` — find similar implementations in the existing codebase
 

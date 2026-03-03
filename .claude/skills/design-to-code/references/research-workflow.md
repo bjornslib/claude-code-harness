@@ -188,7 +188,7 @@ Verify compatibility before selecting:
 ### Query Format
 
 ```
-mcp__perplexity-ask__perplexity_ask:
+mcp__perplexity__perplexity_ask:
   "Best practices for {pattern} in React 19 with Tailwind CSS.
    Focus on: accessibility, performance, dark mode support.
    Include specific implementation patterns."
@@ -295,7 +295,7 @@ Execute all research in a single message with multiple tool calls:
   Task({ subagent_type: "Explore", prompt: "Find patterns..." }),
   mcp__@magicuidesign/mcp__getUIComponents({ query: "..." }),
   mcp__@magicuidesign/mcp__getAnimations({ query: "..." }),
-  mcp__perplexity-ask__perplexity_ask({ query: "..." })
+  mcp__perplexity__perplexity_ask({ query: "..." })
 ]
 ```
 

@@ -156,7 +156,48 @@ cobuilder pipeline validate /path/to/impl-repo/.claude/attractor/pipelines/${INI
 
 # 4. Review status
 cobuilder pipeline status /path/to/impl-repo/.claude/attractor/pipelines/${INITIATIVE}.dot --summary
+
+# 5. Verify research → refine → codergen chains (MANDATORY)
+PIPELINE=/path/to/impl-repo/.claude/attractor/pipelines/${INITIATIVE}.dot
+cobuilder pipeline status ${PIPELINE} --json | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+nodes = data.get('nodes', [])
+edges = data.get('edges', [])
+
+codergen = [n for n in nodes if n.get('handler') == 'codergen']
+research = {n['node_id'] for n in nodes if n.get('handler') == 'research'}
+refine = {n['node_id'] for n in nodes if n.get('handler') == 'refine'}
+
+# Build edge lookup: dst -> set of srcs
+incoming = {}
+for e in edges:
+    incoming.setdefault(e['dst'], set()).add(e['src'])
+
+issues = []
+for cg in codergen:
+    cg_id = cg['node_id']
+    cg_preds = incoming.get(cg_id, set())
+    refine_preds = cg_preds & refine
+    if not refine_preds:
+        issues.append(f'  {cg_id}: no refine predecessor (needs research -> refine -> codergen chain)')
+        continue
+    for rp in refine_preds:
+        rp_preds = incoming.get(rp, set())
+        if not (rp_preds & research):
+            issues.append(f'  {cg_id}: refine node {rp} has no research predecessor')
+
+if issues:
+    print('FAILED: Missing research -> refine -> codergen chains:', file=sys.stderr)
+    for i in issues:
+        print(i, file=sys.stderr)
+    sys.exit(1)
+else:
+    print(f'OK: All {len(codergen)} codergen nodes have research -> refine predecessors')
+"
 ```
+
+**MANDATORY**: Every `codergen` node in the pipeline MUST be preceded by a `research → refine` chain. This was introduced in v0.4.1 — research nodes validate framework patterns via Context7/Perplexity, refine nodes rewrite the SD with findings as first-class content. Bare codergen nodes risk implementing against outdated API patterns. If step 5 fails, add the missing research/refine nodes via `cobuilder pipeline node-add` and `cobuilder pipeline edge-add` before proceeding to Checkpoint A.
 
 The `cobuilder pipeline create` command performs 7 steps automatically:
 1. Checks/auto-creates RepoMap baseline (`ensure_baseline`)
@@ -168,6 +209,48 @@ The `cobuilder pipeline create` command performs 7 steps automatically:
 7. Generates the DOT file
 
 **Do NOT build pipelines manually** with `node-add` / `edge-add` commands. Use `cobuilder pipeline create` which produces a properly structured pipeline from your SD + RepoMap context.
+
+### Checkpoint A: PRD & Pipeline Review
+
+Before proceeding to Task Master parsing, pause and present the user with a summary of what Phase 0 has produced so far. This is the last opportunity to adjust PRD scope or pipeline structure before the task hierarchy is locked in.
+
+**Gather summary data**:
+
+```bash
+# Pipeline summary
+cobuilder pipeline status ${PIPELINE} --summary --json
+
+# Count epics and goals in PRD
+EPIC_COUNT=$(grep -c "^## Epic" ${IMPL_REPO}/docs/prds/PRD-${ID}.md || echo 0)
+GOAL_COUNT=$(grep -c "^## Goal\|^### Goal" ${IMPL_REPO}/docs/prds/PRD-${ID}.md || echo 0)
+SD_COUNT=$(ls ${IMPL_REPO}/docs/prds/SD-*.md 2>/dev/null | wc -l | tr -d ' ')
+```
+
+**Present to user via AskUserQuestion**:
+
+Compose a summary message that includes:
+- PRD title, goal count, and epic count
+- Per-epic: title, SD file path, number of acceptance criteria
+- Pipeline summary: total nodes (research/refine/codergen breakdown), edge count, chain validation status
+- Estimated implementation scope (node count as proxy for effort)
+
+Then call `AskUserQuestion` with these options:
+
+| Option | Label | Description |
+|--------|-------|-------------|
+| 1 | Continue to Task Master (Recommended) | PRD scope and pipeline look correct — proceed to parse PRD into tasks and sync to beads |
+| 2 | Adjust PRD scope | I want to modify epics, acceptance criteria, or technology choices before proceeding |
+| 3 | Regenerate pipeline | Pipeline structure needs changes — re-run `cobuilder pipeline create` with different parameters |
+| 4 | Review files first | Show me the file paths so I can review the PRD and SDs manually before deciding |
+
+**Response handling**:
+
+| User Choice | Guardian Action |
+|-------------|-----------------|
+| Continue to Task Master | Proceed to Step 0.3 |
+| Adjust PRD scope | Wait for user edits or apply specified changes to PRD, then re-run Step 0.2 (pipeline creation + chain validation) and present Checkpoint A again |
+| Regenerate pipeline | Re-run `cobuilder pipeline create` with user-specified adjustments, re-validate chains, and present Checkpoint A again |
+| Review files first | List all relevant file paths (PRD, SDs, pipeline DOT file) so the user can inspect them, then re-present Checkpoint A |
 
 ### Step 0.3: Parse PRD with Task Master
 
@@ -293,13 +376,93 @@ Task(
 
 #### Handling Challenge Results
 
-| Verdict | Guardian Action |
-|---------|----------------|
-| PROCEED | Log result to Hindsight, continue to Phase 1 |
-| AMEND | Apply recommended changes to PRD, re-run Step 0.3 (Task Master re-parse), update beads |
-| REDESIGN | Major rework needed — revisit Step 0.1 with architect feedback as input |
+| Verdict | Guardian Action | User Checkpoint |
+|---------|----------------|-----------------|
+| PROCEED | Log result to Hindsight, continue to Phase 1 | Confirm via Checkpoint B |
+| AMEND | Apply changes, re-run 0.3 | Select which amendments to accept |
+| REDESIGN | Revisit Step 0.1 | Confirm restart or narrow scope |
 
 **Anti-pattern**: Ignoring AMEND/REDESIGN verdicts because "it's probably fine" or "we already created beads." The cost of fixing a flawed design after implementation is 10x the cost of fixing the PRD.
+
+### Checkpoint B: Design Challenge Review
+
+After the design challenge completes and the verdict is determined, pause and present the results to the user before proceeding. The user should see the architect consensus and confirm the path forward.
+
+**Present to user via AskUserQuestion** — use the variant matching the verdict:
+
+#### Variant: PROCEED Verdict
+
+Compose a summary that includes:
+- Design challenge verdict: PROCEED
+- Key consensus items from the architect review (top 3 concerns, even if minor)
+- Technology validation results (any deprecation warnings or version issues)
+- Confirmation that all 7 architects found no blocking issues
+
+Then call `AskUserQuestion` with these options:
+
+| Option | Label | Description |
+|--------|-------|-------------|
+| 1 | Proceed to Phase 1 (Recommended) | Design challenge passed — continue to acceptance test creation |
+| 2 | Address concerns first | I want to address the minor concerns raised before proceeding |
+| 3 | Run additional research | I want deeper investigation on a specific technology choice |
+
+**Response handling**:
+
+| User Choice | Guardian Action |
+|-------------|-----------------|
+| Proceed to Phase 1 | Log PROCEED to Hindsight, continue to Phase 1 |
+| Address concerns first | Wait for user to specify which concerns to address, apply changes, re-run Step 0.4 |
+| Run additional research | Spawn `research-first` for the specified technology, present findings, then re-present Checkpoint B |
+
+#### Variant: AMEND Verdict
+
+Compose a summary that includes:
+- Design challenge verdict: AMEND
+- Recommended amendments (list each with rationale)
+- Risk matrix highlights (critical/high items only)
+- Impact on existing pipeline and task structure
+
+Then call `AskUserQuestion` with these options:
+
+| Option | Label | Description |
+|--------|-------|-------------|
+| 1 | Accept all amendments (Recommended) | Apply all recommended changes to PRD, re-run Task Master parsing |
+| 2 | Accept some amendments | I want to select which amendments to apply |
+| 3 | Override and proceed | I understand the risks — proceed without amendments |
+| 4 | Redesign from scratch | The amendments reveal deeper issues — restart Phase 0 |
+
+**Response handling**:
+
+| User Choice | Guardian Action |
+|-------------|-----------------|
+| Accept all amendments | Apply all changes to PRD, re-run Step 0.3, update beads and pipeline |
+| Accept some amendments | Wait for user to specify which amendments, apply selected changes, re-run Step 0.3 |
+| Override and proceed | Log override decision to Hindsight with rationale, continue to Phase 1 |
+| Redesign from scratch | Return to Step 0.1 with architect feedback as input |
+
+#### Variant: REDESIGN Verdict
+
+Compose a summary that includes:
+- Design challenge verdict: REDESIGN
+- Critical issues that necessitate redesign (from consensus concerns)
+- Architect recommendations for alternative approaches
+- Estimated impact of redesign vs proceeding with current design
+
+Then call `AskUserQuestion` with these options:
+
+| Option | Label | Description |
+|--------|-------|-------------|
+| 1 | Restart Phase 0 (Recommended) | Return to Step 0.1 with architect feedback as input for a new PRD |
+| 2 | Narrow scope | Reduce the initiative scope to avoid the critical issues, then re-design |
+| 3 | Override and proceed | I understand the significant risks — proceed with the current design |
+
+**Response handling**:
+
+| User Choice | Guardian Action |
+|-------------|-----------------|
+| Restart Phase 0 | Return to Step 0.1 with architect feedback as context, create new PRD |
+| Narrow scope | Work with user to define reduced scope, then restart from Step 0.1 with narrower PRD |
+| Override and proceed | Log override to Hindsight with explicit risk acknowledgment, continue to Phase 1 |
 
 #### Evidence Storage
 

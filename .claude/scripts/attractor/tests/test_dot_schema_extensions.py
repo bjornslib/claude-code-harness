@@ -18,7 +18,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from parser import parse_dot
-from validator import validate, WARNING_ATTRS
+from validator import validate, WARNING_ATTRS, VALID_HANDLERS, HANDLER_SHAPE_MAP, REQUIRED_ATTRS
 
 # ---------------------------------------------------------------------------
 # Test fixtures (DOT strings)
@@ -305,4 +305,198 @@ def test_validator_warning_node_id_matches_codergen_node():
     # The node field should reference the codergen node
     assert prd_warnings[0].node == "impl_feature", (
         f"Expected warning node to be 'impl_feature', got '{prd_warnings[0].node}'"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Research and Refine handler tests
+# ---------------------------------------------------------------------------
+
+DOT_WITH_RESEARCH_AND_REFINE = '''
+digraph "test_research_refine" {
+    graph [
+        label="Research-Refine Pipeline"
+        prd_ref="PRD-TEST-002"
+        promise_id=""
+    ];
+    start [
+        handler="start"
+        shape=Mdiamond
+        label="Start"
+        status="validated"
+    ]
+    research_g1 [
+        shape=tab
+        handler="research"
+        label="Research\\nG1 Patterns"
+        solution_design="docs/sds/SD-TEST.md"
+        research_queries="nextjs,supabase"
+        prd_ref="PRD-TEST-002"
+        status="pending"
+    ]
+    refine_g1 [
+        shape=note
+        handler="refine"
+        label="Refine\\nG1 Patterns"
+        solution_design="docs/sds/SD-TEST.md"
+        evidence_path=".claude/evidence/research_g1/research-findings.json"
+        prd_ref="PRD-TEST-002"
+        status="pending"
+    ]
+    impl_g1 [
+        handler="codergen"
+        shape=box
+        label="Implement G1"
+        status="pending"
+        bead_id="G1-001"
+        worker_type="backend-solutions-engineer"
+        prd_ref="PRD-TEST-002"
+        acceptance="G1 works correctly"
+    ]
+    validate_g1 [
+        handler="wait.human"
+        shape=hexagon
+        label="Validate G1"
+        gate="technical"
+        mode="technical"
+        status="pending"
+    ]
+    decision_g1 [
+        handler="conditional"
+        shape=diamond
+        label="G1 Result?"
+    ]
+    finish [
+        handler="exit"
+        shape=Msquare
+        label="Finish"
+        status="pending"
+    ]
+
+    start -> research_g1
+    research_g1 -> refine_g1 [label="research_complete"]
+    refine_g1 -> impl_g1 [label="refine_complete"]
+    impl_g1 -> validate_g1
+    validate_g1 -> decision_g1
+    decision_g1 -> finish [label="pass" condition="pass"]
+    decision_g1 -> impl_g1 [label="fail" condition="fail"]
+}
+'''
+
+DOT_WITH_REFINE_MISSING_EVIDENCE_PATH = '''
+digraph "test_refine_missing" {
+    graph [label="Missing evidence_path" promise_id=""];
+    start [handler="start" shape=Mdiamond label="Start" status="validated"]
+    refine_bad [
+        shape=note
+        handler="refine"
+        label="Refine\\nBad"
+        solution_design="docs/sds/SD-TEST.md"
+        status="pending"
+    ]
+    finish [handler="exit" shape=Msquare label="Finish" status="pending"]
+    start -> refine_bad
+    refine_bad -> finish
+}
+'''
+
+DOT_WITH_REFINE_WRONG_SHAPE = '''
+digraph "test_refine_shape" {
+    graph [label="Wrong shape" promise_id=""];
+    start [handler="start" shape=Mdiamond label="Start" status="validated"]
+    refine_bad [
+        shape=box
+        handler="refine"
+        label="Refine\\nBad"
+        solution_design="docs/sds/SD-TEST.md"
+        evidence_path=".claude/evidence/research/findings.json"
+        status="pending"
+    ]
+    finish [handler="exit" shape=Msquare label="Finish" status="pending"]
+    start -> refine_bad
+    refine_bad -> finish
+}
+'''
+
+
+def test_valid_handlers_includes_research_and_refine():
+    """VALID_HANDLERS constant includes research and refine."""
+    assert "research" in VALID_HANDLERS
+    assert "refine" in VALID_HANDLERS
+
+
+def test_handler_shape_map_research_tab():
+    """research handler maps to tab shape."""
+    assert HANDLER_SHAPE_MAP["research"] == "tab"
+
+
+def test_handler_shape_map_refine_note():
+    """refine handler maps to note shape."""
+    assert HANDLER_SHAPE_MAP["refine"] == "note"
+
+
+def test_required_attrs_research():
+    """research handler requires label, handler, solution_design."""
+    assert "research" in REQUIRED_ATTRS
+    assert "label" in REQUIRED_ATTRS["research"]
+    assert "handler" in REQUIRED_ATTRS["research"]
+    assert "solution_design" in REQUIRED_ATTRS["research"]
+
+
+def test_required_attrs_refine():
+    """refine handler requires label, handler, solution_design, evidence_path."""
+    assert "refine" in REQUIRED_ATTRS
+    assert "label" in REQUIRED_ATTRS["refine"]
+    assert "handler" in REQUIRED_ATTRS["refine"]
+    assert "solution_design" in REQUIRED_ATTRS["refine"]
+    assert "evidence_path" in REQUIRED_ATTRS["refine"]
+
+
+def test_warning_attrs_research():
+    """research handler has prd_ref and research_queries as warning attrs."""
+    assert "research" in WARNING_ATTRS
+    assert "prd_ref" in WARNING_ATTRS["research"]
+    assert "research_queries" in WARNING_ATTRS["research"]
+
+
+def test_warning_attrs_refine():
+    """refine handler has prd_ref as warning attr."""
+    assert "refine" in WARNING_ATTRS
+    assert "prd_ref" in WARNING_ATTRS["refine"]
+
+
+def test_validator_accepts_research_refine_codergen_chain():
+    """A pipeline with research -> refine -> codergen chain produces no errors."""
+    data = parse_dot(DOT_WITH_RESEARCH_AND_REFINE)
+    issues = validate(data)
+    errors = [i for i in issues if i.level == "error"]
+    assert len(errors) == 0, (
+        f"Expected no errors for research->refine->codergen chain, got: "
+        f"{[str(e) for e in errors]}"
+    )
+
+
+def test_validator_errors_on_refine_missing_evidence_path():
+    """A refine node without evidence_path produces an error."""
+    data = parse_dot(DOT_WITH_REFINE_MISSING_EVIDENCE_PATH)
+    issues = validate(data)
+    evidence_errors = [
+        i for i in issues
+        if i.level == "error" and "evidence_path" in i.message
+    ]
+    assert len(evidence_errors) >= 1, (
+        f"Expected error about missing evidence_path, got: {[str(i) for i in issues]}"
+    )
+
+
+def test_validator_errors_on_refine_wrong_shape():
+    """A refine node with shape=box (instead of note) produces an error."""
+    data = parse_dot(DOT_WITH_REFINE_WRONG_SHAPE)
+    issues = validate(data)
+    shape_errors = [
+        i for i in issues
+        if i.level == "error" and "shape" in i.message.lower() and "refine" in i.message
+    ]
+    assert len(shape_errors) >= 1, (
+        f"Expected shape mismatch error for refine node, got: {[str(i) for i in issues]}"
     )

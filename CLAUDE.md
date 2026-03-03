@@ -113,7 +113,7 @@ The repository includes extensive MCP (Model Context Protocol) server integratio
 - `sequential-thinking` - Multi-step reasoning
 - `task-master-ai` - Task decomposition and management
 - `context7` - Framework documentation lookup
-- `perplexity-ask` - Web research
+- `perplexity` - Web research (4 tools: `perplexity_search`, `perplexity_ask`, `perplexity_research`, `perplexity_reason`)
 - `brave-search` - Web search
 - `serena` - IDE assistant patterns
 - `hindsight` - Long-term memory (HTTP server on localhost:8888)

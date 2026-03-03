@@ -1,9 +1,10 @@
 ---
 name: s3-guardian
 description: This skill should be used when System 3 needs to act as an independent guardian angel — designing PRDs with CoBuilder RepoMap context injection, challenging designs via parallel solutioning, spawning orchestrators in tmux, creating blind Gherkin acceptance tests and executable browser test scripts from PRDs, monitoring orchestrator progress, independently validating claims against acceptance criteria using gradient confidence scoring (0.0-1.0), and setting session promises. Use when asked to "spawn and monitor an orchestrator", "create acceptance tests for a PRD", "validate orchestrator claims", "act as guardian angel", "independently verify implementation work", or "design and challenge a PRD".
-version: 0.1.0
+version: 0.4.4
 title: "S3 Guardian"
 status: active
+last_verified: 2026-03-02
 ---
 
 # S3 Guardian — Independent Validation Pattern
@@ -23,6 +24,8 @@ Guardian (this session, config repo)
     |       +-- tmux mode: Spawns Orchestrators in tmux (one per epic/DOT node)
     |       |
     |       +-- Research nodes run BEFORE codergen (validate SD via Context7/Perplexity)
+    |       +-- Refine nodes run AFTER research (rewrite SD with findings as first-class content)
+    |       +-- Research-only pipelines (no codergen) are valid — guardian completes after refine
     |       +-- Workers (native Agent Teams, spawned by orchestrator)
     |
     |-- Monitors orchestrator progress (SDK: poll DOT state; tmux: capture-pane)
@@ -127,13 +130,20 @@ export PATH="${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/completion-state:$PATH"
 
 ## Step 0: Promise Creation (MANDATORY — Do This First)
 
-Before ANY other work, identify whether the user has given you a goal or task to achieve. If they have, create a completion promise that captures it.
+Before ANY other work, identify the user's goal and create a completion promise.
 
-Use your judgment to understand:
-- What the user wants you to achieve (the promise title)
-- What the key deliverables or outcomes are (acceptance criteria — 3–5 measurable results)
+### Identifying the Promise
 
-Then create and start the promise:
+| Work Type | Promise Title Pattern | Example ACs |
+|-----------|----------------------|-------------|
+| **Guardian validation** (standard) | "Guardian: Validate PRD-{ID} implementation" | See Session Promise Integration below |
+| **Research / Investigation** | "Research: {topic}" | "Research report delivered", "Findings retained to Hindsight", "Recommendation documented" |
+| **PRD & Solution Design** | "Design: {initiative name}" | "PRD written with business goals + epics", "SD created per epic", "Pipeline DOT created", "Design challenge passed" |
+| **Implementation (direct)** | "Implement: {feature/fix}" | "Code changes committed", "Tests passing", "Validation agent confirms" |
+| **Codebase quality / maintenance** | "Maintain: {scope}" | "Issues identified and cataloged", "Fixes applied", "No regressions" |
+| **Multi-initiative orchestration** | "Orchestrate: {N} initiatives" | One AC per initiative completion |
+
+### Creating the Promise
 
 ```bash
 cs-promise --create "<goal title>" \
@@ -143,9 +153,13 @@ cs-promise --create "<goal title>" \
 cs-promise --start <promise-id>
 ```
 
-**Store the promise ID** — you will `--meet` each AC as its phase completes (see "Session Promise Integration" section for the per-phase `--meet` calls).
+**Rules**:
+- Every session MUST have at least one promise
+- ACs should be **verifiable** — "code committed" not "code written"
+- 3-5 ACs is ideal; more than 6 suggests the goal should be split
+- Store the promise ID — you will `--meet` each AC as work progresses
 
-> **Note**: The "Session Promise Integration" section at the bottom of this skill provides a pre-built template specifically for guardian validation sessions (acceptance tests, spawning, monitoring, validation, verdict). Use that template's `--ac` text directly when your goal matches the standard guardian pattern; adjust the ACs for non-standard goals.
+> **Note**: The "Session Promise Integration" section below provides a pre-built template for the standard guardian validation pattern. For all other work types, craft ACs from the examples above.
 
 ---
 
@@ -153,7 +167,7 @@ cs-promise --start <promise-id>
 
 | Phase | Purpose | Reference |
 |-------|---------|-----------|
-| **Phase 0** | PRD authoring with CoBuilder RepoMap context injection, DOT pipeline creation, Task Master parsing, design challenge | [references/phase0-prd-design.md](references/phase0-prd-design.md) |
+| **Phase 0** | PRD authoring with CoBuilder RepoMap context injection, DOT pipeline creation (with research→refine→codergen chain validation), Task Master parsing, design challenge. **2 user checkpoints**: Checkpoint A (after pipeline creation) and Checkpoint B (after design challenge) | [references/phase0-prd-design.md](references/phase0-prd-design.md) |
 | **Phase 1** | Generate per-epic Gherkin tests, journey tests, and executable browser test scripts | [references/gherkin-test-patterns.md](references/gherkin-test-patterns.md) |
 | **Phase 2** | Orchestrator spawning via `spawn_orchestrator.py`, tmux patterns, DOT-driven dispatch | [references/guardian-workflow.md](references/guardian-workflow.md) |
 | **Phase 3** | Monitoring cadence, pause-and-check pattern, intervention triggers, AskUserQuestion handling | [references/monitoring-patterns.md](references/monitoring-patterns.md) |
@@ -163,7 +177,9 @@ cs-promise --start <promise-id>
 
 ---
 
-## Session Promise Integration
+## Session Promise Integration (Guardian Validation Template)
+
+> This template is for the **standard guardian validation pattern** (Phases 0-4). For other work types (research, PRD design, implementation), see Step 0 above for work-type-specific AC patterns.
 
 The guardian session itself tracks completion via the `cs-promise` CLI.
 
@@ -230,6 +246,27 @@ Each level adds independent verification. The key constraint: each guardian stor
 | 4. Validation | Score scenarios, run executable tests, weighted total | [validation-scoring.md](references/validation-scoring.md) |
 | 4.5 Regression | ZeroRepo diff before journey tests | [references/validation-scoring.md](references/validation-scoring.md) |
 
+### SDK Mode Entry Points
+
+For automated (headless) pipeline execution, use SDK mode. Full CLI reference: [references/sdk-cli-tools.md](references/sdk-cli-tools.md)
+
+**Primary entry point** — launches the full 4-layer chain:
+```bash
+python3 .claude/scripts/attractor/launch_guardian.py \
+    --dot .claude/attractor/pipelines/PRD-{ID}.dot \
+    --pipeline-id PRD-{ID} \
+    --project-root /path/to/impl-repo
+```
+
+| Script | Layer | Key Flags | Purpose |
+|--------|-------|-----------|---------|
+| `launch_guardian.py` | 0 (Terminal) | `--dot`, `--multi`, `--dry-run` | Entry point — bridges terminal to headless guardian |
+| `guardian_agent.py` | 1 (Guardian) | `--dot`, `--pipeline-id`, `--max-retries` | Pipeline execution engine |
+| `spawn_orchestrator.py` | 2 (Runner) | `--node`, `--prd`, `--mode {sdk\|tmux}`, `--prompt` | Creates orchestrator sessions |
+| `runner_agent.py` | 2 (Runner) | `--node`, `--prd`, `--session`, `--check-interval` | Monitors orchestrator, signals guardian |
+
+> **When to use SDK vs tmux**: SDK mode (`launch_guardian.py`) for automated pipelines and CI/CD. tmux mode (`spawn_orchestrator.py --mode tmux`) for interactive sessions where you need to observe and intervene.
+
 ### Key Files
 
 | File | Purpose |
@@ -258,16 +295,22 @@ Each level adds independent verification. The key constraint: each guardian stor
 | Skipping `/output-style orchestrator` step | Orchestrator has no delegation rules, tries to implement directly | Script handles this automatically |
 | Wisdom without `Skill("orchestrator-multiagent")` | Orchestrator cannot create teams or delegate to workers | Include in `--prompt` or wisdom file |
 | Codergen node without preceding research node | Orchestrator implements with potentially outdated API patterns | Add `handler="research"` node before each codergen |
+| Research without refine node downstream | SD retains inline annotations (`// Validated via...`) that confuse codergen | Add `handler="refine"` node between research and codergen |
 | Research validates docs but not local install | SD may reference v1.63 API while local env has v1.58 | Pin versions in SD or add local version check to research prompt |
+| Calling `run_research.py` per-node for pipeline execution | Bypasses guardian state machine — no DOT transitions, no checkpoints, exit code 2 | Always use `launch_guardian.py --dot-file` to drive ANY pipeline (research-only or mixed). See [guardian-workflow.md § Research-Only Pipeline Dispatch](references/guardian-workflow.md) |
 
 ---
 
-**Version**: 0.4.0
+**Version**: 0.4.4
 **Dependencies**: cs-promise CLI (requires PATH setup — see Prerequisites section), tmux (tmux mode), claude_code_sdk (SDK mode), Hindsight MCP, ccsystem3 shell function, Task Master MCP, ZeroRepo
 **Integration**: system3-orchestrator skill, completion-promise skill, acceptance-test-writer skill, parallel-solutioning skill, research-first skill
 **Theory**: Independent verification eliminates self-reporting bias in agentic systems
 
 **Changelog**:
+- v0.4.4: Broadened Step 0 promise creation with work-type-aware decision table (research, PRD design, implementation, maintenance, multi-initiative — not just guardian validation). Added SDK Mode Entry Points section to Quick Reference with 4-layer CLI table and SDK-vs-tmux guidance, linking to `references/sdk-cli-tools.md`. Qualified Session Promise Integration heading to clarify it's the guardian validation template. Root cause: non-standard sessions (research, PRD writing) had no promise template guidance, and SDK CLI parameters were undiscoverable without running `--help`.
+- v0.4.3: Documented research-only pipeline dispatch. Added "Research-Only Pipeline Dispatch" section to guardian-workflow.md with dispatch hierarchy diagram, example DOT file, exact CLI command, and internal behavior walkthrough. Added anti-pattern for calling `run_research.py` per-node instead of using `launch_guardian.py`. Updated SKILL.md architecture diagram to acknowledge research-only as a valid pipeline topology. Root cause: colleague tried to run 4 research nodes via parallel `run_research.py` calls (exit code 2) instead of launching the guardian runner.
+- v0.4.2: Added mandatory research→refine→codergen chain validation to Step 0.2 (bare codergen nodes now fail validation). Added two AskUserQuestion checkpoints to Phase 0 — Checkpoint A (after pipeline creation + chain validation) presents PRD/SD/pipeline summary; Checkpoint B (after design challenge) presents architect verdict. Both offer contextual next-step options. Prevents silent misalignment during long autonomous Phase 0 runs.
+- v0.4.1: Added refine node pattern (`handler="refine"`, `shape=note`) — runs AFTER research to rewrite SD with findings as first-class content, removing inline annotations. Uses Sonnet with mandatory Hindsight reflection before editing. Pipeline flow: `research (Haiku) → refine (Sonnet) → codergen`. Added `run_refine.py` with restricted tools (Read/Edit/Write/Hindsight only). Added anti-pattern for research-without-refine. Updated guardian-workflow.md with Refine Nodes section, pre-flight checklist, and updated DOT examples.
 - v0.4.0: Added research node pattern (`handler="research"`, `shape=tab`) — mandatory pre-implementation gates that validate framework patterns via Context7/Perplexity and update Solution Design documents. Added SDK-mode dispatch (4-layer: launch_guardian → guardian → runner → orchestrator, all headless via claude_code_sdk). Added 2 new anti-patterns (missing research node, docs-vs-local version mismatch). Updated architecture diagram and guardian-workflow reference. Validated E2E: PydanticAI web search agent pipeline completed all 5 nodes via SDK mode.
 - v0.3.0: Progressive disclosure refactor — moved Phase 0-4 content to `references/` directory. SKILL.md now acts as a routing table (~400 lines) that points to detailed reference docs loaded on demand. Reduces cold-start context by ~8,000 words.
 - v0.2.1: Replaced inline Bash spawn sequence with mandatory `spawn_orchestrator.py` usage. Added "Mandatory 3-Step Boot Sequence" section. Added "Anti-Pattern: Ad-Hoc Bash Spawn" with real-world example showing 5 violations. Added 3 new anti-patterns to table. Root cause: inline Bash in Phase 2 invited copy-paste adaptation that dropped ccorch, /output-style, and Skill("orchestrator-multiagent").

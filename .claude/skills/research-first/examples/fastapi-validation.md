@@ -31,7 +31,7 @@ Task(
     Steps:
     1. Use mcp__context7__resolve-library-id for "fastapi"
     2. Use mcp__context7__query-docs for "async background tasks dependencies"
-    3. Use mcp__perplexity-ask__perplexity_ask:
+    3. Use mcp__perplexity__perplexity_ask:
        - Should external calls be in endpoint or background task?
        - How to handle partial failures?
        - Timeout patterns for external APIs?

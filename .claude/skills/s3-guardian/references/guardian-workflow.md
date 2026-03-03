@@ -2,7 +2,7 @@
 title: "Guardian Workflow"
 status: active
 type: skill
-last_verified: 2026-02-19
+last_verified: 2026-03-02
 grade: authoritative
 ---
 
@@ -595,7 +595,7 @@ Two dispatch modes are available. Choose based on the use case:
 launch_guardian.py ──SDK──► guardian_agent.py ──SDK──► runner (spawn_runner.py)
                                                           ──SDK──► orchestrator (worker)
 ```
-All 4 layers run headless via `claude_code_sdk`. No tmux sessions, no interactive prompts. The guardian reads the DOT pipeline, dispatches research nodes (synchronous), then spawns runners for codergen nodes. Each runner spawns an orchestrator that implements the work.
+All 4 layers run headless via `claude_code_sdk`. No tmux sessions, no interactive prompts. The guardian reads the DOT pipeline, dispatches research nodes (synchronous, Haiku), then refine nodes (synchronous, Sonnet), then spawns runners for codergen nodes. Each runner spawns an orchestrator that implements the work.
 
 **tmux mode architecture** (interactive):
 ```
@@ -636,6 +636,38 @@ Research runs synchronously before codergen dispatch (~15-30s, Haiku model, ~$0.
 
 **Known limitation**: Research validates against *latest published docs* but does not check the *locally installed version*. If the local environment has an older version (e.g., pydantic-ai 1.58.0 vs documented 1.63.0), API attribute names may differ. Mitigation: pin dependency versions in the SD or add a local version check to the research prompt.
 
+### Refine Nodes (SD Cleanup After Research)
+
+Refine nodes (`handler="refine"`, `shape=note`) sit between research and codergen. They rewrite the Solution Design with research findings as first-class content, removing annotation artifacts.
+
+**DOT attributes:**
+
+| Attribute | Required | Description |
+|-----------|----------|-------------|
+| `handler` | Yes | Must be `"refine"` |
+| `shape` | Yes | Must be `"note"` |
+| `solution_design` | Yes | Path to the SD file to rewrite |
+| `evidence_path` | Yes | Path to upstream research evidence (`research-findings.json`) |
+| `prd_ref` | Recommended | PRD identifier for traceability |
+
+**What refine nodes do:**
+1. Read the upstream research evidence file (`research-findings.json`)
+2. Call `mcp__hindsight__reflect` to surface prior SD rewrite patterns
+3. Rewrite the SD — integrating validated patterns as native content, removing annotation artifacts
+4. Write `refine-findings.json` to `.claude/evidence/{node_id}/`
+
+**Key design**: Refine agents have restricted tools — only Read, Edit, Write, and Hindsight. No internet access, no Bash. This ensures the refine step is purely a rewrite operation, not additional research.
+
+**Annotation patterns removed:**
+- `// Validated via Context7/Perplexity: ...`
+- `// Note: research confirmed ...`
+- `// Context7: ...`
+- `> Note: Based on research findings ...`
+
+**Timing**: ~30-60s per node, Sonnet model (needs editorial judgment for SD rewriting).
+
+**Pipeline flow**: `research (Haiku, ~15s) → refine (Sonnet, ~30-60s) → codergen`
+
 ### SDK Mode Dispatch
 
 For automated pipelines, use `launch_guardian.py`:
@@ -651,10 +683,106 @@ python3 .claude/scripts/attractor/launch_guardian.py \
 The guardian automatically:
 1. Validates the DOT pipeline
 2. Dispatches research nodes (synchronous, before codergen)
-3. Transitions nodes through the state machine (pending → active → validated)
-4. Spawns runners for codergen nodes via SDK
-5. Handles validation gates
-6. Exits when all nodes reach `validated` or a node fails
+3. Dispatches refine nodes (synchronous, after research)
+4. Transitions nodes through the state machine (pending → active → validated)
+5. Spawns runners for codergen nodes via SDK
+6. Handles validation gates
+7. Exits when all nodes reach `validated` or a node fails
+
+### Research-Only Pipeline Dispatch
+
+Pipelines that contain **only research and refine nodes** (no codergen) are a valid and common use case — for example, batch-validating Solution Designs against current framework documentation before starting implementation.
+
+**The entry point is the same**: `launch_guardian.py` (or `guardian_agent.py` directly). The guardian detects that no codergen nodes exist and completes after all research/refine chains validate. Do NOT call `run_research.py` per-node — that is a Layer 2 internal tool invoked by the guardian, not a user-facing pipeline driver.
+
+**Dispatch hierarchy** (applies to ALL pipeline types, including research-only):
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  Layer 0: System 3 (you)                                         │
+│    Calls: launch_guardian.py --dot-file <pipeline.dot>           │
+│                                                                  │
+│  Layer 1: guardian_agent.py (Sonnet, pipeline coordinator)       │
+│    Reads DOT → dispatches nodes by handler type:                 │
+│    - handler="research" → calls run_research.py (Layer 2)       │
+│    - handler="refine"   → calls run_refine.py (Layer 2)         │
+│    - handler="codergen" → calls spawn_runner.py (Layer 2)       │
+│                                                                  │
+│  Layer 2: run_research.py / run_refine.py / spawn_runner.py     │
+│    Single-node executors. NEVER call these directly for          │
+│    pipeline execution — the guardian handles dispatch, state     │
+│    transitions, and completion detection.                        │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**Example: Research-only DOT file**
+
+```dot
+digraph research_batch {
+    // Research-only pipeline — no codergen nodes
+    // Guardian completes when all refine nodes reach "validated"
+
+    research_e4 [
+        shape=tab
+        label="Research\nFormEventEmitter"
+        handler="research"
+        solution_design="docs/sds/SD-E4-form-event-emitter.md"
+        research_queries="@livekit/components-react,livekit"
+        prd_ref="PRD-VERIFY-002"
+        status="pending"
+    ];
+    refine_e4 [
+        shape=note
+        label="Refine\nFormEventEmitter SD"
+        handler="refine"
+        solution_design="docs/sds/SD-E4-form-event-emitter.md"
+        evidence_path=".claude/evidence/research_e4/research-findings.json"
+        prd_ref="PRD-VERIFY-002"
+        status="pending"
+    ];
+    research_e4 -> refine_e4 [label="research_complete"];
+
+    research_e5 [
+        shape=tab
+        label="Research\nPostCheckProcessor"
+        handler="research"
+        solution_design="docs/sds/SD-E5-postcheck-processor.md"
+        research_queries="pydantic-ai,supabase"
+        prd_ref="PRD-VERIFY-002"
+        status="pending"
+    ];
+    refine_e5 [
+        shape=note
+        label="Refine\nPostCheckProcessor SD"
+        handler="refine"
+        solution_design="docs/sds/SD-E5-postcheck-processor.md"
+        evidence_path=".claude/evidence/research_e5/research-findings.json"
+        prd_ref="PRD-VERIFY-002"
+        status="pending"
+    ];
+    research_e5 -> refine_e5 [label="research_complete"];
+}
+```
+
+**Launch command** (identical to mixed pipelines):
+
+```bash
+python3 .claude/scripts/attractor/launch_guardian.py \
+    --dot-file .claude/attractor/pipelines/verify-check-002-research-batch.dot \
+    --target-dir /path/to/impl-repo \
+    --model claude-sonnet-4-6 \
+    --max-turns 100
+```
+
+**What happens internally**:
+1. Guardian validates the DOT — finds research and refine nodes, no codergen
+2. Phase 2a: Dispatches all research nodes in parallel (Haiku, ~15s each, ~$0.02)
+3. Phase 2a.5: Dispatches refine nodes as their upstream research validates (Sonnet, ~30-60s)
+4. Phase 2b: Finds no codergen nodes — skips
+5. Phase 4: All nodes validated → signals `PIPELINE_COMPLETE`
+6. Guardian exits cleanly
+
+**Common mistake**: Calling `run_research.py` per-node in parallel Bash jobs. This bypasses the guardian's state machine (no DOT transitions, no checkpoints, no completion detection) and the scripts fail with exit code 2 when required pipeline context is missing.
 
 ### tmux Mode Pre-flight Checks
 

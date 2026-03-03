@@ -37,6 +37,7 @@ def build_research_prompt(
     sd_path: str,
     frameworks: list[str],
     evidence_dir: str,
+    prd_path: str | None = None,
 ) -> str:
     """Build the prompt that instructs Haiku to research and update the SD.
 
@@ -46,6 +47,7 @@ def build_research_prompt(
         sd_path: Absolute path to the Solution Design document.
         frameworks: List of frameworks/libraries to validate.
         evidence_dir: Directory to write research evidence JSON.
+        prd_path: Optional absolute path to the PRD document for additional context.
 
     Returns:
         Formatted research prompt string.
@@ -58,12 +60,25 @@ def build_research_prompt(
 {fw_list}
 
 For each framework above:
-1. Use the ToolSearch tool to find and load the context7 tools
-2. Call mcp__context7__resolve-library-id to find the library ID
-3. Call mcp__context7__query-docs with relevant topics (API patterns, migration guides, breaking changes)
-4. Use the ToolSearch tool to find and load the perplexity tool
-5. Call mcp__perplexity-ask__perplexity_ask to cross-validate: "What are the current best practices and latest API patterns for <framework> as of 2026?"
+1. Call mcp__context7__resolve-library-id with the framework name to find the library ID
+2. Call mcp__context7__query-docs with the resolved library ID and relevant topics (API patterns, migration guides, breaking changes)
+3. Call mcp__perplexity__perplexity_ask to cross-validate: "What are the current best practices and latest API patterns for <framework> as of 2026?"
+4. If the research reveals multiple viable approaches or conflicting best practices,
+   use mcp__perplexity__perplexity_reason to analyze tradeoffs:
+   "Given these approaches for <framework feature>: [A] vs [B], analyze the tradeoffs
+   considering performance, maintainability, and current ecosystem support as of 2026"
+
+These MCP tools are directly available — you do NOT need to use ToolSearch to discover them.
 """
+
+    prd_section = ""
+    if prd_path:
+        prd_section = f"""
+2. Read the PRD document at {prd_path} to understand the full context, requirements, and acceptance criteria that the SD must satisfy
+"""
+        sd_step = "3"
+    else:
+        sd_step = "2"
 
     return f"""\
 You are a Research Agent validating implementation patterns before coding begins.
@@ -72,10 +87,12 @@ You are a Research Agent validating implementation patterns before coding begins
 - Node ID: {node_id}
 - PRD Reference: {prd_ref}
 - Solution Design: {sd_path}
+{f'- PRD Document: {prd_path}' if prd_path else ''}
 
 ## Instructions
 
 1. Read the Solution Design document at {sd_path}
+{prd_section}
 {frameworks_section}
 ## Update the Solution Design
 
@@ -118,7 +135,13 @@ If research tools are unavailable, still write evidence with what you could dete
 
 After writing evidence, use Hindsight to persist learnings in the target repo's memory bank.
 
-1. Use ToolSearch to find and load the hindsight tools (search "hindsight")
+The Hindsight MCP tools (mcp__hindsight__reflect, mcp__hindsight__retain, mcp__hindsight__recall) are directly available.
+
+1. **Recall** relevant research patterns — Before reflecting, surface prior learnings:
+   Call mcp__hindsight__recall with a query like:
+   "Research findings for {frameworks}, API pattern validations, Context7/Perplexity results for {prd_ref}"
+   This surfaces any prior research agent learnings for these frameworks, helping you
+   avoid re-discovering known gotchas and build on previous sessions' work.
 2. **Reflect** — Formulate your own query based on what you actually discovered during
    research. Your query should capture the most useful question a future research agent
    would need answered about these frameworks in this project's context. Consider:
@@ -152,6 +175,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="Path to Solution Design document")
     parser.add_argument("--target-dir", required=True, dest="target_dir",
                         help="Target implementation directory")
+    parser.add_argument("--prd-path", default="", dest="prd_path",
+                        help="Path to PRD document for additional context")
     parser.add_argument("--frameworks", default="",
                         help="Comma-separated list of frameworks to research")
     parser.add_argument("--model", default=DEFAULT_MODEL,
@@ -188,6 +213,7 @@ def main(argv: list[str] | None = None) -> None:
     # Resolve paths
     sd_path = os.path.abspath(args.solution_design)
     target_dir = os.path.abspath(args.target_dir)
+    prd_path = os.path.abspath(args.prd_path) if args.prd_path else None
     evidence_dir = os.path.join(target_dir, ".claude", "evidence", args.node)
     os.makedirs(evidence_dir, exist_ok=True)
 
@@ -197,6 +223,7 @@ def main(argv: list[str] | None = None) -> None:
         sd_path=sd_path,
         frameworks=frameworks,
         evidence_dir=evidence_dir,
+        prd_path=prd_path,
     )
 
     # Dry-run: output prompt and exit
@@ -205,6 +232,7 @@ def main(argv: list[str] | None = None) -> None:
             "dry_run": True,
             "node": args.node,
             "prd": args.prd,
+            "prd_path": prd_path,
             "sd_path": sd_path,
             "frameworks": frameworks,
             "model": args.model,
@@ -220,7 +248,19 @@ def main(argv: list[str] | None = None) -> None:
     from claude_code_sdk import ClaudeCodeOptions
 
     options = ClaudeCodeOptions(
-        allowed_tools=["Bash", "Read", "Edit", "Write", "ToolSearch"],
+        allowed_tools=[
+            "Bash", "Read", "Edit", "Write", "ToolSearch",
+            # MCP: research tools (Context7 for docs, Perplexity for cross-validation)
+            "mcp__context7__resolve-library-id",
+            "mcp__context7__query-docs",
+            "mcp__perplexity__perplexity_ask",
+            "mcp__perplexity__perplexity_reason",
+            "mcp__perplexity__perplexity_research",
+            # MCP: memory persistence (Hindsight for cross-session learnings)
+            "mcp__hindsight__reflect",
+            "mcp__hindsight__retain",
+            "mcp__hindsight__recall",
+        ],
         system_prompt="You are a research agent that validates implementation patterns against current documentation.",
         cwd=target_dir,
         model=args.model,

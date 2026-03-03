@@ -20,10 +20,12 @@ Validation Rules (from schema.md section 11):
     9.  No unguarded cycles (only via diamond fail-edges)
     10. promise_id exists on graph if any node has promise_ac
     11. Edge conditions use valid syntax (pass, fail, partial)
+    12. Refine evidence_path cross-references valid upstream research node
 """
 
 import argparse
 import json
+import re
 import sys
 from typing import Any
 
@@ -42,6 +44,8 @@ VALID_HANDLERS = {
     "wait.human",
     "conditional",
     "parallel",
+    "research",
+    "refine",
 }
 
 HANDLER_SHAPE_MAP = {
@@ -52,6 +56,8 @@ HANDLER_SHAPE_MAP = {
     "wait.human": "hexagon",
     "conditional": "diamond",
     "parallel": "parallelogram",
+    "research": "tab",
+    "refine": "note",
 }
 
 VALID_CONDITIONS = {"pass", "fail", "partial"}
@@ -65,12 +71,16 @@ REQUIRED_ATTRS: dict[str, list[str]] = {
     "wait.human": ["label", "handler", "gate", "mode"],
     "conditional": ["label", "handler"],
     "parallel": ["label", "handler"],
+    "research": ["label", "handler", "solution_design"],
+    "refine": ["label", "handler", "solution_design", "evidence_path"],
 }
 
 # Recommended attributes per handler type — absence emits warnings (not errors).
 # These are needed for Runner context and PRD traceability.
 WARNING_ATTRS: dict[str, list[str]] = {
     "codergen": ["prd_ref", "acceptance"],
+    "research": ["prd_ref", "research_queries", "downstream_node"],
+    "refine": ["prd_ref"],
 }
 
 VALID_WORKER_TYPES = {
@@ -284,7 +294,7 @@ def validate(data: dict[str, Any], strict: bool = False) -> list[Issue]:
                     Issue(
                         "warning",
                         8,
-                        f"codergen node '{n['id']}' missing recommended attribute '{attr}' (needed for Runner context)",
+                        f"{handler} node '{n['id']}' missing recommended attribute '{attr}' (needed for Runner context)",
                         n["id"],
                     )
                 )
@@ -353,6 +363,65 @@ def validate(data: dict[str, Any], strict: bool = False) -> list[Issue]:
                     f"expected one of {sorted(VALID_CONDITIONS)}",
                 )
             )
+
+    # --- Rule 12: Refine evidence_path cross-references upstream research node ---
+    refine_nodes = [
+        n for n in nodes if n["attrs"].get("handler") == "refine"
+    ]
+    for rn in refine_nodes:
+        ev_path = rn["attrs"].get("evidence_path", "")
+        if not ev_path:
+            continue  # Missing evidence_path is caught by required attrs (rule 8)
+        # Extract research node ID from path: */evidence/{research_node_id}/research-findings.json
+        match = re.search(r"/evidence/([^/]+)/research-findings\.json", ev_path)
+        if not match:
+            issues.append(
+                Issue(
+                    "warning",
+                    12,
+                    f"evidence_path '{ev_path}' does not match expected pattern "
+                    f"'*/evidence/{{research_node_id}}/research-findings.json'",
+                    rn["id"],
+                )
+            )
+            continue
+        ref_research_id = match.group(1)
+        # Check that the referenced research node exists
+        if ref_research_id not in node_map:
+            issues.append(
+                Issue(
+                    "warning",
+                    12,
+                    f"evidence_path references node '{ref_research_id}' which does not exist in the graph",
+                    rn["id"],
+                )
+            )
+        elif node_map[ref_research_id].get("handler") != "research":
+            issues.append(
+                Issue(
+                    "warning",
+                    12,
+                    f"evidence_path references node '{ref_research_id}' which has handler="
+                    f"'{node_map[ref_research_id].get('handler')}' (expected 'research')",
+                    rn["id"],
+                )
+            )
+        else:
+            # Check that there is an edge from research -> refine
+            has_edge = any(
+                e["src"] == ref_research_id and e["dst"] == rn["id"]
+                for e in edges
+            )
+            if not has_edge:
+                issues.append(
+                    Issue(
+                        "warning",
+                        12,
+                        f"No edge from research node '{ref_research_id}' to refine node '{rn['id']}' "
+                        f"(structural inconsistency with evidence_path)",
+                        rn["id"],
+                    )
+                )
 
     # --- Handler/shape consistency (schema rule 10 in the doc) ---
     for n in nodes:

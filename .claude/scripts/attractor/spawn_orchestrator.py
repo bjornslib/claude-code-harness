@@ -468,8 +468,10 @@ def main() -> None:
 
     # Inject baseline freshness AC into completion promise if requested.
     if getattr(args, "promise_id", ""):
+        cs_bin = Path(work_dir) / ".claude" / "scripts" / "completion-state" / "cs-promise"
+        cs_cmd = [str(cs_bin)] if cs_bin.exists() else ["cs-promise"]  # fallback to PATH
         subprocess.run([
-            "cs-promise", "--add-ac", args.promise_id,
+            *cs_cmd, "--add-ac", args.promise_id,
             "RepoMap baseline refreshed for all validated nodes (scoped_refresh called after each validated transition)",
         ], check=False)
 

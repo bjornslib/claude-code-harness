@@ -411,6 +411,7 @@ check_validation_responses() {
 
         local verdict
         verdict=$(jq -r '.verdict' "$validation_file")
+        verdict=$(echo "$verdict" | tr '[:lower:]' '[:upper:]')  # case-insensitive
 
         case "$verdict" in
             PASS|PARTIAL)
@@ -438,7 +439,7 @@ check_validation_responses() {
                 all_passed=false
                 ;;
             *)
-                echo "Gate 2 BLOCKED: Unknown verdict '$verdict' for $ac_id" >&2
+                echo "Gate 2 BLOCKED: Unknown verdict '$verdict' for $ac_id (valid: PASS, PARTIAL, FAIL, BLOCKED)" >&2
                 all_passed=false
                 ;;
         esac

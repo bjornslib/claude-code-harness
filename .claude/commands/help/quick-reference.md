@@ -107,8 +107,8 @@ mcp__serena__get_current_config()
 ### Fast Colleague Consultation
 ```python
 # Quick technical question
-mcp__perplexity-ask__perplexity_ask([{
-    "role": "user", 
+mcp__perplexity__perplexity_ask([{
+    "role": "user",
     "content": "Quick question about [SPECIFIC_TOPIC]"
 }])
 

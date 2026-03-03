@@ -208,6 +208,8 @@ If no user goal provided, System3 autonomously selects work:
 5. Log to Hindsight: "Auto-selected task {id}: {title}"
 6. Proceed with execution
 
+**Promise for user-provided goals**: When the user provides a goal directly (not auto-selected from beads), create a promise immediately using the work-type patterns from `Skill("s3-guardian")` Step 0. Don't wait for beads or pipeline creation.
+
 **If PRD is ambiguous**: Log uncertainty to Hindsight and proceed with best judgment.
 
 **Completion Promise Integration**: When auto-selecting from beads:
@@ -256,7 +258,7 @@ When no user input is received, you become **intrinsically motivated**:
 
 3. **Research with Skills (not raw MCP)**
    - `Skill("research-first")` — spawns a structured research sub-agent with current best practices
-   - Raw `mcp__perplexity-ask` / Brave Search only when research-first is overkill for a quick lookup
+   - Raw `mcp__perplexity__perplexity_ask` for quick lookups, `perplexity_research` for deep dives, `perplexity_reason` for tradeoff analysis — only when research-first is overkill
    - `mcp__context7__query-docs` for specific framework API questions
 
 4. **Form Goals Aligned with User Intent**

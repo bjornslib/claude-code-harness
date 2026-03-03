@@ -112,6 +112,7 @@ def create_multi_node_dot(
     pipeline_id: str = "multi-001",
     prd_ref: str = "PRD-MULTI-001",
     include_research: bool = False,
+    include_refine: bool = False,
     solution_design: str = "docs/sds/SD-TEST.md",
 ) -> str:
     """Generate a DOT file with multiple codergen nodes and edges.
@@ -123,11 +124,16 @@ def create_multi_node_dot(
         pipeline_id: Pipeline identifier.
         prd_ref: PRD reference.
         include_research: If True, insert a research node before each codergen node.
+        include_refine: If True, insert a refine node between research and codergen.
+                        Forces include_research=True (refine requires upstream research).
         solution_design: SD path for research nodes (only used if include_research=True).
 
     Returns:
         Absolute path to the written DOT file.
     """
+    # Refine requires upstream research
+    if include_refine:
+        include_research = True
     if nodes is None:
         nodes = [
             {"id": "impl_auth", "label": "Implement Auth", "acceptance": "Auth module works"},
@@ -136,6 +142,7 @@ def create_multi_node_dot(
 
     node_lines = []
     research_lines = []
+    refine_lines = []
     val_lines = []
     edge_lines = []
 
@@ -148,12 +155,24 @@ def create_multi_node_dot(
 
         # Optional research node before this codergen node
         if include_research and handler == "codergen":
-            rid = f"research_{nid.removeprefix('impl_')}"
+            suffix = nid.removeprefix("impl_")
+            rid = f"research_{suffix}"
             research_lines.append(
                 f'    {rid} [label="Research\\n{label}" shape="tab" handler="research"'
                 f' downstream_node="{nid}" solution_design="{solution_design}"'
                 f' research_queries="{research_queries}" prd_ref="{prd_ref}" status="pending"];'
             )
+
+            # Optional refine node between research and codergen
+            if include_refine:
+                fid = f"refine_{suffix}"
+                target_dir = str(tmp_path)
+                evidence_path = f"{target_dir}/.claude/evidence/{rid}/research-findings.json"
+                refine_lines.append(
+                    f'    {fid} [label="Refine\\n{label}" shape="note" handler="refine"'
+                    f' solution_design="{solution_design}" evidence_path="{evidence_path}"'
+                    f' prd_ref="{prd_ref}" status="pending"];'
+                )
 
         node_lines.append(
             f'    {nid} [label="{label}" handler="{handler}" status="pending"'
@@ -164,10 +183,16 @@ def create_multi_node_dot(
             f' handler="wait.human" status="pending"];'
         )
 
-        # Edge: research -> impl (or just impl -> val if no research)
+        # Edge: research -> refine -> impl, or research -> impl, or just impl -> val
         if include_research and handler == "codergen":
-            rid = f"research_{nid.removeprefix('impl_')}"
-            edge_lines.append(f'    {rid} -> {nid} [label="research_complete"];')
+            suffix = nid.removeprefix("impl_")
+            rid = f"research_{suffix}"
+            if include_refine:
+                fid = f"refine_{suffix}"
+                edge_lines.append(f'    {rid} -> {fid} [label="research_complete"];')
+                edge_lines.append(f'    {fid} -> {nid} [label="refine_complete"];')
+            else:
+                edge_lines.append(f'    {rid} -> {nid} [label="research_complete"];')
         edge_lines.append(f'    {nid} -> val_{nid} [label="pass"];')
 
     # Chain validation gates: val_nodeA -> research_nodeB (or nodeB if no research)
@@ -181,7 +206,7 @@ def create_multi_node_dot(
         else:
             edge_lines.append(f'    {cur_val} -> {next_nid} [label="next"];')
 
-    all_node_lines = research_lines + node_lines
+    all_node_lines = research_lines + refine_lines + node_lines
     dot_content = (
         f"digraph pipeline {{\n"
         f'    graph [label="Multi-Node Pipeline" prd_ref="{prd_ref}" pipeline_id="{pipeline_id}"];\n\n'
@@ -597,6 +622,63 @@ class TestResearchNodePipeline:
         assert "run_research.py" in prompt
         assert "research" in prompt.lower()
 
+
+class TestRefineNodeDotGeneration:
+    """Test: create_multi_node_dot with include_refine=True generates correct DOT."""
+
+    def test_multi_node_dot_with_refine_has_refine_nodes(self, tmp_path):
+        """include_refine=True inserts refine nodes between research and codergen."""
+        dot_path = create_multi_node_dot(
+            tmp_path, include_refine=True, solution_design="docs/sds/SD-TEST.md",
+        )
+        with open(dot_path, encoding="utf-8") as fh:
+            content = fh.read()
+        assert "refine_auth" in content
+        assert "refine_db" in content
+        assert 'handler="refine"' in content
+        assert 'shape="note"' in content
+
+    def test_multi_node_dot_with_refine_has_correct_edges(self, tmp_path):
+        """Refine nodes are wired: research -> refine -> impl (no direct research -> impl)."""
+        dot_path = create_multi_node_dot(
+            tmp_path, include_refine=True, solution_design="docs/sds/SD-TEST.md",
+        )
+        with open(dot_path, encoding="utf-8") as fh:
+            content = fh.read()
+        # research -> refine edge
+        assert "research_auth -> refine_auth" in content
+        assert "research_db -> refine_db" in content
+        # refine -> impl edge
+        assert "refine_auth -> impl_auth" in content
+        assert "refine_db -> impl_db" in content
+        # NO direct research -> impl edge
+        assert "research_auth -> impl_auth" not in content
+        assert "research_db -> impl_db" not in content
+
+    def test_multi_node_dot_with_refine_has_evidence_path(self, tmp_path):
+        """Refine nodes include evidence_path pointing to upstream research evidence."""
+        dot_path = create_multi_node_dot(
+            tmp_path, include_refine=True, solution_design="docs/sds/SD-TEST.md",
+        )
+        with open(dot_path, encoding="utf-8") as fh:
+            content = fh.read()
+        assert "evidence_path=" in content
+        assert "research_auth/research-findings.json" in content
+        assert "research_db/research-findings.json" in content
+
+    def test_multi_node_dot_with_refine_has_solution_design(self, tmp_path):
+        """Refine nodes include the solution_design attribute."""
+        dot_path = create_multi_node_dot(
+            tmp_path,
+            include_refine=True,
+            solution_design="docs/sds/SD-CUSTOM.md",
+        )
+        with open(dot_path, encoding="utf-8") as fh:
+            content = fh.read()
+        # Check that refine nodes have solution_design (not just research nodes)
+        # Both research and refine nodes should reference the SD
+        assert content.count("SD-CUSTOM.md") >= 4  # 2 research + 2 refine nodes
+
     def test_guardian_prompt_research_before_codergen(self, tmp_path):
         """Phase 2a (research) appears before Phase 2b (codergen) in the prompt."""
         dot_path = create_minimal_dot(tmp_path)
@@ -645,6 +727,121 @@ class TestResearchNodePipeline:
         assert "prompt" in data
         # Prompt should reference the SD path
         assert str(sd_file) in data["prompt"]
+
+
+class TestRefineNodePipeline:
+    """Test: DOT pipelines with refine nodes between research and codergen."""
+
+    def test_guardian_prompt_mentions_refine_dispatch(self, tmp_path):
+        """Guardian system prompt includes Phase 2a.5 refine dispatch instructions."""
+        dot_path = create_minimal_dot(tmp_path)
+        scripts_dir = guardian_agent.resolve_scripts_dir()
+        prompt = guardian_agent.build_system_prompt(
+            dot_path=dot_path,
+            pipeline_id="refine-test-001",
+            scripts_dir=scripts_dir,
+            signal_timeout=600.0,
+            max_retries=3,
+            target_dir=str(tmp_path),
+        )
+        assert "Phase 2a.5" in prompt
+        assert "run_refine.py" in prompt
+        assert "refine" in prompt.lower()
+
+    def test_guardian_prompt_refine_between_research_and_codergen(self, tmp_path):
+        """Phase 2a.5 (refine) appears between Phase 2a (research) and Phase 2b (codergen)."""
+        dot_path = create_minimal_dot(tmp_path)
+        scripts_dir = guardian_agent.resolve_scripts_dir()
+        prompt = guardian_agent.build_system_prompt(
+            dot_path=dot_path,
+            pipeline_id="order-test",
+            scripts_dir=scripts_dir,
+            signal_timeout=600.0,
+            max_retries=3,
+            target_dir=str(tmp_path),
+        )
+        research_pos = prompt.index("Phase 2a:")
+        refine_pos = prompt.index("Phase 2a.5")
+        codergen_pos = prompt.index("Phase 2b")
+        assert research_pos < refine_pos < codergen_pos
+
+    def test_run_refine_dry_run(self, tmp_path):
+        """run_refine.py --dry-run produces valid JSON with correct structure."""
+        import io
+        from contextlib import redirect_stdout
+
+        sd_file = tmp_path / "docs" / "sds" / "SD-TEST.md"
+        sd_file.parent.mkdir(parents=True, exist_ok=True)
+        sd_file.write_text("# Test SD\n\n## Auth\nUse FastAPI.\n")
+
+        evidence_file = tmp_path / ".claude" / "evidence" / "research_g1" / "research-findings.json"
+        evidence_file.parent.mkdir(parents=True, exist_ok=True)
+        evidence_file.write_text(json.dumps({
+            "node_id": "research_g1",
+            "timestamp": "2026-03-02T12:00:00Z",
+            "sd_path": str(sd_file),
+            "sd_updated": True,
+            "frameworks_queried": ["fastapi"],
+            "findings": [{"framework": "fastapi", "source": "context7", "summary": "Current"}],
+            "sd_changes_summary": "Updated FastAPI patterns",
+            "gotchas": [],
+        }))
+
+        import run_refine
+
+        buf = io.StringIO()
+        with pytest.raises(SystemExit) as exc_info:
+            with redirect_stdout(buf):
+                run_refine.main([
+                    "--node", "refine_g1",
+                    "--prd", "PRD-TEST-002",
+                    "--solution-design", str(sd_file),
+                    "--target-dir", str(tmp_path),
+                    "--evidence-path", str(evidence_file),
+                    "--dry-run",
+                ])
+
+        assert exc_info.value.code == 0
+        data = json.loads(buf.getvalue())
+        assert data["dry_run"] is True
+        assert data["node"] == "refine_g1"
+        assert data["evidence_path"] == str(evidence_file)
+        assert "prompt" in data
+        # Prompt should reference both the SD and evidence paths
+        assert str(sd_file) in data["prompt"]
+        assert str(evidence_file) in data["prompt"]
+        # Prompt should mention Hindsight reflection
+        assert "hindsight" in data["prompt"].lower()
+        assert "reflect" in data["prompt"].lower()
+
+    def test_run_refine_dry_run_prompt_has_annotation_removal(self, tmp_path):
+        """The refine prompt instructs removal of inline research annotations."""
+        import io
+        from contextlib import redirect_stdout
+
+        sd_file = tmp_path / "SD.md"
+        sd_file.write_text("# SD\n")
+        evidence_file = tmp_path / "evidence.json"
+        evidence_file.write_text("{}")
+
+        import run_refine
+
+        buf = io.StringIO()
+        with pytest.raises(SystemExit):
+            with redirect_stdout(buf):
+                run_refine.main([
+                    "--node", "refine_test",
+                    "--prd", "PRD-X",
+                    "--solution-design", str(sd_file),
+                    "--target-dir", str(tmp_path),
+                    "--evidence-path", str(evidence_file),
+                    "--dry-run",
+                ])
+
+        data = json.loads(buf.getvalue())
+        prompt = data["prompt"]
+        assert "Validated via Context7/Perplexity" in prompt
+        assert "annotations_removed" in prompt
 
 
 class TestSignalRoundtripAllTypes:

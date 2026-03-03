@@ -145,7 +145,7 @@ Symlink this if you want shared MCP server configurations across projects:
 - sequential-thinking
 - task-master-ai
 - context7
-- perplexity-ask
+- perplexity (4 tools: search, ask, research, reason)
 - brave-search
 - serena
 - hindsight

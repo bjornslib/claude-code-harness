@@ -25,10 +25,10 @@ grade: reference
 
 ### Standard Mode - Quick Technical Questions
 ```python
-# Tool: mcp__perplexity-ask__perplexity_ask
+# Tool: mcp__perplexity__perplexity_ask
 # Use for: API research, quick clarifications, specific technical questions
 
-mcp__perplexity-ask__perplexity_ask([{
+mcp__perplexity__perplexity_ask([{
   "role": "user", 
   "content": "What's the current OpenAI GPT-4.1 model name for API calls in 2025?"
 }])
@@ -36,10 +36,10 @@ mcp__perplexity-ask__perplexity_ask([{
 
 ### Pro Mode - In-Depth Architecture Discussions  
 ```python
-# Tool: mcp__perplexity-ask__perplexity_research
+# Tool: mcp__perplexity__perplexity_research
 # Use for: Technology comparisons, architectural decisions, comprehensive analysis
 
-mcp__perplexity-ask__perplexity_research([{
+mcp__perplexity__perplexity_research([{
   "role": "user",
   "content": "Compare vector databases for production LLM applications: performance, cost, scalability considerations for 2025"
 }])
@@ -47,10 +47,10 @@ mcp__perplexity-ask__perplexity_research([{
 
 ### Deep Research Mode - Complex Technical Analysis
 ```python  
-# Tool: mcp__perplexity-ask__perplexity_reason
+# Tool: mcp__perplexity__perplexity_reason
 # Use for: Complex technical analysis, comprehensive solution design, research synthesis
 
-mcp__perplexity-ask__perplexity_reason([{
+mcp__perplexity__perplexity_reason([{
   "role": "user", 
   "content": "Analyze optimal architecture patterns for LLM-first applications: agent coordination, tool integration, performance optimization, and production deployment strategies"
 }])
@@ -195,7 +195,7 @@ mcp__context7__get-library-docs(
 # Use Claude Code's concurrent execution capabilities
 
 # Perplexity research
-mcp__perplexity-ask__perplexity_research([{"role": "user", "content": "LLM agent coordination patterns 2025"}])
+mcp__perplexity__perplexity_research([{"role": "user", "content": "LLM agent coordination patterns 2025"}])
 
 # Brave Search research (parallel)
 mcp__brave-search__brave_web_search("LLM agent coordination patterns frameworks 2025", count=10)

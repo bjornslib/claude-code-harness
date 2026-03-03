@@ -266,6 +266,22 @@ def main() -> None:
         if args.execute:
             print("\n# --- Executing initialization commands ---", file=sys.stderr)
             import subprocess
+            from pathlib import Path
+
+            # Resolve cs-* script paths: prefer absolute path, fall back to PATH
+            def _cs_bin(name: str) -> str:
+                """Return absolute path to a cs-* script if it exists, else bare name."""
+                # Try relative to this script's location (../completion-state/)
+                candidate = Path(SCRIPT_DIR).parent / "completion-state" / name
+                if candidate.exists():
+                    return str(candidate)
+                # Try CLAUDE_PROJECT_DIR
+                proj = os.environ.get("CLAUDE_PROJECT_DIR", "")
+                if proj:
+                    candidate = Path(proj) / ".claude" / "scripts" / "completion-state" / name
+                    if candidate.exists():
+                        return str(candidate)
+                return name  # fallback to PATH
 
             # Only execute the safe initialization commands (not the templates)
             slug = re.sub(r"[^a-z0-9]+", "-", info["prd_ref"].lower()).strip("-")
@@ -273,7 +289,7 @@ def main() -> None:
             # cs-init
             print(f"Executing: cs-init --initiative {slug}", file=sys.stderr)
             result = subprocess.run(
-                ["cs-init", "--initiative", slug],
+                [_cs_bin("cs-init"), "--initiative", slug],
                 capture_output=True,
                 text=True,
             )
@@ -286,7 +302,7 @@ def main() -> None:
 
             # cs-promise --create
             label = info["graph_label"] or info["prd_ref"]
-            create_cmd = ["cs-promise", "--create", label]
+            create_cmd = [_cs_bin("cs-promise"), "--create", label]
             for cg in info["codergen_nodes"]:
                 ac_desc = cg.get("acceptance") or cg.get("label", "")
                 if ac_desc:

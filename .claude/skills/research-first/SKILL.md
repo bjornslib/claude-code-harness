@@ -69,7 +69,9 @@ Task(
     Instructions:
     1. Use mcp__context7__resolve-library-id to find the framework
     2. Use mcp__context7__query-docs to get current documentation
-    3. Use mcp__perplexity-ask__perplexity_ask to validate the approach
+    3. Use mcp__perplexity__perplexity_ask to validate the approach
+    4. If comparing approaches/frameworks, use mcp__perplexity__perplexity_reason
+       to analyze tradeoffs with structured reasoning
 
     Return Format:
     ## Current Best Practice
@@ -146,7 +148,57 @@ Task(
 )
 ```
 
-### Pattern 3: Combined Research
+### Pattern 3: Solution Design Validation with Reasoning
+
+For validating approaches that involve comparing multiple frameworks or architectures:
+
+```python
+Task(
+    subagent_type="general-purpose",
+    model="haiku",
+    description="Validate and compare [approaches]",
+    prompt="""
+    I'm choosing between: [approach A] vs [approach B]
+
+    Context: [what we're solving]
+
+    Steps:
+    1. Use mcp__perplexity__perplexity_ask for quick validation of each approach
+    2. Use mcp__perplexity__perplexity_reason to analyze tradeoffs:
+       "Given these approaches: [A] vs [B], analyze the tradeoffs
+       considering performance, maintainability, and current ecosystem support"
+
+    Return: Recommended approach with structured reasoning
+    """
+)
+```
+
+### Pattern 4: Deep Research
+
+For comprehensive investigations (new domain, major architecture decisions):
+
+```python
+Task(
+    subagent_type="general-purpose",
+    model="haiku",
+    description="Deep research on [topic]",
+    prompt="""
+    Goal: Comprehensive investigation of [topic]
+
+    Use mcp__perplexity__perplexity_research for an exhaustive multi-step
+    investigation. This tool takes 1-5 minutes but returns thorough results.
+
+    Query: "[detailed research question about the topic]"
+
+    After receiving results, summarize:
+    - Key findings and recommendations
+    - Risks and considerations
+    - Recommended next steps
+    """
+)
+```
+
+### Pattern 5: Combined Research
 
 For new implementations needing both docs and validation:
 
