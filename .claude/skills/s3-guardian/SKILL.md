@@ -20,9 +20,9 @@ Guardian (this session, config repo)
     |-- Generates executable browser test scripts for UX prototypes
     |-- Dispatches via DOT pipeline (two modes):
     |       |
-    |       +-- SDK mode: launch_guardian.py → guardian → runner → orchestrator (all headless via SDK)
+    |       +-- SDK mode: guardian.py → runner.py → dispatch_worker.py → claude -p (all headless via SDK)
     |       +-- Headless mode: Workers run via `claude -p` CLI (structured JSON output, no SDK)
-    |       +-- tmux mode: Spawns Orchestrators in tmux (one per epic/DOT node) [DEPRECATED]
+    |       +-- tmux mode: Spawns Orchestrators in tmux (one per epic/DOT node) [interactive, lower API cost]
     |       |
     |       +-- Research nodes run BEFORE codergen (validate SD via Context7/Perplexity)
     |       +-- Refine nodes run AFTER research (rewrite SD with findings as first-class content)
@@ -261,15 +261,15 @@ python3 .claude/scripts/attractor/launch_guardian.py \
 
 | Script | Layer | Key Flags | Purpose |
 |--------|-------|-----------|---------|
-| `launch_guardian.py` | 0 (Terminal) | `--dot`, `--multi`, `--dry-run` | Entry point — bridges terminal to headless guardian |
-| `guardian_agent.py` | 1 (Guardian) | `--dot`, `--pipeline-id`, `--max-retries` | Pipeline execution engine |
-| `spawn_orchestrator.py` | 2 (Runner) | `--node`, `--prd`, `--mode {sdk\|headless\|tmux}`, `--prompt` | Creates orchestrator sessions |
-| `runner_agent.py` | 2 (Runner) | `--node`, `--prd`, `--session`, `--check-interval` | Monitors orchestrator, signals guardian |
+| `guardian.py` | 0+1 | `--dot`, `--multi`, `--dry-run` | Consolidated guardian entry point (composes launch_guardian + guardian_agent) |
+| `runner.py` | 2 | `--spawn`, `--node`, `--prd`, `--dot-file` | Consolidated runner entry point (spawn mode + direct execution) |
+| `dispatch_worker.py` | 3 (Worker) | (library) | Headless worker dispatch (`_build_headless_worker_cmd`, `run_headless_worker`) |
+| `spawn_orchestrator.py` | 2 (Runner) | `--node`, `--prd`, `--mode {headless\|tmux}` | Tmux mode + backward-compat re-exports from dispatch_worker |
 
 > **When to use each mode**:
 > - **Headless** (`--mode headless`): Default for workers. Uses `claude -p` CLI with structured JSON output. Three-Layer Context: ROLE (--system-prompt), TASK (-p), IDENTITY (env vars). Best for focused implementation tasks.
 > - **SDK** (`launch_guardian.py`): For automated pipelines and CI/CD. Full `claude_code_sdk` integration with multi-turn conversation.
-> - **tmux** (`--mode tmux`): **Deprecated.** For interactive sessions where you need to observe and intervene manually.
+> - **tmux** (`--mode tmux`): For interactive sessions where you can observe and intervene manually. Lower API cost than SDK mode since the orchestrator runs as a Max plan interactive session rather than billing API credits per token.
 
 ### Key Files
 
@@ -295,7 +295,7 @@ python3 .claude/scripts/attractor/launch_guardian.py \
 | Ignoring AMEND verdict | Sunk cost fallacy — beads already exist | Re-parse is cheap, bad design is expensive |
 | Only writing scoring rubrics for UX PRDs | Cannot automatically verify browser behavior | Write executable-tests/ alongside scenarios.feature |
 | Scoring UX at 0.9 from code reading alone | Code may compile but render incorrectly | Executable browser tests cap/floor confidence scores |
-| Ad-hoc Bash spawn (plain `claude` in tmux or raw subprocess) | Missing output style, session ID, agent teams, model — orchestrator is crippled | Always use `spawn_orchestrator.py --mode headless` (default) or `--mode sdk` for pipelines |
+| Ad-hoc Bash spawn (plain `claude` in tmux or raw subprocess) | Missing output style, session ID, agent teams, model — orchestrator is crippled | Always use `spawn_orchestrator.py --mode tmux` (interactive), `--mode headless`, or `--mode sdk` for pipelines |
 | Skipping `/output-style orchestrator` step | Orchestrator has no delegation rules, tries to implement directly | Script handles this automatically |
 | Wisdom without `Skill("orchestrator-multiagent")` | Orchestrator cannot create teams or delegate to workers | Include in `--prompt` or wisdom file |
 | Codergen node without preceding research node | Orchestrator implements with potentially outdated API patterns | Add `handler="research"` node before each codergen |
@@ -306,12 +306,13 @@ python3 .claude/scripts/attractor/launch_guardian.py \
 ---
 
 **Version**: 0.5.0
-**Dependencies**: cs-promise CLI (requires PATH setup — see Prerequisites section), claude CLI (headless mode, default), claude_code_sdk (SDK mode), tmux (legacy tmux mode, for debugging only), Hindsight MCP, ccsystem3 shell function, Task Master MCP, ZeroRepo
+**Dependencies**: cs-promise CLI (requires PATH setup — see Prerequisites section), claude CLI (headless mode, default), claude_code_sdk (SDK mode), tmux (tmux mode — interactive, lower API cost), Hindsight MCP, ccsystem3 shell function, Task Master MCP, ZeroRepo
 **Integration**: system3-orchestrator skill, completion-promise skill, acceptance-test-writer skill, parallel-solutioning skill, research-first skill
 **Theory**: Independent verification eliminates self-reporting bias in agentic systems
 
 **Changelog**:
-- v0.5.0: Added headless CLI worker mode (Epic 6). Workers run via `claude -p` with Three-Layer Context: ROLE (--system-prompt from .claude/agents/), TASK (-p prompt), IDENTITY (env vars). New functions: `_build_headless_worker_cmd()` and `run_headless_worker()` in spawn_orchestrator.py. `--mode headless` added to spawn_orchestrator.py, spawn_runner.py, and guardian_agent.py system prompt. tmux mode deprecated in favor of headless. JSON output parsing replaces tmux capture-pane monitoring.
+- v0.6.0: 3-layer attractor consolidation. Created `guardian.py` (composes launch_guardian + guardian_agent), `runner.py` (composes spawn_runner + runner_agent with `--spawn` mode), `dispatch_worker.py` (extracted headless functions from spawn_orchestrator.py). Guardian system prompt now references `runner.py --spawn` instead of `spawn_runner.py`. Old files untouched — backward-compatible re-exports from spawn_orchestrator.py. Zero test breakage (987 tests pass).
+- v0.5.0: Added headless CLI worker mode (Epic 6). Workers run via `claude -p` with Three-Layer Context: ROLE (--system-prompt from .claude/agents/), TASK (-p prompt), IDENTITY (env vars). New functions: `_build_headless_worker_cmd()` and `run_headless_worker()` in dispatch_worker.py (re-exported from spawn_orchestrator.py). `--mode headless` added to runner.py, spawn_orchestrator.py, and guardian_agent.py system prompt. tmux mode deprecated in favor of headless. JSON output parsing replaces tmux capture-pane monitoring.
 - v0.4.4: Broadened Step 0 promise creation with work-type-aware decision table (research, PRD design, implementation, maintenance, multi-initiative — not just guardian validation). Added SDK Mode Entry Points section to Quick Reference with 4-layer CLI table and SDK-vs-tmux guidance, linking to `references/sdk-cli-tools.md`. Qualified Session Promise Integration heading to clarify it's the guardian validation template. Root cause: non-standard sessions (research, PRD writing) had no promise template guidance, and SDK CLI parameters were undiscoverable without running `--help`.
 - v0.4.3: Documented research-only pipeline dispatch. Added "Research-Only Pipeline Dispatch" section to guardian-workflow.md with dispatch hierarchy diagram, example DOT file, exact CLI command, and internal behavior walkthrough. Added anti-pattern for calling `run_research.py` per-node instead of using `launch_guardian.py`. Updated SKILL.md architecture diagram to acknowledge research-only as a valid pipeline topology. Root cause: colleague tried to run 4 research nodes via parallel `run_research.py` calls (exit code 2) instead of launching the guardian runner.
 - v0.4.2: Added mandatory research→refine→codergen chain validation to Step 0.2 (bare codergen nodes now fail validation). Added two AskUserQuestion checkpoints to Phase 0 — Checkpoint A (after pipeline creation + chain validation) presents PRD/SD/pipeline summary; Checkpoint B (after design challenge) presents architect verdict. Both offer contextual next-step options. Prevents silent misalignment during long autonomous Phase 0 runs.

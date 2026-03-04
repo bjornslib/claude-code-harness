@@ -547,19 +547,19 @@ Two dispatch modes are available. Choose based on the use case:
 | Mode | When to Use | How It Works |
 |------|-------------|--------------|
 | **Headless mode** | Default for workers, focused tasks | Workers run via `claude -p` CLI with JSON output — no SDK or tmux needed |
-| **SDK mode** | Automated pipelines, E2E tests, CI/CD | `launch_guardian.py` drives the full chain via `claude_code_sdk` — no tmux |
-| **tmux mode** | Interactive sessions (DEPRECATED) | Guardian spawns orchestrators in tmux sessions for manual monitoring |
+| **SDK mode** | Automated pipelines, E2E tests, CI/CD | `guardian.py` (or `launch_guardian.py`) drives the full chain via `claude_code_sdk` — no tmux |
+| **tmux mode** | Interactive sessions, lower API cost | Guardian spawns orchestrators in tmux sessions for manual monitoring; orchestrators run on Max plan (no per-token API billing) |
 
 **SDK mode architecture** (validated E2E 2026-03-02):
 ```
-launch_guardian.py ──SDK──► guardian_agent.py ──SDK──► runner (spawn_runner.py)
-                                                          ──SDK──► orchestrator (worker)
+guardian.py ──SDK──► guardian_agent.py ──SDK──► runner.py ──dispatch──► dispatch_worker.py → claude -p
+                                                          (or legacy spawn_runner.py)
 ```
 All 4 layers run headless via `claude_code_sdk`. No tmux sessions, no interactive prompts. The guardian reads the DOT pipeline, dispatches research nodes (synchronous, Haiku), then refine nodes (synchronous, Sonnet), then spawns runners for codergen nodes. Each runner spawns an orchestrator that implements the work.
 
 **Headless mode architecture** (recommended for workers):
 ```
-Guardian (this session) ──spawns──► spawn_orchestrator.py --mode headless
+Guardian (this session) ──spawns──► dispatch_worker.py (via runner.py / spawn_orchestrator.py)
                                        └── claude -p "<task>" --system-prompt <role> --output-format stream-json --verbose
                                        └── Three-Layer Context:
                                             Layer 1 (ROLE): --system-prompt from .claude/agents/{worker_type}.md
@@ -569,7 +569,7 @@ Guardian (this session) ──spawns──► spawn_orchestrator.py --mode headl
 Workers run as single-shot `claude -p` processes. No tmux, no SDK. JSON output is captured and parsed.
 Monitoring is via process exit code and stdout JSON — no capture-pane polling needed.
 
-**tmux mode architecture** (interactive, DEPRECATED):
+**tmux mode architecture** (interactive, lower API cost):
 ```
 Guardian (this session) ──spawns──► Orchestrator A (orch-epic1) ──delegates──► Workers
                         ──spawns──► Orchestrator B (orch-epic2) ──delegates──► Workers
@@ -678,9 +678,9 @@ Pipelines that contain **only research and refine nodes** (no codergen) are a va
 │    Reads DOT → dispatches nodes by handler type:                 │
 │    - handler="research" → calls run_research.py (Layer 2)       │
 │    - handler="refine"   → calls run_refine.py (Layer 2)         │
-│    - handler="codergen" → calls spawn_runner.py (Layer 2)       │
+│    - handler="codergen" → calls runner.py --spawn (Layer 2)     │
 │                                                                  │
-│  Layer 2: run_research.py / run_refine.py / spawn_runner.py     │
+│  Layer 2: run_research.py / run_refine.py / runner.py           │
 │    Single-node executors. NEVER call these directly for          │
 │    pipeline execution — the guardian handles dispatch, state     │
 │    transitions, and completion detection.                        │
@@ -849,7 +849,7 @@ cat "${SIGNAL_DIR}"/*-${NODE_ID}-*.json 2>/dev/null | python3 -c "import json,sy
 --output-format stream-json --verbose → JSONL streaming for real-time monitoring
 ```
 
-**Legacy tmux mode** (3-Step Boot Sequence — for debugging only):
+**tmux mode** (3-Step Boot Sequence — interactive, lower API cost):
 ```
 Step 1: ccorch          → Sets 9 env vars (output style, session ID, agent teams, etc.)
 Step 2: /output-style   → Loads orchestrator persona and delegation rules
@@ -937,7 +937,7 @@ python3 "${IMPL_REPO}/.claude/scripts/attractor/spawn_orchestrator.py" \
 3. Streams JSONL events line-by-line from subprocess stdout
 4. Writes signal file on completion/error (includes full event stream)
 
-**Legacy tmux mode** (for debugging only):
+**tmux mode** (interactive, lower API cost):
 1. Creates tmux session with `exec zsh` in `--repo-root` directory
 2. Sends `unset CLAUDECODE && ccorch --worktree <node>` (8s pause) — **Step 1**
 3. Sends `/output-style orchestrator` (3s pause) — **Step 2**
