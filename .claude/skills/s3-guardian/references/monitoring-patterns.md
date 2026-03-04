@@ -74,7 +74,7 @@ else
 fi
 
 # List all active orchestrator processes
-ps aux | grep "claude.*--output-format json" | grep -v grep
+ps aux | grep "claude.*--output-format stream-json" | grep -v grep
 ```
 
 ---

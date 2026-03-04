@@ -221,10 +221,10 @@ python3 "${IMPL_REPO}/.claude/scripts/attractor/spawn_orchestrator.py" \
 ```
 
 **What headless mode does internally**:
-1. Builds `claude -p "<prompt>" --system-prompt <role> --permission-mode bypassPermissions --output-format json`
+1. Builds `claude -p "<prompt>" --system-prompt <role> --permission-mode bypassPermissions --output-format stream-json --verbose`
 2. Sets Three-Layer Context: ROLE (--system-prompt), TASK (-p), IDENTITY (env vars)
-3. Captures structured JSON output from stdout
-4. Writes signal files for guardian monitoring
+3. Streams JSONL events line-by-line from stdout (types: `system/init`, `assistant`, `result`, etc.)
+4. Writes signal files for guardian monitoring (includes full event stream)
 
 ### 3.3 Send Initial Instructions
 
@@ -560,7 +560,7 @@ All 4 layers run headless via `claude_code_sdk`. No tmux sessions, no interactiv
 **Headless mode architecture** (recommended for workers):
 ```
 Guardian (this session) ──spawns──► spawn_orchestrator.py --mode headless
-                                       └── claude -p "<task>" --system-prompt <role> --output-format json
+                                       └── claude -p "<task>" --system-prompt <role> --output-format stream-json --verbose
                                        └── Three-Layer Context:
                                             Layer 1 (ROLE): --system-prompt from .claude/agents/{worker_type}.md
                                             Layer 2 (TASK): -p argument (task prompt)
@@ -835,8 +835,8 @@ cat "${SIGNAL_DIR}"/*-${NODE_ID}-*.json 2>/dev/null | python3 -c "import json,sy
 
 **Pattern 4 — JSON output capture** (headless mode returns structured results):
 ```bash
-# spawn_orchestrator.py captures stdout JSON from `claude -p --output-format json`
-# Parse the result for completion status, errors, and evidence
+# spawn_orchestrator.py streams JSONL from `claude -p --output-format stream-json --verbose`
+# Parse result events for completion status, errors, and evidence
 ```
 
 ### The Boot Sequence (Headless vs Legacy)
@@ -846,7 +846,7 @@ cat "${SIGNAL_DIR}"/*-${NODE_ID}-*.json 2>/dev/null | python3 -c "import json,sy
 --system-prompt  → Sets the orchestrator role (replaces Step 1 + Step 2 of tmux boot)
 -p prompt        → Delivers the task with Skill invocation instruction (replaces Step 3)
 --permission-mode bypassPermissions → No interactive dialogs
---output-format json → Structured output for monitoring
+--output-format stream-json --verbose → JSONL streaming for real-time monitoring
 ```
 
 **Legacy tmux mode** (3-Step Boot Sequence — for debugging only):
@@ -932,10 +932,10 @@ python3 "${IMPL_REPO}/.claude/scripts/attractor/spawn_orchestrator.py" \
 **What `spawn_orchestrator.py` does internally** (you should NOT replicate this manually):
 
 **Headless mode** (`--mode headless`, DEFAULT):
-1. Constructs `claude -p <prompt> --system-prompt <role> --permission-mode bypassPermissions --output-format json`
+1. Constructs `claude -p <prompt> --system-prompt <role> --permission-mode bypassPermissions --output-format stream-json --verbose`
 2. Sets env vars: `WORKER_NODE_ID`, `PIPELINE_ID`, `CLAUDE_SESSION_ID`, etc.
-3. Launches subprocess, captures JSON stdout
-4. Writes signal file on completion/error
+3. Streams JSONL events line-by-line from subprocess stdout
+4. Writes signal file on completion/error (includes full event stream)
 
 **Legacy tmux mode** (for debugging only):
 1. Creates tmux session with `exec zsh` in `--repo-root` directory
@@ -951,7 +951,7 @@ The following examples show ad-hoc spawning patterns (both tmux and raw subproce
 **Headless anti-pattern** (raw `claude -p` without spawn script):
 ```bash
 # WRONG — no Three-Layer Context, no signal management, no env vars
-claude -p "Implement the auth feature" --output-format json
+claude -p "Implement the auth feature" --output-format stream-json --verbose
 ```
 
 **Legacy tmux anti-pattern** (found in a real session):
