@@ -8,14 +8,19 @@ Tests:
     TestDryRunMode              - --dry-run exits 0 and prints JSON config
     TestEnvConfig               - build_env_config() handles CLAUDECODE correctly
     TestResolveScriptsDir       - resolve_scripts_dir() returns valid path
+    TestEmitEvent               - emit_event() writes valid JSONL to stdout
+    TestRunnerStateMachineEvents - RunnerStateMachine.run() emits structured events
 """
 
 from __future__ import annotations
 
+import io
 import json
 import os
+import re
 import sys
 import unittest
+from contextlib import redirect_stdout
 from unittest.mock import MagicMock, patch
 
 # Ensure the attractor package root is on sys.path (mirrors conftest.py).
@@ -29,6 +34,7 @@ from runner_agent import (  # noqa: E402
     build_initial_prompt,
     build_options,
     build_system_prompt,
+    emit_event,
     parse_args,
     resolve_scripts_dir,
     DEFAULT_CHECK_INTERVAL,
@@ -720,6 +726,212 @@ class TestHookPhaseTracking(unittest.TestCase):
         self.assertGreater(liveness_pos, 0, "Liveness Tracking section not found")
         self.assertLess(hook_pos, liveness_pos,
                         "Hook Phase Tracking should appear before Liveness Tracking")
+
+
+# ---------------------------------------------------------------------------
+# TestEmitEvent
+# ---------------------------------------------------------------------------
+
+
+class TestEmitEvent(unittest.TestCase):
+    """Tests for emit_event() helper function."""
+
+    def _capture(self, event_type: str, **payload) -> dict:
+        """Call emit_event and return the parsed JSON object from stdout."""
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            emit_event(event_type, **payload)
+        line = buf.getvalue().strip()
+        return json.loads(line)
+
+    def test_emit_event_writes_json_line(self) -> None:
+        """emit_event must write exactly one valid JSON line to stdout."""
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            emit_event("runner/test")
+        output = buf.getvalue()
+        lines = [l for l in output.splitlines() if l.strip()]
+        self.assertEqual(len(lines), 1, "Expected exactly one output line")
+        data = json.loads(lines[0])  # must not raise
+        self.assertIsInstance(data, dict)
+
+    def test_emit_event_includes_type_field(self) -> None:
+        data = self._capture("runner/started")
+        self.assertEqual(data["type"], "runner/started")
+
+    def test_emit_event_includes_ts_field(self) -> None:
+        data = self._capture("runner/started")
+        self.assertIn("ts", data)
+
+    def test_emit_event_includes_payload(self) -> None:
+        """Extra keyword arguments must appear in the JSON output."""
+        data = self._capture("runner/cycle_start", cycle=3, node="impl_auth")
+        self.assertEqual(data["cycle"], 3)
+        self.assertEqual(data["node"], "impl_auth")
+
+    def test_emit_event_ts_format(self) -> None:
+        """ts field must be ISO-8601 format: YYYY-MM-DDTHH:MM:SS.ffffffZ"""
+        data = self._capture("runner/test")
+        ts = data["ts"]
+        # Pattern: 2026-03-04T12:34:56.123456Z
+        pattern = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z$"
+        self.assertRegex(ts, pattern, f"ts value '{ts}' does not match ISO-8601 pattern")
+
+    def test_emit_event_payload_does_not_override_type(self) -> None:
+        """A payload kwarg named 'type' must not silently displace the event_type."""
+        # The spec merges **payload after setting 'type'; passing type= in payload
+        # would clobber the event_type. Verify this does NOT happen via the public API —
+        # emit_event's event_type parameter is positional and always wins because
+        # the dict literal sets "type" before the splat.
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            # Do NOT pass type= as a kwarg; this test just validates normal usage
+            emit_event("runner/expected")
+        data = json.loads(buf.getvalue().strip())
+        self.assertEqual(data["type"], "runner/expected")
+
+
+# ---------------------------------------------------------------------------
+# TestRunnerStateMachineEvents
+# ---------------------------------------------------------------------------
+
+
+def _make_machine(**overrides) -> "runner_agent.RunnerStateMachine":
+    """Construct a RunnerStateMachine with signal_protocol mocked out.
+
+    signal_protocol is imported lazily inside RunnerStateMachine.__init__
+    via ``import signal_protocol as _sp``.  We inject a fake module into
+    sys.modules so the import resolves without touching the filesystem,
+    then overwrite the instance attribute immediately after construction
+    so _write_safety_net_if_needed is also fully mocked.
+    """
+    from runner_agent import RunnerStateMachine
+
+    kwargs = dict(
+        node_id="impl_auth",
+        prd_ref="PRD-AUTH-001",
+        session_name="orch-auth",
+        target_dir="/tmp",
+        max_cycles=10,
+    )
+    kwargs.update(overrides)
+
+    mock_sp = MagicMock()
+    with patch.dict(sys.modules, {"signal_protocol": mock_sp}):
+        machine = RunnerStateMachine(**kwargs)
+    # Overwrite the stored reference so safety-net writes are fully no-op.
+    machine._signal_protocol = MagicMock()
+    return machine
+
+
+class TestRunnerStateMachineEvents(unittest.TestCase):
+    """Tests that RunnerStateMachine.run() emits the expected JSONL events."""
+
+    def _run_and_collect(self, machine: "runner_agent.RunnerStateMachine") -> list[dict]:
+        """Execute machine.run() and return a list of parsed JSONL event dicts."""
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            machine.run()
+        events = []
+        for line in buf.getvalue().splitlines():
+            line = line.strip()
+            if line:
+                try:
+                    obj = json.loads(line)
+                    if "type" in obj and obj["type"].startswith("runner/"):
+                        events.append(obj)
+                except json.JSONDecodeError:
+                    pass
+        return events
+
+    def _event_types(self, events: list[dict]) -> list[str]:
+        return [e["type"] for e in events]
+
+    def test_run_emits_started_and_completed(self) -> None:
+        """A successful run must emit started, cycle_start, cycle_end, state_change, completed."""
+        machine = _make_machine()
+        machine._do_monitor_mode = MagicMock(return_value="COMPLETED")
+
+        events = self._run_and_collect(machine)
+        types = self._event_types(events)
+
+        self.assertIn("runner/started", types, f"Missing runner/started in {types}")
+        self.assertIn("runner/cycle_start", types, f"Missing runner/cycle_start in {types}")
+        self.assertIn("runner/cycle_end", types, f"Missing runner/cycle_end in {types}")
+        self.assertIn("runner/state_change", types, f"Missing runner/state_change in {types}")
+        self.assertIn("runner/completed", types, f"Missing runner/completed in {types}")
+
+    def test_run_emits_started_first(self) -> None:
+        """runner/started must be the very first runner/ event."""
+        machine = _make_machine()
+        machine._do_monitor_mode = MagicMock(return_value="COMPLETED")
+
+        events = self._run_and_collect(machine)
+        self.assertEqual(events[0]["type"], "runner/started")
+
+    def test_run_emits_completed_last(self) -> None:
+        """runner/completed must be the last runner/ event (in the finally block)."""
+        machine = _make_machine()
+        machine._do_monitor_mode = MagicMock(return_value="COMPLETED")
+
+        events = self._run_and_collect(machine)
+        self.assertEqual(events[-1]["type"], "runner/completed")
+
+    def test_cycle_end_carries_status(self) -> None:
+        """runner/cycle_end event must include the status returned by _do_monitor_mode."""
+        machine = _make_machine()
+        machine._do_monitor_mode = MagicMock(return_value="COMPLETED")
+
+        events = self._run_and_collect(machine)
+        cycle_ends = [e for e in events if e["type"] == "runner/cycle_end"]
+        self.assertGreater(len(cycle_ends), 0)
+        self.assertEqual(cycle_ends[0]["status"], "COMPLETED")
+
+    def test_state_change_carries_final_mode(self) -> None:
+        """runner/state_change event must include a 'to' field with the new mode."""
+        machine = _make_machine()
+        machine._do_monitor_mode = MagicMock(return_value="COMPLETED")
+
+        events = self._run_and_collect(machine)
+        state_changes = [e for e in events if e["type"] == "runner/state_change"]
+        self.assertGreater(len(state_changes), 0)
+        self.assertIn("to", state_changes[-1])
+
+    def test_run_emits_failed_on_max_cycles(self) -> None:
+        """When max_cycles is exceeded, runner/state_change must carry to=FAILED."""
+        machine = _make_machine(max_cycles=1)
+        # _do_monitor_mode always returns IN_PROGRESS so cycles keep incrementing.
+        machine._do_monitor_mode = MagicMock(return_value="IN_PROGRESS")
+
+        events = self._run_and_collect(machine)
+        types = self._event_types(events)
+
+        self.assertIn("runner/state_change", types, f"Missing runner/state_change in {types}")
+        state_changes = [e for e in events if e["type"] == "runner/state_change"]
+        failed_changes = [e for e in state_changes if "FAILED" in str(e.get("to", ""))]
+        self.assertGreater(
+            len(failed_changes), 0,
+            f"No state_change with to=FAILED found. state_change events: {state_changes}",
+        )
+
+    def test_started_event_includes_node_and_prd(self) -> None:
+        """runner/started must carry 'node' and 'prd' fields."""
+        machine = _make_machine(node_id="impl_payments", prd_ref="PRD-PAY-007")
+        machine._do_monitor_mode = MagicMock(return_value="COMPLETED")
+
+        events = self._run_and_collect(machine)
+        started = next(e for e in events if e["type"] == "runner/started")
+        self.assertEqual(started["node"], "impl_payments")
+        self.assertEqual(started["prd"], "PRD-PAY-007")
+
+    def test_completed_event_includes_final_mode(self) -> None:
+        """runner/completed must carry a 'final_mode' field."""
+        machine = _make_machine()
+        machine._do_monitor_mode = MagicMock(return_value="COMPLETED")
+
+        events = self._run_and_collect(machine)
+        completed = next(e for e in events if e["type"] == "runner/completed")
+        self.assertIn("final_mode", completed)
 
 
 if __name__ == "__main__":

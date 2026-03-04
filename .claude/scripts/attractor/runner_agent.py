@@ -50,6 +50,7 @@ import json
 import os
 import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 import warnings
 from typing import Any
@@ -95,6 +96,29 @@ DEFAULT_MODEL = "claude-sonnet-4-6"
 DEFAULT_CHECK_INTERVAL = 30      # seconds between polling cycles
 DEFAULT_STUCK_THRESHOLD = 300    # seconds before declaring "stuck"
 DEFAULT_MAX_TURNS = 100          # enough turns for a long monitoring loop
+
+
+# ---------------------------------------------------------------------------
+# JSONL event emitter
+# ---------------------------------------------------------------------------
+
+
+def emit_event(event_type: str, **payload) -> None:
+    """Emit a structured JSONL event to stdout.
+
+    Each line is valid JSON with 'type' and 'ts' fields plus any extra payload.
+    Consumers can parse runner progress in real-time by reading stdout line by line.
+
+    Args:
+        event_type: Dot-namespaced event identifier (e.g. ``runner/started``).
+        **payload:  Arbitrary key-value pairs included in the JSON object.
+    """
+    event = {
+        "type": event_type,
+        "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        **payload,
+    }
+    print(json.dumps(event, default=str), flush=True)
 
 
 # ---------------------------------------------------------------------------
@@ -662,23 +686,40 @@ class RunnerStateMachine:
         Returns:
             Final mode string (RunnerMode.COMPLETE or RunnerMode.FAILED).
         """
+        emit_event("runner/started", node=self.node_id, prd=self.prd_ref)
         try:
             cycles = 0
             while self.mode == RunnerMode.MONITOR:
                 cycles += 1
+                emit_event(
+                    "runner/cycle_start",
+                    cycle=cycles,
+                    max_cycles=self.max_cycles,
+                    node=self.node_id,
+                )
                 if cycles > self.max_cycles:
                     self.mode = RunnerMode.FAILED
+                    emit_event("runner/state_change", node=self.node_id, to=self.mode)
                     break
 
                 status = self._do_monitor_mode()
+                emit_event(
+                    "runner/cycle_end",
+                    cycle=cycles,
+                    status=status,
+                    node=self.node_id,
+                )
                 if status == "COMPLETED":
                     self.mode = RunnerMode.COMPLETE
+                    emit_event("runner/state_change", node=self.node_id, to=self.mode)
                 elif status == "FAILED":
                     self.mode = RunnerMode.FAILED
+                    emit_event("runner/state_change", node=self.node_id, to=self.mode)
                 # else: IN_PROGRESS — continue monitoring
 
         finally:
             self._write_safety_net_if_needed()
+            emit_event("runner/completed", node=self.node_id, final_mode=self.mode)
 
         return self.mode
 
@@ -885,9 +926,12 @@ def main(argv: list[str] | None = None) -> None:
         # Live run: choose between state machine (--dot-file) and legacy tmux monitoring.
         if args.dot_file:
             # Mode-switching path: use RunnerStateMachine for pipeline-aware monitoring.
-            print(
-                f"[Runner] State machine mode (dot_file={args.dot_file})",
-                flush=True,
+            emit_event(
+                "runner/init",
+                node=node_id,
+                prd=args.prd,
+                dot_file=args.dot_file,
+                mode=args.mode,
             )
             try:
                 machine = RunnerStateMachine(
@@ -901,7 +945,7 @@ def main(argv: list[str] | None = None) -> None:
                     max_turns=args.max_turns,
                 )
                 final_mode = machine.run()
-                print(f"[Runner] State machine exited with mode: {final_mode}", flush=True)
+                emit_event("runner/exit", node=node_id, final_mode=final_mode)
                 try:
                     identity_registry.mark_terminated(role="runner", name=node_id)
                 except Exception:

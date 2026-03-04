@@ -158,7 +158,7 @@ class TestHeadlessWorkerCmd:
         assert "--permission-mode" in cmd
         assert "bypassPermissions" in cmd
         assert "--output-format" in cmd
-        assert "json" in cmd
+        assert "stream-json" in cmd
 
     def test_cmd_includes_system_prompt(self):
         """Command should always include --system-prompt (from agent file or fallback)."""
