@@ -102,7 +102,6 @@ logfire.configure(
 # Constants
 # ---------------------------------------------------------------------------
 
-DEFAULT_MODEL = "claude-sonnet-4-6"
 DEFAULT_MAX_TURNS = 200          # more turns than runner; guardian runs longer
 DEFAULT_SIGNAL_TIMEOUT = 600     # 10 minutes per wait cycle
 DEFAULT_MAX_RETRIES = 3          # max retries per node before escalating
@@ -587,8 +586,9 @@ Examples:
     parser.add_argument("--max-turns", type=int, default=DEFAULT_MAX_TURNS,
                         dest="max_turns",
                         help=f"Max SDK turns (default: {DEFAULT_MAX_TURNS})")
-    parser.add_argument("--model", default=DEFAULT_MODEL,
-                        help=f"Claude model to use (default: {DEFAULT_MODEL})")
+    _default_model = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6")
+    parser.add_argument("--model", default=_default_model,
+                        help=f"Claude model to use (default: {_default_model})")
     parser.add_argument("--signals-dir", default=None, dest="signals_dir",
                         help="Override signals directory path")
     parser.add_argument("--signal-timeout", type=float, default=DEFAULT_SIGNAL_TIMEOUT,
@@ -728,7 +728,7 @@ async def _launch_guardian_async(
     project_root: str,
     pipeline_id: str,
     *,
-    model: str = DEFAULT_MODEL,
+    model: str = "claude-sonnet-4-6",
     max_turns: int = DEFAULT_MAX_TURNS,
     signal_timeout: float = DEFAULT_SIGNAL_TIMEOUT,
     max_retries: int = DEFAULT_MAX_RETRIES,
@@ -865,7 +865,7 @@ async def _launch_multiple_async(
             dot_path=os.path.abspath(cfg["dot_path"]),
             project_root=cfg.get("project_root", os.getcwd()),
             pipeline_id=cfg["pipeline_id"],
-            model=cfg.get("model", DEFAULT_MODEL),
+            model=cfg.get("model", "claude-sonnet-4-6"),
             max_turns=cfg.get("max_turns", DEFAULT_MAX_TURNS),
             signal_timeout=cfg.get("signal_timeout", DEFAULT_SIGNAL_TIMEOUT),
             max_retries=cfg.get("max_retries", DEFAULT_MAX_RETRIES),

@@ -122,7 +122,6 @@ logfire.configure(
 # Constants
 # ---------------------------------------------------------------------------
 
-DEFAULT_MODEL = "claude-sonnet-4-6"
 DEFAULT_CHECK_INTERVAL = 30      # seconds between polling cycles
 DEFAULT_STUCK_THRESHOLD = 300    # seconds before declaring "stuck"
 DEFAULT_MAX_TURNS = 100          # enough turns for a long monitoring loop
@@ -454,8 +453,9 @@ Examples:
     parser.add_argument("--max-turns", type=int, default=DEFAULT_MAX_TURNS,
                         dest="max_turns",
                         help=f"Max SDK turns (default: {DEFAULT_MAX_TURNS})")
-    parser.add_argument("--model", default=DEFAULT_MODEL,
-                        help=f"Claude model to use (default: {DEFAULT_MODEL})")
+    _default_model = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6")
+    parser.add_argument("--model", default=_default_model,
+                        help=f"Claude model to use (default: {_default_model})")
     parser.add_argument("--signals-dir", default=None, dest="signals_dir",
                         help="Override signals directory path")
     parser.add_argument("--dry-run", action="store_true", dest="dry_run",
@@ -613,7 +613,7 @@ class RunnerStateMachine:
         target_dir: str,
         dot_file: str | None = None,
         signals_dir: str | None = None,
-        model: str = DEFAULT_MODEL,
+        model: str = "claude-sonnet-4-6",
         max_turns: int = DEFAULT_MAX_TURNS,
         max_cycles: int = 10,
     ) -> None:
@@ -942,7 +942,8 @@ def spawn(args: argparse.Namespace) -> None:
            "--prd", args.prd,
            "--session", f"orch-{args.node}",
            "--target-dir", args.target_dir,
-           "--mode", args.mode]
+           "--mode", args.mode,
+           "--model", args.model]
 
     if args.solution_design:
         cmd += ["--solution-design", args.solution_design]

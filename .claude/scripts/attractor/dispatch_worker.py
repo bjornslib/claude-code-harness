@@ -99,7 +99,7 @@ def _build_headless_worker_cmd(
     task_prompt: str,
     work_dir: str,
     worker_type: str = "backend-solutions-engineer",
-    model: str = "claude-sonnet-4-6",
+    model: str = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
     node_id: str = "",
     pipeline_id: str = "",
     runner_id: str = "",
