@@ -397,6 +397,119 @@ def build_options(
         )
 
 
+def build_worker_system_prompt(
+    node_id: str,
+    prd_ref: str,
+    acceptance: str,
+    target_dir: str,
+) -> str:
+    """Return the system prompt for a direct SDK worker agent (task execution).
+
+    Unlike build_system_prompt() which instructs a monitoring agent, this
+    prompt configures an agent that directly implements the task.
+
+    Args:
+        node_id: Pipeline node identifier.
+        prd_ref: PRD reference string.
+        acceptance: Acceptance criteria text.
+        target_dir: Working directory for the agent.
+
+    Returns:
+        Formatted system prompt string.
+    """
+    with logfire.span("runner.build_worker_system_prompt", node_id=node_id, prd_ref=prd_ref):
+        return (
+            f"You are a software engineer implementing a pipeline task directly.\n\n"
+            f"Your assignment:\n"
+            f"- Node: {node_id}\n"
+            f"- PRD: {prd_ref}\n"
+            f"- Working directory: {target_dir}\n\n"
+            f"Acceptance criteria:\n"
+            f"{acceptance or 'Implement the feature as described in the initial prompt.'}\n\n"
+            f"Work directly in {target_dir}. Use available tools to read, write, and "
+            f"edit files as needed.\n"
+            f"When finished, ensure all acceptance criteria are satisfied.\n"
+        )
+
+
+def build_worker_initial_prompt(
+    node_id: str,
+    prd_ref: str,
+    acceptance: str,
+    solution_design: str | None = None,
+    bead_id: str = "",
+) -> str:
+    """Return the initial task prompt for a direct SDK worker agent.
+
+    Args:
+        node_id: Pipeline node identifier.
+        prd_ref: PRD reference string.
+        acceptance: Acceptance criteria text.
+        solution_design: Optional path to a solution design document.
+        bead_id: Optional bead/task identifier.
+
+    Returns:
+        Formatted initial prompt string.
+    """
+    with logfire.span("runner.build_worker_initial_prompt", node_id=node_id, prd_ref=prd_ref):
+        parts: list[str] = [
+            f"## Task: {node_id}",
+            f"",
+            f"**PRD Reference**: {prd_ref}",
+        ]
+        if bead_id:
+            parts.append(f"**Bead ID**: {bead_id}")
+        parts += [
+            f"",
+            f"## Acceptance Criteria",
+            f"{acceptance or 'Implement the feature. Ensure the code works correctly.'}",
+        ]
+        if solution_design:
+            parts += [
+                f"",
+                f"## Solution Design",
+                f"Refer to: {solution_design}",
+            ]
+        parts += [
+            f"",
+            f"Please implement this task now, working in the project directory.",
+        ]
+        return "\n".join(parts)
+
+
+def build_worker_options(
+    system_prompt: str,
+    cwd: str,
+    model: str,
+    max_turns: int,
+) -> Any:
+    """Build ClaudeCodeOptions for a direct SDK worker with full toolset.
+
+    Unlike build_options() which restricts to Bash only (for monitoring),
+    this gives the worker unrestricted tool access for implementation work.
+
+    Args:
+        system_prompt: Task execution instructions for Claude.
+        cwd: Working directory for the agent (project root).
+        model: Claude model identifier.
+        max_turns: Maximum turns before the SDK stops the conversation.
+
+    Returns:
+        Configured ClaudeCodeOptions instance.
+    """
+    with logfire.span("runner.build_worker_options", model=model):
+        from claude_code_sdk import ClaudeCodeOptions
+
+        return ClaudeCodeOptions(
+            # No allowed_tools restriction — worker needs full toolset
+            system_prompt=system_prompt,
+            cwd=cwd,
+            model=model,
+            max_turns=max_turns,
+            env={"CLAUDECODE": ""},
+        )
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse CLI arguments for runner.py.
 
@@ -1144,9 +1257,83 @@ def main(argv: list[str] | None = None) -> None:
                 pass
             sys.exit(1)
 
-        # Live run: choose between state machine (--dot-file) and legacy tmux monitoring.
-        if args.dot_file:
-            # Mode-switching path: use RunnerStateMachine for pipeline-aware monitoring.
+        # Live run: choose execution path based on mode and dot-file presence.
+        if args.dot_file and args.mode == "sdk":
+            # SDK direct execution: runner IS the worker — no monitoring loop.
+            # Build task prompts (not monitoring prompts), run the agent directly,
+            # then transition the dot node state on completion.
+            cli_script = os.path.join(_THIS_DIR, "cli.py")
+            emit_event(
+                "runner/init",
+                node=node_id,
+                prd=args.prd,
+                dot_file=args.dot_file,
+                mode="sdk_direct",
+            )
+
+            worker_system_prompt = build_worker_system_prompt(
+                node_id=node_id,
+                prd_ref=args.prd,
+                acceptance=args.acceptance or "",
+                target_dir=cwd,
+            )
+            worker_initial_prompt = build_worker_initial_prompt(
+                node_id=node_id,
+                prd_ref=args.prd,
+                acceptance=args.acceptance or "",
+                solution_design=args.solution_design,
+                bead_id=args.bead_id or "",
+            )
+            worker_options = build_worker_options(
+                system_prompt=worker_system_prompt,
+                cwd=cwd,
+                model=args.model,
+                max_turns=args.max_turns,
+            )
+
+            try:
+                asyncio.run(_run_agent(worker_initial_prompt, worker_options))
+                # Success: transition node to impl_complete
+                subprocess.run(
+                    [sys.executable, cli_script, "transition",
+                     args.dot_file, "transition", node_id, "impl_complete"],
+                    cwd=cwd,
+                    check=False,
+                )
+                emit_event("runner/exit", node=node_id, final_mode="COMPLETE")
+                try:
+                    identity_registry.mark_terminated(role="runner", name=node_id)
+                except Exception:
+                    pass
+            except KeyboardInterrupt:
+                subprocess.run(
+                    [sys.executable, cli_script, "transition",
+                     args.dot_file, "transition", node_id, "failed"],
+                    cwd=cwd,
+                    check=False,
+                )
+                try:
+                    identity_registry.mark_terminated(role="runner", name=node_id)
+                except Exception:
+                    pass
+                sys.exit(130)
+            except Exception as exc:
+                # Failure: transition node to failed
+                subprocess.run(
+                    [sys.executable, cli_script, "transition",
+                     args.dot_file, "transition", node_id, "failed"],
+                    cwd=cwd,
+                    check=False,
+                )
+                emit_event("runner/exit", node=node_id, final_mode="FAILED", error=str(exc))
+                try:
+                    identity_registry.mark_crashed(role="runner", name=node_id)
+                except Exception:
+                    pass
+                sys.exit(1)
+
+        elif args.dot_file:
+            # Mode-switching path (tmux/headless): use RunnerStateMachine for pipeline-aware monitoring.
             emit_event(
                 "runner/init",
                 node=node_id,

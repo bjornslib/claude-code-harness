@@ -37,7 +37,7 @@ digraph "simple-example" {
         promise_ac="AC-1"
         status="pending"
         style=filled
-        fillcolor=lightyellow
+        fillcolor="lightblue"
     ];
 
     // Stage 5: FINALIZE — Pipeline exit

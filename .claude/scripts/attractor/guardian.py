@@ -270,107 +270,64 @@ is validated.
    b. If autonomous: transition directly to validated after reviewing acceptance criteria
    c. If human needed: escalate to Terminal
 
-### Phase 3: Wait and Handle Signals
-7. After spawning all ready runners, wait for a signal:
-   python3 {scripts_dir}/wait_for_signal.py --target guardian --timeout {signal_timeout}
-8. Parse the signal to determine node and signal type
-9. Handle based on signal type:
+### Phase 3: Wait for Runner Completion (PID polling)
+7. After spawning a runner, parse runner_pid from the JSON output of the spawn command.
+8. Poll until the runner process exits (check every 30 seconds):
+   ```bash
+   while ps -p <runner_pid> > /dev/null 2>&1; do
+       sleep 30
+   done
+   ```
+   You may also check status mid-poll for progress logging:
+   python3 {scripts_dir}/cli.py status {dot_path} --json
 
-   NEEDS_REVIEW (node implementation complete, needs validation):
-   - Review the evidence provided in the signal
-   - Check the DOT node's acceptance criteria
-   - Make a validation decision using your intelligence
-   - If PASSING:
-     * Transition node to impl_complete
-     * Transition node to validated
-     * Save checkpoint
-     * Respond: python3 {scripts_dir}/respond_to_runner.py VALIDATION_PASSED --node <id>
-   - If FAILING:
-     * Check retry count (max {max_retries} retries per node)
-     * If retries remain: python3 {scripts_dir}/respond_to_runner.py VALIDATION_FAILED --node <id> --feedback "<specific feedback>"
-     * If max retries exceeded: escalate to Terminal
+9. Once the PID exits, check the node status:
+   python3 {scripts_dir}/cli.py status {dot_path} --json
 
-   NEEDS_INPUT (orchestrator needs a decision):
-   - Read the question from the signal payload
-   - Use your judgment to make the decision (you ARE the "user" for Layer 3)
-   - Respond: python3 {scripts_dir}/respond_to_runner.py INPUT_RESPONSE --node <id> --response "<decision>"
+10. Handle based on node status:
 
-   VIOLATION (orchestrator violated guard rails):
-   - Log the violation
-   - Decide: warn (send GUIDANCE) or abort (send KILL_ORCHESTRATOR)
-   - Minor violation: python3 {scripts_dir}/respond_to_runner.py GUIDANCE --node <id> --message "Please delegate, do not implement directly"
-   - Major violation: python3 {scripts_dir}/respond_to_runner.py KILL_ORCHESTRATOR --node <id> --reason "<reason>"
+    NODE IS impl_complete (runner finished successfully):
+    - The runner completed and transitioned the node.
+    - Validate against acceptance criteria from the DOT node attributes.
+    - If PASSING:
+      * Transition node to validated:
+        python3 {scripts_dir}/cli.py transition {dot_path} transition <node_id> validated
+      * Save checkpoint:
+        python3 {scripts_dir}/cli.py checkpoint save {dot_path}
+    - If FAILING (acceptance criteria not met):
+      * Check retry count (max {max_retries} retries per node).
+      * If retries remain:
+        - Transition back to active: python3 {scripts_dir}/cli.py transition {dot_path} transition <node_id> active
+        - Re-spawn runner: python3 {scripts_dir}/runner.py --spawn --node <node_id> --prd <prd_ref> --acceptance "<ac>" --bead-id <bead_id> --mode sdk{target_dir_flag} --dot-file {dot_path}
+        - Return to step 7 (poll new PID)
+      * If max retries exceeded: escalate
+        python3 {scripts_dir}/escalate_to_terminal.py --pipeline {pipeline_id} --issue "Node <node_id> failed validation after {max_retries} retries"
 
-   ORCHESTRATOR_STUCK (no progress):
-   - Review the last output provided in signal
-   - Send targeted guidance: python3 {scripts_dir}/respond_to_runner.py GUIDANCE --node <id> --message "<specific unstick advice>"
+    NODE IS failed (runner crashed or reported failure):
+    - Check runner stderr log for diagnostics:
+      cat {target_dir_flag.strip() or "."}/. claude/attractor/runner-state/*-stderr.log 2>/dev/null | tail -50
+    - Check retry count (max {max_retries} retries per node).
+    - If retries remain:
+      * Transition node to active (failed -> active is a valid transition):
+        python3 {scripts_dir}/cli.py transition {dot_path} transition <node_id> active
+      * Re-spawn runner: python3 {scripts_dir}/runner.py --spawn --node <node_id> --prd <prd_ref> --acceptance "<ac>" --bead-id <bead_id> --mode sdk{target_dir_flag} --dot-file {dot_path}
+      * Return to step 7 (poll new PID)
+    - If max retries exceeded: escalate
+      python3 {scripts_dir}/escalate_to_terminal.py --pipeline {pipeline_id} --issue "Runner failed for <node_id> after {max_retries} retries"
 
-   ORCHESTRATOR_CRASHED (tmux session died):
-   - Check if retry is possible
-   - If retries remain: re-spawn runner (increment retry count)
-   - If max retries exceeded: escalate to Terminal
+    NODE IS still active (PID died without updating node state):
+    - The runner crashed before it could transition the node.
+    - Check runner stderr log:
+      cat {target_dir_flag.strip() or "."}/. claude/attractor/runner-state/*-stderr.log 2>/dev/null | tail -50
+    - Treat as "NODE IS failed" above (retry or escalate).
 
-   NODE_COMPLETE (node finished and committed):
-   - Transition node to impl_complete:
-     python3 {scripts_dir}/cli.py transition {dot_path} transition <node_id> impl_complete
-   - Save checkpoint
-   - Respond: python3 {scripts_dir}/respond_to_runner.py VALIDATION_PASSED --node <id>
+11. After validating a node, check for newly unblocked nodes:
+    python3 {scripts_dir}/cli.py status {dot_path} --filter=pending --deps-met --json
+    Dispatch any newly ready nodes (return to Phase 2b).
 
-   RUNNER_EXITED (state machine runner exited without completing):
-   - Read payload.mode to understand why: FAILED, MONITOR (unexpected exit mid-cycle)
-   - Read payload.reason for human-readable explanation
-   - Check payload.node_id against the current pipeline state
-   - Determine if retry is safe:
-     * If retries remain: re-spawn runner with same parameters
-       python3 {scripts_dir}/runner.py --spawn --node <node_id> --prd <prd_ref> --mode sdk --target-dir {target_dir_flag.strip()} --dot-file {dot_path}
-     * If max retries exceeded: escalate to Terminal
-       python3 {scripts_dir}/escalate_to_terminal.py --pipeline {pipeline_id} --issue "Runner exited in mode <mode>: <reason>"
-   - If mode=FAILED and the node is genuinely failed in the DOT file:
-     * Escalate to Terminal immediately with context about what failed
-
-   SIGNAL_TIMEOUT or wait_for_signal exits with no signal:
-   - The wait timed out — this usually means the runner process crashed silently.
-   - Check if the runner process is still alive:
-     ```bash
-     # Find runner state files for active nodes
-     ls -la {target_dir_flag.strip()}/.claude/attractor/runner-state/ | grep "$(date -u +%Y%m%d)"
-     # Check runner stderr log for crash info
-     cat {target_dir_flag.strip()}/.claude/attractor/runner-state/*-stderr.log 2>/dev/null | tail -50
-     ```
-   - Check identity registry for stale runners:
-     python3 {scripts_dir}/identity_registry.py --find-stale --role runner
-   - If runner is dead (no process, stale identity):
-     * Mark identity as crashed: python3 -c "import identity_registry; identity_registry.mark_crashed(role='runner', name='<node_id>')"
-     * Re-spawn runner (if retries remain):
-       python3 {scripts_dir}/runner.py --spawn --node <node_id> --prd <prd_ref> --mode sdk --target-dir {target_dir_flag.strip()} --dot-file {dot_path}
-     * If max retries exceeded: escalate to Terminal
-   - If runner is alive but stuck, send a guidance signal and wait again
-
-   MERGE_READY (node branch is ready for sequential merge into main):
-   - Call the merge queue to process the next pending entry:
-     ```python
-     import merge_queue, signal_protocol
-     result = merge_queue.process_next()
-     ```
-   - If result["success"] is True and result["entry"] is not None:
-     * Write MERGE_COMPLETE signal back to runner:
-       signal_protocol.write_signal(
-           source="guardian", target="runner",
-           signal_type="MERGE_COMPLETE",
-           payload={{"node_id": result["entry"]["node_id"],
-                    "branch": result["entry"]["branch"],
-                    "entry_id": result["entry"]["entry_id"]}},
-       )
-   - If result["success"] is False:
-     * Write MERGE_FAILED signal back to runner:
-       signal_protocol.write_signal(
-           source="guardian", target="runner",
-           signal_type="MERGE_FAILED",
-           payload={{"node_id": result["entry"]["node_id"],
-                    "branch": result["entry"]["branch"],
-                    "error": result["error"]}},
-       )
-     * Log the failure and escalate if repeated failures occur
+12. Pipeline complete when all non-start/exit nodes are validated:
+    python3 {scripts_dir}/cli.py status {dot_path} --json
+    If summary shows all nodes "validated" → save final checkpoint and exit successfully.
 
 ### Phase 4: Check Pipeline Progress
 10. After handling the signal, check for new ready nodes (go to Phase 2)
