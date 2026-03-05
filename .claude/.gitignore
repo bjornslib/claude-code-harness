@@ -41,7 +41,8 @@ __pycache__/
 credentials/google-chat-token.json
 credentials/google-chat-oauth-client.json
 
-# Attractor runtime artifacts
+# Attractor runtime artifacts and credentials
+attractor/.env
 attractor/checkpoints/
 attractor/pipelines/
 attractor/runner-state/
