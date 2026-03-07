@@ -377,6 +377,20 @@ class PipelineRunner:
                 log.info("[resume] Re-dispatching validation for impl_complete node: %s", nid)
                 self._dispatch_validation_agent(nid, nid)
 
+            # Re-dispatch codergen workers for active nodes with no in-memory worker.
+            # This handles the case where validation fails and requeues a node back to
+            # "active" in the DOT, but the dispatch loop only picks up "pending" nodes.
+            orphaned_active_nodes = [
+                n for n in nodes
+                if n["attrs"].get("status") == "active"
+                and n["attrs"].get("handler") == "codergen"
+                and n["id"] not in self.active_workers
+            ]
+            for node in orphaned_active_nodes:
+                nid = node["id"]
+                log.info("[resume] Re-dispatching codergen for orphaned active node: %s", nid)
+                self._dispatch_node(node, data)
+
             # If nothing is dispatchable and nothing is active, we're stuck
             if not self.active_workers:
                 pending_nodes = [n for n in nodes if n["attrs"].get("status", "pending") == "pending"]
@@ -925,12 +939,22 @@ class PipelineRunner:
         """
         import asyncio
 
+        _span = None
+        if _LOGFIRE_AVAILABLE:
+            _span = logfire.span(
+                "validation_agent {node_id}",
+                node_id=node_id, target_node_id=target_node_id,
+            )
+            _span.__enter__()
+
         if not _SDK_AVAILABLE or claude_code_sdk is None:
             log.warning("[validation] SDK not available — auto-passing %s", node_id)
             signal: dict = {"result": "pass", "reason": "auto-pass: SDK not available for validation"}
             self._write_node_signal(node_id, signal)
             self.active_workers.pop(node_id, None)
             self._wake_event.set()
+            if _span:
+                _span.__exit__(None, None, None)
             return
 
         os.environ.pop("CLAUDECODE", None)
@@ -940,6 +964,10 @@ class PipelineRunner:
             f"Check if the implementation meets acceptance criteria. "
             f"DOT file: {self.dot_path}"
         )
+        if _LOGFIRE_AVAILABLE:
+            logfire.info("validation_dispatch {node_id}",
+                         node_id=node_id, model=worker_model,
+                         cwd=self._get_target_dir())
 
         async def _run() -> dict:
             clean_env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
@@ -953,9 +981,28 @@ class PipelineRunner:
                 env=clean_env,
             )
             messages = []
+            _first_msg_logged = False
             try:
                 async for msg in claude_code_sdk.query(prompt=prompt, options=options):  # type: ignore[attr-defined]
                     messages.append(msg)
+                    msg_type = type(msg).__name__
+                    if not _first_msg_logged and _LOGFIRE_AVAILABLE:
+                        logfire.info("validation_first_message {node_id}",
+                                     node_id=node_id, msg_type=msg_type)
+                        _first_msg_logged = True
+                    # Log tool use and text for visibility
+                    if _LOGFIRE_AVAILABLE and hasattr(msg, "content") and msg_type == "AssistantMessage":
+                        for block in (msg.content if isinstance(msg.content, list) else []):
+                            block_type = type(block).__name__
+                            if block_type == "ToolUseBlock":
+                                logfire.info("validation_tool {node_id} {tool}",
+                                             node_id=node_id, tool=getattr(block, "name", ""),
+                                             input_preview=str(getattr(block, "input", ""))[:300])
+                            elif block_type == "TextBlock":
+                                text = getattr(block, "text", "")
+                                if text and len(text.strip()) > 5:
+                                    logfire.info("validation_text {node_id}",
+                                                 node_id=node_id, text=text[:300])
                     if hasattr(msg, "result") and msg.result:  # type: ignore[union-attr]
                         result_text = str(msg.result).lower()
                         if "fail" in result_text:
@@ -972,9 +1019,16 @@ class PipelineRunner:
             log.warning("[validation] Dispatch failed for %s — auto-passing: %s", node_id, exc)
             signal = {"result": "pass", "reason": f"auto-pass: {exc}"}
 
+        if _LOGFIRE_AVAILABLE:
+            logfire.info("validation_complete {node_id} {result}",
+                         node_id=node_id, result=signal.get("result"),
+                         reason=signal.get("reason", "")[:200])
+
         self._write_node_signal(node_id, signal)
         self.active_workers.pop(node_id, None)
         self._wake_event.set()
+        if _span:
+            _span.__exit__(None, None, None)
 
     # ------------------------------------------------------------------
     # Signal processing
