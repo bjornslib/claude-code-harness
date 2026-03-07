@@ -1,6 +1,6 @@
 ---
 title: "SD-HARNESS-UPGRADE-001: E4-E6 Post-Pipeline Gap Remediation"
-status: active
+status: complete
 type: solution-design
 last_verified: 2026-03-07
 grade: authoritative
