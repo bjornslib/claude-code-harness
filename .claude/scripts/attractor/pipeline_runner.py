@@ -1326,12 +1326,15 @@ class PipelineRunner:
 
         lines.append(
             f"\n## Signal Protocol\n"
-            f"When your work is complete, write a JSON result file to:\n"
-            f"  {self.signal_dir}/{nid}.json\n\n"
+            f"The signal directory is available as environment variable $ATTRACTOR_SIGNAL_DIR.\n"
+            f"IMPORTANT: Always verify the path first:\n"
+            f"  Bash(\"echo $ATTRACTOR_SIGNAL_DIR\")\n\n"
+            f"Then write your result file to: $ATTRACTOR_SIGNAL_DIR/{nid}.json\n\n"
             f"Format:\n"
             f'  {{"status": "success", "files_changed": ["file1", "file2"], "message": "brief description"}}\n\n'
-            f"Use Write tool with file_path parameter:\n"
-            f"  Write(file_path=\"{self.signal_dir}/{nid}.json\", content='{{\"status\": \"success\", \"message\": \"done\"}}')\n\n"
+            f"Example (use the EXACT path from echo above, do NOT construct your own path):\n"
+            f"  Bash(\"echo $ATTRACTOR_SIGNAL_DIR/{nid}.json\")  # verify path first\n"
+            f"  Write(file_path=\"<path from echo above>/{nid}.json\", content='{{\"status\": \"success\", \"message\": \"done\"}}')\n\n"
             f"Tool usage reminder: boolean values are true/false (not True/False). "
             f"MCP tools are unavailable in this headless context. "
             f"Use only: Bash, Read, Write, Edit, Glob, Grep, MultiEdit."
