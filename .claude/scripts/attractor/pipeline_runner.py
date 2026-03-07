@@ -931,6 +931,93 @@ class PipelineRunner:
             self._executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="worker")
         self._executor.submit(self._run_validation_subprocess, node_id, target_node_id)
 
+    def _build_validation_system_prompt(self) -> str:
+        """System prompt for validation agents."""
+        return (
+            "You are a validation agent. Your job is to independently verify that "
+            "a worker's implementation meets the acceptance criteria.\n\n"
+            "## Process\n"
+            "1. Read the acceptance criteria below carefully\n"
+            "2. Read the files listed in 'files changed' to verify the implementation\n"
+            "3. Check each criterion: does the code actually do what it claims?\n"
+            "4. If the SD is provided, verify the implementation matches the design\n\n"
+            "## Response Format\n"
+            "End your response with EXACTLY one of:\n"
+            "- PASS: All acceptance criteria are met\n"
+            "- FAIL: One or more criteria are not met (explain which and why)\n\n"
+            "Be thorough but fair. Check actual code, not just file existence."
+        )
+
+    def _build_validation_prompt(self, target_node_id: str) -> str:
+        """Build a rich validation prompt with acceptance criteria, files changed, and SD."""
+        data = parse_dot(self.dot_content)
+        node = next((n for n in data["nodes"] if n["id"] == target_node_id), None)
+        if node is None:
+            return f"Validate node {target_node_id} in pipeline {self.pipeline_id}."
+
+        attrs = node["attrs"]
+        acceptance = attrs.get("acceptance", "")
+        sd_path = attrs.get("sd_path", "")
+        label = attrs.get("label", target_node_id).replace("\\n", " ")
+
+        lines = [
+            f"# Validate: {label}",
+            f"Node ID: {target_node_id}",
+            f"Pipeline: {self.pipeline_id}",
+        ]
+
+        if acceptance:
+            lines.append(f"\n## Acceptance Criteria\n{acceptance}")
+        else:
+            lines.append("\n## Acceptance Criteria\n(none specified — check for reasonable implementation)")
+
+        # Read the worker's signal to get files_changed
+        processed_dir = os.path.join(self.signal_dir, "processed")
+        files_changed = []
+        if os.path.isdir(processed_dir):
+            for fname in sorted(os.listdir(processed_dir), reverse=True):
+                if target_node_id in fname and fname.endswith(".json"):
+                    try:
+                        with open(os.path.join(processed_dir, fname)) as fh:
+                            worker_signal = json.load(fh)
+                            files_changed = worker_signal.get("files_changed", [])
+                            if files_changed:
+                                break
+                    except (OSError, json.JSONDecodeError):
+                        continue
+
+        if files_changed:
+            lines.append(f"\n## Files Changed by Worker\n" + "\n".join(f"- {f}" for f in files_changed))
+            lines.append("\nRead these files to verify the implementation.")
+        else:
+            lines.append("\n## Files Changed\n(not reported — search the codebase to find relevant changes)")
+
+        # Inline SD if available
+        if sd_path:
+            sd_abs = os.path.join(self.dot_dir, sd_path) if not os.path.isabs(sd_path) else sd_path
+            if os.path.exists(sd_abs):
+                try:
+                    with open(sd_abs) as fh:
+                        sd_content = fh.read()
+                    lines.append(f"\n## Solution Design\n{sd_content}")
+                except OSError:
+                    lines.append(f"\n## Solution Design Path\n{sd_path}")
+            else:
+                lines.append(f"\n## Solution Design Path\n{sd_path}")
+
+        # Signal file path for result
+        signal_file_path = os.path.join(self.signal_dir, f"{target_node_id}.json")
+        lines.append(
+            f"\n## Write Your Result\n"
+            f"Write your validation result to: {signal_file_path}\n\n"
+            f"PASS example:\n"
+            f'```\nWrite(file_path="{signal_file_path}", content=\'{{"result": "pass", "reason": "All criteria met"}}\')\n```\n\n'
+            f"FAIL example:\n"
+            f'```\nWrite(file_path="{signal_file_path}", content=\'{{"result": "fail", "reason": "Criterion X not met because..."}}\')\n```'
+        )
+
+        return "\n".join(lines)
+
     def _run_validation_subprocess(self, node_id: str, target_node_id: str) -> None:
         """Run validation-test-agent via AgentSDK. Falls back to auto-pass if unavailable.
 
@@ -959,11 +1046,10 @@ class PipelineRunner:
 
         os.environ.pop("CLAUDECODE", None)
         worker_model = os.environ.get("ANTHROPIC_MODEL") or os.environ.get("PIPELINE_WORKER_MODEL", "claude-haiku-4-5-20251001")
-        prompt = (
-            f"Validate node {target_node_id} in pipeline {self.pipeline_id}. "
-            f"Check if the implementation meets acceptance criteria. "
-            f"DOT file: {self.dot_path}"
-        )
+
+        # Build a rich validation prompt with acceptance criteria and context
+        prompt = self._build_validation_prompt(target_node_id)
+
         if _LOGFIRE_AVAILABLE:
             logfire.info("validation_dispatch {node_id}",
                          node_id=node_id, model=worker_model,
@@ -972,12 +1058,12 @@ class PipelineRunner:
         async def _run() -> dict:
             clean_env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
             options = claude_code_sdk.ClaudeCodeOptions(  # type: ignore[attr-defined]
-                system_prompt="You are a validation agent. Check if implementation meets acceptance criteria. Respond with PASS or FAIL.",
+                system_prompt=self._build_validation_system_prompt(),
                 allowed_tools=["Read", "Bash", "Grep", "Glob"],
                 permission_mode="bypassPermissions",
                 model=worker_model,
                 cwd=self._get_target_dir(),
-                max_turns=10,
+                max_turns=20,
                 env=clean_env,
             )
             messages = []
