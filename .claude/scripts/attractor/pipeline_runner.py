@@ -195,6 +195,9 @@ class PipelineRunner:
         self.signal_dir = os.path.join(self.dot_dir, "signals")
         self.resume = resume
 
+        # Load attractor .env if present (sets ANTHROPIC_MODEL, ANTHROPIC_BASE_URL, etc.)
+        self._load_attractor_env()
+
         # Active workers: node_id -> worker metadata dict
         self.active_workers: dict[str, dict[str, Any]] = {}
 
@@ -214,6 +217,28 @@ class PipelineRunner:
         self.pipeline_id = pipeline_data.get("graph_name", os.path.splitext(os.path.basename(dot_path))[0])
         self._graph_attrs = pipeline_data.get("graph_attrs", {})
         log.info("Pipeline loaded: %s  nodes=%d", self.pipeline_id, len(pipeline_data.get("nodes", [])))
+
+    def _load_attractor_env(self) -> None:
+        """Source .claude/attractor/.env if it exists. Sets ANTHROPIC_MODEL etc."""
+        env_path = os.path.join(_THIS_DIR, "..", "..", "attractor", ".env")
+        env_path = os.path.normpath(env_path)
+        if not os.path.isfile(env_path):
+            return
+        with open(env_path) as fh:
+            for line in fh:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                # Handle 'export KEY=VALUE' and 'KEY=VALUE'
+                if line.startswith("export "):
+                    line = line[7:]
+                if "=" in line:
+                    key, _, value = line.partition("=")
+                    key = key.strip()
+                    value = value.strip().strip('"').strip("'")
+                    if key and key not in os.environ:
+                        os.environ[key] = value
+                        log.debug("[env] Set %s from attractor .env", key)
 
     def _get_target_dir(self) -> str:
         """Return target directory for worker execution. Falls back to dot_dir."""
@@ -608,8 +633,8 @@ class PipelineRunner:
         # Unset CLAUDECODE to avoid nested session detection
         os.environ.pop("CLAUDECODE", None)
 
-        # Worker model: prefer env override, default to Haiku for cost efficiency
-        worker_model = os.environ.get("PIPELINE_WORKER_MODEL", "claude-haiku-4-5-20251001")
+        # Worker model: ANTHROPIC_MODEL (from attractor .env) > PIPELINE_WORKER_MODEL > default
+        worker_model = os.environ.get("ANTHROPIC_MODEL") or os.environ.get("PIPELINE_WORKER_MODEL", "claude-haiku-4-5-20251001")
 
         async def _run() -> dict:
             # Build clean env without CLAUDECODE
@@ -699,7 +724,7 @@ class PipelineRunner:
             return
 
         os.environ.pop("CLAUDECODE", None)
-        worker_model = os.environ.get("PIPELINE_WORKER_MODEL", "claude-haiku-4-5-20251001")
+        worker_model = os.environ.get("ANTHROPIC_MODEL") or os.environ.get("PIPELINE_WORKER_MODEL", "claude-haiku-4-5-20251001")
         prompt = (
             f"Validate node {target_node_id} in pipeline {self.pipeline_id}. "
             f"Check if the implementation meets acceptance criteria. "
