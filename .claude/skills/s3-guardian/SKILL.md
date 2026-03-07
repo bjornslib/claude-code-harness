@@ -9,7 +9,7 @@ last_verified: 2026-03-02
 
 # S3 Guardian — Independent Validation Pattern
 
-The guardian angel pattern provides independent, blind validation of System 3 meta-orchestrator work. A guardian session creates acceptance tests from PRDs, stores them outside the implementation repo where meta-orchestrators cannot see them, dispatches orchestrators via headless CLI (`claude -p`) or SDK pipelines, and independently validates claims against a gradient confidence rubric.
+The guardian angel pattern provides independent, blind validation of System 3 meta-orchestrator work. A guardian session creates acceptance tests from PRDs, stores them outside the implementation repo where meta-orchestrators cannot see them, dispatches workers via AgentSDK pipelines (`pipeline_runner.py --dot-file`), and independently validates claims against a gradient confidence rubric.
 
 ```
 Guardian (this session, config repo)
@@ -20,16 +20,17 @@ Guardian (this session, config repo)
     |-- Generates executable browser test scripts for UX prototypes
     |-- Dispatches via DOT pipeline (two modes):
     |       |
-    |       +-- SDK mode: guardian.py → runner.py → dispatch_worker.py → claude -p (all headless via SDK)
-    |       +-- Headless mode: Workers run via `claude -p` CLI (structured JSON output, no SDK)
-    |       +-- tmux mode: Spawns Orchestrators in tmux (one per epic/DOT node) [interactive, lower API cost]
+    |       +-- Pipeline mode (PRIMARY): pipeline_runner.py --dot-file → AgentSDK dispatches workers
+    |       |       Workers appear as `claude` processes in `ps` — this is normal SDK behavior, NOT claude -p
+    |       +-- tmux mode: spawn_orchestrator.py --mode tmux → interactive Max-plan session
+    |       +-- Headless mode (LEGACY): spawn_orchestrator.py --mode headless → claude -p subprocess
     |       |
     |       +-- Research nodes run BEFORE codergen (validate SD via Context7/Perplexity)
     |       +-- Refine nodes run AFTER research (rewrite SD with findings as first-class content)
     |       +-- Research-only pipelines (no codergen) are valid — guardian completes after refine
     |       +-- Workers (native Agent Teams, spawned by orchestrator)
     |
-    |-- Monitors orchestrator progress (SDK: poll DOT state; headless: JSON output; tmux: capture-pane)
+    |-- Monitors orchestrator progress (pipeline: poll DOT state via cli.py status; tmux: capture-pane)
     |-- Independently validates claims against rubric
     |-- Delivers verdict with gradient confidence scores
 ```
@@ -538,13 +539,13 @@ python3 .claude/scripts/attractor/launch_guardian.py \
 |--------|-------|-----------|---------|
 | `guardian.py` | 0+1 | `--dot`, `--multi`, `--dry-run` | Consolidated guardian entry point (composes launch_guardian + guardian_agent) |
 | `runner.py` | 2 | `--spawn`, `--node`, `--prd`, `--dot-file` | Consolidated runner entry point (spawn mode + direct execution) |
-| `dispatch_worker.py` | 3 (Worker) | (library) | Headless worker dispatch (`_build_headless_worker_cmd`, `run_headless_worker`) |
-| `spawn_orchestrator.py` | 2 (Runner) | `--node`, `--prd`, `--mode {headless\|tmux}` | Tmux mode + backward-compat re-exports from dispatch_worker |
+| `dispatch_worker.py` | 3 (Worker) | (library) | AgentSDK worker dispatch — invoked by pipeline_runner.py per codergen node |
+| `spawn_orchestrator.py` | 2 (Runner) | `--node`, `--prd`, `--mode {headless\|tmux}` | Tmux mode + legacy headless (`claude -p`) + backward-compat re-exports |
 
 > **When to use each mode**:
-> - **Headless** (`--mode headless`): Uses `claude -p` CLI with structured JSON output. Three-Layer Context: ROLE (--system-prompt), TASK (-p), IDENTITY (env vars). Best when: automated pipelines, CI/CD, signal-file monitoring, no tmux available.
-> - **SDK** (`launch_guardian.py`): Full `claude_code_sdk` integration with multi-turn conversation. Best when: long-running pipelines, complex multi-turn orchestration.
-> - **tmux** (`--mode tmux`): Spawns an interactive Claude Code session via tmux. Best when: Max plan sessions (no per-token API cost), human observation/intervention needed.
+> - **Pipeline (PRIMARY)** (`pipeline_runner.py --dot-file`): Uses **AgentSDK** (`claude_code_sdk`) to dispatch workers. Workers appear as `claude` processes in `ps` — this is normal SDK behavior, NOT direct `claude -p` invocation. Best when: all standard DOT pipelines.
+> - **tmux** (`spawn_orchestrator.py --mode tmux`): Spawns an interactive Claude Code session via tmux. Best when: Max plan sessions (no per-token API cost), human observation/intervention needed.
+> - **Headless (LEGACY)** (`spawn_orchestrator.py --mode headless`): Uses `claude -p` CLI subprocess directly. Three-Layer Context: ROLE (--system-prompt), TASK (-p), IDENTITY (env vars). Use only when pipeline_runner is unavailable or for one-off scripted invocations.
 
 ### Key Files
 
@@ -576,16 +577,18 @@ python3 .claude/scripts/attractor/launch_guardian.py \
 | Codergen node without preceding research node | Orchestrator implements with potentially outdated API patterns | Add `handler="research"` node before each codergen |
 | Research without refine node downstream | SD retains inline annotations (`// Validated via...`) that confuse codergen | Add `handler="refine"` node between research and codergen |
 | Research validates docs but not local install | SD may reference v1.63 API while local env has v1.58 | Pin versions in SD or add local version check to research prompt |
-| Calling `run_research.py` per-node for pipeline execution | Bypasses guardian state machine — no DOT transitions, no checkpoints, exit code 2 | Always use `launch_guardian.py --dot-file` to drive ANY pipeline (research-only or mixed). See [guardian-workflow.md § Research-Only Pipeline Dispatch](references/guardian-workflow.md) |
+| Calling `run_research.py` per-node for pipeline execution | Bypasses guardian state machine — no DOT transitions, no checkpoints, exit code 2 | Always use `pipeline_runner.py --dot-file` to drive ANY pipeline (research-only or mixed). See [guardian-workflow.md § Research-Only Pipeline Dispatch](references/guardian-workflow.md) |
+| Assuming `claude` processes in `ps` mean `claude -p` was used | AgentSDK internally shells out to the `claude` binary — seeing it in `ps` doesn't mean direct `claude -p` invocation | `pipeline_runner.py` uses AgentSDK; `spawn_orchestrator.py --mode headless` uses `claude -p` directly |
 
 ---
 
-**Version**: 0.5.1
-**Dependencies**: cs-promise CLI (requires PATH setup — see Prerequisites section), claude CLI (headless mode), claude_code_sdk (SDK mode), tmux (tmux mode — interactive, lower API cost), Hindsight MCP, ccsystem3 shell function, Task Master MCP, ZeroRepo
+**Version**: 0.5.2
+**Dependencies**: cs-promise CLI (requires PATH setup — see Prerequisites section), pipeline_runner.py + claude_code_sdk (primary dispatch), tmux (tmux mode — interactive, lower API cost), claude CLI via spawn_orchestrator.py (legacy headless only), Hindsight MCP, ccsystem3 shell function, Task Master MCP, ZeroRepo
 **Integration**: system3-orchestrator skill, completion-promise skill, acceptance-test-writer skill, parallel-solutioning skill, research-first skill
 **Theory**: Independent verification eliminates self-reporting bias in agentic systems
 
 **Changelog**:
+- v0.5.2: Corrected dispatch model throughout. `pipeline_runner.py --dot-file` is the PRIMARY dispatch path and uses **AgentSDK** (`claude_code_sdk`) — NOT `claude -p`. Seeing `claude` in `ps` when pipeline_runner runs is normal SDK behavior (SDK internally shells to the claude binary). `claude -p` is ONLY used by `spawn_orchestrator.py --mode headless` (legacy). Updated architecture diagram, mode table, anti-patterns, and dependencies line. Root cause: System 3 misread `ps` output and incorrectly concluded pipeline_runner uses `claude -p` — the process signature looks identical but the dispatch layer is entirely different.
 - v0.5.1: Rebalanced mode descriptions — tmux is equal peer to headless, not deprecated/legacy. Removed "Default for workers" label from headless. Added explicit tmux spawn command example in Quick Reference with wisdom file template. Updated system3-meta-orchestrator.md to remove "legacy tmux" and "for debugging only" language. Root cause: recent tmux-as-legacy language in docs caused orchestrator prompts to drop mandatory `Skill("orchestrator-multiagent")` invocation, resulting in direct implementation instead of delegation to workers.
 - v0.6.0: 3-layer attractor consolidation. Created `guardian.py` (composes launch_guardian + guardian_agent), `runner.py` (composes spawn_runner + runner_agent with `--spawn` mode), `dispatch_worker.py` (extracted headless functions from spawn_orchestrator.py). Guardian system prompt now references `runner.py --spawn` instead of `spawn_runner.py`. Old files untouched — backward-compatible re-exports from spawn_orchestrator.py. Zero test breakage (987 tests pass).
 - v0.5.0: Added headless CLI worker mode (Epic 6). Workers run via `claude -p` with Three-Layer Context: ROLE (--system-prompt from .claude/agents/), TASK (-p prompt), IDENTITY (env vars). New functions: `_build_headless_worker_cmd()` and `run_headless_worker()` in dispatch_worker.py (re-exported from spawn_orchestrator.py). `--mode headless` added to runner.py, spawn_orchestrator.py, and guardian_agent.py system prompt. tmux mode deprecated in favor of headless. JSON output parsing replaces tmux capture-pane monitoring.

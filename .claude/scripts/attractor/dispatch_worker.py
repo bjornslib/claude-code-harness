@@ -25,8 +25,11 @@ import hashlib
 import json
 import logging
 import os
+import re
 import subprocess
+import sys
 import threading
+import yaml
 from collections.abc import Callable
 from pathlib import Path
 
@@ -135,6 +138,128 @@ def load_attractor_env() -> dict[str, str]:
     return result
 
 
+def load_agent_definition(work_dir: str, worker_type: str) -> dict:
+    """Load an agent definition from its Markdown file and parse YAML frontmatter.
+
+    Args:
+        work_dir: The working directory of the project
+        worker_type: The agent type (filename stem)
+
+    Returns:
+        The parsed YAML frontmatter as a dictionary
+
+    Raises:
+        FileNotFoundError: If the agent definition file does not exist
+        ValueError: If the frontmatter is malformed
+    """
+    agents_dir = Path(work_dir) / ".claude" / "agents"
+    agent_file = agents_dir / f"{worker_type}.md"
+
+    if not agent_file.exists():
+        raise FileNotFoundError(f"Agent definition not found: {agent_file}")
+
+    content = agent_file.read_text()
+
+    if not content.startswith("---"):
+        raise ValueError(f"Agent file {agent_file} does not have YAML frontmatter")
+
+    # Find the boundaries of the YAML frontmatter
+    lines = content.split('\n')
+    if len(lines) < 3:
+        raise ValueError(f"Agent file {agent_file} has malformed YAML frontmatter")
+
+    # Find where the frontmatter ends (the second occurrence of '---')
+    frontmatter_end_idx = -1
+    for i in range(1, len(lines)):
+        if lines[i].strip() == "---":
+            frontmatter_end_idx = i
+            break
+
+    if frontmatter_end_idx == -1:
+        raise ValueError(f"Agent file {agent_file} has malformed YAML frontmatter (missing closing ---)")
+
+    # Extract frontmatter lines (from after first --- to before second ---)
+    frontmatter_lines = lines[1:frontmatter_end_idx]
+
+    # Manually parse the YAML frontmatter, handling multi-line content carefully
+    result = {}
+    i = 0
+    while i < len(frontmatter_lines):
+        line = frontmatter_lines[i].rstrip()
+
+        if not line.strip():  # Skip empty lines
+            i += 1
+            continue
+
+        # Check if this line is a field definition (key: value format)
+        colon_pos = line.find(':')
+        if colon_pos != -1:
+            key = line[:colon_pos].strip()
+            value_part = line[colon_pos + 1:].strip()
+
+            # Check if this field has a multi-line value (indented content after)
+            # Look ahead to see if subsequent lines are more indented
+            next_i = i + 1
+            multi_line_value = []
+
+            # If the initial value part isn't empty, start with that
+            if value_part:
+                multi_line_value.append(value_part)
+
+            # Collect indented lines that belong to this field
+            while next_i < len(frontmatter_lines):
+                next_line = frontmatter_lines[next_i]
+                if next_line.strip() == "":
+                    # Empty line, but check if next line is indented (still part of this field)
+                    next_i += 1
+                    continue
+
+                # Count leading spaces to determine indentation
+                leading_spaces = len(next_line) - len(next_line.lstrip())
+
+                # If it's more indented than the key, it's part of this field
+                key_indent = len(line) - len(line.lstrip())
+                if leading_spaces > key_indent and next_line.strip():
+                    multi_line_value.append(next_line.strip())
+                    next_i += 1
+                else:
+                    # Less or equal indentation means a new field
+                    break
+
+            # Join multi-line value with newlines
+            full_value = '\n'.join(multi_line_value) if multi_line_value else ''
+
+            # Process the value based on its content
+            if key == "skills_required":
+                # Handle skills list format like [item1, item2, ...]
+                if full_value.startswith('[') and full_value.endswith(']'):
+                    # Extract items from bracketed list
+                    items_str = full_value[1:-1]  # Remove [ and ]
+                    # Split by comma, but be careful of commas in the middle of complex values
+                    items = [item.strip().strip('"\'') for item in items_str.split(',')]
+                    items = [item for item in items if item]  # Filter out empty items
+                    result[key] = items
+                else:
+                    result[key] = []  # Default to empty list if not properly formatted
+            elif full_value.lower() in ['true', 'false']:
+                # Handle boolean values
+                result[key] = full_value.lower() == 'true'
+            elif full_value and full_value.lstrip('-').isdigit():
+                # Handle integer values
+                result[key] = int(full_value)
+            else:
+                # Store as string (this handles the problematic description field)
+                result[key] = full_value
+
+            # Move to the next potential field
+            i = next_i
+        else:
+            # This shouldn't happen in proper YAML, but skip this line
+            i += 1
+
+    return result
+
+
 def _build_headless_worker_cmd(
     task_prompt: str,
     work_dir: str,
@@ -165,6 +290,14 @@ def _build_headless_worker_cmd(
     Returns:
         Tuple of (command list, environment dict).
     """
+    # Load agent definition with skills_required and other metadata
+    try:
+        agent_def = load_agent_definition(work_dir, worker_type)
+        skills_required = agent_def.get("skills_required", [])
+    except (FileNotFoundError, ValueError) as e:
+        print(f"ERROR: Failed to load agent definition for '{worker_type}': {e}", file=sys.stderr)
+        raise
+
     # Read Layer 1: ROLE from .claude/agents/{worker_type}.md
     agents_dir = Path(work_dir) / ".claude" / "agents"
     role_file = agents_dir / f"{worker_type}.md"
@@ -175,7 +308,15 @@ def _build_headless_worker_cmd(
             _, _, rest = role_content.partition("---")
             _, _, role_content = rest.partition("---")
         role_content = role_content.strip()
+
+        # Inject skill invocations at the beginning of the role content
+        if skills_required:
+            skills_section = f"\n\n## Required Skills\n\nBefore starting work, run:\n"
+            for skill in skills_required:
+                skills_section += f"- `Skill(\"{skill}\")`\n"
+            role_content = skills_section + role_content
     else:
+        # This shouldn't happen due to the hard error check above, but just in case
         role_content = f"You are a specialist agent ({worker_type}). Implement features directly."
 
     cmd = [
@@ -197,11 +338,21 @@ def _build_headless_worker_cmd(
     env = dict(os.environ)
     # Overlay attractor-specific credentials for headless workers.
     env.update(load_attractor_env())
+
+    # Set ATTRACTOR_SIGNAL_DIR and CONCERNS_FILE for worker subprocesses
+    attractor_signals_dir = os.path.join(work_dir, ".claude", "attractor", "signals")
+    os.makedirs(attractor_signals_dir, exist_ok=True)
+
+    # Set CONCERNS_FILE path
+    concerns_file = os.path.join(attractor_signals_dir, "concerns.jsonl")
+
     env.update({
         "WORKER_NODE_ID": node_id,
         "PIPELINE_ID": pipeline_id,
         "RUNNER_ID": runner_id,
         "PRD_REF": prd_ref,
+        "ATTRACTOR_SIGNAL_DIR": attractor_signals_dir,
+        "CONCERNS_FILE": concerns_file,
     })
     # Remove CLAUDECODE to prevent nested session detection
     env.pop("CLAUDECODE", None)
