@@ -1,7 +1,7 @@
 ---
 name: s3-guardian
 description: This skill should be used when System 3 needs to act as an independent guardian angel — designing PRDs with CoBuilder RepoMap context injection, challenging designs via parallel solutioning, spawning orchestrators via headless CLI dispatch, creating blind Gherkin acceptance tests and executable browser test scripts from PRDs, monitoring orchestrator progress, independently validating claims against acceptance criteria using gradient confidence scoring (0.0-1.0), and setting session promises. Use when asked to "spawn and monitor an orchestrator", "create acceptance tests for a PRD", "validate orchestrator claims", "act as guardian angel", "independently verify implementation work", or "design and challenge a PRD".
-version: 0.5.0
+version: 0.5.1
 title: "S3 Guardian"
 status: active
 last_verified: 2026-03-02
@@ -225,6 +225,91 @@ cs-verify --check --verbose
 
 ---
 
+## Hindsight Validation Checklist (MANDATORY)
+
+**This checklist is non-negotiable.** Every guardian validation session MUST complete these Hindsight integration steps before closing.
+
+### Phase 4 Completion: Storing Results
+
+After scoring validation and determining verdict (ACCEPT, INVESTIGATE, or REJECT), execute both steps:
+
+#### Step 1: Store to Private Bank (Guardian Learnings)
+
+```python
+mcp__hindsight__retain(
+    content=f"""## Guardian Validation: PRD-{prd_id}
+
+### Decision
+- Verdict: {verdict}  # ACCEPT|INVESTIGATE|REJECT
+- Overall Score: {score:.2f}
+- Date: {timestamp}
+- Duration: {duration}
+
+### Feature Breakdown
+{feature_table}
+
+### Gaps Identified
+{gaps_list}
+
+### Lessons Learned
+- {lesson_1}
+- {lesson_2}
+""",
+    context="s3-guardian-validations",
+    bank_id="system3-orchestrator"
+)
+```
+
+**When**: After Phase 4 validation scoring completes.
+**Why**: Captures patterns for future guardian sessions to reference.
+**Required fields**: `context="s3-guardian-validations"`, `bank_id="system3-orchestrator"` (always).
+
+#### Step 2: Store to Project Bank (Team Context)
+
+```python
+# Get project bank from environment (set by ccsystem3/ccorch)
+import os
+PROJECT_BANK = os.environ.get("CLAUDE_PROJECT_BANK", "default-project")
+
+mcp__hindsight__retain(
+    content=f"PRD-{prd_id}: {verdict} (score: {score:.2f}) | {gap_summary}",
+    context="project-validations",
+    bank_id=PROJECT_BANK
+)
+```
+
+**When**: Immediately after Step 1.
+**Why**: Other sessions in this project can quickly understand validation outcomes.
+**Required fields**: `context="project-validations"`, `bank_id=PROJECT_BANK` (auto-derived).
+
+### Completion Verification
+
+Before marking promise AC as complete:
+
+```bash
+# Verify both Hindsight operations succeeded
+echo "✓ Private bank (system3-orchestrator) retains guardian validation"
+echo "✓ Project bank ($CLAUDE_PROJECT_BANK) retains project context"
+echo "✓ Both mcp__hindsight__retain() calls executed without error"
+
+# Then meet the promise AC
+cs-promise --meet <promise-id> --ac-id AC-5 \
+    --evidence "ACCEPT verdict + Hindsight stored to both banks" \
+    --type manual
+```
+
+### Common Mistakes to Avoid
+
+| Mistake | Fix |
+|---------|-----|
+| Storing only to private bank (forget project bank) | Execute BOTH steps above |
+| Using wrong `bank_id` value | Private = `"system3-orchestrator"`, Project = environment `$CLAUDE_PROJECT_BANK` |
+| Forgetting `context=` parameter | Must include: `context="s3-guardian-validations"` for private, `context="project-validations"` for project |
+| Storing BEFORE validation completes | Store ONLY after Phase 4 verdict determined |
+| Storing results but not meeting promise AC | Meeting the AC is how System 3 knows validation is complete |
+
+---
+
 ## Recursive Guardian Pattern
 
 The guardian pattern is recursive. A guardian can watch:
@@ -242,16 +327,56 @@ Each level adds independent verification. The key constraint: each guardian stor
 |-------|------------|-----------|
 | 0. PRD Design | Write PRD, ZeroRepo analysis, pipeline, design challenge | [references/phase0-prd-design.md](references/phase0-prd-design.md) |
 | 1. Acceptance Tests | Gherkin rubrics + executable browser tests (Step 3) | [gherkin-test-patterns.md](references/gherkin-test-patterns.md) |
-| 2. Orchestrator Spawn | DOT dispatch, headless CLI / SDK / legacy tmux patterns, wisdom inject | [guardian-workflow.md](references/guardian-workflow.md) |
+| 2. Orchestrator Spawn | DOT dispatch, headless CLI / SDK / tmux patterns, wisdom inject | [guardian-workflow.md](references/guardian-workflow.md) |
 | 3. Monitoring | JSON output parsing (headless), DOT polling (SDK), signal-file monitoring | [monitoring-patterns.md](references/monitoring-patterns.md) |
 | 4. Validation | Score scenarios, run executable tests, weighted total | [validation-scoring.md](references/validation-scoring.md) |
 | 4.5 Regression | ZeroRepo diff before journey tests | [references/validation-scoring.md](references/validation-scoring.md) |
 
 ### SDK Mode Entry Points
 
-For automated (headless) pipeline execution, use SDK mode.
+For automated (headless) pipeline execution, use SDK mode. For interactive sessions with human oversight, use tmux mode.
 
-**Primary entry point** — launches the full 4-layer chain:
+**Headless mode entry point** — single-shot `claude -p` with signal-file monitoring:
+```bash
+python3 .claude/scripts/attractor/spawn_orchestrator.py \
+    --node "epic-name" \
+    --prd "PRD-ID" \
+    --mode headless \
+    --repo-root /path/to/impl-repo \
+    --prompt "Read /tmp/wisdom.md, then Skill(\"orchestrator-multiagent\")"
+```
+
+**tmux mode entry point** — interactive Max-plan session with manual observation:
+```bash
+python3 .claude/scripts/attractor/spawn_orchestrator.py \
+    --node "epic-name" \
+    --prd "PRD-ID" \
+    --mode tmux \
+    --repo-root /path/to/impl-repo \
+    --prompt "Read /tmp/wisdom.md, then Skill(\"orchestrator-multiagent\")"
+```
+
+With wisdom file written first:
+```bash
+cat > /tmp/wisdom-epic-name.md << 'EOF'
+You are an orchestrator for: epic-name
+
+## FIRST ACTIONS (Mandatory — before any investigation or implementation)
+1. Skill("orchestrator-multiagent")   ← loads delegation patterns
+2. Teammate(operation="spawnTeam", team_name="epic-name-workers", …)
+
+## Mission
+[Epic description and goals]
+
+## Solution Design
+[Path to SD file]
+
+## On Completion
+bd update [BEAD_ID] --status=impl_complete
+EOF
+```
+
+**Primary entry point (SDK mode)** — launches the full 4-layer chain:
 ```bash
 python3 .claude/scripts/attractor/launch_guardian.py \
     --dot .claude/attractor/pipelines/PRD-{ID}.dot \
@@ -267,9 +392,9 @@ python3 .claude/scripts/attractor/launch_guardian.py \
 | `spawn_orchestrator.py` | 2 (Runner) | `--node`, `--prd`, `--mode {headless\|tmux}` | Tmux mode + backward-compat re-exports from dispatch_worker |
 
 > **When to use each mode**:
-> - **Headless** (`--mode headless`): Default for workers. Uses `claude -p` CLI with structured JSON output. Three-Layer Context: ROLE (--system-prompt), TASK (-p), IDENTITY (env vars). Best for focused implementation tasks.
-> - **SDK** (`launch_guardian.py`): For automated pipelines and CI/CD. Full `claude_code_sdk` integration with multi-turn conversation.
-> - **tmux** (`--mode tmux`): For interactive sessions where you can observe and intervene manually. Lower API cost than SDK mode since the orchestrator runs as a Max plan interactive session rather than billing API credits per token.
+> - **Headless** (`--mode headless`): Uses `claude -p` CLI with structured JSON output. Three-Layer Context: ROLE (--system-prompt), TASK (-p), IDENTITY (env vars). Best when: automated pipelines, CI/CD, signal-file monitoring, no tmux available.
+> - **SDK** (`launch_guardian.py`): Full `claude_code_sdk` integration with multi-turn conversation. Best when: long-running pipelines, complex multi-turn orchestration.
+> - **tmux** (`--mode tmux`): Spawns an interactive Claude Code session via tmux. Best when: Max plan sessions (no per-token API cost), human observation/intervention needed.
 
 ### Key Files
 
@@ -305,12 +430,13 @@ python3 .claude/scripts/attractor/launch_guardian.py \
 
 ---
 
-**Version**: 0.5.0
-**Dependencies**: cs-promise CLI (requires PATH setup — see Prerequisites section), claude CLI (headless mode, default), claude_code_sdk (SDK mode), tmux (tmux mode — interactive, lower API cost), Hindsight MCP, ccsystem3 shell function, Task Master MCP, ZeroRepo
+**Version**: 0.5.1
+**Dependencies**: cs-promise CLI (requires PATH setup — see Prerequisites section), claude CLI (headless mode), claude_code_sdk (SDK mode), tmux (tmux mode — interactive, lower API cost), Hindsight MCP, ccsystem3 shell function, Task Master MCP, ZeroRepo
 **Integration**: system3-orchestrator skill, completion-promise skill, acceptance-test-writer skill, parallel-solutioning skill, research-first skill
 **Theory**: Independent verification eliminates self-reporting bias in agentic systems
 
 **Changelog**:
+- v0.5.1: Rebalanced mode descriptions — tmux is equal peer to headless, not deprecated/legacy. Removed "Default for workers" label from headless. Added explicit tmux spawn command example in Quick Reference with wisdom file template. Updated system3-meta-orchestrator.md to remove "legacy tmux" and "for debugging only" language. Root cause: recent tmux-as-legacy language in docs caused orchestrator prompts to drop mandatory `Skill("orchestrator-multiagent")` invocation, resulting in direct implementation instead of delegation to workers.
 - v0.6.0: 3-layer attractor consolidation. Created `guardian.py` (composes launch_guardian + guardian_agent), `runner.py` (composes spawn_runner + runner_agent with `--spawn` mode), `dispatch_worker.py` (extracted headless functions from spawn_orchestrator.py). Guardian system prompt now references `runner.py --spawn` instead of `spawn_runner.py`. Old files untouched — backward-compatible re-exports from spawn_orchestrator.py. Zero test breakage (987 tests pass).
 - v0.5.0: Added headless CLI worker mode (Epic 6). Workers run via `claude -p` with Three-Layer Context: ROLE (--system-prompt from .claude/agents/), TASK (-p prompt), IDENTITY (env vars). New functions: `_build_headless_worker_cmd()` and `run_headless_worker()` in dispatch_worker.py (re-exported from spawn_orchestrator.py). `--mode headless` added to runner.py, spawn_orchestrator.py, and guardian_agent.py system prompt. tmux mode deprecated in favor of headless. JSON output parsing replaces tmux capture-pane monitoring.
 - v0.4.4: Broadened Step 0 promise creation with work-type-aware decision table (research, PRD design, implementation, maintenance, multi-initiative — not just guardian validation). Added SDK Mode Entry Points section to Quick Reference with 4-layer CLI table and SDK-vs-tmux guidance. Qualified Session Promise Integration heading to clarify it's the guardian validation template. Root cause: non-standard sessions (research, PRD writing) had no promise template guidance, and SDK CLI parameters were undiscoverable without running `--help`.
