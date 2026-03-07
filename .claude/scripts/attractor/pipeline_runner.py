@@ -89,6 +89,13 @@ except ImportError:
     logfire = None  # type: ignore[assignment]
     _LOGFIRE_AVAILABLE = False
 
+# OpenTelemetry context propagation for background threads
+try:
+    from contextvars import copy_context
+    _CONTEXT_COPY_AVAILABLE = True
+except ImportError:
+    _CONTEXT_COPY_AVAILABLE = False
+
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
@@ -621,10 +628,13 @@ class PipelineRunner:
             "prd_ref": prd_ref,
         }
 
-        # Dispatch in background thread so the main loop stays responsive
+        # Dispatch in background thread so the main loop stays responsive.
+        # Copy contextvars so Logfire/OTel spans link to the parent trace.
+        ctx = copy_context() if _CONTEXT_COPY_AVAILABLE else None
+        _target = (lambda: ctx.run(self._dispatch_agent_sdk, nid, worker_type, prompt)) if ctx else self._dispatch_agent_sdk
         thread = threading.Thread(
-            target=self._dispatch_agent_sdk,
-            args=(nid, worker_type, prompt),
+            target=_target if ctx else self._dispatch_agent_sdk,
+            args=() if ctx else (nid, worker_type, prompt),
             name=f"worker-{nid}",
             daemon=True,
         )
