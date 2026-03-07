@@ -630,17 +630,12 @@ class PipelineRunner:
             "prd_ref": prd_ref,
         }
 
-        # Dispatch in background thread so the main loop stays responsive.
-        # Copy contextvars so Logfire/OTel spans link to the parent trace.
-        ctx = copy_context() if _CONTEXT_COPY_AVAILABLE else None
-        _target = (lambda: ctx.run(self._dispatch_agent_sdk, nid, worker_type, prompt)) if ctx else self._dispatch_agent_sdk
-        thread = threading.Thread(
-            target=_target if ctx else self._dispatch_agent_sdk,
-            args=() if ctx else (nid, worker_type, prompt),
-            name=f"worker-{nid}",
-            daemon=True,
-        )
-        thread.start()
+        # Dispatch via ThreadPoolExecutor so Logfire auto-propagates OTel context.
+        # (Logfire patches ThreadPoolExecutor; raw threading.Thread loses trace linkage.)
+        if not hasattr(self, "_executor"):
+            from concurrent.futures import ThreadPoolExecutor
+            self._executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="worker")
+        self._executor.submit(self._dispatch_agent_sdk, nid, worker_type, prompt)
 
     def _handle_tool(self, node: dict, data: dict) -> None:  # noqa: ARG002
         """Tool nodes: run subprocess.run() with the command from node attrs."""
@@ -809,12 +804,18 @@ class PipelineRunner:
             )
             messages = []
             result_text = ""
+            _first_msg_logged = False
             try:
                 async for msg in claude_code_sdk.query(  # type: ignore[attr-defined]
                     prompt=prompt,
                     options=options,
                 ):
                     messages.append(msg)
+                    if not _first_msg_logged and _LOGFIRE_AVAILABLE:
+                        logfire.info("worker_first_message {node_id}",
+                                     node_id=node_id, worker_type=worker_type,
+                                     msg_type=type(msg).__name__)
+                        _first_msg_logged = True
                     # Capture result from ResultMessage
                     if hasattr(msg, "result") and msg.result:  # type: ignore[union-attr]
                         result_text = str(msg.result)[:500]
@@ -834,6 +835,11 @@ class PipelineRunner:
                 return {"status": "success", "message": result_text}
             return {"status": "success", "message": f"SDK worker completed ({len(messages)} events)"}
 
+        if _LOGFIRE_AVAILABLE:
+            logfire.info("worker_dispatch_start {node_id}",
+                         node_id=node_id, worker_type=worker_type,
+                         model=worker_model, cwd=self._get_target_dir())
+
         t0 = time.time()
         try:
             loop = asyncio.new_event_loop()
@@ -848,7 +854,7 @@ class PipelineRunner:
         log.info("[sdk] Worker %s finished in %.1fs  status=%s  msgs=%s",
                  node_id, elapsed, result.get("status"), result.get("message", "")[:100])
         if _LOGFIRE_AVAILABLE:
-            logfire.info("worker complete {node_id} {status} in {elapsed_s}s",
+            logfire.info("worker_complete {node_id} {status} in {elapsed_s}s",
                          node_id=node_id, worker_type=worker_type,
                          status=result.get("status"), elapsed_s=round(elapsed, 1),
                          message=result.get("message", "")[:200])
@@ -868,13 +874,11 @@ class PipelineRunner:
             "type": "validation",
             "started_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         }
-        thread = threading.Thread(
-            target=self._run_validation_subprocess,
-            args=(node_id, target_node_id),
-            name=f"validate-{node_id}",
-            daemon=True,
-        )
-        thread.start()
+        # Dispatch via ThreadPoolExecutor so Logfire auto-propagates OTel context.
+        if not hasattr(self, "_executor"):
+            from concurrent.futures import ThreadPoolExecutor
+            self._executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="worker")
+        self._executor.submit(self._run_validation_subprocess, node_id, target_node_id)
 
     def _run_validation_subprocess(self, node_id: str, target_node_id: str) -> None:
         """Run validation-test-agent via AgentSDK. Falls back to auto-pass if unavailable.
