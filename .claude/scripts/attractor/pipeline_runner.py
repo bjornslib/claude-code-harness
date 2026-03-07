@@ -78,6 +78,18 @@ except ImportError:
     _SDK_AVAILABLE = False
 
 # ---------------------------------------------------------------------------
+# Logfire instrumentation (optional — graceful no-op if not installed)
+# ---------------------------------------------------------------------------
+
+try:
+    import logfire
+    logfire.configure()
+    _LOGFIRE_AVAILABLE = True
+except ImportError:
+    logfire = None  # type: ignore[assignment]
+    _LOGFIRE_AVAILABLE = False
+
+# ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
 
@@ -253,8 +265,8 @@ class PipelineRunner:
 
     def run(self) -> bool:
         """Run the pipeline to completion. Returns True on success, False on failure."""
-        log.info("Starting pipeline runner  dot=%s  resume=%s  watchdog=%s  sdk=%s",
-                 self.dot_path, self.resume, _WATCHDOG_AVAILABLE, _SDK_AVAILABLE)
+        log.info("Starting pipeline runner  dot=%s  resume=%s  watchdog=%s  sdk=%s  logfire=%s",
+                 self.dot_path, self.resume, _WATCHDOG_AVAILABLE, _SDK_AVAILABLE, _LOGFIRE_AVAILABLE)
 
         if not self.resume:
             self._reset_active_nodes()
@@ -488,6 +500,10 @@ class PipelineRunner:
 
         log.info("[worker] Dispatching %s (handler=%s worker_type=%s)",
                  nid, attrs.get("handler"), worker_type)
+        if _LOGFIRE_AVAILABLE:
+            logfire.info("pipeline_runner.dispatch_worker",
+                         node_id=nid, handler=attrs.get("handler"),
+                         worker_type=worker_type, prd_ref=prd_ref)
 
         # Build task prompt from node attributes
         prompt = self._build_worker_prompt(node, data)
@@ -518,7 +534,9 @@ class PipelineRunner:
             self._write_node_signal(nid, {"status": "failed", "message": "no command attribute"})
             return
 
-        log.info("[tool] %s — running: %s", nid, cmd)
+        log.info("[tool] %s — running: %s", nid, cmd[:200])
+        if _LOGFIRE_AVAILABLE:
+            logfire.info("pipeline_runner.tool_exec", node_id=nid, command=cmd[:200])
         self.active_workers[nid] = {
             "node_id": nid,
             "started_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -603,7 +621,14 @@ class PipelineRunner:
         This method runs in a background thread. On completion it writes a
         signal file to {signal_dir}/{node_id}.json and sets _wake_event.
         """
-        log.info("[sdk] Dispatching worker  node=%s  type=%s", node_id, worker_type)
+        worker_model = os.environ.get("ANTHROPIC_MODEL") or os.environ.get("PIPELINE_WORKER_MODEL", "claude-haiku-4-5-20251001")
+        log.info("[sdk] Dispatching worker  node=%s  type=%s  model=%s  cwd=%s",
+                 node_id, worker_type, worker_model, self._get_target_dir())
+        if _LOGFIRE_AVAILABLE:
+            logfire.info("pipeline_runner.sdk_dispatch_start",
+                         node_id=node_id, worker_type=worker_type,
+                         model=worker_model, cwd=self._get_target_dir(),
+                         sdk_version=getattr(claude_code_sdk, "__version__", "unknown"))
 
         if not _SDK_AVAILABLE or claude_code_sdk is None:
             log.error("[sdk] claude_code_sdk not available — cannot dispatch %s", node_id)
@@ -675,6 +700,7 @@ class PipelineRunner:
                 return {"status": "success", "message": result_text}
             return {"status": "success", "message": f"SDK worker completed ({len(messages)} events)"}
 
+        t0 = time.time()
         try:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
@@ -683,6 +709,15 @@ class PipelineRunner:
             result = {"status": "failed", "message": str(exc)}
         finally:
             loop.close()
+
+        elapsed = time.time() - t0
+        log.info("[sdk] Worker %s finished in %.1fs  status=%s  msgs=%s",
+                 node_id, elapsed, result.get("status"), result.get("message", "")[:100])
+        if _LOGFIRE_AVAILABLE:
+            logfire.info("pipeline_runner.sdk_dispatch_complete",
+                         node_id=node_id, worker_type=worker_type,
+                         status=result.get("status"), elapsed_s=round(elapsed, 1),
+                         message=result.get("message", "")[:200])
 
         self._write_node_signal(node_id, result)
         self.active_workers.pop(node_id, None)
@@ -804,6 +839,12 @@ class PipelineRunner:
 
     def _apply_signal(self, node_id: str, signal: dict) -> None:
         """Mechanically apply a signal to the pipeline graph. No LLM involved."""
+        sig_status = signal.get("status") or signal.get("result", "unknown")
+        log.info("[signal] Processing signal for %s  status=%s", node_id, sig_status)
+        if _LOGFIRE_AVAILABLE:
+            logfire.info("pipeline_runner.apply_signal",
+                         node_id=node_id, signal_status=sig_status,
+                         signal_keys=list(signal.keys()))
         # Reload current content to get latest state
         try:
             with open(self.dot_path) as fh:
