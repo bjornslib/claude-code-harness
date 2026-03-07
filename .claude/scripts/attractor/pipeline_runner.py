@@ -1398,13 +1398,25 @@ class PipelineRunner:
         for node in data["nodes"]:
             if node["attrs"].get("status") == "active":
                 nid = node["id"]
+                handler = node["attrs"].get("handler", "")
                 log.info("[reset] Resetting active node %s -> pending (fresh start)", nid)
-                try:
-                    content, _ = apply_transition(content, nid, "failed")
-                    # Note: we can't go failed->pending directly; leave as failed
-                    # The dispatcher will skip non-pending nodes
-                except ValueError:
-                    pass
+                if handler in ("wait.system3", "wait.human", "gate"):
+                    # Gate nodes have no running worker — they were just waiting.
+                    # Transition active→failed, then failed→pending so the gate
+                    # can be re-dispatched cleanly. Both transitions go through
+                    # apply_transition which handles the specific node's status.
+                    try:
+                        content, _ = apply_transition(content, nid, "failed")
+                        content, _ = apply_transition(content, nid, "pending")
+                    except ValueError:
+                        pass
+                else:
+                    try:
+                        content, _ = apply_transition(content, nid, "failed")
+                        # Note: we can't go failed->pending directly; leave as failed
+                        # The dispatcher will skip non-pending nodes
+                    except ValueError:
+                        pass
 
         tmp_path = self.dot_path + ".tmp"
         try:

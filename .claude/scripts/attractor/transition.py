@@ -31,7 +31,7 @@ VALID_TRANSITIONS: dict[str, set[str]] = {
     "pending": {"active"},
     "active": {"impl_complete", "validated", "failed"},  # hexagons go active→validated/failed directly
     "impl_complete": {"validated", "failed", "active"},  # active for retry after fail
-    "failed": {"active"},
+    "failed": {"active", "pending"},  # pending: gate nodes reset to pending on runner restart
     "validated": {"accepted"},  # validated -> accepted (pipeline runner final step)
     "accepted": set(),  # terminal
 }
