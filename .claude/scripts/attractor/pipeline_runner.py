@@ -216,6 +216,10 @@ class PipelineRunner:
         # Retry counters: node_id -> int
         self.retry_counts: dict[str, int] = {}
 
+        # Requeue guidance: node_id -> failure message from downstream verify
+        # Injected into worker prompt on re-dispatch so the worker knows what to fix
+        self.requeue_guidance: dict[str, str] = {}
+
         # Threading event — wakes the main loop on file changes
         self._wake_event = threading.Event()
 
@@ -440,6 +444,93 @@ class PipelineRunner:
             dispatchable.append(node)
 
         return dispatchable
+
+    def _find_predecessor_workers(self, node_id: str, data: dict) -> list[str]:
+        """Find upstream codergen/research/refine predecessor node IDs for a given node."""
+        edges = data.get("edges", [])
+        nodes_by_id = {n["id"]: n for n in data.get("nodes", [])}
+
+        predecessors: list[str] = []
+        for edge in edges:
+            if edge["dst"] == node_id:
+                src = edge["src"]
+                src_node = nodes_by_id.get(src)
+                if src_node and src_node["attrs"].get("handler") in WORKER_HANDLERS:
+                    predecessors.append(src)
+        return predecessors
+
+    def _requeue_upstream_worker(self, tool_node_id: str, failure_message: str, data: dict) -> bool:
+        """When a verify tool fails, requeue its upstream codergen predecessor.
+
+        Returns True if an upstream node was successfully requeued, False if no
+        eligible predecessor was found (caller should mark tool as permanently failed).
+        """
+        predecessors = self._find_predecessor_workers(tool_node_id, data)
+        if not predecessors:
+            log.warning("[requeue] No upstream worker found for tool node %s", tool_node_id)
+            return False
+
+        requeued_any = False
+        for pred_id in predecessors:
+            retries = self.retry_counts.get(pred_id, 0) + 1
+            self.retry_counts[pred_id] = retries
+
+            if retries >= MAX_RETRIES:
+                log.error("[requeue] Upstream %s exhausted retries (%d/%d) — cannot fix %s",
+                          pred_id, retries, MAX_RETRIES, tool_node_id)
+                continue
+
+            # Store the failure message so the re-dispatched worker gets context
+            self.requeue_guidance[pred_id] = (
+                f"Your previous implementation failed verification at node '{tool_node_id}'.\n"
+                f"Error: {failure_message}\n"
+                f"Fix the issue and re-signal completion."
+            )
+
+            # Transition predecessor back to pending: accepted/validated → failed → active
+            # Then _find_dispatchable_nodes will NOT pick it up (status != pending).
+            # We need to get it to pending. The valid chain from accepted is not standard,
+            # so we edit the DOT directly.
+            nodes_by_id = {n["id"]: n for n in data.get("nodes", [])}
+            pred_node = nodes_by_id.get(pred_id)
+            if pred_node:
+                current = pred_node["attrs"].get("status", "pending")
+                log.info("[requeue] Resetting upstream %s (%s -> pending) for retry %d/%d",
+                         pred_id, current, retries, MAX_RETRIES)
+                # Use direct DOT edit to reset to pending (transition chain doesn't support accepted->pending)
+                self._force_status(pred_id, "pending")
+                # Also reset the tool node itself to pending so it re-runs after the worker
+                self._force_status(tool_node_id, "pending")
+                requeued_any = True
+
+        return requeued_any
+
+    def _force_status(self, node_id: str, target_status: str) -> None:
+        """Directly edit the DOT file to set a node's status, bypassing transition validation.
+
+        Used for requeue operations where the standard transition chain doesn't support
+        the required state change (e.g., accepted -> pending).
+        """
+        import re as _re
+        try:
+            with open(self.dot_path) as fh:
+                content = fh.read()
+            # Match status="..." within the node's attribute block
+            # Pattern: find the node definition and replace its status
+            pattern = _re.compile(
+                rf'({_re.escape(node_id)}\s*\[.*?status\s*=\s*")([^"]*?)(")',
+                _re.DOTALL,
+            )
+            new_content, count = pattern.subn(rf'\g<1>{target_status}\g<3>', content)
+            if count > 0:
+                with open(self.dot_path, "w") as fh:
+                    fh.write(new_content)
+                self.dot_content = new_content
+                log.info("[force-status] %s -> %s (direct DOT edit)", node_id, target_status)
+            else:
+                log.warning("[force-status] Could not find status attribute for %s in DOT", node_id)
+        except OSError as exc:
+            log.error("[force-status] Failed to edit DOT: %s", exc)
 
     # ------------------------------------------------------------------
     # Node dispatch
@@ -927,21 +1018,36 @@ class PipelineRunner:
                 self.active_workers.pop(node_id, None)
 
             elif status in ("failed", "error"):
-                retries = self.retry_counts.get(node_id, 0) + 1
-                self.retry_counts[node_id] = retries
-                if retries >= MAX_RETRIES:
-                    if current_status == "active":
-                        self._do_transition(node_id, "failed")
-                    log.error("[signal] %s: worker failed permanently (retry %d/%d)",
-                              node_id, retries, MAX_RETRIES)
-                else:
-                    # Reset to pending for retry by going through failed
-                    if current_status == "active":
-                        self._do_transition(node_id, "failed")
+                handler = node["attrs"].get("handler", "")
+                failure_msg = signal.get("message", "unknown error")
+
+                if handler == "tool":
+                    # Tool verify nodes: requeue the upstream codergen worker
+                    # instead of retrying the tool itself
+                    log.info("[signal] %s: tool verify failed — attempting upstream requeue", node_id)
+                    requeued = self._requeue_upstream_worker(node_id, failure_msg, data)
+                    if not requeued:
+                        # No eligible upstream — mark tool as permanently failed
+                        if current_status == "active":
+                            self._do_transition(node_id, "failed")
+                        log.error("[signal] %s: tool failed, no upstream to requeue — permanent failure",
+                                  node_id)
                     self.active_workers.pop(node_id, None)
-                    log.warning("[signal] %s: worker failed (retry %d/%d) — will retry",
-                                node_id, retries, MAX_RETRIES)
-                self.active_workers.pop(node_id, None)
+                else:
+                    # Non-tool nodes (codergen/research/refine): retry the node itself
+                    retries = self.retry_counts.get(node_id, 0) + 1
+                    self.retry_counts[node_id] = retries
+                    if retries >= MAX_RETRIES:
+                        if current_status == "active":
+                            self._do_transition(node_id, "failed")
+                        log.error("[signal] %s: worker failed permanently (retry %d/%d)",
+                                  node_id, retries, MAX_RETRIES)
+                    else:
+                        # Reset to pending for retry via force_status
+                        self._force_status(node_id, "pending")
+                        log.warning("[signal] %s: worker failed (retry %d/%d) — reset to pending for retry",
+                                    node_id, retries, MAX_RETRIES)
+                    self.active_workers.pop(node_id, None)
 
     # ------------------------------------------------------------------
     # DOT file transition helpers
@@ -1093,6 +1199,15 @@ class PipelineRunner:
             lines.append(f"\n## Solution Design\n{solution_design_content}")
         else:
             lines.append(f"\n## Solution Design Path\n{solution_design_path or '(none)'}")
+
+        # Inject failure guidance if this is a requeued node
+        guidance = self.requeue_guidance.pop(nid, None)
+        if guidance:
+            lines.append(
+                f"\n## IMPORTANT: Previous Attempt Failed\n"
+                f"{guidance}\n"
+                f"Focus specifically on fixing the issue described above."
+            )
 
         lines.append(
             f"\n## Signal Protocol\n"
