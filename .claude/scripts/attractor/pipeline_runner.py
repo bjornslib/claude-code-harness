@@ -807,19 +807,9 @@ class PipelineRunner:
         # Worker model: ANTHROPIC_MODEL (from attractor .env) > PIPELINE_WORKER_MODEL > default
         worker_model = os.environ.get("ANTHROPIC_MODEL") or os.environ.get("PIPELINE_WORKER_MODEL", "claude-haiku-4-5-20251001")
 
-        # Import function to load agent definitions for skill injection (GAP-6.2)
-        from dispatch_worker import load_agent_definition
-
-        # Add skill injection from agent definitions (GAP-6.2)
-        try:
-            agent_def = load_agent_definition(self.dot_dir, worker_type)
-            if agent_def and agent_def.get("skills_required"):
-                skills_block = "\n".join(
-                    f'Skill("{s}")' for s in agent_def["skills_required"]
-                )
-                prompt += f"\n\n## Required Skills\nInvoke these skills before starting:\n{skills_block}\n"
-        except Exception:
-            pass  # Don't fail dispatch on agent definition errors
+        # NOTE: Skill() is NOT available to SDK agents — skills_required from agent
+        # definitions are informational only. The system prompt from the agent .md
+        # file already contains domain knowledge that replaces skill invocation.
 
         async def _run() -> dict:
             # Build clean env without CLAUDECODE
@@ -828,7 +818,7 @@ class PipelineRunner:
             clean_env["ATTRACTOR_SIGNAL_DIR"] = str(self.signal_dir)
             options = claude_code_sdk.ClaudeCodeOptions(  # type: ignore[attr-defined]
                 system_prompt=self._build_system_prompt(worker_type),
-                allowed_tools=["Bash", "Read", "Write", "Edit", "Glob", "Grep", "MultiEdit"],
+                allowed_tools=["Bash", "Read", "Write", "Edit", "Glob", "Grep", "MultiEdit", "TodoWrite", "WebFetch", "WebSearch"],
                 permission_mode="bypassPermissions",
                 model=worker_model,
                 cwd=self._get_target_dir(),
@@ -1113,8 +1103,12 @@ class PipelineRunner:
                 elif current_status == "active":
                     self._do_transition(node_id, "impl_complete")
                     log.info("[signal] %s: worker success -> impl_complete", node_id)
-                    # Auto-dispatch validation agent for impl_complete nodes
+                    # Auto-dispatch validation agent — it owns the active_workers slot
+                    # until it completes. Do NOT pop here; _run_validation_subprocess
+                    # calls active_workers.pop when done, preventing the resume loop
+                    # from re-dispatching validation while it is already in-flight.
                     self._dispatch_validation_agent(node_id, node_id)
+                    return
                 elif current_status in ("validated", "accepted"):
                     log.debug("[signal] %s already in terminal state %s — ignoring success signal", node_id, current_status)
                 self.active_workers.pop(node_id, None)
@@ -1349,27 +1343,48 @@ class PipelineRunner:
                 f"Focus specifically on fixing the issue described above."
             )
 
+        # Resolve signal path at prompt-build time so worker gets the absolute path
+        signal_file_path = os.path.join(self.signal_dir, f"{nid}.json")
+
         lines.append(
-            f"\n## Signal Protocol\n"
-            f"The signal directory is available as environment variable $ATTRACTOR_SIGNAL_DIR.\n"
-            f"IMPORTANT: Always verify the path first:\n"
-            f"  Bash(\"echo $ATTRACTOR_SIGNAL_DIR\")\n\n"
-            f"Then write your result file to: $ATTRACTOR_SIGNAL_DIR/{nid}.json\n\n"
-            f"Format:\n"
-            f'  {{"status": "success", "files_changed": ["file1", "file2"], "message": "brief description"}}\n\n'
-            f"Example (use the EXACT path from echo above, do NOT construct your own path):\n"
-            f"  Bash(\"echo $ATTRACTOR_SIGNAL_DIR/{nid}.json\")  # verify path first\n"
-            f"  Write(file_path=\"<path from echo above>/{nid}.json\", content='{{\"status\": \"success\", \"message\": \"done\"}}')\n\n"
-            f"Tool usage reminder: boolean values are true/false (not True/False). "
-            f"MCP tools are unavailable in this headless context. "
-            f"Use only: Bash, Read, Write, Edit, Glob, Grep, MultiEdit."
+            f"\n## Signal Protocol — MANDATORY on completion\n"
+            f"When your task is done (success or failure), write a signal file.\n\n"
+            f"Signal file path (absolute): {signal_file_path}\n\n"
+            f"Use Write (this is a NEW file):\n"
+            f'```\n'
+            f'Write(file_path="{signal_file_path}", content=\'{{"status": "success", "files_changed": ["file1.py"], "message": "brief description"}}\')\n'
+            f'```\n\n'
+            f"On failure:\n"
+            f'```\n'
+            f'Write(file_path="{signal_file_path}", content=\'{{"status": "error", "message": "what went wrong", "files_changed": []}}\')\n'
+            f'```\n\n'
+            f"IMPORTANT: Use this EXACT path. Do NOT construct your own path.\n"
+            f"For modifying existing source code files, ALWAYS use Edit (not Write)."
         )
 
         return "\n".join(lines)
 
     def _build_system_prompt(self, worker_type: str) -> str:
-        """Load system prompt from .claude/agents/{worker_type}.md."""
+        """Load system prompt from .claude/agents/{worker_type}.md + tool reference."""
         agents_dir = os.path.join(self.dot_dir, ".claude", "agents")
+
+        # Always load tool reference — this is critical for smaller models
+        tool_ref = ""
+        tool_ref_file = os.path.join(agents_dir, "worker-tool-reference.md")
+        if os.path.exists(tool_ref_file):
+            try:
+                with open(tool_ref_file) as fh:
+                    raw = fh.read()
+                # Strip frontmatter
+                if raw.startswith("---"):
+                    _, _, rest = raw.partition("---")
+                    _, _, raw = rest.partition("---")
+                tool_ref = raw.strip()
+            except OSError:
+                pass
+
+        # Load role-specific prompt
+        role_content = ""
         role_file = os.path.join(agents_dir, f"{worker_type}.md")
         if os.path.exists(role_file):
             try:
@@ -1379,10 +1394,17 @@ class PipelineRunner:
                 if content.startswith("---"):
                     _, _, rest = content.partition("---")
                     _, _, content = rest.partition("---")
-                return content.strip()
+                role_content = content.strip()
             except OSError:
                 pass
-        return f"You are a specialist agent ({worker_type}). Implement features directly using the provided tools."
+
+        if not role_content:
+            role_content = f"You are a specialist agent ({worker_type}). Implement features directly using the provided tools."
+
+        # Tool reference goes FIRST so it's always visible, even if role prompt is long
+        if tool_ref:
+            return f"{tool_ref}\n\n---\n\n{role_content}"
+        return role_content
 
 
 # ---------------------------------------------------------------------------
