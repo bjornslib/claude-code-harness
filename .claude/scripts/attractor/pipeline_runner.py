@@ -211,7 +211,9 @@ class PipelineRunner:
     def __init__(self, dot_path: str, resume: bool = False) -> None:
         self.dot_path = os.path.abspath(dot_path)
         self.dot_dir = os.path.dirname(self.dot_path)
-        self.signal_dir = os.path.join(self.dot_dir, "signals")
+        # Each pipeline gets its own signal subdirectory to avoid cross-pipeline clutter
+        self.pipeline_id = os.path.splitext(os.path.basename(self.dot_path))[0]
+        self.signal_dir = os.path.join(self.dot_dir, "signals", self.pipeline_id)
         self.resume = resume
 
         # Load attractor .env if present (sets ANTHROPIC_MODEL, ANTHROPIC_BASE_URL, etc.)
