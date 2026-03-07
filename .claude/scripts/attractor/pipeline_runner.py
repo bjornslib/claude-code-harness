@@ -272,6 +272,18 @@ class PipelineRunner:
         log.info("Starting pipeline runner  dot=%s  resume=%s  watchdog=%s  sdk=%s  logfire=%s",
                  self.dot_path, self.resume, _WATCHDOG_AVAILABLE, _SDK_AVAILABLE, _LOGFIRE_AVAILABLE)
 
+        # Top-level Logfire span wraps the entire pipeline run
+        if _LOGFIRE_AVAILABLE:
+            self._pipeline_span = logfire.span(
+                "pipeline_runner {pipeline_id}",
+                pipeline_id=self.pipeline_id,
+                dot_path=str(self.dot_path),
+                resume=self.resume,
+            )
+            self._pipeline_span.__enter__()
+        else:
+            self._pipeline_span = None
+
         if not self.resume:
             self._reset_active_nodes()
 
@@ -297,6 +309,8 @@ class PipelineRunner:
             for obs in observers:
                 obs.stop()
                 obs.join()
+            if self._pipeline_span is not None:
+                self._pipeline_span.__exit__(None, None, None)
 
     def _main_loop(self) -> bool:
         """Main event loop. Blocks on _wake_event until pipeline completes."""
@@ -592,7 +606,7 @@ class PipelineRunner:
         log.info("[worker] Dispatching %s (handler=%s worker_type=%s)",
                  nid, attrs.get("handler"), worker_type)
         if _LOGFIRE_AVAILABLE:
-            logfire.info("pipeline_runner.dispatch_worker",
+            logfire.info("dispatch_worker {node_id}",
                          node_id=nid, handler=attrs.get("handler"),
                          worker_type=worker_type, prd_ref=prd_ref)
 
@@ -626,8 +640,9 @@ class PipelineRunner:
             return
 
         log.info("[tool] %s — running: %s", nid, cmd[:200])
-        if _LOGFIRE_AVAILABLE:
-            logfire.info("pipeline_runner.tool_exec", node_id=nid, command=cmd[:200])
+        _span = logfire.span("tool {node_id}", node_id=nid, command=cmd[:200]) if _LOGFIRE_AVAILABLE else None
+        if _span:
+            _span.__enter__()
         self.active_workers[nid] = {
             "node_id": nid,
             "started_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -643,11 +658,16 @@ class PipelineRunner:
                 cwd=self.dot_dir,
             )
             if result.returncode == 0:
+                if _LOGFIRE_AVAILABLE:
+                    logfire.info("tool PASS", node_id=nid)
                 self._write_node_signal(nid, {
                     "status": "success",
                     "message": result.stdout[-500:] if result.stdout else "exit code 0",
                 })
             else:
+                if _LOGFIRE_AVAILABLE:
+                    logfire.info("tool FAIL exit={rc}", node_id=nid, rc=result.returncode,
+                                 stderr=result.stderr[-300:] if result.stderr else "")
                 self._write_node_signal(nid, {
                     "status": "failed",
                     "message": f"exit {result.returncode}: {result.stderr[-300:]}",
@@ -659,6 +679,8 @@ class PipelineRunner:
         finally:
             self.active_workers.pop(nid, None)
             self._wake_event.set()
+            if _span:
+                _span.__exit__(None, None, None)
 
     def _handle_gate(self, node: dict, data: dict) -> None:  # noqa: ARG002
         """Gate/wait.system3 nodes: emit a gate-wait signal and mark as waiting.
@@ -715,23 +737,29 @@ class PipelineRunner:
         worker_model = os.environ.get("ANTHROPIC_MODEL") or os.environ.get("PIPELINE_WORKER_MODEL", "claude-haiku-4-5-20251001")
         log.info("[sdk] Dispatching worker  node=%s  type=%s  model=%s  cwd=%s",
                  node_id, worker_type, worker_model, self._get_target_dir())
-        if _LOGFIRE_AVAILABLE:
-            logfire.info("pipeline_runner.sdk_dispatch_start",
-                         node_id=node_id, worker_type=worker_type,
-                         model=worker_model, cwd=self._get_target_dir(),
-                         sdk_version=getattr(claude_code_sdk, "__version__", "unknown"))
 
-        if not _SDK_AVAILABLE or claude_code_sdk is None:
-            log.error("[sdk] claude_code_sdk not available — cannot dispatch %s", node_id)
-            self._write_node_signal(node_id, {
-                "status": "failed",
-                "message": "claude_code_sdk not installed. Install with: pip install claude-code-sdk",
-            })
-            self.active_workers.pop(node_id, None)
-            self._wake_event.set()
-            return
+        # Logfire span covers the entire worker lifecycle (dispatch → completion)
+        _span = None
+        if _LOGFIRE_AVAILABLE:
+            _span = logfire.span(
+                "sdk_worker {node_id} ({worker_type})",
+                node_id=node_id, worker_type=worker_type,
+                model=worker_model, cwd=self._get_target_dir(),
+                sdk_version=getattr(claude_code_sdk, "__version__", "unknown"),
+            )
+            _span.__enter__()
 
         try:
+            if not _SDK_AVAILABLE or claude_code_sdk is None:
+                log.error("[sdk] claude_code_sdk not available — cannot dispatch %s", node_id)
+                self._write_node_signal(node_id, {
+                    "status": "failed",
+                    "message": "claude_code_sdk not installed. Install with: pip install claude-code-sdk",
+                })
+                self.active_workers.pop(node_id, None)
+                self._wake_event.set()
+                return
+
             self._dispatch_via_sdk(node_id, worker_type, prompt)
         except Exception as exc:  # noqa: BLE001
             log.error("[sdk] SDK dispatch failed for %s: %s", node_id, exc)
@@ -741,6 +769,9 @@ class PipelineRunner:
             })
             self.active_workers.pop(node_id, None)
             self._wake_event.set()
+        finally:
+            if _span:
+                _span.__exit__(None, None, None)
 
     def _dispatch_via_sdk(self, node_id: str, worker_type: str, prompt: str) -> None:
         """Dispatch worker using claude_code_sdk."""
@@ -805,7 +836,7 @@ class PipelineRunner:
         log.info("[sdk] Worker %s finished in %.1fs  status=%s  msgs=%s",
                  node_id, elapsed, result.get("status"), result.get("message", "")[:100])
         if _LOGFIRE_AVAILABLE:
-            logfire.info("pipeline_runner.sdk_dispatch_complete",
+            logfire.info("worker complete {node_id} {status} in {elapsed_s}s",
                          node_id=node_id, worker_type=worker_type,
                          status=result.get("status"), elapsed_s=round(elapsed, 1),
                          message=result.get("message", "")[:200])
@@ -933,7 +964,7 @@ class PipelineRunner:
         sig_status = signal.get("status") or signal.get("result", "unknown")
         log.info("[signal] Processing signal for %s  status=%s", node_id, sig_status)
         if _LOGFIRE_AVAILABLE:
-            logfire.info("pipeline_runner.apply_signal",
+            logfire.info("signal {node_id} → {signal_status}",
                          node_id=node_id, signal_status=sig_status,
                          signal_keys=list(signal.keys()))
         # Reload current content to get latest state
