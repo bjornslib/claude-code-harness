@@ -273,6 +273,18 @@ class PipelineRunner:
             return target
         return self.dot_dir
 
+    def _get_repo_root(self) -> str:
+        """Find the git repo root by walking up from dot_dir. Falls back to target_dir."""
+        d = os.path.abspath(self.dot_dir)
+        for _ in range(10):  # max 10 levels up
+            if os.path.isdir(os.path.join(d, ".git")):
+                return d
+            parent = os.path.dirname(d)
+            if parent == d:
+                break
+            d = parent
+        return self._get_target_dir()
+
     # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
@@ -363,8 +375,9 @@ class PipelineRunner:
                 for node in dispatchable:
                     self._dispatch_node(node, data)
                 self._save_checkpoint("progress")
-                # Don't wait — immediately check for more work
-                self._wake_event.clear()
+                # Don't wait — immediately check for more work.
+                # Don't clear the event here — a background thread may have set()
+                # it while we were dispatching. The clear() after wait() handles it.
                 continue
 
             # Re-dispatch validation for impl_complete nodes with no active workers
@@ -407,10 +420,14 @@ class PipelineRunner:
                     self._save_checkpoint("complete")
                     return True
 
-            # Wait for a file event or poll timeout
-            self._wake_event.clear()
+            # Wait for a file event or poll timeout.
+            # IMPORTANT: Do NOT clear() before wait() — that races with background
+            # threads calling set() (validation, worker signals). Instead, wait first,
+            # then clear. If set() fires between clear() and the next wait(), the
+            # wait() returns immediately (correct behavior).
             if _WATCHDOG_AVAILABLE:
                 self._wake_event.wait(timeout=30.0)
+                self._wake_event.clear()
             else:
                 time.sleep(POLL_INTERVAL_S)
 
@@ -650,7 +667,8 @@ class PipelineRunner:
         if not hasattr(self, "_executor"):
             from concurrent.futures import ThreadPoolExecutor
             self._executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="worker")
-        self._executor.submit(self._dispatch_agent_sdk, nid, worker_type, prompt)
+        handler = attrs.get("handler", "codergen")
+        self._executor.submit(self._dispatch_agent_sdk, nid, worker_type, prompt, handler)
 
     def _handle_tool(self, node: dict, data: dict) -> None:  # noqa: ARG002
         """Tool nodes: run subprocess.run() with the command from node attrs."""
@@ -766,7 +784,7 @@ class PipelineRunner:
     # AgentSDK dispatch
     # ------------------------------------------------------------------
 
-    def _dispatch_agent_sdk(self, node_id: str, worker_type: str, prompt: str) -> None:
+    def _dispatch_agent_sdk(self, node_id: str, worker_type: str, prompt: str, handler: str = "codergen") -> None:
         """Dispatch a worker via claude_code_sdk. No headless fallback.
 
         All worker dispatch goes through AgentSDK exclusively.
@@ -799,7 +817,7 @@ class PipelineRunner:
                 self._wake_event.set()
                 return
 
-            self._dispatch_via_sdk(node_id, worker_type, prompt)
+            self._dispatch_via_sdk(node_id, worker_type, prompt, handler)
         except Exception as exc:  # noqa: BLE001
             log.error("[sdk] SDK dispatch failed for %s: %s", node_id, exc)
             self._write_node_signal(node_id, {
@@ -812,7 +830,84 @@ class PipelineRunner:
             if _span:
                 _span.__exit__(None, None, None)
 
-    def _dispatch_via_sdk(self, node_id: str, worker_type: str, prompt: str) -> None:
+    # ------------------------------------------------------------------
+    # Handler-specific allowed_tools
+    # ------------------------------------------------------------------
+    # Claude Code SDK `allowed_tools` is a RESTRICT list: only listed tools
+    # can be used. MCP tools are deferred — they need ToolSearch to load
+    # their schemas into context AND they need to be in allowed_tools to
+    # pass the permission gate.
+    #
+    # Base tools available to ALL handlers:
+    _BASE_TOOLS: list[str] = [
+        "Bash", "Read", "Write", "Edit", "Glob", "Grep", "MultiEdit",
+        "TodoWrite", "WebFetch", "WebSearch",
+        "ToolSearch",  # MANDATORY — loads deferred MCP tool schemas
+        "LSP",         # type info, definitions, diagnostics
+    ]
+    # Serena: semantic code navigation and symbol-level editing
+    _SERENA_TOOLS: list[str] = [
+        "mcp__serena__activate_project",
+        "mcp__serena__check_onboarding_performed",
+        "mcp__serena__find_symbol",
+        "mcp__serena__search_for_pattern",
+        "mcp__serena__get_symbols_overview",
+        "mcp__serena__find_referencing_symbols",
+        "mcp__serena__find_file",
+        "mcp__serena__replace_symbol_body",
+        "mcp__serena__insert_after_symbol",
+        "mcp__serena__insert_before_symbol",
+    ]
+    # Context7: framework documentation lookup
+    _CONTEXT7_TOOLS: list[str] = [
+        "mcp__context7__resolve-library-id",
+        "mcp__context7__query-docs",
+    ]
+    # Perplexity: web research and reasoning
+    _PERPLEXITY_TOOLS: list[str] = [
+        "mcp__perplexity__perplexity_ask",
+        "mcp__perplexity__perplexity_reason",
+        "mcp__perplexity__perplexity_research",
+        "mcp__perplexity__perplexity_search",
+    ]
+    # Hindsight: long-term memory (reflect/retain/recall)
+    _HINDSIGHT_TOOLS: list[str] = [
+        "mcp__hindsight__reflect",
+        "mcp__hindsight__retain",
+        "mcp__hindsight__recall",
+    ]
+
+    # Per-handler tool sets (additive on top of _BASE_TOOLS)
+    _HANDLER_EXTRA_TOOLS: dict[str, list[str]] = {
+        "codergen": [
+            # Implementation workers: code nav only, no research tools
+            *_SERENA_TOOLS,
+        ],
+        "research": [
+            # Research workers: docs + web research + memory + code nav (read-only)
+            *_SERENA_TOOLS,
+            *_CONTEXT7_TOOLS,
+            *_PERPLEXITY_TOOLS,
+            *_HINDSIGHT_TOOLS,
+        ],
+        "refine": [
+            # Refine workers: memory + reasoning + code nav (for SD verification)
+            *_SERENA_TOOLS,
+            *_HINDSIGHT_TOOLS,
+            "mcp__perplexity__perplexity_reason",  # Reasoning only, not full research
+        ],
+        "acceptance-test-writer": [
+            # Test writers: code nav only
+            *_SERENA_TOOLS,
+        ],
+    }
+
+    def _get_allowed_tools(self, handler: str) -> list[str]:
+        """Build the allowed_tools list for a given handler type."""
+        extra = self._HANDLER_EXTRA_TOOLS.get(handler, self._SERENA_TOOLS)
+        return self._BASE_TOOLS + extra
+
+    def _dispatch_via_sdk(self, node_id: str, worker_type: str, prompt: str, handler: str = "codergen") -> None:
         """Dispatch worker using claude_code_sdk."""
         import asyncio
 
@@ -826,6 +921,9 @@ class PipelineRunner:
         # definitions are informational only. The system prompt from the agent .md
         # file already contains domain knowledge that replaces skill invocation.
 
+        # Build handler-specific allowed_tools
+        tools = self._get_allowed_tools(handler)
+
         async def _run() -> dict:
             # Build clean env without CLAUDECODE
             clean_env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
@@ -833,22 +931,7 @@ class PipelineRunner:
             clean_env["ATTRACTOR_SIGNAL_DIR"] = str(self.signal_dir)
             options = claude_code_sdk.ClaudeCodeOptions(  # type: ignore[attr-defined]
                 system_prompt=self._build_system_prompt(worker_type),
-                allowed_tools=[
-                    "Bash", "Read", "Write", "Edit", "Glob", "Grep", "MultiEdit", "TodoWrite", "WebFetch", "WebSearch",
-                    # LSP: type info, definitions, diagnostics (built-in, requires pyright-langserver / typescript-language-server)
-                    "LSP",
-                    # Serena: semantic code navigation and symbol-level editing
-                    "mcp__serena__activate_project",
-                    "mcp__serena__check_onboarding_performed",
-                    "mcp__serena__find_symbol",
-                    "mcp__serena__search_for_pattern",
-                    "mcp__serena__get_symbols_overview",
-                    "mcp__serena__find_referencing_symbols",
-                    "mcp__serena__find_file",
-                    "mcp__serena__replace_symbol_body",
-                    "mcp__serena__insert_after_symbol",
-                    "mcp__serena__insert_before_symbol",
-                ],
+                allowed_tools=tools,
                 permission_mode="bypassPermissions",
                 model=worker_model,
                 cwd=self._get_target_dir(),
@@ -1131,7 +1214,7 @@ class PipelineRunner:
         async def _run() -> dict:
             clean_env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
             # Base tools for validation; extend for browser-required PRDs
-            validation_tools = ["Read", "Bash", "Grep", "Glob"]
+            validation_tools = ["Read", "Write", "Bash", "Grep", "Glob"]
             if getattr(self, "_validation_method_hint", None) == "browser-required":
                 validation_tools.extend([
                     "mcp__claude-in-chrome__navigate",
@@ -1270,6 +1353,12 @@ class PipelineRunner:
 
         current_status = node["attrs"].get("status", "pending")
         log.debug("Applying signal node=%s current=%s signal=%s", node_id, current_status, signal)
+
+        # Skip signals for nodes already in terminal state (duplicate/stale signals)
+        if current_status in ("accepted", "validated"):
+            log.debug("[signal] %s already in terminal state %s — ignoring stale signal", node_id, current_status)
+            self.active_workers.pop(node_id, None)
+            return
 
         # --- Validation agent results ---
         if "result" in signal:
@@ -1535,6 +1624,47 @@ class PipelineRunner:
     # Prompt construction
     # ------------------------------------------------------------------
 
+    # Handler-specific preambles: tell workers their role and how to use MCP tools
+    HANDLER_PREAMBLES: dict[str, str] = {
+        "codergen": (
+            "## Your Role: IMPLEMENTATION Worker\n"
+            "You write production-quality code. Do NOT research or investigate — only implement.\n"
+            "Read the Solution Design carefully. It contains the exact changes to make.\n"
+            "Done when: All files changed, tests pass, signal written with files_changed list."
+        ),
+        "research": (
+            "## Your Role: RESEARCH Worker\n"
+            "You investigate and document findings. Do NOT modify source code.\n"
+            "Write findings to a NEW markdown file (not the SD) at the evidence directory.\n"
+            "Use WebSearch, WebFetch, and Read to gather information.\n\n"
+            "### MCP Tools: Use ToolSearch to Discover Available Tools\n"
+            "You have access to MCP tools for research — use ToolSearch to discover them:\n"
+            "- Search `ToolSearch(query=\"context7\")` to find documentation lookup tools\n"
+            "- Search `ToolSearch(query=\"perplexity\")` to find web research tools\n"
+            "- Search `ToolSearch(query=\"hindsight\")` to find memory/learning tools\n"
+            "ToolSearch loads tool schemas into your context. Once loaded, call them directly.\n\n"
+            "Done when: Research doc written with findings. Signal written with doc path."
+        ),
+        "refine": (
+            "## Your Role: REFINEMENT Worker\n"
+            "You merge research findings into the Solution Design document.\n"
+            "Read predecessor signal files to find research doc paths.\n"
+            "Edit the SD to incorporate findings as first-class content (not annotations).\n\n"
+            "### MCP Tools: Use ToolSearch to Discover Available Tools\n"
+            "You have access to MCP tools — use ToolSearch to discover them:\n"
+            "- Search `ToolSearch(query=\"hindsight\")` to find memory tools (reflect before editing, retain after)\n"
+            "- Search `ToolSearch(query=\"perplexity\")` if you need to reason through conflicting findings\n"
+            "ToolSearch loads tool schemas into your context. Once loaded, call them directly.\n\n"
+            "Done when: SD updated with research findings integrated. No annotations remain."
+        ),
+        "acceptance-test-writer": (
+            "## Your Role: TEST WRITER\n"
+            "You create Gherkin acceptance test scenarios from PRD acceptance criteria.\n"
+            "Write .feature files with Given/When/Then. Tests should be blind (not peek at implementation).\n"
+            "Done when: Feature files written covering all PRD acceptance criteria."
+        ),
+    }
+
     def _build_worker_prompt(self, node: dict, data: dict) -> str:
         """Build a task prompt for a worker from node attributes."""
         attrs = node["attrs"]
@@ -1547,21 +1677,40 @@ class PipelineRunner:
         bead_id = attrs.get("bead_id", "")
 
         # Inline solution design content if file exists
+        # Try repo root first (most SD paths are relative to repo root), then dot_dir as fallback
         solution_design_content = ""
         if solution_design_path:
-            sd_abs = os.path.join(self.dot_dir, solution_design_path) if not os.path.isabs(solution_design_path) else solution_design_path
-            if os.path.exists(sd_abs):
-                try:
-                    with open(sd_abs) as fh:
-                        solution_design_content = fh.read()
-                except OSError:
-                    pass
+            candidates = []
+            if not os.path.isabs(solution_design_path):
+                # Try repo root first (SD paths like docs/sds/... are relative to repo root)
+                repo_root = self._get_repo_root()
+                candidates.append(os.path.join(repo_root, solution_design_path))
+                # Then target_dir and dot_dir as fallbacks
+                target = self._get_target_dir()
+                if target != repo_root:
+                    candidates.append(os.path.join(target, solution_design_path))
+                candidates.append(os.path.join(self.dot_dir, solution_design_path))
+            else:
+                candidates.append(solution_design_path)
+            for sd_abs in candidates:
+                if os.path.exists(sd_abs):
+                    try:
+                        with open(sd_abs) as fh:
+                            solution_design_content = fh.read()
+                        break
+                    except OSError:
+                        pass
 
         lines = [
             f"# Task: {label}",
             f"Node ID: {nid}",
             f"Handler: {handler}",
         ]
+
+        # Add handler-specific preamble (role, MCP tool loading instructions)
+        preamble = self.HANDLER_PREAMBLES.get(handler, "")
+        if preamble:
+            lines.append(f"\n{preamble}")
         if prd_ref:
             lines.append(f"PRD: {prd_ref}")
         if bead_id:
@@ -1605,7 +1754,9 @@ class PipelineRunner:
 
     def _build_system_prompt(self, worker_type: str) -> str:
         """Load system prompt from .claude/agents/{worker_type}.md + tool reference."""
-        agents_dir = os.path.join(self.dot_dir, ".claude", "agents")
+        # Use repo root for agent files (they live at <repo>/.claude/agents/)
+        repo_root = self._get_repo_root()
+        agents_dir = os.path.join(repo_root, ".claude", "agents")
 
         # Always load tool reference — this is critical for smaller models
         tool_ref = ""

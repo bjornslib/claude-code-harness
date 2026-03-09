@@ -2,7 +2,7 @@
 title: "Worker Tool Reference"
 status: active
 type: reference
-last_verified: 2026-03-07
+last_verified: 2026-03-10
 grade: authoritative
 ---
 
@@ -11,6 +11,24 @@ grade: authoritative
 Your primary tools are: Bash, Read, Write, Edit, Glob, Grep, MultiEdit, TodoWrite, WebFetch, WebSearch.
 
 You also have access to **LSP** (built-in type/definition tool) and **Serena MCP** (semantic code navigation). Use them for code investigation before falling back to Grep/Read on source files.
+
+## ToolSearch — Discover MCP Tools Before Use
+
+MCP tools (context7, Hindsight, Perplexity, Serena) are **deferred** — their schemas are NOT in your context until you discover them via ToolSearch.
+
+**Use ToolSearch to find what's available, then call the tools it returns.**
+
+```
+# Discover tools by keyword — finds and loads matching tools:
+ToolSearch(query="context7")      # → documentation lookup tools
+ToolSearch(query="hindsight")     # → memory/learning tools
+ToolSearch(query="perplexity")    # → web research tools
+ToolSearch(query="serena")        # → code navigation tools
+```
+
+Once ToolSearch returns a tool, it's loaded and callable for the rest of your session. You don't need to ToolSearch again for the same tool.
+
+**Note**: ToolSearch itself is always pre-loaded — you never need to discover it.
 
 **Code Navigation Decision Guide** (use the right tool, not the first one):
 

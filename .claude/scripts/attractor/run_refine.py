@@ -102,8 +102,13 @@ You are a Refine Agent that incorporates validated research findings into a Solu
 Before editing the SD, you MUST use Hindsight to reflect on what you've read. This ensures
 you make informed, context-aware decisions about how to restructure the SD.
 
-The Hindsight MCP tools (mcp__hindsight__reflect, mcp__hindsight__retain, mcp__hindsight__recall)
-are directly available — you do NOT need ToolSearch.
+**IMPORTANT — Discover MCP tools via ToolSearch FIRST:**
+Before calling any mcp__* tool, discover it using ToolSearch by keyword:
+```
+ToolSearch(query="hindsight")     # memory/learning tools
+ToolSearch(query="perplexity")    # reasoning tools (for conflicting findings)
+```
+Once ToolSearch returns a tool, it's loaded and callable for the rest of your session.
 
 1. **Reflect on the SD structure and research findings together**:
    Call mcp__hindsight__reflect with a query like:
@@ -273,7 +278,7 @@ def main(argv: list[str] | None = None) -> None:
 
     options = ClaudeCodeOptions(
         allowed_tools=[
-            "Read", "Edit", "Write",
+            "Read", "Edit", "Write", "ToolSearch",
             # LSP: type info, go-to-definition, diagnostics (for validating code references in SD)
             "LSP",
             # MCP: memory persistence (Hindsight for reflection and cross-session learnings)

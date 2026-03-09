@@ -80,7 +80,16 @@ For each framework above:
    "Given these approaches for <framework feature>: [A] vs [B], analyze the tradeoffs
    considering performance, maintainability, and current ecosystem support as of 2026"
 
-These MCP tools are directly available — you do NOT need to use ToolSearch to discover them.
+**IMPORTANT — Discover MCP tools via ToolSearch FIRST:**
+Before calling any mcp__* tool, discover it using ToolSearch by keyword:
+
+```
+ToolSearch(query="context7")      # documentation lookup tools
+ToolSearch(query="perplexity")    # web research tools
+ToolSearch(query="hindsight")     # memory/learning tools
+```
+
+Once ToolSearch returns a tool, it's loaded and callable for the rest of your session.
 """
 
     prd_section = ""
@@ -147,7 +156,7 @@ If research tools are unavailable, still write evidence with what you could dete
 
 After writing evidence, use Hindsight to persist learnings in the target repo's memory bank.
 
-The Hindsight MCP tools (mcp__hindsight__reflect, mcp__hindsight__retain, mcp__hindsight__recall) are directly available.
+The Hindsight tools should already be loaded from your ToolSearch calls above. If not, run `ToolSearch(query="hindsight")` to load them.
 
 1. **Recall** relevant research patterns — Before reflecting, surface prior learnings:
    Call mcp__hindsight__recall with a query like:

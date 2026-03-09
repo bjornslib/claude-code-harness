@@ -35,9 +35,62 @@ The runner works perfectly on the **happy path**. But it has never been stress-t
 
 These are **ticking time bombs** — invisible until they detonate during a critical pipeline run.
 
+### 1.4 Research Pipeline Evidence (2026-03-09)
+
+A 4-node research pipeline was run to validate the SD. **The failures proved the thesis:**
+
+| Node | Outcome | What It Proves |
+|------|---------|----------------|
+| `research_worker_context` | **FAILED 3/3** — worker modified SD with code fixes instead of research | Workers don't understand handler roles. Prompts are identical for codergen/research/refine. |
+| `research_signal_atomicity` | **CRASHED** — JSON buffer overflow (1MB). No signal written. Node stuck `active` forever. | Dead workers leave nodes orphaned. No liveness check. No signal timeout. |
+| `research_feedback_loops` | **ACCEPTED** — comprehensive doc on act-observe-correct loops | Current validation is sequential + binary. Needs parallel, predictive, graduated feedback. |
+| `research_env_legibility` | **2 docs written** — gap analysis scores codebase | Discoverability: 5/10. Failure handling: 3/10. Inter-agent communication: 4/10. |
+
+**2 new bugs discovered during the run:**
+1. **Dead SDK workers → zombie nodes**: When worker process dies without writing signal, node stays `active` forever. Runner has no process liveness check.
+2. **Validation agent spam**: After node reaches `accepted`, runner dispatches ~6 extra validation signals (blocked but noisy).
+
+### 1.5 Harness Engineering Principles (Research Basis)
+
+Per Anthropic, OpenAI, and Martin Fowler harness engineering best practices:
+
+1. **Environment Legibility** > plumbing fixes. Make the codebase discoverable with AGENTS.md, architecture diagrams, schemas, and principles encoded in repo files.
+2. **Worker Context** > raw model power. Workers need to know their role, what happened before them, and what "done" looks like for their specific handler type.
+3. **Feedback Loops** > binary pass/fail. Implement act-observe-correct loops with graduated, actionable feedback.
+4. **Constraints** > micromanagement. Enforce boundaries (linter rules, structured logging, schema validation) to prevent drift.
+
+**Priority rebalancing**: Worker context and legibility promoted to P0 alongside signal/crash fixes. The root cause of the `research_worker_context` failure (workers don't know their role) is more impactful than signal atomicity (which only manifests under concurrent writes).
+
+### 1.6 ToolSearch Gap Discovery (2026-03-10)
+
+**Root cause**: Two separate mechanisms gate MCP tool access in Claude Code SDK:
+
+1. **`allowed_tools` (permission gate)**: A restrict list — ONLY listed tools can be called. If any tool is listed, unlisted tools are blocked. If `allowed_tools` is omitted entirely, ALL tools are available.
+2. **ToolSearch (schema discovery)**: MCP tools are deferred — their schemas are NOT in the agent's context until loaded via ToolSearch. Even with permission, the agent can't call a tool it doesn't know exists.
+
+**Both mechanisms must be satisfied**: the tool must be in `allowed_tools` AND loaded via ToolSearch.
+
+| File | Issue |
+|------|-------|
+| `pipeline_runner.py` `allowed_tools` | Listed Serena tools but NOT context7/Hindsight/Perplexity — research/refine workers were permission-blocked from MCP research tools |
+| `pipeline_runner.py` prompts | No handler-specific preambles — all workers got identical generic prompts regardless of role |
+| `run_research.py:83` | Prompt says "you do NOT need to use ToolSearch" — **false** |
+| `run_refine.py:106` | Same incorrect claim. Additionally, `ToolSearch` was **missing from `allowed_tools`** |
+| `worker-tool-reference.md` | Zero mention of ToolSearch or deferred tool loading |
+
+**Context7 finding** (Claude Code agent docs): "Agents can use MCP tools autonomously without requiring pre-allowed lists, allowing Claude to determine which tools are necessary for the task at hand." — This means omitting `allowed_tools` gives agents ALL tools. We chose to keep explicit lists for role isolation (codergen shouldn't research, research shouldn't implement).
+
+**Fix applied (2 phases)**:
+
+Phase 1 (initial): ToolSearch added to all `allowed_tools` lists. Prompts updated with mandatory ToolSearch loading step. `worker-tool-reference.md` updated with ToolSearch section.
+
+Phase 2 (deeper fix): Handler-specific `allowed_tools` — each handler type (codergen, research, refine) gets only the MCP tools appropriate for its role. Research workers get context7 + Perplexity + Hindsight. Refine workers get Hindsight + perplexity_reason. Codergen workers get Serena only. Prompts changed from "here are the exact tool names" to "use ToolSearch to discover available tools" — letting the agent self-discover rather than hardcoding names.
+
+**Validated**: Test pipeline v3 (research node) successfully used ToolSearch → context7 → Hindsight in sequence.
+
 ---
 
-## 2. Architecture Changes
+## 2. Architecture Changes (Rebalanced Post-Research)
 
 ### 2.1 Epic A: Atomic Signal File Protocol (P0 — Critical)
 
@@ -390,18 +443,261 @@ WORKER_TYPE_LIMITS = {
 
 ---
 
-## 3. Implementation Priority
+### 2.7 Epic G: Worker Context & Handler-Specific Preambles (P0 — Critical, NEW)
 
-| Priority | Epic | Effort | Impact | Risk if Skipped |
-|----------|------|--------|--------|-----------------|
-| **P0** | A: Atomic Signals | 2h | CRITICAL | Data loss, stuck pipelines |
-| **P0** | B: force_status Fix | 1h | CRITICAL | Lost retries, stuck nodes |
-| **P0** | C: Validation Error Handling | 2h | CRITICAL | Invisible failures |
-| **P1** | D: Orphan Resume Expansion | 2h | HIGH | Stuck research/refine after crash |
-| **P1** | E: Worker Prompt Improvements | 3h | HIGH | Worker confusion, wasted cycles |
-| **P2** | F: Global Safeguards | 3h | MEDIUM | Runaway pipelines, cost surprises |
+**Problem proven by research_worker_context failure**: Workers don't understand their handler role. A research node modified the SD with implementation fixes instead of conducting comparative research. Validator correctly rejected 3/3 times.
 
-**Total estimated effort**: ~13h
+**Root cause**: `_build_worker_prompt()` generates identical prompts regardless of handler type. Workers have no context about:
+- What their handler role means (research ≠ codergen ≠ refine)
+- What happened in predecessor nodes (no prior-node-outcome injection)
+- What "done" looks like for their specific handler type
+- Decision history from the pipeline
+
+**Proposed**:
+
+```python
+HANDLER_CONTEXT = {
+    "codergen": {
+        "preamble": """You are an IMPLEMENTATION worker. Your job is to write production-quality code.
+DO NOT research, investigate, or write documentation — only implement.
+Read the Solution Design carefully. It contains the exact changes to make.""",
+        "done_criteria": "All files changed, tests pass, signal written with files_changed list.",
+    },
+    "research": {
+        "preamble": """You are a RESEARCH worker. Your job is to investigate and document findings.
+DO NOT modify source code or the Solution Design directly.
+Write your findings to a NEW markdown file (not the SD) at the repo root.
+Use WebSearch, WebFetch, and Read to gather information from external sources AND the codebase.
+Compare best practices against the current implementation.""",
+        "done_criteria": "Research doc written with all acceptance criteria addressed. Signal written with doc path.",
+    },
+    "refine": {
+        "preamble": """You are a REFINEMENT worker. Your job is to merge research findings into the Solution Design.
+Read the research docs produced by predecessor nodes (check signal files for paths).
+Edit the SD to incorporate findings as first-class content (not annotations).
+Use Hindsight reflect before editing to check for prior patterns.""",
+        "done_criteria": "SD updated with research findings integrated. No research annotations remain.",
+    },
+    "acceptance-test-writer": {
+        "preamble": """You are a TEST WRITER. Your job is to create Gherkin acceptance test scenarios.
+Read the PRD acceptance criteria. Write .feature files with Given/When/Then.
+Tests should be blind (not peek at implementation).""",
+        "done_criteria": "Feature files written with scenarios covering all PRD acceptance criteria.",
+    },
+}
+```
+
+**Prior-node-outcome injection** — embed predecessor signals in prompt:
+
+```python
+def _inject_predecessor_context(self, node_id, data):
+    """Read signals from predecessor nodes and embed in prompt."""
+    predecessors = data.get("edges", {}).get(node_id, {}).get("predecessors", [])
+    context_lines = []
+    for pred_id in predecessors:
+        signal_path = os.path.join(self.signal_dir, "processed", f"*-{pred_id}.json")
+        signals = sorted(glob.glob(signal_path))
+        if signals:
+            with open(signals[-1]) as f:
+                sig = json.load(f)
+            context_lines.append(f"### Predecessor: {pred_id}")
+            context_lines.append(f"- Status: {sig.get('status', 'unknown')}")
+            context_lines.append(f"- Files: {sig.get('files_changed', [])}")
+            context_lines.append(f"- Message: {sig.get('message', 'N/A')[:200]}")
+    return "\n".join(context_lines) if context_lines else "No predecessor signals available."
+```
+
+**Files to modify**:
+- `pipeline_runner.py`: `_build_worker_prompt()`, add `HANDLER_CONTEXT` dict, add `_inject_predecessor_context()`
+
+**Acceptance Criteria**:
+- AC-1: Each handler type gets a distinct preamble that clearly states what the worker SHOULD and SHOULD NOT do
+- AC-2: Predecessor node signals are embedded in the prompt (status, files_changed, message)
+- AC-3: "Done criteria" for each handler type is included in the prompt
+- AC-4: Test: research handler prompt does NOT contain "implement" or "write code"
+- AC-5: Test: codergen handler prompt does NOT contain "research" or "investigate"
+
+---
+
+### 2.8 Epic H: Dead Worker Detection & Signal Timeout (P0 — Critical, NEW)
+
+**Problem proven by research_signal_atomicity crash**: Worker PID 98114 died with JSON buffer overflow. No signal was ever written. Node stayed `active` forever with no process working on it. Runner had no way to detect the dead worker.
+
+**Root cause**: `_dispatch_agent_sdk()` tracks workers in `self.active_workers` dict but never checks if the underlying process is still alive. AgentSDK workers run in ThreadPoolExecutor futures — if the future completes with an exception, the result is silently lost.
+
+**Proposed**:
+
+```python
+def _check_worker_liveness(self):
+    """Detect dead workers whose futures completed but wrote no signal."""
+    for node_id, future in list(self.active_workers.items()):
+        if future.done():
+            # Future completed but no signal was written
+            signal_path = os.path.join(self.signal_dir, f"{node_id}.json")
+            if not os.path.exists(signal_path):
+                exc = future.exception()
+                if exc:
+                    log.error("[liveness] Worker %s died with exception: %s", node_id, exc)
+                    self._write_node_signal(node_id, {
+                        "status": "error",
+                        "result": "fail",
+                        "reason": f"Worker process died: {str(exc)[:300]}",
+                        "worker_crash": True,
+                    })
+                else:
+                    # Completed without exception but no signal — worker forgot to write
+                    elapsed = time.monotonic() - self.dispatch_times.get(node_id, 0)
+                    log.warning("[liveness] Worker %s completed silently after %.0fs", node_id, elapsed)
+                    self._write_node_signal(node_id, {
+                        "status": "error",
+                        "result": "fail",
+                        "reason": f"Worker completed without writing signal after {elapsed:.0f}s",
+                    })
+                del self.active_workers[node_id]
+
+    # Also check for signal timeout (worker running too long)
+    timeout = int(os.environ.get("WORKER_SIGNAL_TIMEOUT", "900"))  # 15min default
+    for node_id, dispatch_time in list(self.dispatch_times.items()):
+        if node_id in self.active_workers:
+            elapsed = time.monotonic() - dispatch_time
+            if elapsed > timeout:
+                log.error("[liveness] Worker %s exceeded signal timeout (%ds)", node_id, timeout)
+                # Kill the future if possible
+                future = self.active_workers[node_id]
+                future.cancel()
+                self._write_node_signal(node_id, {
+                    "status": "error",
+                    "result": "fail",
+                    "reason": f"Worker timed out after {elapsed:.0f}s (limit: {timeout}s)",
+                })
+                del self.active_workers[node_id]
+```
+
+Call `_check_worker_liveness()` in every iteration of `_main_loop()`.
+
+**Files to modify**:
+- `pipeline_runner.py`: add `_check_worker_liveness()`, add `dispatch_times` dict, integrate into `_main_loop()`
+
+**Acceptance Criteria**:
+- AC-1: Dead worker futures detected within one loop iteration (~2s)
+- AC-2: Failure signal written automatically when worker dies without signal
+- AC-3: Worker signal timeout configurable via `WORKER_SIGNAL_TIMEOUT` env var (default 900s)
+- AC-4: Timed-out workers have their futures cancelled
+- AC-5: Test: mock future.exception() → verify fail signal written
+
+---
+
+### 2.9 Epic I: Centralized AGENTS.md & Environment Legibility (P0 — Critical, NEW)
+
+**Problem proven by env_legibility research**: Current discoverability score is **5/10**. Workers must manually search for agent configs. No centralized menu, no competency matrices, no boundary definitions.
+
+**Root cause**: Agent docs exist in `.claude/agents/*.md` but there's no index, no routing guidance, and no cross-agent handoff protocols. Workers arriving at a new codebase have no map.
+
+**Proposed**:
+
+Create `.claude/agents/AGENTS.md` as a centralized directory:
+
+```markdown
+# Agent Directory
+
+## Quick Selection Guide
+
+| If your task involves... | Use Agent | Model |
+|--------------------------|-----------|-------|
+| Python backend, APIs, databases | backend-solutions-engineer | Sonnet |
+| React, TypeScript, CSS, UI | frontend-dev-expert | Sonnet |
+| System design, PRDs, SDs | solution-architect | Sonnet |
+| Writing/running tests | tdd-test-engineer | Sonnet |
+| Validating implementations | validation-test-agent | Sonnet |
+
+## Competency Matrix
+
+| Agent | Can Do | Cannot Do | Escalate To |
+|-------|--------|-----------|-------------|
+| backend-solutions-engineer | Python, FastAPI, PydanticAI, SQL, MCP | Frontend, CSS, React | frontend-dev-expert |
+| frontend-dev-expert | React, Next.js, Tailwind, Zustand | Python, databases | backend-solutions-engineer |
+| tdd-test-engineer | Unit/integration/E2E tests | Implementation, design | backend/frontend agent |
+| validation-test-agent | PRD validation, acceptance testing | Implementation, design | orchestrator |
+
+## Handoff Protocol
+
+When an agent encounters work outside its competency:
+1. Document what was found (in signal file message)
+2. Set signal status to "needs_handoff"
+3. Include target_agent in signal payload
+4. Runner will dispatch appropriate agent
+```
+
+Also create `.claude/agents/ARCHITECTURE.md` — a lightweight codebase map for workers arriving fresh:
+
+```markdown
+# Codebase Architecture (for AI Workers)
+
+## Repository Map
+- `.claude/scripts/attractor/` — Pipeline runner and worker dispatch
+- `.claude/agents/` — Agent configurations (YOU ARE HERE)
+- `.claude/skills/` — Skill definitions (invoked via Skill tool)
+- `docs/prds/` — Product requirement documents
+- `docs/sds/` — Solution design documents
+- `acceptance-tests/` — Gherkin acceptance test suites
+```
+
+**Files to create/modify**:
+- `.claude/agents/AGENTS.md` (new)
+- `.claude/agents/ARCHITECTURE.md` (new)
+- `.claude/agents/worker-tool-reference.md` (update with model selection guide)
+
+**Acceptance Criteria**:
+- AC-1: AGENTS.md exists with quick selection guide, competency matrix, and handoff protocol
+- AC-2: ARCHITECTURE.md exists with repo map, directory purposes, and key file locations
+- AC-3: worker-tool-reference.md includes model selection guide per handler type
+- AC-4: All agent *.md files cross-linked from AGENTS.md
+- AC-5: doc-gardener lint passes on all new files
+
+---
+
+### 2.10 Epic J: Validation Spam Suppression (P1 — High, NEW)
+
+**Problem discovered during research pipeline**: After `research_feedback_loops` reached `accepted`, the runner dispatched ~6 additional validation signals (mix of pass/fail from lingering agents). Blocked by state machine but noisy.
+
+**Root cause**: `_dispatch_validation_agent()` is called whenever a signal arrives for a node, even if the node is already in a terminal state.
+
+**Proposed**:
+
+```python
+def _dispatch_validation_agent(self, node_id, target_node_id):
+    # Guard: skip if node already terminal
+    node_status = self._get_node_status(target_node_id)
+    if node_status in ("validated", "accepted", "failed"):
+        log.debug("[validation] Skipping dispatch for terminal node %s (status=%s)",
+                 target_node_id, node_status)
+        return
+    # ... existing dispatch logic
+```
+
+**Acceptance Criteria**:
+- AC-1: Validation not dispatched for nodes in terminal states
+- AC-2: Zero validation signals for already-accepted nodes
+- AC-3: Test: accept node → trigger signal → verify no validation dispatch
+
+---
+
+## 3. Implementation Priority (Rebalanced Post-Research)
+
+| Priority | Epic | Effort | Impact | Evidence |
+|----------|------|--------|--------|----------|
+| **P0** | G: Worker Context & Handler Preambles | 3h | CRITICAL | research_worker_context failed 3/3 — workers don't know their role |
+| **P0** | H: Dead Worker Detection | 2h | CRITICAL | research_signal_atomicity crashed — node stuck active forever |
+| **P0** | I: AGENTS.md & Environment Legibility | 2h | CRITICAL | Gap analysis: discoverability 5/10, failure handling 3/10 |
+| **P1** | A: Atomic Signals | 2h | HIGH | Code analysis: race condition under parallel writes |
+| **P1** | B: force_status Fix | 1h | HIGH | Code analysis: in-memory edits lost on reload |
+| **P1** | C: Validation Error Handling | 2h | HIGH | Code analysis: invisible validation failures |
+| **P1** | J: Validation Spam Suppression | 1h | MEDIUM | Research pipeline: ~6 extra signals per accepted node |
+| **P2** | D: Orphan Resume Expansion | 2h | MEDIUM | Partially addressed by Epic H |
+| **P2** | E: Worker Prompt (remaining sub-items) | 1h | MEDIUM | Partially addressed by Epic G |
+| **P2** | F: Global Safeguards | 3h | LOW | Nice-to-have (timeout, cost tracking) |
+
+**Total estimated effort**: ~19h (6 new hours from research-discovered epics)
 
 ---
 
@@ -445,9 +741,23 @@ WORKER_TYPE_LIMITS = {
 
 ---
 
-## 7. Open Questions (For Research Phase)
+## 7. Open Questions (Resolved by Research)
 
 - **Q1**: Should corrupted signals trigger immediate node failure or wait for manual inspection?
+  - **RESOLVED**: Quarantine to `signals/quarantine/` + log error. Node retries via normal retry logic. Human can inspect quarantine dir.
 - **Q2**: What is the right default for `--max-duration`? 2h may be too short for large initiatives.
+  - **RESOLVED**: 2h is fine. Longest observed pipeline in 24h was 85min (AURA-LIVEKIT). Large initiatives run multiple pipelines, not one long one.
 - **Q3**: Should we add structured logging (JSON) to complement Logfire spans?
+  - **RESOLVED**: No. Logfire already provides structured tracing. Adding JSON logs would duplicate without value.
 - **Q4**: Is there value in a `--dry-run` mode that validates the pipeline without dispatching workers?
+  - **RESOLVED**: Yes — `cobuilder pipeline validate` already does this for graph structure. Adding `--dry-run` to runner would validate dispatch config without actual execution. Low priority (P2).
+
+## 8. Research Artifacts
+
+| Artifact | Location | Status |
+|----------|----------|--------|
+| Feedback & Verification Loops Research | `research_feedback_and_verification_loops.md` (repo root) | Complete |
+| Environment Legibility Guide | `docs/environment-legibility-for-ai-agents.md` | Complete |
+| Agent Documentation Gap Analysis | `docs/agent-documentation-gap-analysis.md` | Complete |
+| Worker Context Research | Not produced (worker failed 3/3) | Failed — proves Epic G thesis |
+| Signal Atomicity Research | Not produced (worker crashed) | Failed — proves Epic H thesis |
