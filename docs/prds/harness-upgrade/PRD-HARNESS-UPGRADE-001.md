@@ -427,11 +427,14 @@ Post-E7.2 hardening addressing latent bugs discovered via stress testing and res
 | B: force_status Persistence | P1 | **DONE** | _do_transition disk write, guidance files. 4 E2E tests (`5e826fc`) |
 | C: Validation Error Handling | P1 | **DONE** | VALIDATION_TIMEOUT, crash→fail signal. 4 E2E tests (`5e826fc`) |
 | J: Validation Spam Suppression | P1 | **DONE** | Terminal state guard. 8 E2E tests (`5e826fc`) |
-| D: Orphan Resume Expansion | P2 | **PARTIAL** | All handlers resumable with exponential backoff |
-| E: Worker Prompt (remaining) | P2 | Remaining | |
-| F: Global Safeguards | P2 | Remaining | |
+| D: Orphan Resume Expansion | P2 | **PARTIAL** → Absorbed into PRD-COBUILDER-CONSOLIDATION-001 E2 | All handlers resumable with exponential backoff |
+| E.3: Persistent Requeue Guidance | P2 | Absorbed into PRD-COBUILDER-CONSOLIDATION-001 E2 | |
+| F: Global Safeguards | P2 | Absorbed into PRD-COBUILDER-CONSOLIDATION-001 E4-E5 | |
+| Liveness Race Fix | P1 | **DONE** | `6337153` — _get_node_status() guard prevents spurious signal overwrites |
 
 **E2E Test Suite**: 33 tests in `tests/e2e/test_pipeline_hardening.py`, all passing (`cda90ed`).
+
+> **Note (2026-03-10)**: Remaining hardening epics D, E.3, and F have been absorbed into [PRD-COBUILDER-CONSOLIDATION-001](../../PRD-COBUILDER-CONSOLIDATION-001.md) to avoid migrating known-buggy code. See Section 13 of that PRD.
 
 ### Phase 3: Architecture Vision (E8-E12) — Future Work
 

@@ -1172,11 +1172,12 @@ def _dispatch_validation_agent(self, node_id, target_node_id):
 | **P1** | B: force_status Fix | 1h | HIGH | **DONE** | `5e826fc` — _force_status calls _do_transition (disk write), requeue guidance persisted. 4 E2E tests |
 | **P1** | C: Validation Error Handling | 2h | HIGH | **DONE** | `5e826fc` — VALIDATION_TIMEOUT env var, crash→fail signal, no silent auto-pass. 4 E2E tests |
 | **P1** | J: Validation Spam Suppression | 1h | MEDIUM | **DONE** | `5e826fc` — _get_node_status guard before dispatch. 8 E2E tests |
-| **P2** | D: Orphan Resume Expansion | 2h | MEDIUM | **PARTIAL** | All handler types resumable with exponential backoff (5s→60s). Remaining: crash-recovery stress test |
-| **P2** | E: Worker Prompt (remaining sub-items) | 1h | MEDIUM | Remaining | Partially addressed by Epic G |
-| **P2** | F: Global Safeguards | 3h | LOW | Remaining | Nice-to-have (timeout, cost tracking) |
+| **P2** | D: Orphan Resume Expansion | 2h | MEDIUM | **PARTIAL** → Absorbed into PRD-COBUILDER-CONSOLIDATION-001 E2 | All handler types resumable with exponential backoff (5s→60s). Remaining: crash-recovery stress test |
+| **P2** | E.3: Persistent Requeue Guidance | 1h | MEDIUM | Absorbed into PRD-COBUILDER-CONSOLIDATION-001 E2 | Replace .pop() one-shot with file-backed persistence |
+| **P2** | F: Global Safeguards | 3h | LOW | Absorbed into PRD-COBUILDER-CONSOLIDATION-001 E4-E5 | Pipeline timeout, cost tracking, rate limiting |
+| **P1** | Liveness Race Fix | 1h | HIGH | **DONE** | `6337153` — _get_node_status() guard in both liveness loops. Prevents spurious signal overwrites. |
 
-**Total estimated effort**: ~19h | **Completed**: ~13h (7 of 10 epics done, 1 partial) | **Remaining**: ~6h (D remainder, E, F)
+**Total estimated effort**: ~19h | **Completed**: ~14h (8 of 10 epics done, 1 partial) | **Remaining**: ~5h (D remainder, E.3, F — absorbed into CoBuilder consolidation)
 
 **E2E Test Suite**: 33 tests in `tests/e2e/test_pipeline_hardening.py`, all passing in 3.62s. Commit `cda90ed`.
 

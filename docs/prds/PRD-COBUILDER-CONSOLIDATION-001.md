@@ -289,3 +289,31 @@ E8 (Security) ── independent, can run anytime
 | Phase 5 | E8 | 0.5 days | 7 days |
 
 **Total: ~7 working days** across 8 epics.
+
+## 13. Absorbed Hardening Work (from SD-PIPELINE-RUNNER-HARDENING-001)
+
+The following remaining hardening epics from PRD-HARNESS-UPGRADE-001 / SD-PIPELINE-RUNNER-HARDENING-001 are absorbed into this consolidation:
+
+| Hardening Epic | Absorbed Into | Description |
+|----------------|---------------|-------------|
+| **D: Orphan Resume Expansion** | E2 (Fix Divergences) | Extend orphan resume to all handler types (research, refine, acceptance-test-writer), not just codergen. Exponential backoff with max 3 retries. Gate nodes emit escalation signals. |
+| **E.3: Persistent Requeue Guidance** | E2 (Fix Divergences) | Replace `.pop()` one-shot guidance with file-backed persistence so validation feedback survives across multiple retries. |
+| **F: Global Pipeline Safeguards** | E4-E5 (Code Migration) | Pipeline timeout (`--max-duration`), cost tracking in signals, per-worker-type rate limiting. Deferred to code migration phase. |
+
+**Rationale**: These improvements strengthen the pipeline runner before it moves into `cobuilder/attractor/`. Fixing them during consolidation avoids migrating known-buggy code.
+
+## 14. Implementation Status
+
+| Epic | Status | Date | Commits | Notes |
+|------|--------|------|---------|-------|
+| **E0: Dead Code Cleanup** | **DONE** | 2026-03-10 | `5333115` | 23 files deleted, 3,232 lines removed. 11 dead attractor files + superseded cobuilder/orchestration/pipeline_runner.py + 10 root artifacts + empty dirs + empty CLI group. |
+| **E8: Security Remediation** | **DONE** | 2026-03-10 | `5333115` | private.pem deleted, *.pem added to .gitignore, worktree copies cleaned. |
+| **Bugfix: Liveness Race** | **DONE** | 2026-03-10 | `6337153` | Liveness checker now checks node status before writing error signals. Prevents spurious failures from overwriting processed signals. |
+| **Bugfix: Monitor Cycles** | **DONE** | 2026-03-10 | `6337153` | Monitor pattern updated to blocking 10min cycles in s3-guardian SKILL.md and system3-meta-orchestrator.md. |
+| E1: dirs.py | Pending | — | — | — |
+| E2: Fix Divergences (+D, E.3) | **Next** | — | — | Includes absorbed hardening D + E.3 |
+| E3: State Migration | Pending | — | — | Depends on E1 |
+| E4: Code Migration (+F) | Pending | — | — | Includes absorbed hardening F |
+| E5: Import Surgery | Pending | — | — | Depends on E4 |
+| E6: CLI Unification | Pending | — | — | Depends on E4+E5 |
+| E7: Documentation Updates | Pending | — | — | Depends on E4+E5+E6 |
