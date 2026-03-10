@@ -332,3 +332,11 @@ Failure:
 ```json
 {"status": "error", "message": "what went wrong", "files_changed": []}
 ```
+
+## Model Selection Guide
+| Handler | Default Model | When to Override |
+|---------|--------------|-----------------|
+| codergen | claude-haiku-4-5-20251001 | claude-sonnet-4-5-20251001 for complex multi-file changes |
+| research | claude-haiku-4-5-20251001 | Rarely needs upgrade |
+| refine | claude-sonnet-4-5-20251001 | Always Sonnet (requires synthesis) |
+| validation | claude-sonnet-4-5-20251001 | Never downgrade (needs judgment) |

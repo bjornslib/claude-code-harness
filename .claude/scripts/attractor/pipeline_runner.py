@@ -332,6 +332,9 @@ class PipelineRunner:
         # Injected into worker prompt on re-dispatch so the worker knows what to fix
         self.requeue_guidance: dict[str, str] = {}
 
+        # Orphan resume counts: node_id -> int (for exponential backoff)
+        self.orphan_resume_counts: dict[str, int] = {}
+
         # Threading event — wakes the main loop on file changes
         self._wake_event = threading.Event()
 
@@ -499,16 +502,45 @@ class PipelineRunner:
             # Re-dispatch codergen workers for active nodes with no in-memory worker.
             # This handles the case where validation fails and requeues a node back to
             # "active" in the DOT, but the dispatch loop only picks up "pending" nodes.
+            # Expand to include all resumable handlers (Epic D)
+            RESUMABLE_HANDLERS = frozenset({"codergen", "research", "refine", "acceptance-test-writer"})
+            GATE_HANDLERS = frozenset({"wait.system3", "wait.human"})
+
             orphaned_active_nodes = [
                 n for n in nodes
                 if n["attrs"].get("status") == "active"
-                and n["attrs"].get("handler") == "codergen"
+                and n["attrs"].get("handler") in RESUMABLE_HANDLERS
                 and n["id"] not in self.active_workers
             ]
             for node in orphaned_active_nodes:
                 nid = node["id"]
-                log.info("[resume] Re-dispatching codergen for orphaned active node: %s", nid)
-                self._dispatch_node(node, data)
+                handler = node["attrs"].get("handler", "")
+                retries = self.orphan_resume_counts.get(nid, 0)
+                if retries < 3:  # Exponential backoff
+                    delay = min(2 ** retries * 5, 60)  # 5s, 10s, 20s, max 60s
+                    log.info("[resume] Re-dispatching %s for orphaned %s node (attempt=%d, delay=%ds)",
+                             handler, nid, retries + 1, delay)
+                    time.sleep(delay)
+                    self._dispatch_node(node, data)
+                    self.orphan_resume_counts[nid] = retries + 1
+                else:
+                    log.error("[resume] Exhausted retries for orphaned node %s", nid)
+                    self._do_transition(nid, "failed")
+
+            # Handle orphaned gate nodes (Epic D)
+            orphaned_gate_nodes = [
+                n for n in nodes
+                if n["attrs"].get("status") == "active"
+                and n["attrs"].get("handler") in GATE_HANDLERS
+                and n["id"] not in self.active_workers
+            ]
+            for node in orphaned_gate_nodes:
+                nid = node["id"]
+                log.warning("[resume] Gate node %s stuck in active — emitting escalation", nid)
+                self._write_node_signal(nid, {
+                    "status": "escalation",
+                    "reason": f"Gate node {nid} orphaned after restart",
+                })
 
             # If nothing is dispatchable and nothing is active, we're stuck
             if not self.active_workers:
@@ -671,26 +703,21 @@ class PipelineRunner:
         Used for requeue operations where the standard transition chain doesn't support
         the required state change (e.g., accepted -> pending).
         """
-        import re as _re
+        self._do_transition(node_id, target_status)
+        # Also persist requeue guidance if present
+        if node_id in self.requeue_guidance:
+            self._persist_requeue_guidance(node_id, self.requeue_guidance[node_id])
+
+    def _persist_requeue_guidance(self, node_id: str, guidance: str) -> None:
+        """Persist requeue guidance to a file so it survives reloads."""
+        guidance_dir = os.path.join(self.signal_dir, "guidance")
+        os.makedirs(guidance_dir, exist_ok=True)
+        guidance_path = os.path.join(guidance_dir, f"{node_id}.txt")
         try:
-            with open(self.dot_path) as fh:
-                content = fh.read()
-            # Match status="..." within the node's attribute block
-            # Pattern: find the node definition and replace its status
-            pattern = _re.compile(
-                rf'({_re.escape(node_id)}\s*\[.*?status\s*=\s*")([^"]*?)(")',
-                _re.DOTALL,
-            )
-            new_content, count = pattern.subn(rf'\g<1>{target_status}\g<3>', content)
-            if count > 0:
-                with open(self.dot_path, "w") as fh:
-                    fh.write(new_content)
-                self.dot_content = new_content
-                log.info("[force-status] %s -> %s (direct DOT edit)", node_id, target_status)
-            else:
-                log.warning("[force-status] Could not find status attribute for %s in DOT", node_id)
+            with open(guidance_path, "w") as fh:
+                fh.write(guidance)
         except OSError as exc:
-            log.error("[force-status] Failed to edit DOT: %s", exc)
+            log.error("[persist-guidance] Failed to write guidance for %s: %s", node_id, exc)
 
     # ------------------------------------------------------------------
     # Node dispatch
@@ -1127,7 +1154,17 @@ class PipelineRunner:
         """Dispatch a validation-test-agent for a node at impl_complete.
 
         Runs in a background thread. Writes a validation signal on completion.
+
+        Includes validation timeout and error handling for crashes.
+        Also prevents validation spam for already terminal nodes.
         """
+        # Guard: skip if node already terminal to avoid validation spam
+        node_status = self._get_node_status(target_node_id)
+        if node_status in ("validated", "accepted", "failed"):
+            log.debug("[validation] Skipping dispatch for terminal node %s (status=%s)",
+                     target_node_id, node_status)
+            return
+
         log.info("[validation] Dispatching validation agent  node=%s  target=%s", node_id, target_node_id)
         self.active_workers[node_id] = {
             "node_id": node_id,
@@ -1139,6 +1176,19 @@ class PipelineRunner:
             from concurrent.futures import ThreadPoolExecutor
             self._executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="worker")
         self._executor.submit(self._run_validation_subprocess, node_id, target_node_id)
+
+    def _get_node_status(self, node_id: str) -> str:
+        """Get the current status of a node by reading the DOT file."""
+        try:
+            with open(self.dot_path) as fh:
+                content = fh.read()
+            data = parse_dot(content)
+            node = next((n for n in data["nodes"] if n["id"] == node_id), None)
+            if node:
+                return node["attrs"].get("status", "pending")
+        except Exception:
+            pass
+        return "pending"
 
     def _build_validation_prompt(self, target_node_id: str) -> str:
         """Build a rich validation prompt with acceptance criteria, files changed, and SD."""
@@ -1289,6 +1339,8 @@ class PipelineRunner:
 
         Validation is a System 3 concern — the runner auto-advances nodes when
         validation dispatch is not possible (e.g., nested sessions, no SDK).
+
+        Includes timeout handling and error reporting for validation crashes.
         """
         import asyncio
 
@@ -1320,6 +1372,9 @@ class PipelineRunner:
             logfire.info("validation_dispatch {node_id}",
                          node_id=node_id, model=worker_model,
                          cwd=self._get_target_dir())
+
+        # Dispatch with timeout handling - Epic C
+        timeout = int(os.environ.get("VALIDATION_TIMEOUT", "600"))  # 10min default
 
         async def _run() -> dict:
             clean_env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
@@ -1378,12 +1433,43 @@ class PipelineRunner:
             return {"result": "pass", "reason": f"validation completed ({len(messages)} events)"}
 
         try:
+            # Set timeout for the validation subprocess
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            signal = loop.run_until_complete(_run())
+
+            # Wrap the run function with timeout
+            future = loop.create_task(_run())
+            signal = loop.run_until_complete(asyncio.wait_for(future, timeout=timeout))
+
+        except asyncio.TimeoutError:
+            log.error("[validation] %s timed out after %ds", node_id, timeout)
+            # Write failure signal so node doesn't hang (Epic C)
+            self._write_node_signal(target_node_id, {
+                "status": "fail",
+                "result": "fail",
+                "reason": f"Validation timed out after {timeout}s",
+            })
+            self.active_workers.pop(node_id, None)
+            self._wake_event.set()
+            if _span:
+                _span.__exit__(None, None, None)
+            return
+
         except Exception as exc:  # noqa: BLE001
-            log.warning("[validation] Dispatch failed for %s — auto-passing: %s", node_id, exc)
-            signal = {"result": "pass", "reason": f"auto-pass: {exc}"}
+            log.error("[validation] %s failed with exception: %s", node_id, exc)
+            # Write failure signal so node doesn't hang (Epic C)
+            self._write_node_signal(target_node_id, {
+                "status": "error",
+                "result": "fail",
+                "reason": f"Validation agent crashed: {str(exc)[:200]}",
+                "validator_exit_code": -1,  # Indicate agent crash
+                "exception": type(exc).__name__,
+            })
+            self.active_workers.pop(node_id, None)
+            self._wake_event.set()
+            if _span:
+                _span.__exit__(None, None, None)
+            return
 
         if _LOGFIRE_AVAILABLE:
             logfire.info("validation_complete {node_id} {result}",
@@ -1418,9 +1504,23 @@ class PipelineRunner:
                     signal = json.load(fh)
             except (OSError, json.JSONDecodeError) as exc:
                 log.warning("Cannot read signal %s: %s", signal_path, exc)
+                # Quarantine corrupted signals instead of silently skipping
+                quarantine = os.path.join(self.signal_dir, "quarantine")
+                os.makedirs(quarantine, exist_ok=True)
+                corrupted_dest = os.path.join(quarantine, fname)
+                try:
+                    import shutil
+                    shutil.move(signal_path, corrupted_dest)
+                    log.error("Quarantined corrupted signal %s: %s", signal_path, exc)
+                except Exception:
+                    # If quarantine fails, at least log the issue
+                    log.error("Failed to quarantine corrupted signal %s: %s", signal_path, exc)
                 continue
 
-            # Consume the signal (move to processed/)
+            # Apply the signal BEFORE consuming it (apply-then-consume for atomicity)
+            self._apply_signal(node_id, signal)
+
+            # Now consume the signal (move to processed/) - only after successful application
             processed_dir = os.path.join(self.signal_dir, "processed")
             os.makedirs(processed_dir, exist_ok=True)
             ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -1428,9 +1528,7 @@ class PipelineRunner:
             try:
                 os.rename(signal_path, dest)
             except OSError:
-                pass
-
-            self._apply_signal(node_id, signal)
+                pass  # Signal may have already been moved by another process
 
     def _check_worker_liveness(self) -> None:
         """Enhanced dead worker detection using comprehensive tracking."""
