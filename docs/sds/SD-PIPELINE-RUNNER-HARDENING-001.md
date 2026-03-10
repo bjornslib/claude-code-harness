@@ -453,6 +453,8 @@ WORKER_TYPE_LIMITS = {
 - What "done" looks like for their specific handler type
 - Decision history from the pipeline
 
+**Additional root cause discovered in research_feedback_and_verification_loops.md**: The validation system has sequential processing with limited automated recovery and heavy reliance on human intervention. The act-observe-correct loops need strengthening with more predictive and parallel validation capabilities.
+
 **Proposed**:
 
 ```python
@@ -460,7 +462,9 @@ HANDLER_CONTEXT = {
     "codergen": {
         "preamble": """You are an IMPLEMENTATION worker. Your job is to write production-quality code.
 DO NOT research, investigate, or write documentation — only implement.
-Read the Solution Design carefully. It contains the exact changes to make.""",
+Read the Solution Design carefully. It contains the exact changes to make.
+
+FEEDBACK LOOPS: Your implementation will be validated in the next phase. Pay attention to the PRD acceptance criteria to ensure you're building the right thing.""",
         "done_criteria": "All files changed, tests pass, signal written with files_changed list.",
     },
     "research": {
@@ -468,54 +472,167 @@ Read the Solution Design carefully. It contains the exact changes to make.""",
 DO NOT modify source code or the Solution Design directly.
 Write your findings to a NEW markdown file (not the SD) at the repo root.
 Use WebSearch, WebFetch, and Read to gather information from external sources AND the codebase.
-Compare best practices against the current implementation.""",
+Compare best practices against the current implementation.
+
+FEEDBACK LOOPS: Focus on gathering objective data about current state versus best practices. Do not implement changes.""",
         "done_criteria": "Research doc written with all acceptance criteria addressed. Signal written with doc path.",
     },
     "refine": {
         "preamble": """You are a REFINEMENT worker. Your job is to merge research findings into the Solution Design.
 Read the research docs produced by predecessor nodes (check signal files for paths).
 Edit the SD to incorporate findings as first-class content (not annotations).
-Use Hindsight reflect before editing to check for prior patterns.""",
+Use Hindsight reflect before editing to check for prior patterns.
+
+FEEDBACK LOOPS: Ensure research findings are properly integrated into the SD structure with clear traceability to source research.""",
         "done_criteria": "SD updated with research findings integrated. No research annotations remain.",
     },
     "acceptance-test-writer": {
         "preamble": """You are a TEST WRITER. Your job is to create Gherkin acceptance test scenarios.
 Read the PRD acceptance criteria. Write .feature files with Given/When/Then.
-Tests should be blind (not peek at implementation).""",
+Tests should be blind (not peek at implementation).
+
+FEEDBACK LOOPS: Create comprehensive test coverage that will effectively validate the implementation against PRD requirements.""",
         "done_criteria": "Feature files written with scenarios covering all PRD acceptance criteria.",
     },
 }
+
+# Incorporate the validation patterns from research_feedback_and_verification_loops.md
+VALIDATION_CONTEXT = {
+    "validation-test-agent": {
+        "dual_pass_validation": {
+            "technical_pass": [
+                "Unit tests pass (pytest/jest)",
+                "Code builds successfully (npm run build)",
+                "Import resolution verified",
+                "No TODO/FIXME in changed scope",
+                "Dependencies valid (pip check/npm ls)",
+                "Type-checking passes (mypy/tsc)",
+                "Linting clean (eslint/ruff)"
+            ],
+            "business_pass": [
+                "PRD requirements met",
+                "User journeys functional",
+                "Business outcomes achieved"
+            ]
+        },
+        "act_observe_correct": {
+            "act": "Workers implement features, validators run tests",
+            "observe": "System monitors signal files and task states",
+            "correct": "Failed validations trigger rework cycles or rejection signals"
+        },
+        "hidden_tests": [
+            "Contract Verification: API contract invariants enforced",
+            "Import Resolution: Ensures no broken dependencies",
+            "Type Safety: Static type checking requirements",
+            "Build Integrity: Compilation/execution validation",
+            "Documentation Consistency: PRD-to-implementation traceability"
+        ]
+    }
+}
 ```
 
-**Prior-node-outcome injection** — embed predecessor signals in prompt:
+**Enhanced Prior-node-outcome injection** — embed predecessor signals and validation context in prompt:
 
 ```python
 def _inject_predecessor_context(self, node_id, data):
-    """Read signals from predecessor nodes and embed in prompt."""
+    """Read signals from predecessor nodes and embed in prompt with validation context."""
     predecessors = data.get("edges", {}).get(node_id, {}).get("predecessors", [])
     context_lines = []
+
     for pred_id in predecessors:
+        # Find the most recent processed signal file for this predecessor
         signal_path = os.path.join(self.signal_dir, "processed", f"*-{pred_id}.json")
+        import glob
         signals = sorted(glob.glob(signal_path))
         if signals:
             with open(signals[-1]) as f:
                 sig = json.load(f)
             context_lines.append(f"### Predecessor: {pred_id}")
             context_lines.append(f"- Status: {sig.get('status', 'unknown')}")
+            context_lines.append(f"- Result: {sig.get('result', 'N/A')}")
             context_lines.append(f"- Files: {sig.get('files_changed', [])}")
             context_lines.append(f"- Message: {sig.get('message', 'N/A')[:200]}")
+            if 'reason' in sig:
+                context_lines.append(f"- Reason: {sig['reason'][:200]}")
+
+    # Add validation context for upcoming validation phases
+    if node_id.startswith("validation"):
+        context_lines.extend([
+            "",
+            "## Validation Context",
+            "This validation will check:",
+            "- Technical validation: Code builds, tests pass, type safety",
+            "- Business validation: PRD requirements met",
+            "- Hidden tests: Contract verification, import resolution, build integrity"
+        ])
+
     return "\n".join(context_lines) if context_lines else "No predecessor signals available."
 ```
 
+**Enhanced validation agent error handling** based on research findings:
+
+```python
+def _dispatch_validation_agent(self, node_id, target_node_id):
+    """Dispatch validation with error handling and configurable timeout from research."""
+    timeout = int(os.environ.get("VALIDATION_TIMEOUT", "600"))  # 10min default
+
+    # Check if node already terminal to avoid validation spam
+    node_status = self._get_node_status(target_node_id)
+    if node_status in ("validated", "accepted", "failed"):
+        log.debug("[validation] Skipping dispatch for terminal node %s (status=%s)",
+                 target_node_id, node_status)
+        return
+
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+
+        if result.returncode != 0:
+            log.error("[validation] %s failed (rc=%d): %s",
+                     node_id, result.returncode, result.stderr[:500])
+            # Write failure signal so node doesn't hang
+            self._write_node_signal(target_node_id, {
+                "status": "fail",
+                "result": "fail",
+                "reason": f"Validation agent crashed: {result.stderr[:200]}",
+                "validator_exit_code": result.returncode,
+            })
+
+    except subprocess.TimeoutExpired:
+        log.error("[validation] %s timed out after %ds", node_id, timeout)
+        self._write_node_signal(target_node_id, {
+            "status": "fail",
+            "result": "fail",
+            "reason": f"Validation timed out after {timeout}s",
+        })
+
+    except Exception as e:
+        log.error("[validation] %s failed with exception: %s", node_id, e)
+        self._write_node_signal(target_node_id, {
+            "status": "error",
+            "result": "fail",
+            "reason": f"Validation agent error: {str(e)[:300]}",
+            "exception": type(e).__name__,
+        })
+```
+
 **Files to modify**:
-- `pipeline_runner.py`: `_build_worker_prompt()`, add `HANDLER_CONTEXT` dict, add `_inject_predecessor_context()`
+- `pipeline_runner.py`: `_build_worker_prompt()`, add `HANDLER_CONTEXT` dict, add `_inject_predecessor_context()` with validation context, `_dispatch_validation_agent()` with spam prevention
 
 **Acceptance Criteria**:
 - AC-1: Each handler type gets a distinct preamble that clearly states what the worker SHOULD and SHOULD NOT do
 - AC-2: Predecessor node signals are embedded in the prompt (status, files_changed, message)
 - AC-3: "Done criteria" for each handler type is included in the prompt
-- AC-4: Test: research handler prompt does NOT contain "implement" or "write code"
-- AC-5: Test: codergen handler prompt does NOT contain "research" or "investigate"
+- AC-4: Validation context and feedback loops are included in validation prompts
+- AC-5: Test: research handler prompt does NOT contain "implement" or "write code"
+- AC-6: Test: codergen handler prompt does NOT contain "research" or "investigate"
+- AC-7: Validation agents implement dual-pass validation (technical + business)
+- AC-8: Hidden validation checks are documented and executed
+- AC-9: Validation spam is prevented by checking node status before dispatch
 
 ---
 
@@ -527,15 +644,119 @@ def _inject_predecessor_context(self, node_id, data):
 
 **Proposed**:
 
+Based on the dead_worker_detection_research.md findings, implement a comprehensive dead worker detection system that includes process monitoring, timeout enforcement, and robust signal handling:
+
 ```python
+from concurrent.futures import ThreadPoolExecutor, Future
+import subprocess
+import time
+import os
+import json
+from pathlib import Path
+from dataclasses import dataclass
+from enum import Enum
+from typing import Dict, Optional, Any, Set
+import threading
+
+class WorkerState(Enum):
+    SUBMITTED = "submitted"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    TIMED_OUT = "timed_out"
+    CANCELLED = "cancelled"
+
+@dataclass
+class WorkerInfo:
+    node_id: str
+    future: Future
+    submitted_at: float
+    state: WorkerState = WorkerState.SUBMITTED
+    result: Optional[Any] = None
+    exception: Optional[Exception] = None
+    process_handle: Optional[subprocess.Popen] = None
+
+class AdvancedWorkerTracker:
+    def __init__(self, default_timeout: int = 900):  # 15 min default
+        self.default_timeout = default_timeout
+        self.workers: Dict[str, WorkerInfo] = {}
+        self.lock = threading.RLock()
+
+    def track_worker(self, node_id: str, future: Future, process_handle: Optional[subprocess.Popen] = None) -> WorkerInfo:
+        """Track a new worker future with process handle."""
+        with self.lock:
+            worker_info = WorkerInfo(
+                node_id=node_id,
+                future=future,
+                submitted_at=time.time(),
+                process_handle=process_handle
+            )
+            self.workers[node_id] = worker_info
+            return worker_info
+
+    def update_worker_states(self) -> None:
+        """Update states of all tracked workers with comprehensive monitoring."""
+        current_time = time.time()
+        timeout_threshold = self.default_timeout
+
+        with self.lock:
+            for node_id, worker_info in self.workers.items():
+                if worker_info.state in [WorkerState.COMPLETED, WorkerState.FAILED, WorkerState.CANCELLED]:
+                    continue
+
+                # Check if future is done
+                if worker_info.future.done():
+                    try:
+                        worker_info.result = worker_info.future.result(timeout=0.01)
+                        worker_info.state = WorkerState.COMPLETED
+                    except Exception as e:
+                        worker_info.exception = e
+                        worker_info.state = WorkerState.FAILED
+                    continue
+
+                # Check for timeout
+                elapsed = current_time - worker_info.submitted_at
+                if elapsed > timeout_threshold:
+                    # Attempt to cancel the future
+                    if worker_info.future.cancel():
+                        worker_info.state = WorkerState.CANCELLED
+                    else:
+                        worker_info.state = WorkerState.TIMED_OUT
+
+                    # If there's a process handle, attempt to terminate it
+                    if worker_info.process_handle:
+                        try:
+                            worker_info.process_handle.terminate()
+                            worker_info.process_handle.wait(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            worker_info.process_handle.kill()
+
+    def get_dead_workers(self) -> list:
+        """Get list of workers that are in failed, timed_out, or cancelled states."""
+        with self.lock:
+            dead_workers = []
+            for node_id, worker_info in self.workers.items():
+                if worker_info.state in [WorkerState.FAILED, WorkerState.TIMED_OUT, WorkerState.CANCELLED]:
+                    dead_workers.append((node_id, worker_info))
+            return dead_workers
+
+    def remove_worker(self, node_id: str) -> bool:
+        """Remove a worker from tracking."""
+        with self.lock:
+            if node_id in self.workers:
+                del self.workers[node_id]
+                return True
+            return False
+
 def _check_worker_liveness(self):
-    """Detect dead workers whose futures completed but wrote no signal."""
-    for node_id, future in list(self.active_workers.items()):
-        if future.done():
-            # Future completed but no signal was written
+    """Enhanced dead worker detection using comprehensive tracking."""
+    # Use the AdvancedWorkerTracker pattern from research
+    for node_id, worker_info in list(self.worker_tracker.workers.items()):
+        # Check if future completed without writing signal
+        if worker_info.future.done() and worker_info.state in [WorkerState.FAILED, WorkerState.COMPLETED]:
             signal_path = os.path.join(self.signal_dir, f"{node_id}.json")
             if not os.path.exists(signal_path):
-                exc = future.exception()
+                exc = worker_info.exception
                 if exc:
                     log.error("[liveness] Worker %s died with exception: %s", node_id, exc)
                     self._write_node_signal(node_id, {
@@ -546,44 +767,94 @@ def _check_worker_liveness(self):
                     })
                 else:
                     # Completed without exception but no signal — worker forgot to write
-                    elapsed = time.monotonic() - self.dispatch_times.get(node_id, 0)
+                    elapsed = time.monotonic() - worker_info.submitted_at
                     log.warning("[liveness] Worker %s completed silently after %.0fs", node_id, elapsed)
                     self._write_node_signal(node_id, {
                         "status": "error",
                         "result": "fail",
                         "reason": f"Worker completed without writing signal after {elapsed:.0f}s",
                     })
-                del self.active_workers[node_id]
 
-    # Also check for signal timeout (worker running too long)
-    timeout = int(os.environ.get("WORKER_SIGNAL_TIMEOUT", "900"))  # 15min default
-    for node_id, dispatch_time in list(self.dispatch_times.items()):
-        if node_id in self.active_workers:
-            elapsed = time.monotonic() - dispatch_time
-            if elapsed > timeout:
-                log.error("[liveness] Worker %s exceeded signal timeout (%ds)", node_id, timeout)
-                # Kill the future if possible
-                future = self.active_workers[node_id]
-                future.cancel()
-                self._write_node_signal(node_id, {
-                    "status": "error",
-                    "result": "fail",
-                    "reason": f"Worker timed out after {elapsed:.0f}s (limit: {timeout}s)",
-                })
-                del self.active_workers[node_id]
+            # Clean up from tracker
+            self.worker_tracker.remove_worker(node_id)
+
+    # Also check for signal timeout using the AdvancedWorkerTracker
+    self.worker_tracker.update_worker_states()
+
+    # Process any detected dead workers
+    dead_workers = self.worker_tracker.get_dead_workers()
+    for node_id, worker_info in dead_workers:
+        if worker_info.state in [WorkerState.TIMED_OUT, WorkerState.FAILED]:
+            elapsed = time.monotonic() - worker_info.submitted_at
+            timeout = int(os.environ.get("WORKER_SIGNAL_TIMEOUT", "900"))
+
+            error_msg = f"Worker "
+            if worker_info.state == WorkerState.TIMED_OUT:
+                error_msg += f"timed out after {elapsed:.0f}s (limit: {timeout}s)"
+            else:
+                error_msg += f"failed: {str(worker_info.exception)[:300] if worker_info.exception else 'Unknown error'}"
+
+            self._write_node_signal(node_id, {
+                "status": "error",
+                "result": "fail",
+                "reason": error_msg,
+                "worker_crash": True,
+                "state": worker_info.state.value
+            })
+
+            # Remove from tracking
+            self.worker_tracker.remove_worker(node_id)
+
+def _write_node_signal(self, node_id: str, payload: dict) -> str:
+    """Atomically write a signal file using the temp file + rename pattern from research."""
+    signal_path = os.path.join(self.signal_dir, f"{node_id}.json")
+
+    # Add metadata for ordering and debugging as per research findings
+    import datetime
+    payload["_seq"] = getattr(self, '_signal_seq', {}).get(node_id, 0) + 1
+    self._signal_seq = getattr(self, '_signal_seq', {})
+    self._signal_seq[node_id] = payload["_seq"]
+    payload["_ts"] = datetime.datetime.utcnow().isoformat() + "Z"
+    payload["_pid"] = os.getpid()
+
+    # Create temporary file with unique name
+    tmp_path = signal_path.with_suffix(f'.tmp.{os.getpid()}.{int(time.monotonic_ns())}')
+
+    try:
+        # Write to temporary file
+        with open(tmp_path, 'w') as fh:
+            json.dump(payload, fh, indent=2)
+            fh.flush()  # Flush to OS buffer
+            os.fsync(fh.fileno())  # Force OS to write to disk
+
+        # Atomically rename (POSIX atomic operation)
+        os.rename(str(tmp_path), str(signal_path))
+
+        return str(signal_path)
+
+    except Exception as e:
+        # Clean up temp file if something went wrong
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except:
+                pass  # Ignore cleanup errors
+        raise e
 ```
 
-Call `_check_worker_liveness()` in every iteration of `_main_loop()`.
+Call `_check_worker_liveness()` in every iteration of `_main_loop()` and initialize the `worker_tracker`.
 
 **Files to modify**:
-- `pipeline_runner.py`: add `_check_worker_liveness()`, add `dispatch_times` dict, integrate into `_main_loop()`
+- `pipeline_runner.py`: add `AdvancedWorkerTracker`, `_check_worker_liveness()` with comprehensive monitoring, update `_dispatch_agent_sdk()` to track workers with process handles, enhance `_write_node_signal()` with atomic operations
 
 **Acceptance Criteria**:
-- AC-1: Dead worker futures detected within one loop iteration (~2s)
+- AC-1: Dead worker detection includes process monitoring and comprehensive state tracking
 - AC-2: Failure signal written automatically when worker dies without signal
 - AC-3: Worker signal timeout configurable via `WORKER_SIGNAL_TIMEOUT` env var (default 900s)
-- AC-4: Timed-out workers have their futures cancelled
-- AC-5: Test: mock future.exception() → verify fail signal written
+- AC-4: Timed-out workers have their futures and processes cancelled properly
+- AC-5: Atomic signal file writes prevent corruption during concurrent access
+- AC-6: Test: mock future.exception() → verify fail signal written with comprehensive error details
+- AC-7: Test: simulate worker timeout → verify proper cleanup of process and tracking structures
 
 ---
 
@@ -595,29 +866,79 @@ Call `_check_worker_liveness()` in every iteration of `_main_loop()`.
 
 **Proposed**:
 
-Create `.claude/agents/AGENTS.md` as a centralized directory:
+Based on the environment-legibility-for-ai-agents.md research, create comprehensive environment legibility documentation that includes all essential files and cross-linking. Create `.claude/agents/AGENTS.md` as a centralized directory with competency matrices:
 
 ```markdown
-# Agent Directory
+# Agent Directory - Worker Menu
 
-## Quick Selection Guide
+## Specialized Workers
 
-| If your task involves... | Use Agent | Model |
-|--------------------------|-----------|-------|
-| Python backend, APIs, databases | backend-solutions-engineer | Sonnet |
-| React, TypeScript, CSS, UI | frontend-dev-expert | Sonnet |
-| System design, PRDs, SDs | solution-architect | Sonnet |
-| Writing/running tests | tdd-test-engineer | Sonnet |
-| Validating implementations | validation-test-agent | Sonnet |
+### [Frontend Dev Expert](./agents/frontend-dev-expert.md)
+- **Specialization**: Modern web technologies, UI/UX implementation, React/Vue/Angular
+- **Best for**: Frontend development, component architecture, responsive design
+- **Triggers**: "I need to create a login form", "mobile layout is broken"
+- **Competency Matrix**: CAN do: React, Next.js, Tailwind, Zustand. CANNOT do: Python, databases, backend logic.
 
-## Competency Matrix
+### [Backend Solutions Engineer](./agents/backend-solutions-engineer.md)
+- **Specialization**: Python backend, APIs, databases, PydanticAI agents
+- **Best for**: API development, database operations, server-side logic
+- **Triggers**: "Create an API endpoint", "PydanticAI agent debugging"
+- **Competency Matrix**: CAN do: Python, FastAPI, PydanticAI, SQL, MCP. CANNOT do: Frontend, CSS, React.
 
-| Agent | Can Do | Cannot Do | Escalate To |
-|-------|--------|-----------|-------------|
-| backend-solutions-engineer | Python, FastAPI, PydanticAI, SQL, MCP | Frontend, CSS, React | frontend-dev-expert |
-| frontend-dev-expert | React, Next.js, Tailwind, Zustand | Python, databases | backend-solutions-engineer |
-| tdd-test-engineer | Unit/integration/E2E tests | Implementation, design | backend/frontend agent |
-| validation-test-agent | PRD validation, acceptance testing | Implementation, design | orchestrator |
+### [TDD Test Engineer](./agents/tdd-test-engineer.md)
+- **Specialization**: Automated testing, test-driven development, CI/CD
+- **Best for**: Writing comprehensive tests, test architecture
+- **Triggers**: "Write tests for feature X", "Test coverage improvement"
+- **Competency Matrix**: CAN do: Unit/integration/E2E tests, testing frameworks. CANNOT do: Implementation, design.
+
+### [Solution Architect](./agents/solution-architect.md)
+- **Specialization**: High-level design, architecture decisions, technical planning
+- **Best for**: System design, architectural patterns, technology choices
+- **Triggers**: "Design solution for X", "Architectural review needed"
+- **Competency Matrix**: CAN do: System design, technical planning, architecture decisions. CANNOT do: Implementation, detailed coding.
+
+## Validation and Quality
+
+### [Validation Test Agent](./agents/validation-test-agent.md)
+- **Specialization**: PRD acceptance validation, technical verification
+- **Best for**: Verifying implementations meet requirements
+- **Triggers**: "Validate implementation", "Run acceptance tests", "Does it work?"
+- **Competency Matrix**: CAN do: PRD validation, acceptance testing, verification. CANNOT do: Implementation, design.
+
+## Usage Guidelines
+
+### When to Use Each Agent
+- **Investigation**: Use general agents or orchestrators for analysis
+- **Implementation**: Delegate to specialized workers based on technology domain
+- **Validation**: Always use validation-test-agent before task completion
+- **Architecture**: Engage solution architect for significant design decisions
+
+### Interaction Patterns
+- Agents are invoked with specific skills and contexts
+- Workers focus on implementation while orchestrators coordinate
+- Validation happens in layers: unit, integration, end-to-end
+
+## Architecture Documentation Components:
+- Component relationships and data flows
+- Dependency maps (both internal and external dependencies)
+- Service boundaries and integration points
+- Technology stack and framework relationships
+
+## Boundary Invariants and Linting Rules
+- **Code formatting**: Enforce consistent style for readability by AI agents
+- **Import validation**: Prevent circular dependencies and improper layering
+- **Naming conventions**: Maintain consistent terminology across the codebase
+- **Documentation requirements**: Ensure critical functions/classes have proper documentation
+- **Schema Validation**: Ensure configuration files follow predefined schemas
+
+## Cross-Link Integrity
+All relative markdown links must resolve to real files. Use relative paths consistently.
+Maintain link validity during refactoring. Include alternative pathways for critical navigation.
+
+## Context Provision
+Provide sufficient context for AI agents to understand their operating environment.
+Include architectural context in all technical decisions. Maintain living documentation.
+Use consistent terminology across all documentation.
 
 ## Handoff Protocol
 
@@ -628,7 +949,7 @@ When an agent encounters work outside its competency:
 4. Runner will dispatch appropriate agent
 ```
 
-Also create `.claude/agents/ARCHITECTURE.md` — a lightweight codebase map for workers arriving fresh:
+Create `.claude/agents/ARCHITECTURE.md` — a lightweight codebase map for workers arriving fresh:
 
 ```markdown
 # Codebase Architecture (for AI Workers)
@@ -640,19 +961,79 @@ Also create `.claude/agents/ARCHITECTURE.md` — a lightweight codebase map for 
 - `docs/prds/` — Product requirement documents
 - `docs/sds/` — Solution design documents
 - `acceptance-tests/` — Gherkin acceptance test suites
+
+## Essential Documentation Files:
+- **`CLAUDE.md`**: Contains project-specific guidelines, coding standards, architectural decisions, and development workflows that override general best practices
+- **`README.md`**: High-level overview of the project, setup instructions, and key entry points
+- **`ARCHITECTURE.md`**: System architecture diagrams, component relationships, and technical design overview
+- **`TOC.md` or `INDEX.md`**: Table of contents linking to major documentation sections and code areas
+
+## Architecture Documentation Components:
+The repository should contain architectural diagrams showing:
+- Component relationships and data flows
+- Dependency maps (both internal and external dependencies)
+- Service boundaries and integration points
+- Technology stack and framework relationships
+```
+
+Create `.claude/agents/CLAUDE.md` — project-specific guidelines for workers:
+
+```markdown
+# Project Guidelines for AI Workers
+
+## Repository Purpose
+This is a Claude Code harness setup repository that provides a complete configuration framework for multi-agent AI orchestration using Claude Code. It contains no application code—only configuration, skills, hooks, and orchestration tools.
+
+## Key Patterns
+
+### Investigation vs Implementation Boundary
+- **Orchestrators**: Use Read/Grep/Glob to investigate, analyze, plan, and create task structures
+- **Workers**: Implement features using Edit/Write
+- **Never use Edit/Write directly for implementation in orchestrator mode**
+
+### 4-Phase Orchestration Pattern
+1. **Ideation** - Brainstorm, research, parallel-solutioning
+2. **Planning** - PRD → Task Master → Beads hierarchy
+3. **Execution** - Delegate to workers, monitor progress
+4. **Validation** - 3-level testing (Unit + API + E2E)
+
+### Validation Agent Enforcement
+All task closures must go through validation-agent with --mode=implementation.
+
+## Environment Variables
+- `CLAUDE_SESSION_ID`: Unique session identifier
+- `CLAUDE_OUTPUT_STYLE`: Active output style (system3/orchestrator)
+- `CLAUDE_PROJECT_DIR`: Project root directory
+- `ANTHROPIC_API_KEY`: API authentication
+- `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`: Enable native Agent Teams (1)
+- `CLAUDE_CODE_TASK_LIST_ID`: Shared task list ID for team coordination
+
+## Critical MCP Tools Patterns
+Use ToolSearch to discover available tools before using them. MCP tools are deferred and their schemas are not in the agent's context until loaded via ToolSearch.
+
+## Validation & Quality Standards
+- Type Safety: Use comprehensive type hints and Pydantic models for all data structures
+- Error Handling: Implement proper exception handling with meaningful error messages
+- Performance: Profile and optimize critical paths, implement caching where appropriate
+- Security: Validate all inputs, sanitize outputs, implement proper authentication
+- Documentation: Write clear docstrings, maintain API documentation
 ```
 
 **Files to create/modify**:
-- `.claude/agents/AGENTS.md` (new)
-- `.claude/agents/ARCHITECTURE.md` (new)
+- `.claude/agents/AGENTS.md` (new) - comprehensive agent directory with competency matrices
+- `.claude/agents/ARCHITECTURE.md` (new) - codebase map and essential documentation list
+- `.claude/agents/CLAUDE.md` (new) - project-specific guidelines for AI workers
 - `.claude/agents/worker-tool-reference.md` (update with model selection guide)
+- Update all existing agent documentation files to cross-link with the new AGENTS.md
 
 **Acceptance Criteria**:
-- AC-1: AGENTS.md exists with quick selection guide, competency matrix, and handoff protocol
-- AC-2: ARCHITECTURE.md exists with repo map, directory purposes, and key file locations
-- AC-3: worker-tool-reference.md includes model selection guide per handler type
-- AC-4: All agent *.md files cross-linked from AGENTS.md
-- AC-5: doc-gardener lint passes on all new files
+- AC-1: AGENTS.md exists with quick selection guide, competency matrix, handoff protocol, and comprehensive documentation guidance
+- AC-2: ARCHITECTURE.md exists with repo map, essential documentation list, and architectural components
+- AC-3: CLAUDE.md exists with project-specific guidelines for AI workers
+- AC-4: worker-tool-reference.md includes model selection guide per handler type
+- AC-5: All agent *.md files cross-linked from AGENTS.md and properly cross-referenced
+- AC-6: doc-gardener lint passes on all new files with proper frontmatter and cross-links
+- AC-7: All essential documentation follows naming conventions and includes proper YAML frontmatter
 
 ---
 
