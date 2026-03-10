@@ -10,13 +10,17 @@ The current verification orchestrator is **fire-and-forget**: it dispatches one 
 
 1. **No pre-dispatch status check**: The orchestrator never checks whether the `background_tasks.status` or `cases.status` is already terminal before dispatching. If a verifier completes the unified-form (clicks the email link, fills in the form), the case may already be `completed` — but the orchestrator will still fire off another email or voice call.
 
-2. **Email sends succeed but aren't followed up**: When an email is sent (`email_sent` status), the orchestrator considers this "success" and stops. There's no mechanism to check if the recipient responded (via the unified-form link in the email) and retry if they didn't.
+2. **Email sends succeed but aren't followed up**: When an email is sent (`email_sent` status), the orchestrator considers this "success" and stops. There's no mechanism to check if the recipient responded (via the unified-form link in the email) and retry if they didn't. According to research, the system currently treats `email_sent` as a terminal success, but it's actually non-terminal - the verification is only complete when the recipient responds via the unified-form.
 
 3. **No re-entry loop**: After the orchestrator completes, nothing triggers the next attempt. The `advance_sequence()` function creates a new pending task in the DB, but:
    - The `run_deployment()` call uses the wrong deployment name (`"verification-orchestrator/default"` vs actual `"verification-orchestrator/verification-orchestrator"`)
    - The catch-up poller only picks up `call_attempt` action types, ignoring `email_attempt`
 
 4. **Scheduled times are ignored**: The catch-up poller doesn't filter `scheduled_time <= NOW()`, meaning delayed tasks would fire immediately if picked up.
+
+5. **Missing email template progression**: Research indicates that the system has three email templates (`email_first_contact`, `email_reminder_1`, `email_reminder_2`) that should be selected based on the attempt number (0 for first contact, 1 for first reminder, ≥2 for final reminder), but the template selection mechanism may not be properly utilized in the retry loop.
+
+6. **No attempt tracking per sequence step**: The system doesn't properly track email attempts per sequence step, making it difficult to know when to advance to the next step in the sequence. The attempt counter should be used for both determining when to retry the same step and for selecting the appropriate email template.
 
 ## 2. Target Architecture
 
@@ -134,12 +138,13 @@ This guard is what makes the whole system safe:
 | Component | Current Behavior | Target Behavior |
 |-----------|-----------------|-----------------|
 | **Orchestrator** | Fire-and-forget. `email_sent` = success, exit. | Loop driver. After dispatch, evaluates result → schedules next invocation if non-terminal. |
-| **Email result handling** | `email_sent` = success → orchestrator returns | `email_sent` = attempt made, non-terminal → schedule follow-up check at `delay_hours` |
+| **Email result handling** | `email_sent` = success → orchestrator returns | `email_sent` = attempt made, non-terminal → schedule follow-up check at `delay_hours` with next email template (first_contact → reminder_1 → reminder_2 based on attempt number) |
 | **Retry task creation** | Only in `process_result.py` for voice | Orchestrator creates retry tasks for ALL channels |
 | **Next Prefect run scheduling** | `advance_sequence()` tries wrong deployment name | Orchestrator schedules directly with correct deployment name |
 | **Catch-up poller** | Only `call_attempt`, no `scheduled_time` filter | All action types, respects `scheduled_time <= NOW()` |
 | **`advance_sequence()`** | Self-contained, tries `run_deployment()` | Returns info only; orchestrator handles Prefect scheduling |
 | **Case status** | Set to `completed` when email sent | Stays `in_progress` until terminal result |
+| **Email Template Selection** | Fixed template per step | Template varies based on attempt number: `email_first_contact` (attempt 0), `email_reminder_1` (attempt 1), `email_reminder_2` (attempt ≥2) |
 
 ### 2.4 Terminal vs Non-Terminal Results
 
@@ -148,11 +153,16 @@ This guard is what makes the whole system safe:
 | `verified`, `confirmed` | YES | Close case as completed |
 | `refused`, `not_employed`, `company_closed` | YES | Close case as completed (negative) |
 | `invalid_contact` | YES | Close case, flag for review |
-| `email_sent` | NO | Schedule follow-up at delay_hours |
+| `email_sent` | NO | Schedule follow-up at delay_hours with next template (first_contact → reminder_1 → reminder_2 based on attempt number) |
 | `no_answer`, `busy`, `voicemail_left` | NO | Retry same step if attempts remain |
 | `callback_requested` | NO | Retry same step at requested time |
 | `max_retries_exceeded` (all steps exhausted) | YES | Close case as max_retries_exceeded |
 | `not_implemented` (sms/whatsapp placeholder) | Treat as FAIL | Advance to next step or escalate |
+
+According to research, the email template selection logic should work as follows:
+- `attempt == 0`: Uses "email_first_contact" template - Professional first contact with verification details
+- `attempt == 1`: Uses "email_reminder_1" template - Follow-up message after initial contact
+- `attempt >= 2`: Uses "email_reminder_2" template - Final notice with deadline
 
 ### 2.5 Orchestrator Rewrite: Scheduling Chain Pattern
 
@@ -381,12 +391,20 @@ This gives us a clean lifecycle: `pending → processing → completed | failed`
 3. Remove direct Prefect scheduling from `advance_sequence()` — let the orchestrator handle it (single responsibility)
 
 ### Epic D: Email Retry Context & Template Progression
-**Files**: `prefect_flows/flows/tasks/channel_dispatch.py`
+**Files**: `prefect_flows/flows/tasks/channel_dispatch.py`, `prefect_flows/templates/work_history/`
 
+Research indicates the email system has three templates with specific subject lines and purposes:
+- `email_first_contact.txt`: "Employment Verification Request – {candidate_name}" - Professional first contact with verification details
+- `email_reminder_1.txt`: "Reminder – Employment Verification Request for {candidate_name}" - Follow-up message after initial contact
+- `email_reminder_2.txt`: "Final Follow-Up – Employment Verification for {candidate_name}" - Final notice with 48-hour deadline
+
+The template selection should be based on the attempt number from the retry task's context:
 1. Ensure retry tasks carry `context_data` with `employer.contact_email` (the email recipient)
 2. Track `attempt_number` in context_data for template selection (`email_first_contact` → `email_reminder_1` → `email_reminder_2`)
 3. Pass `attempt` from the retry task's context to `_dispatch_email_verification` so the correct template is used
-4. Email results: `email_sent` = dispatch succeeded but verification not complete; verifier needs to click link and fill unified-form
+4. Template selection logic: `attempt == 0` → `email_first_contact`, `attempt == 1` → `email_reminder_1`, `attempt >= 2` → `email_reminder_2`
+5. Email results: `email_sent` = dispatch succeeded but verification not complete; verifier needs to click link and fill unified-form
+6. Template variables provided include: `employer_name`, `candidate_name`, `contact_name`, `verifier_name`, `company_name`, `case_id`, `callback_number`, `position_title`, `employment_start`, `employment_end`
 
 ## 4. Risks and Considerations
 
@@ -398,7 +416,9 @@ This gives us a clean lifecycle: `pending → processing → completed | failed`
 
 4. **Prefect flow run accumulation**: Each retry creates a new flow run. This is by design — Prefect flow runs are lightweight. The catch-up poller's `FOR UPDATE SKIP LOCKED` prevents duplicates.
 
-5. **Email template progression**: The `attempt_number` must be tracked per-step (not globally). When sequence advances to a new step, the attempt counter resets to 0, selecting `email_first_contact` again (appropriate for a new step).
+5. **Email template progression**: The `attempt_number` must be tracked per-step (not globally). When sequence advances to a new step, the attempt counter resets to 0, selecting `email_first_contact` again (appropriate for a new step). The template progression follows the pattern: `email_first_contact` for attempt 0, `email_reminder_1` for attempt 1, and `email_reminder_2` for attempt 2 or greater.
+
+6. **Context data loading**: The system loads context data from the `background_tasks.context_data` field. Email recipient extraction follows this priority: `context.get("to_email")` → `context.get("hr_email")` → `(context.get("employer", {}) or {}).get("contact_email")`.
 
 ## 5. File Change Summary
 
