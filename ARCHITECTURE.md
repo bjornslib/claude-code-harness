@@ -38,251 +38,362 @@ Visual guide to understanding how the harness works across multiple projects.
         central harness    ──────────────────────────────────────────►
 ```
 
-## Agent Architecture (SDK Mode)
+## Agent Architecture (3-Layer Hierarchy)
 
-The harness uses a **Guardian-led hierarchy** in SDK mode. Layers 0 and 1 have
-collapsed into a single S3 Guardian role — the terminal-based session users
-interact with directly.
+The harness implements a **3-layer hierarchy** where higher levels coordinate
+and lower levels execute. This separation ensures isolation, testability, and
+clear ownership:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  S3 GUARDIAN (User-Facing Terminal Session)                     │
+│  LAYER 0: SYSTEM 3 (S3 Guardian - User's Terminal)              │
 │  ┌───────────────────────────────────────────────────────────┐  │
 │  │  • Strategic planning, OKR tracking, acceptance tests     │  │
-│  │  • Validates business outcomes (stop hook at this layer)  │  │
-│  │  • In SDK mode: spawns Runner → which spawns Orchestrator │  │
-│  │  • Can also spawn another Guardian for monitoring         │  │
+│  │  • Writes blind Gherkin tests (before implementation)     │  │
+│  │  • Creates DOT pipelines with research + codergen nodes   │  │
+│  │  • Launches pipeline_runner.py (pure Python, no LLM)      │  │
+│  │  • Post-pipeline blind validation (Phase 4 of s3-guardian)│  │
 │  │  • UUID-based completion promises (multi-session aware)   │  │
 │  │                                                            │  │
 │  │  Skills: s3-guardian/, completion-promise                 │  │
 │  └───────────────────────────────────────────────────────────┘  │
 │                              │                                   │
-│                              │ (SDK mode only)                   │
+│                              │ Launches with --dot-file          │
 │                              ▼                                   │
 ├─────────────────────────────────────────────────────────────────┤
-│  RUNNER (SDK Mode Only)                                         │
+│  LAYER 1: PIPELINE RUNNER (Pure Python State Machine)           │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │  • Manages orchestrator lifecycle and reliability         │  │
-│  │  • Spawned by Guardian; does NOT run in tmux              │  │
-│  │  • Provides fault-tolerant orchestrator execution         │  │
-│  │  • Reports back to Guardian on completion or failure      │  │
+│  │  • Zero LLM intelligence — mechanical state machine       │  │
+│  │  • Parses DOT files, tracks node states                   │  │
+│  │  • Dispatches workers via AgentSDK (not subprocess)       │  │
+│  │  • Watches signal files (atomic writes, timeout detection)│  │
+│  │  • Auto-detects dead workers (AdvancedWorkerTracker)      │  │
+│  │  • Auto-dispatches validation agents at impl_complete     │  │
+│  │  • Transitions: pending → active → impl_complete →        │  │
+│  │                validated | failed                         │  │
+│  │  • Checkpoints pipeline state mechanically                │  │
 │  │                                                            │  │
 │  │  Package: cobuilder/orchestration/pipeline_runner.py      │  │
+│  │  Cost: $0 (no LLM tokens)                                 │  │
 │  └───────────────────────────────────────────────────────────┘  │
 │                              │                                   │
-│                              │ spawns                            │
+│                              │ Dispatches via AgentSDK           │
 │                              ▼                                   │
 ├─────────────────────────────────────────────────────────────────┤
-│  ORCHESTRATOR                                                   │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │  • Feature coordination and task breakdown                │  │
-│  │  • Investigate: Read/Grep/Glob                            │  │
-│  │  • Delegate to workers via native Agent Teams             │  │
-│  │  • NEVER: Edit/Write/MultiEdit directly                   │  │
-│  │                                                            │  │
-│  │  Skills: orchestrator-multiagent/                         │  │
-│  └───────────────────────────────────────────────────────────┘  │
-│                              │                                   │
-│                              │ delegates via native teams        │
-│                              ▼                                   │
-├─────────────────────────────────────────────────────────────────┤
-│  WORKERS (Specialists)                                          │
+│  LAYER 2: WORKERS (Specialists via Native Agent Teams)          │
 │  ┌───────────────┬───────────────┬───────────────────────────┐  │
 │  │ Frontend Dev  │ Backend Eng   │ TDD Test Engineer        │  │
-│  │               │               │                          │  │
+│  │               │               │ + Validation Agent       │  │
 │  │ • React/Next  │ • Python/API  │ • Write tests first      │  │
-│  │ • Zustand     │ • PydanticAI  │ • Red-Green-Refactor     │  │
-│  │ • Tailwind    │ • Supabase    │ • Browser validation     │  │
-│  │ • Edit/Write  │ • Edit/Write  │ • API testing            │  │
+│  │ • Zustand     │ • PydanticAI  │ • Technical validation   │  │
+│  │ • Tailwind    │ • Supabase    │ • Business validation    │  │
+│  │ • Edit/Write  │ • Edit/Write  │ • Signal result files    │  │
 │  └───────────────┴───────────────┴───────────────────────────┘  │
+│                              │                                   │
+│                              │ Write signal files                │
+│                              ▼                                   │
+│                   .claude/signals/{node}.json                    │
+│                   {result: "pass"|"fail"|"requeue"}              │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Guardian → Runner Reliability Pattern
+### Design Principles
 
-In SDK mode, the Guardian does not call the Orchestrator directly. Instead it
-spawns a **Runner** subagent. This indirection dramatically increases
-reliability: if an orchestrator crashes or stalls, the Runner can detect the
-failure and restart it without the Guardian needing to intervene.
+1. **Layer 0 (System 3)**: LLM-driven strategy, business judgment, independent validation
+2. **Layer 1 (Runner)**: Deterministic automation, zero LLM tokens, mechanical state transitions
+3. **Layer 2 (Workers)**: Focused implementation, reporting via signal files, never self-grading
 
-```
-Guardian
-  │
-  ├── SDK mode ──► Runner ──► Orchestrator ──► Workers
-  │                  │
-  │                  └── On failure: restarts Orchestrator automatically
-  │
-  └── Monitor ──► Guardian (validation subagent, runs in background)
-```
+**Key principle**: The implementer (Layer 2) never validates its own work.
+- Runner (Layer 1) detects completion via signals
+- Validation agent (Layer 2 peer) provides independent technical/business gating
+- System 3 (Layer 0) runs blind Gherkin E2E tests post-pipeline
 
 ## CoBuilder Package
 
 The `cobuilder/` Python package formalises the orchestration patterns that
-were previously implicit in harness scripts:
+were previously implicit in harness scripts. It implements the **4-layer SDK
+pipeline engine** with pure Python state machine dispatch (Layer 1):
 
 ```
 cobuilder/
-├── orchestration/              ← Agent coordination layer
-│   ├── pipeline_runner.py      ← Manages full pipeline execution (Runner)
+├── orchestration/              ← Agent coordination layer (Layer 1 core)
+│   ├── pipeline_runner.py      ← State machine: pending→active→impl_complete→validated
+│   │                           ← AdvancedWorkerTracker: dead worker detection (Epic H)
+│   │                           ← AgentSDK dispatch (not subprocess)
+│   │                           ← Signal protocol: atomic writes, timeout handling
+│   │                           ← Validation agent auto-dispatch at impl_complete
 │   ├── identity_registry.py    ← Tracks agent identities across sessions
-│   ├── spawn_orchestrator.py   ← Programmatic orchestrator spawning
+│   ├── spawn_orchestrator.py   ← Programmatic worker spawning (legacy: was for tmux)
 │   ├── runner_hooks.py         ← Hook lifecycle management
 │   ├── runner_models.py        ← Data models for pipeline state
-│   ├── runner_tools.py         ← Tool wrappers for orchestrators
+│   ├── runner_tools.py         ← Tool wrappers for workers
 │   └── adapters/
 │       ├── native_teams.py     ← Native Agent Teams adapter
 │       └── stdout.py           ← Stdout capture adapter
 │
+├── engine/                     ← **NEW (Epic E7.2)**: Observable pipeline engine
+│   ├── runner.py               ← EngineRunner: event bus + middleware chains (35K lines)
+│   ├── checkpoint.py           ← Persistent state tracking (19K)
+│   ├── parser.py               ← DOT parsing with quote-aware regex (25K)
+│   ├── parser_utils.py         ← Quote tracking, escape handling
+│   ├── events/                 ← Event bus pattern (Epic 4)
+│   │   ├── emitter.py          ← Single-instance emitter per run
+│   │   ├── dispatcher.py       ← Event routing
+│   │   └── lifecycle.py        ← Session lifecycle events
+│   ├── middleware/             ← Logging, token counting, retry, audit chains
+│   │   ├── logfire.py          ← Pydantic Logfire integration
+│   │   ├── token_counter.py    ← Token usage tracking
+│   │   ├── retry.py            ← Exponential backoff retry logic
+│   │   └── audit.py            ← Audit trail logging
+│   ├── conditions/             ← Conditional gate logic
+│   │   ├── evaluator.py        ← Condition evaluation
+│   │   └── policies.py         ← Loop detection, restart handling
+│   ├── handlers/               ← Handler registry + base handler
+│   │   ├── handler_registry.py ← Registration by name
+│   │   ├── base_handler.py     ← Abstract handler interface
+│   │   ├── codergen.py         ← Implementation node handler
+│   │   ├── research.py         ← Research node handler
+│   │   ├── refine.py           ← Refinement node handler
+│   │   └── validation/         ← **NEW**: Validation rules engine
+│   │       ├── rules.py        ← Node type, edge, attribute validation (27K lines)
+│   │       ├── advanced_rules.py ← Complex rules: deadlock, reachability, liveness (16K)
+│   │       └── validator.py    ← Validation entry point (6K)
+│   └── utils/                  ← Utilities: clock, signal files, paths
+│       ├── clock.py            ← time.monotonic() for timeouts (not time.time())
+│       ├── signal_writer.py    ← Atomic signal writes (tmp→rename)
+│       └── paths.py            ← Signal directory conventions
+│
 ├── pipeline/                   ← Pipeline stage implementations
 │   ├── generate.py             ← Code generation stage
-│   ├── validate.py             ← Validation stage
+│   ├── validate.py             ← Validation stage (dual-pass: technical + business)
 │   ├── checkpoint.py           ← Save/restore pipeline state
 │   ├── dashboard.py            ← Real-time progress display
-│   ├── signal_protocol.py      ← Agent-to-agent signalling
-│   ├── transition.py           ← State machine transitions
+│   ├── signal_protocol.py      ← **Signal format spec**: {status, result, message, files_changed}
+│   ├── transition.py           ← State machine transitions (mechanical, no LLM)
 │   └── ...                     ← node_ops, edge_ops, annotate, etc.
 │
 └── repomap/                    ← Repository mapping (from zerorepo)
     └── cli/                    ← CLI commands: init, sync, status
 ```
 
-## Session Resilience System
+### Signal Protocol (Layer 1 ↔ Layer 2 Communication)
+
+**Format**:
+```json
+// Worker completion
+{"status": "success"|"failed", "files_changed": [...], "message": "..."}
+
+// Validation result (technical + business gates)
+{"result": "pass"|"fail"|"requeue", "reason": "...", "requeue_target": "node_id"}
+```
+
+**Status transitions**:
+- `success` → queued for validation agent
+- `failed` → pipeline stops, requires user intervention
+- `requeue` → retry at specified node (predecessor back to pending)
+- `pass` (validation) → `accepted`
+- `fail` (validation) → blocked, requires system3 intervention
+
+**Atomic writes**: tmp file → rename (prevents partial writes if process crashes)
+
+## Session Resilience System (Dead Worker Detection + Signal Protocol)
+
+**Epic H** (2026-03-10) introduced **AdvancedWorkerTracker** for dead worker detection:
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│  Attractor System (.claude/scripts/attractor/ + cobuilder/)      │
+│  Pipeline Runner (cobuilder/orchestration/pipeline_runner.py)    │
 │                                                                   │
-│  IdentityRegistry ─── Tracks agent identities & health          │
+│  AdvancedWorkerTracker ── Tracks futures, detects timeouts      │
 │         │                                                         │
-│  MergeQueue ──────── Serialises concurrent code changes          │
+│         ├─ Main loop: check future.done() each iteration        │
 │         │                                                         │
-│  HookManager ─────── Central hook dispatch (pre/post tool)       │
+│         └─ Timeout logic: if elapsed > WORKER_SIGNAL_TIMEOUT    │
+│            (default 900s, uses time.monotonic() not time.time()) │
+│            → future.cancel()                                     │
+│            → process_handle.terminate() → kill()                │
+│            → Auto-generate fail signal file                      │
+│                                                                   │
+│  Signal File Watchdog ──── Monitors .claude/signals/{node}.json │
 │         │                                                         │
-│  SignalProtocol ──── Agent-to-agent messaging                    │
+│         ├─ Atomic writes: tmp → rename                           │
+│         ├─ Reads signal format: {status, result, message}        │
+│         └─ Transitions node state based on signal               │
+│                                                                   │
+│  Validation Agent Dispatch ─ Auto-invokes at impl_complete      │
 │         │                                                         │
-│  GuardianAgent ───── Validation subagent (monitoring mode)       │
-│         │                                                         │
-│  RunnerAgent ─────── Executes pipeline stages (SDK mode only)    │
+│         └─ Technical + business gates run before node moves to   │
+│            validated or failed state                             │
 └──────────────────────────────────────────────────────────────────┘
 
-Cyclic Validation Pattern (Guardian monitors Runner/Orchestrator):
-────────────────────────────────────────────────────────────────────
+State Chain (Deterministic, No LLM):
+───────────────────────────────────────
 
-Guardian                 Monitor Guardian               Orchestrator
-   │                           │                              │
-   │  Launch monitor ─────────►│                              │
-   │                           │◄── Poll task state ──────────│
-   │                           │    Validate work...          │
-   │◄──── COMPLETE ────────────│                              │
-   │  Handle result            │                              │
-   │  Re-launch monitor ──────►│  (cycle repeats)             │
+pending
+    │
+    ├─ Dispatch worker (via AgentSDK)
+    ▼
+active
+    │
+    ├─ Wait for signal file OR timeout
+    ├─ If signal: read {status, message, files_changed}
+    ├─ If timeout: auto-generate fail signal
+    ▼
+impl_complete (signal received: status=success)
+    │
+    ├─ Auto-dispatch validation agent
+    │  (--mode=technical --mode=business)
+    │
+    └─ Wait for validation signal {result: "pass"|"fail"|"requeue"}
+       ├─ pass → validated
+       ├─ fail → blocked (requires system3 intervention)
+       └─ requeue → predecessor back to pending
 ```
 
-## SDK Pipeline Engine (4-Layer Chain)
+**Key improvements (E7.2 + Epic H)**:
 
-The Attractor Pipeline Engine executes DOT-based initiative pipelines through a
-4-layer chain. Each layer has a distinct responsibility:
+1. **Zero dead workers**: Timeout detection auto-kills stuck processes
+2. **Atomic signals**: Writers use tmp→rename to prevent partial writes
+3. **Clock consistency**: Uses `time.monotonic()` for all timeout calculations
+4. **Auto-validation**: Validation agents dispatched mechanically, not by LLM
+5. **Observable**: Signal files in `.claude/signals/` provide audit trail
+
+## SDK Pipeline Engine (Execution & Validation)
+
+The pipeline engine executes DOT-based initiative pipelines through a
+**2-phase validation model**: inline gating (Layer 1 runner dispatch) +
+post-pipeline blind validation (Layer 0):
+
+### Phase 1: Inline Validation (During Pipeline Execution)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  Layer 0: Claude Code CLI (S3 Guardian — user's terminal)        │
-│  ┌─────────────────────────────────────────────────────────────┐│
-│  │  • User's ccsystem3 session — the S3 Meta-Orchestrator      ││
-│  │  • Launches SDK chain via: launch_guardian.py (bootstrap)   ││
-│  │  • Post-pipeline blind validation (Phase 4 of s3-guardian)  ││
-│  │  • Scores against rubric the SDK Guardian never saw         ││
-│  └─────────────────────────────────────────────────────────────┘│
-│                              │                                   │
-│                              ▼                                   │
-│  Layer 1: guardian_agent.py (Anthropic Claude Code SDK)           │
-│  ┌─────────────────────────────────────────────────────────────┐│
-│  │  • Uses claude_code_sdk.query() — Claude as subprocess      ││
-│  │  • Reads DOT pipeline, advances bootstrap nodes             ││
-│  │  • Dispatches research nodes (tab shape) BEFORE codergen:   ││
-│  │    → Validates framework patterns via Context7/Perplexity   ││
-│  │    → Updates Solution Design with current API patterns      ││
-│  │    → Writes evidence to .claude/evidence/{node}/            ││
-│  │  • Identifies dispatchable codergen nodes (--deps-met)      ││
-│  │  • Spawns Runner agents (Layer 2) per codergen node         ││
-│  │  • VALIDATES nodes after impl_complete:                      ││
-│  │    → Technical gate (hexagon node): tests, imports, TODOs   ││
-│  │    → Business gate (hexagon node): acceptance criteria       ││
-│  │  • Transitions nodes: impl_complete → validated | failed    ││
-│  │  • Checkpoints pipeline state after each transition         ││
-│  └─────────────────────────────────────────────────────────────┘│
-│                              │                                   │
-│                              ▼                                   │
-│  Layer 2: runner_agent.py + spawn_runner.py                      │
-│  ┌─────────────────────────────────────────────────────────────┐│
-│  │  • Spawns orchestrator in tmux via spawn_orchestrator.py    ││
-│  │  • Monitors tmux output for completion/error signals        ││
-│  │  • Signals NEEDS_REVIEW to Guardian when impl_complete      ││
-│  │  • Handles orchestrator respawn on crash (max 3 retries)    ││
-│  │  • NO validation role — pure lifecycle management            ││
-│  └─────────────────────────────────────────────────────────────┘│
-│                              │                                   │
-│                              ▼                                   │
-│  Layer 3: Orchestrator + Workers (tmux + Agent Teams)            │
-│  ┌─────────────────────────────────────────────────────────────┐│
-│  │  • Orchestrator: reads SD, delegates to workers              ││
-│  │  • Workers: implement code, run tests, report completion     ││
-│  │  • Marks node as impl_complete when done                     ││
-│  │  • NO self-validation — implementer never grades own work    ││
-│  └─────────────────────────────────────────────────────────────┘│
+│  Layer 0: System 3 (S3 Guardian — User's Terminal)               │
+│  ├─ Creates DOT pipeline with research + codergen + validation  │
+│  ├─ Launches pipeline_runner.py --dot-file <path>              │
+│  └─ Waits for pipeline completion signal                        │
+│                                                                   │
+├─────────────────────────────────────────────────────────────────┤
+│  Layer 1: PIPELINE RUNNER (Pure Python State Machine)           │
+│  ├─ Parses DOT, dispatches workers via AgentSDK                │
+│  ├─ On impl_complete signal:                                    │
+│  │  ├─ Auto-dispatches validation-test-agent                   │
+│  │  │  ├─ Phase 1a: Technical validation (--mode=technical)    │
+│  │  │  │   • Unit tests, build, imports, TODOs                │
+│  │  │  │   • Returns: TECHNICAL_PASS | TECHNICAL_FAIL         │
+│  │  │  │                                                        │
+│  │  │  └─ Phase 1b: Business validation (--mode=business)     │
+│  │  │      (only if Phase 1a passes)                           │
+│  │  │      • PRD acceptance criteria matrix                    │
+│  │  │      • E2E journey tests, user flows                     │
+│  │  │      • Returns: BUSINESS_PASS | BUSINESS_FAIL           │
+│  │  │                                                            │
+│  │  └─ Validation agent writes signal: {result: "pass"|"fail"} │
+│  │                                                               │
+│  └─ Node transitions: validated | failed (or requeue)          │
+│                                                                   │
+├─────────────────────────────────────────────────────────────────┤
+│  Layer 2: WORKERS (Specialists via Native Agent Teams)          │
+│  ├─ Codergen: Implement features, write code                   │
+│  ├─ Research: Validate framework patterns pre-implementation   │
+│  ├─ Refine: Improve based on validation feedback               │
+│  └─ Validation: Independently gate work (dual-pass)            │
+│                                                                   │
+│  (Layer 2 workers never validate their own work;               │
+│   validation is a separate peer agent)                          │
 └─────────────────────────────────────────────────────────────────┘
+```
+
+### Phase 2: Post-Pipeline Blind Validation
+
+After all pipeline nodes reach terminal state (all validated/failed/accepted):
+
+```
+S3 Guardian (Layer 0)
+  │
+  ├─ Run blind Gherkin E2E tests (from acceptance-tests/PRD-XXX/)
+  │  (Guardian never saw the implementation-specific validation)
+  │
+  ├─ Score against rubric (gradient confidence: 0.0-1.0)
+  │  • Feature completeness
+  │  • Edge case handling
+  │  • User journey coherence
+  │  • Performance and reliability
+  │
+  └─ Verdict: ACCEPT | INVESTIGATE | REJECT
 ```
 
 ### Validation Architecture (Who Validates What)
 
 ```
-Layer 3 (Orchestrator/Workers)       →  Implements, marks impl_complete
-Layer 2 (Runner)                     →  Detects impl_complete, signals NEEDS_REVIEW
-Layer 1 (SDK Guardian, claude_code_sdk) →  Independent validation per node:
-                                          Tech gate → Business gate → validated/failed
-Layer 0 (S3 Guardian, Claude Code CLI)  →  Post-pipeline blind validation:
-                                          Scores against rubric the SDK Guardian never saw
+Layer 2 (Workers)                   →  Implements, never validates own work
+Layer 1 (Pipeline Runner)           →  Detects completion, auto-dispatches
+                                        validation agents
+Validation Agent (Layer 2 peer)     →  Dual-pass validation:
+                                        1. Technical (tests, build, imports)
+                                        2. Business (acceptance criteria)
+                                        → Writes signal {result, reason}
+Layer 0 (S3 Guardian)               →  Post-pipeline blind validation:
+                                        Gherkin E2E tests + gradient scoring
 ```
 
-**Key principle**: The implementer (Layer 3) never validates its own work.
-The SDK Guardian (Layer 1, `claude_code_sdk`) validates during execution.
-The S3 Guardian (Layer 0, the user's Claude Code CLI session) validates
-independently afterward using the s3-guardian skill's Phase 4 protocol.
+**Key principle**: NO worker validates its own output. Validation is always:
+1. A separate peer agent (inline phase)
+2. An independent blind auditor (post-pipeline phase)
 
 ### DOT Pipeline Node Types
 
-| Shape | Handler | Role |
-| --- | --- | --- |
-| `Mdiamond` | `start` | Pipeline entry point |
-| `tab` | `research` | Pre-implementation research gate — validates frameworks via Context7/Perplexity, updates SD |
-| `box` | `tool` | Setup/teardown commands |
-| `parallelogram` | `parallel` | Fan-out / fan-in synchronization |
-| `box` | `codergen` | Implementation node — spawns orchestrator |
-| `hexagon` | `wait.human` | Validation gate (technical or business) |
-| `diamond` | `conditional` | Pass/fail routing |
-| `Msquare` | `exit` | Pipeline finalization |
+| Shape | Handler | Role | New Attributes |
+| --- | --- | --- | --- |
+| `Mdiamond` | `start` | Pipeline entry point | - |
+| `tab` | `research` | Pre-implementation research gate — validates frameworks via Context7/Perplexity, updates SD | `downstream_node`, `solution_design`, `research_queries` |
+| `box` | `tool` | Setup/teardown commands | `command`, `retry_count` |
+| `parallelogram` | `parallel` | Fan-out / fan-in synchronization | - |
+| `box` | `codergen` | Implementation node — dispatches worker via AgentSDK | `handler="codergen"`, `worker_type`, `sd_path`, `acceptance`, `bead_id` |
+| `hexagon` | `wait.system3` | Technical + business validation gates | `handler="wait.system3"`, gates technical then business phases |
+| `hexagon` | `wait.human` | Manual approval gate (not auto-gated by runner) | `handler="wait.human"` |
+| `diamond` | `conditional` | Pass/fail routing based on signal result | `condition="pass"|"fail"`, `style=dashed` for retry edges |
+| `Msquare` | `exit` | Pipeline finalization | - |
 
-### Execution Mode: SDK vs tmux
+**Epic E7.2 Changes**:
+- `codergen` nodes now specify `worker_type` (backend-solutions-engineer, frontend-dev-expert, tdd-test-engineer)
+- `wait.system3` is the inline validation gate (auto-dispatches validation agents at impl_complete)
+- Validation agents signal result via `.claude/signals/{node}.json`
+- Validation agent NOT spawned as orchestrator; dispatched as peer worker in same team
 
-The `spawn_orchestrator.py` script supports two execution modes via `--mode`:
+### Pipeline Dispatch: Pure Python (E7.2+)
 
-| Mode | When | Worktree Behavior |
-| --- | --- | --- |
-| `tmux` (default) | Manual S3 Guardian in terminal | `ccorch --worktree <node>` — creates isolated worktree |
-| `sdk` | PydanticAI Guardian already in worktree | `ccorch` WITHOUT `--worktree` — reuses guardian's worktree |
+**Default execution model** (as of 2026-03-07):
 
-**Why this matters**: In SDK mode, the Guardian already runs in a worktree
-(created by `launch_guardian.py`). If `spawn_orchestrator.py` creates another
-nested worktree, it branches from main's HEAD — not the Guardian's branch.
-The `--mode sdk` parameter prevents this double-worktree problem.
-
-The mode propagates through the full chain:
 ```
-launch_guardian.py
-  → guardian_agent.py (system prompt includes --mode sdk)
-    → spawn_runner.py --mode sdk
-      → runner_agent.py --mode sdk
-        → spawn_orchestrator.py --mode sdk  ← skips --worktree
+System 3 (ccsystem3)
+  │
+  └─ pipeline_runner.py --dot-file <path.dot>
+     │
+     ├─ Parses DOT graph
+     ├─ Dispatches workers via AgentSDK (NOT subprocess, NOT tmux)
+     │  worker = AgentSDK.query(system_prompt=..., user_message=..., tools=[...])
+     │
+     ├─ Watches .claude/signals/{node}.json (atomic writes)
+     │
+     └─ Transitions state mechanically on signal arrival
+        (pending → active → impl_complete → validated | failed)
 ```
+
+**Legacy execution mode** (tmux, kept for compatibility):
+
+The old `spawn_orchestrator.py --mode tmux` still works for manual orchestrator
+sessions, but is no longer the default. It requires a real terminal.
+
+**Why pipeline_runner.py is better** (E7.2 benefits):
+
+| Aspect | tmux mode | pipeline_runner.py |
+| --- | --- | --- |
+| **Cost** | Implicit (orchestrator LLM) | $0 (pure Python) |
+| **Speed** | Slow startup (terminal boot) | 10x faster (no LLM init) |
+| **Reliability** | Manual restarts on crash | Auto-detects dead workers (Epic H) |
+| **Observability** | tmux capture-pane parsing | Signal files + event bus + Logfire |
+| **Validation** | Manual gate decisions | Auto-dispatch validation agents |
 
 ### deps-met Filter (Retry Edge Exclusion)
 
@@ -442,49 +553,66 @@ Notification (On notifications)
     └─→ Forward to webhook for external alerting
 ```
 
-## Workflow: New Feature (SDK Mode)
+## Workflow: New Feature (E7.2+ Pipeline Model)
 
 ```
  1. User defines feature in PRD
         ↓
- 2. Guardian receives request; writes blind acceptance tests (s3-guardian)
+ 2. System 3 writes blind Gherkin acceptance tests (s3-guardian Phase 1)
+        acceptance-tests/PRD-XXX/{feature}.feature
         ↓
- 3. Guardian parses PRD with Task Master
-        PRD ─→ tasks.json ─→ Beads issues
+ 3. System 3 creates Solution Designs per epic (s3-guardian Phase 2)
+        docs/sds/{sd-name}.md ← detailed implementation brief
         ↓
- 4. Guardian creates DOT pipeline with research + codergen nodes
-        start → research_X → impl_X → validate_X → exit
+ 4. System 3 creates DOT pipeline with all node types (s3-guardian Phase 3)
+        start → research_X → codergen_X → wait.system3 → exit
+        (research validates framework patterns before implementation)
         ↓
- 5. Research nodes execute (Haiku, ~15s each, synchronous)
-        Context7 + Perplexity → validate framework patterns → update SD
+ 5. System 3 launches pipeline_runner.py --dot-file <path> (E7.2)
+        CoBuilder: EngineRunner with event bus + middleware chains
         ↓
- 6. Guardian spawns Runner per codergen node (SDK mode)
-        CoBuilder: IdentityRegistry.register()
-        CoBuilder: PipelineRunner.start()
+ 6. Runner dispatches research nodes (Haiku, ~15s each)
+        Context7 + Perplexity → validate frameworks → update SD directly
         ↓
- 7. Runner spawns Orchestrator (with automatic restart on failure)
-        Orchestrator reads the research-corrected SD as its brief
+ 7. Runner dispatches codergen workers via AgentSDK (NOT tmux, NOT subprocess)
+        Workers receive Solution Design as part of system prompt
+        Workers implement features, write code, commit changes
         ↓
- 8. Orchestrator investigates codebase
-        Read/Grep/Glob, analyzes dependencies
+ 8. Worker signals completion (writes to .claude/signals/{node}.json)
+        {"status": "success", "files_changed": [...], "message": "..."}
         ↓
- 9. Orchestrator delegates to Workers (native Agent Teams)
-        ┌──────────────┬──────────────┬──────────────┐
-        │ Frontend     │ Backend      │ TDD Engineer │
-        │ Worker       │ Worker       │              │
-        │              │              │              │
-        │ Implements   │ Implements   │ Writes tests │
-        │ UI           │ API          │ Validates    │
-        └──────────────┴──────────────┴──────────────┘
+ 9. Runner auto-dispatches validation-test-agent at impl_complete
+        Phase 1a: Technical validation (tests, build, imports, TODOs)
+        Phase 1b: Business validation (acceptance criteria matrix, E2E)
         ↓
-10. Workers report completion; CoBuilder MergeQueue serialises changes
+10. Validation agent writes result signal
+        {"result": "pass"|"fail"|"requeue", "reason": "...", "requeue_target": "..."}
         ↓
-11. Guardian Monitor validates work (background subagent, cyclic pattern)
-        Unit tests + API tests + E2E browser tests
+11. Runner transitions node state mechanically
+        impl_complete + pass → validated
+        impl_complete + fail → blocked (requires System 3 intervention)
+        impl_complete + requeue → predecessor back to pending
         ↓
-12. Guardian validates business outcomes against acceptance tests
-        Feature complete! ✓
+12. All pipeline nodes reach terminal state (validated/failed/accepted)
+        ↓
+13. System 3 runs blind Gherkin E2E tests (Phase 4)
+        Gherkin journey tests that were written BEFORE implementation
+        Validation agent never saw these tests
+        ↓
+14. System 3 scores confidence gradient (0.0-1.0)
+        Completeness, edge cases, user flows, performance
+        ↓
+15. Verdict: ACCEPT | INVESTIGATE | REJECT
+        Feature complete (or gaps identified for fix-it nodes)
 ```
+
+**Key differences from pre-E7.2 workflows**:
+- Pure Python pipeline runner ($0 dispatch cost)
+- Dual-pass inline validation (technical + business phases)
+- Dead worker detection (Epic H: timeouts auto-kill stuck processes)
+- Signal protocol for all agent-to-agent communication
+- Solution Design wired into worker prompts (not passed as file path)
+- Post-pipeline blind validation (Gherkin tests written before implementation)
 
 ## File Structure in Projects
 
