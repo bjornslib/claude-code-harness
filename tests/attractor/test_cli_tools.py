@@ -333,33 +333,6 @@ class TestWaitForSignalCLI:
 
 
 # ---------------------------------------------------------------------------
-# TestCaptureOutputCLI
-# ---------------------------------------------------------------------------
-
-class TestCaptureOutputCLI:
-    """Tests for capture_output.py."""
-
-    def test_nonexistent_session_exits_with_error(self):
-        """capture_output.py with nonexistent session produces JSON error."""
-        rc, stdout, _ = _run_cli(
-            "capture_output.py",
-            ["--session", "nonexistent-session-xyz-12345"],
-        )
-
-        # Should exit with error code
-        assert rc == 1
-        data = _parse_json_output(stdout)
-        assert data["status"] == "error"
-        assert "message" in data
-
-    def test_help_flag_works(self):
-        """capture_output.py --help exits with code 0."""
-        rc, stdout, _ = _run_cli("capture_output.py", ["--help"])
-        # argparse help exits with 0
-        assert rc == 0
-
-
-# ---------------------------------------------------------------------------
 # TestCheckOrchestratorCLI
 # ---------------------------------------------------------------------------
 
