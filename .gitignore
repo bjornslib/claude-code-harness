@@ -80,6 +80,9 @@ settings.local.json
 # Empty test artifact
 test
 
+# PEM files (private keys, certificates, etc.)
+*.pem
+
 # Temporary files
 *.tmp
 *.temp
