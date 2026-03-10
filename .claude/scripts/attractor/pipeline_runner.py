@@ -1034,8 +1034,9 @@ class PipelineRunner:
     # Per-handler tool sets (additive on top of _BASE_TOOLS)
     _HANDLER_EXTRA_TOOLS: dict[str, list[str]] = {
         "codergen": [
-            # Implementation workers: code nav only, no research tools
+            # Implementation workers: code nav + memory (recall prior patterns, retain learnings)
             *_SERENA_TOOLS,
+            *_HINDSIGHT_TOOLS,
         ],
         "research": [
             # Research workers: docs + web research + memory + code nav (read-only)
@@ -1083,6 +1084,12 @@ class PipelineRunner:
             clean_env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
             # Add ATTRACTOR_SIGNAL_DIR as required by GAP-6.1
             clean_env["ATTRACTOR_SIGNAL_DIR"] = str(self.signal_dir)
+            # Ensure CLAUDE_PROJECT_BANK is set so workers use the shared project Hindsight bank.
+            # Derived from repo root dirname (matches ccsystem3 convention: "claude-code-<dir>").
+            if "CLAUDE_PROJECT_BANK" not in clean_env:
+                repo_root = self._get_repo_root()
+                bank_name = "claude-code-" + os.path.basename(repo_root).lower().replace("_", "-")
+                clean_env["CLAUDE_PROJECT_BANK"] = bank_name
             options = claude_code_sdk.ClaudeCodeOptions(  # type: ignore[attr-defined]
                 system_prompt=self._build_system_prompt(worker_type),
                 allowed_tools=tools,
@@ -1951,20 +1958,53 @@ class PipelineRunner:
         "codergen": (
             "## Your Role: IMPLEMENTATION Worker\n"
             "You write production-quality code. Do NOT research or investigate — only implement.\n"
-            "Read the Solution Design carefully. It contains the exact changes to make.\n"
-            "Done when: All files changed, tests pass, signal written with files_changed list."
+            "Read the Solution Design carefully. It contains the exact changes to make.\n\n"
+            "### MANDATORY EXECUTION SEQUENCE:\n\n"
+            "**STEP 1 — RECALL PRIOR WORK** (prevents re-solving known problems):\n"
+            "  ToolSearch(query=\"hindsight\")                    ← load memory tools first\n"
+            "  mcp__hindsight__recall(query=\"[module/feature being implemented]\")\n"
+            "  Use bank_id from env: Bash(command=\"echo $CLAUDE_PROJECT_BANK\")\n\n"
+            "**STEP 2 — IMPLEMENT** per the Solution Design.\n\n"
+            "**STEP 3 — RETAIN LEARNINGS** (MANDATORY before writing signal):\n"
+            "  mcp__hindsight__retain(\n"
+            "      content=\"[key patterns, gotchas, decisions made]\",\n"
+            "      context=\"implementation-notes\",\n"
+            "      bank_id=\"[value from $CLAUDE_PROJECT_BANK]\"\n"
+            "  )\n\n"
+            "**STEP 4 — WRITE SIGNAL FILE** with files_changed list.\n\n"
+            "Done when: All files changed, tests pass, signal written."
         ),
         "research": (
             "## Your Role: RESEARCH Worker\n"
             "You investigate and document findings. Do NOT modify source code.\n"
-            "Write findings to a NEW markdown file (not the SD) at the evidence directory.\n"
-            "Use WebSearch, WebFetch, and Read to gather information.\n\n"
-            "### MCP Tools: Use ToolSearch to Discover Available Tools\n"
-            "You have access to MCP tools for research — use ToolSearch to discover them:\n"
-            "- Search `ToolSearch(query=\"context7\")` to find documentation lookup tools\n"
-            "- Search `ToolSearch(query=\"perplexity\")` to find web research tools\n"
-            "- Search `ToolSearch(query=\"hindsight\")` to find memory/learning tools\n"
-            "ToolSearch loads tool schemas into your context. Once loaded, call them directly.\n\n"
+            "Write findings to a NEW markdown file at the evidence directory.\n\n"
+            "### MANDATORY EXECUTION SEQUENCE — steps 1-2 MUST complete before step 3:\n\n"
+            "**STEP 1 — LOAD MCP TOOLS** (run all three, do NOT parallelize with research work):\n"
+            "  ToolSearch(query=\"hindsight\")   ← memory tools (recall + retain)\n"
+            "  ToolSearch(query=\"perplexity\")  ← web research with citations\n"
+            "  ToolSearch(query=\"context7\")    ← official framework/library documentation\n"
+            "  Get project bank: Bash(command=\"echo $CLAUDE_PROJECT_BANK\")\n\n"
+            "**STEP 2 — RECALL PRIOR WORK** (check memory BEFORE researching):\n"
+            "  mcp__hindsight__recall(query=\"[your research topic]\", bank_id=\"[project-bank]\")\n\n"
+            "**STEP 3 — GATHER INFORMATION** (pick the right tool — do NOT use WebSearch for docs):\n"
+            "  • Official framework/library API docs (React, FastAPI, TanStack, PydanticAI, etc.):\n"
+            "      mcp__context7__resolve-library-id(libraryName=\"[name]\")  ← get library ID first\n"
+            "      mcp__context7__query-docs(libraryId=\"/...\", query=\"[question]\")\n"
+            "      Context7 ONLY works for libraries in its index — NOT for proprietary models, blog posts,\n"
+            "      or general web facts. If it returns no results, switch to Perplexity.\n"
+            "  • Web facts, model specs, recent news, blog posts:\n"
+            "      mcp__perplexity__perplexity_ask  (quick single-question lookup)\n"
+            "      mcp__perplexity__perplexity_search  (multi-source, richer results)\n"
+            "  • Codebase patterns, existing implementations → Read/Grep/Serena\n"
+            "  • General fallback (when above don't apply) → WebSearch/WebFetch\n\n"
+            "**STEP 4 — WRITE FINDINGS** to evidence markdown file.\n\n"
+            "**STEP 5 — RETAIN FINDINGS** (MANDATORY before writing signal):\n"
+            "  mcp__hindsight__retain(\n"
+            "      content=\"[key findings summary]\",\n"
+            "      context=\"research-findings\",\n"
+            "      bank_id=\"[value from $CLAUDE_PROJECT_BANK]\"\n"
+            "  )\n\n"
+            "**STEP 6 — WRITE SIGNAL FILE** with doc path.\n\n"
             "Done when: Research doc written with findings. Signal written with doc path."
         ),
         "refine": (
@@ -1972,11 +2012,27 @@ class PipelineRunner:
             "You merge research findings into the Solution Design document.\n"
             "Read predecessor signal files to find research doc paths.\n"
             "Edit the SD to incorporate findings as first-class content (not annotations).\n\n"
-            "### MCP Tools: Use ToolSearch to Discover Available Tools\n"
-            "You have access to MCP tools — use ToolSearch to discover them:\n"
-            "- Search `ToolSearch(query=\"hindsight\")` to find memory tools (reflect before editing, retain after)\n"
-            "- Search `ToolSearch(query=\"perplexity\")` if you need to reason through conflicting findings\n"
-            "ToolSearch loads tool schemas into your context. Once loaded, call them directly.\n\n"
+            "### MANDATORY EXECUTION SEQUENCE:\n\n"
+            "**STEP 1 — LOAD MCP TOOLS** (run FIRST, do NOT parallelize with editing work):\n"
+            "  ToolSearch(query=\"hindsight\")   ← memory tools\n"
+            "  ToolSearch(query=\"perplexity\")  ← needed if you must reason through conflicting findings\n"
+            "  Get project bank: Bash(command=\"echo $CLAUDE_PROJECT_BANK\")\n\n"
+            "**STEP 2 — RECALL CONTEXT** (understand prior decisions before editing):\n"
+            "  mcp__hindsight__reflect(query=\"[SD topic and research areas]\", budget=\"mid\",\n"
+            "                          bank_id=\"[project-bank]\")\n\n"
+            "**STEP 3 — READ & REFINE**:\n"
+            "  - Read predecessor signal files to locate research docs\n"
+            "  - Read the research docs\n"
+            "  - Edit the SD: integrate findings as permanent content\n"
+            "  - Remove all 'TODO: update after research' annotations\n"
+            "  - If findings conflict, use mcp__perplexity__perplexity_reason to resolve\n\n"
+            "**STEP 4 — RETAIN SYNTHESIS** (MANDATORY before writing signal):\n"
+            "  mcp__hindsight__retain(\n"
+            "      content=\"[what was integrated, key decisions, resolved conflicts]\",\n"
+            "      context=\"sd-refinements\",\n"
+            "      bank_id=\"[value from $CLAUDE_PROJECT_BANK]\"\n"
+            "  )\n\n"
+            "**STEP 5 — WRITE SIGNAL FILE**.\n\n"
             "Done when: SD updated with research findings integrated. No annotations remain."
         ),
         "acceptance-test-writer": (

@@ -2,7 +2,7 @@
 title: "Worker Tool Reference"
 status: active
 type: reference
-last_verified: 2026-03-10
+last_verified: 2026-03-11
 grade: authoritative
 ---
 
@@ -16,19 +16,96 @@ You also have access to **LSP** (built-in type/definition tool) and **Serena MCP
 
 MCP tools (context7, Hindsight, Perplexity, Serena) are **deferred** — their schemas are NOT in your context until you discover them via ToolSearch.
 
-**Use ToolSearch to find what's available, then call the tools it returns.**
-
 ```
-# Discover tools by keyword — finds and loads matching tools:
-ToolSearch(query="context7")      # → documentation lookup tools
-ToolSearch(query="hindsight")     # → memory/learning tools
+# Discover tools by keyword — finds and loads matching tool schemas:
+ToolSearch(query="hindsight")     # → memory/learning tools (recall, retain, reflect)
+ToolSearch(query="context7")      # → library/framework documentation tools
 ToolSearch(query="perplexity")    # → web research tools
 ToolSearch(query="serena")        # → code navigation tools
 ```
 
-Once ToolSearch returns a tool, it's loaded and callable for the rest of your session. You don't need to ToolSearch again for the same tool.
+Once ToolSearch returns a tool, it's loaded and callable for the rest of your session.
+
+**CRITICAL — ToolSearch must complete BEFORE you use the discovered tool:**
+```
+# CORRECT: Load first, then use
+ToolSearch(query="perplexity")                      ← wait for this to complete
+mcp__perplexity__perplexity_ask(messages=[...])     ← THEN call it
+
+# WRONG: Running ToolSearch in parallel with the tool it's supposed to load
+ToolSearch(query="perplexity") + WebSearch(...)     ← ToolSearch result ignored
+```
+Do NOT run ToolSearch in parallel with research tasks. Complete ToolSearch first.
 
 **Note**: ToolSearch itself is always pre-loaded — you never need to discover it.
+
+## Hindsight Memory — Recall and Retain Across Sessions
+
+Hindsight is long-term memory shared across all sessions in a project. Use it to avoid re-solving known problems and to leave knowledge for future workers.
+
+**Load first** (Hindsight is deferred):
+```
+ToolSearch(query="hindsight")
+```
+
+**Get the project bank ID** (shared across all workers in this project):
+```
+Bash(command="echo $CLAUDE_PROJECT_BANK", description="Get project memory bank")
+# Returns something like: claude-code-my-project
+```
+
+**Recall prior work BEFORE starting a task** (check if someone already solved this):
+```
+mcp__hindsight__recall(query="[topic you are about to work on]", bank_id="claude-code-my-project")
+```
+
+**Reflect for deeper synthesis** (refine workers: understand prior decisions):
+```
+mcp__hindsight__reflect(query="[SD topic + research context]", budget="mid", bank_id="...")
+```
+
+**Retain findings AFTER completing work** (leave knowledge for future workers):
+```
+mcp__hindsight__retain(
+    content="[key findings, patterns, gotchas, decisions]",
+    context="research-findings",   # or "implementation-notes" or "sd-refinements"
+    bank_id="claude-code-my-project"
+)
+```
+
+**When to use each operation:**
+| Operation | When | Budget |
+|-----------|------|--------|
+| `recall` | Start of task — check for prior work | N/A |
+| `reflect` | Before major decisions — synthesize prior knowledge | `"mid"` |
+| `retain` | After completing work — store findings for future sessions | N/A |
+
+## Context7 — Official Framework/Library Documentation
+
+Context7 fetches official documentation for open-source libraries. It is fast and accurate for API questions.
+
+**When to use Context7:**
+- ✅ React hooks, component API, v18+ changes
+- ✅ FastAPI routing, dependency injection, request handling
+- ✅ TanStack Query v5 `isPending` vs `isLoading`
+- ✅ PydanticAI agent configuration, tools, models
+- ✅ Any popular open-source library/framework
+
+**When NOT to use Context7:**
+- ❌ Proprietary model specs (Groq gpt-oss-20b, OpenAI internals) → use Perplexity
+- ❌ General web facts, blog posts, release news → use Perplexity
+- ❌ Internal codebase patterns → use Read/Grep/Serena
+- ❌ If it returns no results — switch to Perplexity immediately
+
+**How to use:**
+```
+# Step 1: Resolve the library ID (required before querying)
+mcp__context7__resolve-library-id(libraryName="react")
+# Returns something like: /facebook/react
+
+# Step 2: Query the docs
+mcp__context7__query-docs(libraryId="/facebook/react", query="useCallback dependencies optimization")
+```
 
 **Code Navigation Decision Guide** (use the right tool, not the first one):
 
