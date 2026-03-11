@@ -26,8 +26,8 @@ digraph PRD_DASHBOARD_AUDIT_001_fixit {
         label="Fix 4 Frontend Defects"
         handler="codergen"
         shape=box
-        fillcolor="lightyellow"
-        status="pending"
+        fillcolor="lightsalmon"
+        status="validated"
         worker_type="frontend-dev-expert"
         sd_path="docs/sds/dashboard-audit-trail/SD-DASHBOARD-AUDIT-FRONTEND-001.md"
         prd_ref="PRD-DASHBOARD-AUDIT-001"
@@ -46,7 +46,7 @@ digraph PRD_DASHBOARD_AUDIT_001_fixit {
         shape=hexagon
         gate_type="e2e"
         fillcolor="lightyellow"
-        status="pending"
+        status="validated"
         prd_ref="PRD-DASHBOARD-AUDIT-001"
         epic_id="FIXIT-FRONTEND"
         style="filled"
@@ -59,7 +59,7 @@ digraph PRD_DASHBOARD_AUDIT_001_fixit {
         gate="technical"
         mode="technical"
         fillcolor="lightyellow"
-        status="pending"
+        status="validated"
         prd_ref="PRD-DASHBOARD-AUDIT-001"
         epic_id="FIXIT-FRONTEND"
         style="filled"
@@ -73,8 +73,8 @@ digraph PRD_DASHBOARD_AUDIT_001_fixit {
         label="Fix StatusLabelMapper enum mapping"
         handler="codergen"
         shape=box
-        fillcolor="lightyellow"
-        status="pending"
+        fillcolor="lightblue"
+        status="validated"
         worker_type="backend-solutions-engineer"
         sd_path="docs/sds/dashboard-audit-trail/SD-DASHBOARD-AUDIT-001.md"
         prd_ref="PRD-DASHBOARD-AUDIT-001"
@@ -93,7 +93,7 @@ digraph PRD_DASHBOARD_AUDIT_001_fixit {
         shape=hexagon
         gate_type="e2e"
         fillcolor="lightyellow"
-        status="pending"
+        status="validated"
         prd_ref="PRD-DASHBOARD-AUDIT-001"
         epic_id="FIXIT-BACKEND"
         style="filled"
@@ -106,7 +106,7 @@ digraph PRD_DASHBOARD_AUDIT_001_fixit {
         gate="technical"
         mode="technical"
         fillcolor="lightyellow"
-        status="pending"
+        status="validated"
         prd_ref="PRD-DASHBOARD-AUDIT-001"
         epic_id="FIXIT-BACKEND"
         style="filled"
@@ -121,7 +121,7 @@ digraph PRD_DASHBOARD_AUDIT_001_fixit {
         handler="codergen"
         shape=box
         fillcolor="lightyellow"
-        status="pending"
+        status="validated"
         worker_type="backend-solutions-engineer"
         sd_path="docs/sds/dashboard-audit-trail/SD-DASHBOARD-AUDIT-001.md"
         prd_ref="PRD-DASHBOARD-AUDIT-001"
@@ -140,7 +140,7 @@ digraph PRD_DASHBOARD_AUDIT_001_fixit {
         shape=hexagon
         gate_type="e2e"
         fillcolor="lightyellow"
-        status="pending"
+        status="validated"
         prd_ref="PRD-DASHBOARD-AUDIT-001"
         epic_id="FIXIT-DOCKER"
         style="filled"
@@ -153,7 +153,7 @@ digraph PRD_DASHBOARD_AUDIT_001_fixit {
         gate="technical"
         mode="technical"
         fillcolor="lightyellow"
-        status="pending"
+        status="validated"
         prd_ref="PRD-DASHBOARD-AUDIT-001"
         epic_id="FIXIT-DOCKER"
         style="filled"
@@ -167,8 +167,8 @@ digraph PRD_DASHBOARD_AUDIT_001_fixit {
         label="Fix-It Complete"
         handler="exit"
         shape=Msquare
-        fillcolor="lightyellow"
-        status="pending"
+        fillcolor="lightgreen"
+        status="validated"
         style="filled"
     ];
 
