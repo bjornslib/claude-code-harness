@@ -1103,6 +1103,7 @@ class PipelineRunner:
             options = claude_code_sdk.ClaudeCodeOptions(  # type: ignore[attr-defined]
                 system_prompt=self._build_system_prompt(worker_type),
                 allowed_tools=tools,
+                disallowed_tools=["TodoWrite"],  # legacy tool — use TaskCreate/TaskUpdate instead
                 permission_mode="bypassPermissions",
                 model=worker_model,
                 cwd=self._get_target_dir(),
@@ -1996,6 +1997,7 @@ class PipelineRunner:
             "  Use bank_id from env: Bash(command=\"echo $CLAUDE_PROJECT_BANK\")\n\n"
             "**STEP 2 — IMPLEMENT** per the Solution Design.\n\n"
             "**STEP 3 — RETAIN LEARNINGS** (MANDATORY before writing signal):\n"
+            "  IMPORTANT: Use mcp__hindsight__retain (NOT mcp__serena__write_memory).\n"
             "  mcp__hindsight__retain(\n"
             "      content=\"[key patterns, gotchas, decisions made]\",\n"
             "      context=\"implementation-notes\",\n"
