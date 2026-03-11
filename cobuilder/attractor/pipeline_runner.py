@@ -355,25 +355,14 @@ class PipelineRunner:
         log.info("Pipeline loaded: %s  nodes=%d", self.pipeline_id, len(pipeline_data.get("nodes", [])))
 
     def _load_attractor_env(self) -> None:
-        """Source .claude/attractor/.env if it exists. Sets ANTHROPIC_MODEL etc.
+        """Source cobuilder/attractor/.env if it exists. Sets ANTHROPIC_MODEL etc.
 
-        Path resolution strategy:
-        1. Try relative to the DOT file (DOT files normally live in
-           .claude/attractor/pipelines/, so ``../..env`` reaches
-           .claude/attractor/.env).
-        2. Fall back to project root / .claude/attractor/.env, derived from
-           this file's location (cobuilder/attractor/ -> repo root).
-
-        Values from the file ALWAYS override existing env vars so that
-        updating .env takes effect on relaunch without restarting the shell.
+        The .env file lives alongside pipeline_runner.py at
+        cobuilder/attractor/.env. Values ALWAYS override existing env vars
+        so that editing .env takes effect on relaunch.
         """
-        # Strategy 1: DOT file anchor (most reliable when DOT is in the normal location)
-        dot_dir = os.path.dirname(os.path.abspath(self.dot_file))
-        env_path = os.path.normpath(os.path.join(dot_dir, "..", ".env"))
-        if not os.path.isfile(env_path):
-            # Strategy 2: project root anchor (cobuilder/attractor/ -> repo root)
-            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            env_path = os.path.join(project_root, ".claude", "attractor", ".env")
+        # .env is co-located with this module
+        env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
         if not os.path.isfile(env_path):
             return
         with open(env_path) as fh:

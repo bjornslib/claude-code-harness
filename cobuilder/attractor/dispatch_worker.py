@@ -69,22 +69,20 @@ _ATTRACTOR_ENV_KEYS = frozenset({"ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "ANT
 # ---------------------------------------------------------------------------
 # Module-level path constants (resolved once at import time)
 # ---------------------------------------------------------------------------
-# This file lives at cobuilder/attractor/dispatch_worker.py.
-# The repo root is two levels up: cobuilder/attractor/ -> cobuilder/ -> repo root.
+# .env lives alongside this file at cobuilder/attractor/.env
 _this_dir = Path(__file__).resolve().parent  # cobuilder/attractor/
-_project_root = _this_dir.parent.parent       # repo root
 
 
 def _find_attractor_env() -> Path:
-    """Return the canonical path to .claude/attractor/.env from the project root."""
-    return _project_root / ".claude" / "attractor" / ".env"
+    """Return the path to cobuilder/attractor/.env (next to this file)."""
+    return _this_dir / ".env"
 
 
 def load_attractor_env() -> dict[str, str]:
-    """Load Anthropic credentials from ``.claude/attractor/.env``.
+    """Load Anthropic credentials from ``cobuilder/attractor/.env``.
 
-    Walks up from this script's location to find the ``.claude/attractor/.env``
-    file and parses lines in the forms::
+    Reads the ``.env`` file co-located with this module and parses
+    lines in the forms::
 
         export KEY=VALUE
         KEY=VALUE

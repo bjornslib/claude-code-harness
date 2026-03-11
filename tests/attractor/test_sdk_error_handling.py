@@ -489,17 +489,15 @@ class TestSignalFileExistsPreservesSuccess:
 
 
 class TestLoadAttractorEnvPath:
-    """dispatch_worker.load_attractor_env() must find .claude/attractor/.env
-    relative to the project root, not the old .claude/scripts/attractor/ path."""
+    """dispatch_worker.load_attractor_env() must find cobuilder/attractor/.env
+    co-located with the module."""
 
     def test_load_attractor_env_finds_dotenv(self, tmp_path):
-        """load_attractor_env() reads from <project_root>/.claude/attractor/.env."""
+        """load_attractor_env() reads from the directory next to the module."""
         from cobuilder.attractor import dispatch_worker as dw_mod
 
-        # Create a fake project layout: tmp_path plays the role of _project_root.
-        dot_env_dir = tmp_path / ".claude" / "attractor"
-        dot_env_dir.mkdir(parents=True)
-        dot_env = dot_env_dir / ".env"
+        # Create a fake .env in a temp dir
+        dot_env = tmp_path / ".env"
         dot_env.write_text(
             "ANTHROPIC_API_KEY=test-key-from-dotenv\n"
             "ANTHROPIC_MODEL=qwen-test-model\n"
@@ -508,12 +506,12 @@ class TestLoadAttractorEnvPath:
             encoding="utf-8",
         )
 
-        original_project_root = dw_mod._project_root
+        original_this_dir = dw_mod._this_dir
         try:
-            dw_mod._project_root = tmp_path
+            dw_mod._this_dir = tmp_path
             result = dw_mod.load_attractor_env()
         finally:
-            dw_mod._project_root = original_project_root
+            dw_mod._this_dir = original_this_dir
 
         assert result.get("ANTHROPIC_API_KEY") == "test-key-from-dotenv"
         assert result.get("ANTHROPIC_MODEL") == "qwen-test-model"
@@ -523,12 +521,12 @@ class TestLoadAttractorEnvPath:
         """When .env is absent, load_attractor_env() returns {} without error."""
         from cobuilder.attractor import dispatch_worker as dw_mod
 
-        original_project_root = dw_mod._project_root
+        original_this_dir = dw_mod._this_dir
         try:
-            dw_mod._project_root = tmp_path  # no .claude/attractor/.env here
+            dw_mod._this_dir = tmp_path  # no .env here
             result = dw_mod.load_attractor_env()
         finally:
-            dw_mod._project_root = original_project_root
+            dw_mod._this_dir = original_this_dir
 
         assert result == {}
 
@@ -545,27 +543,21 @@ class TestPipelineRunnerEnvOverride:
         """If ANTHROPIC_MODEL is already set in os.environ, .env must override it."""
         from cobuilder.attractor.pipeline_runner import PipelineRunner
 
-        # Build a minimal runner with a fake dot_file path inside tmp_path.
-        # We place the .env alongside the pipeline dir structure:
-        #   tmp_path/
-        #     pipelines/   <- dot_file lives here
-        #     .env         <- _load_attractor_env should find via dotdir/../.env
-        pipelines_dir = tmp_path / "pipelines"
-        pipelines_dir.mkdir()
-        dot_file = pipelines_dir / "test.dot"
-        dot_file.write_text("digraph {}", encoding="utf-8")
-
+        # Create .env in tmp_path (simulating the co-located .env)
         env_file = tmp_path / ".env"
         env_file.write_text("ANTHROPIC_MODEL=overridden-model\n", encoding="utf-8")
 
         runner = PipelineRunner.__new__(PipelineRunner)
-        runner.dot_file = str(dot_file)
-        runner.signal_dir = str(tmp_path / "signals")
 
         old_val = os.environ.get("ANTHROPIC_MODEL")
         os.environ["ANTHROPIC_MODEL"] = "original-model"
         try:
-            runner._load_attractor_env()
+            # Mock __file__ resolution so _load_attractor_env finds our temp .env
+            with patch(
+                "cobuilder.attractor.pipeline_runner.os.path.abspath",
+                return_value=str(tmp_path / "pipeline_runner.py"),
+            ):
+                runner._load_attractor_env()
             assert os.environ.get("ANTHROPIC_MODEL") == "overridden-model", (
                 "_load_attractor_env must override existing env vars; "
                 f"got {os.environ.get('ANTHROPIC_MODEL')!r}"
