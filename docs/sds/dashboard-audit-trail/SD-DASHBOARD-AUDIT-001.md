@@ -8,8 +8,22 @@ last_verified: 2026-03-11T00:00:00.000Z
 # SD-DASHBOARD-AUDIT-001: Dashboard Audit Trail & Stable References
 
 **PRD**: PRD-DASHBOARD-AUDIT-001
-**Version**: 0.6.0 (PRD Design Challenge resolved: use case_id directly, no case_reference column)
 **Date**: 2026-03-11
+**Validated by**: 2026-03-11 - `research_backend_sd.md`, `research_perstep.md`, `research_gaps.md`
+
+---
+
+## Validated Constraints & Breaking Changes
+
+This section front-loads critical constraints discovered during validation research. All sections referencing these patterns must comply.
+
+| Constraint | Impact | Status |
+|------------|--------|--------|
+| `case_reference` column does NOT exist | No `cases.case_reference` column exists; use `cases.id` directly | **Active** |
+| Timeline requires per-step `background_tasks` rows | Timeline display requires one row per sequence step (SD-SEQ-PERSTEP-TASKS-001) | **Prerequisite** |
+| Frontend incorrectly uses `task_id` (UUID) | Must use `case_id` (INTEGER PK) for case navigation | **Bug Fix** |
+| `cases.id` (INTEGER) is stable identity | All internal references use integer case ID | **Active** |
+| `background_tasks.task_id` (UUID) is per-attempt | Task UUID changes on each retry attempt | **Active** |
 
 ---
 
@@ -614,15 +628,15 @@ Row click navigates to `/checks-dashboard/cases/{case_id}`.
 
 | File | Action | Epic | Notes |
 | --- | --- | --- | --- |
-| `database/migrations/052_add_task_chain_columns.sql` | CREATE (PRIORITY) | A | **PREREQUISITE**: Add `previous_task_id`, `next_task_id` columns for per-step task chaining |
+| `database/migrations/052_add_task_chain_columns.sql` | CREATE | A | **PREREQUISITE**: Add `previous_task_id`, `next_task_id` columns for per-step task chaining (SD-SEQ-PERSTEP-TASKS-001) |
 | `database/migrations/0XZ_add_latest_status.sql` | CREATE | A | Add `latest_employment_status` to cases |
-| `utils/background_task_helpers.py` | MODIFY | A | Add `create_step_task()` for per-step task creation (SD-SEQ-PERSTEP-TASKS-001) |
-| `prefect_flows/flows/verification_orchestrator.py` | MODIFY | A | Update step loop to call `create_step_task()` before each step |
+| `utils/background_task_helpers.py` | MODIFY | A | **PREREQUISITE**: Add `create_step_task()` for per-step task creation (SD-SEQ-PERSTEP-TASKS-001) |
+| `prefect_flows/flows/verification_orchestrator.py` | MODIFY | A | **PREREQUISITE**: Update step loop to call `create_step_task()` before each step |
 | `api/routers/work_history.py` | MODIFY | A | New `/cases/{case_id}` endpoint with timeline |
 | `utils/status_labels.py` | CREATE | C | StatusLabelMapper for canonical label mapping |
 | `scripts/export_status_labels.py` | CREATE | C | CI generator for frontend TypeScript constants |
 
-**PREREQUISITE**: The per-step task creation changes (SD-SEQ-PERSTEP-TASKS-001) must be completed BEFORE deploying this SD's timeline endpoint. Without per-step `background_tasks` rows, the timeline will only show step 1 data.
+**PREREQUISITE**: The per-step task creation changes (SD-SEQ-PERSTEP-TASKS-001) must be completed BEFORE deploying this SD's timeline endpoint. Without per-step `background_tasks` rows, the timeline will only show step 1 data. Research validated: `create_step_task()` function pattern confirmed in `utils/background_task_helpers.py:162-280` (`create_retry_task` pattern is reusable).
 
 ### Frontend (agencheck-support-frontend)
 
@@ -649,5 +663,109 @@ Row click navigates to `/checks-dashboard/cases/{case_id}`.
 | Frontend uses `task_id` (UUID) incorrectly | Changed API client to use `case_id` (integer) |
 | Timeline requires per-step `background_tasks` rows | Added prerequisite section referencing SD-SEQ-PERSTEP-TASKS-001 |
 | No PG sequence needed | Removed all sequence-related code from this SD |
+
+---
+
+## 7b. New Prerequisite: Per-Step Task Creation (SD-SEQ-PERSTEP-TASKS-001)
+
+**CRITICAL**: This SD cannot be deployed without first implementing **per-step task creation** (SD-SEQ-PERSTEP-TASKS-001). The timeline display REQUIRES a `background_tasks` row for each sequence step, but the current Prefect orchestrator only creates tasks on retry or completion — not when moving to a new step.
+
+### Current Problem (Verified by research_perstep.md)
+
+The Prefect `verification_orchestrator_flow` iterates steps in-memory via `asyncio.sleep(delay_hours)` and only writes `background_tasks` rows when:
+1. A call result is retryable (`process_result.py:235`)
+2. All steps are exhausted (`followup_scheduler.py:81`)
+
+**Result**: Only step 1 has a visible `background_tasks` row. Steps 2+ are invisible because they reuse step 1's `task_id`.
+
+### Required Prerequisites (Before Deploying Timeline)
+
+| File | Change | Priority | Status |
+| --- | --- | --- | --- |
+| `database/migrations/052_add_task_chain_columns.sql` | Add `previous_task_id`, `next_task_id` columns | P0 | Not created in SD-SEQ-PERSTEP-TASKS-001 |
+| `utils/background_task_helpers.py` | Add `create_step_task()` function | P0 | Requires per-step task creation |
+| `prefect_flows/flows/verification_orchestrator.py` | Update step loop to create per-step tasks | P0 | Requires per-step task creation |
+
+### Implementation Pattern (from research_perstep.md)
+
+```python
+async def create_step_task(
+    case_id: int,
+    customer_id: int,
+    step: dict,
+    sequence_id: int,
+    sequence_version: int,
+    check_type_config_id: int,
+    previous_task_id: int | None,
+    db_pool,
+) -> int:
+    """Create a background_tasks row for a step that is about to begin.
+
+    Called BEFORE dispatching the step's channel (voice/email/SMS).
+    The returned task_id MUST be used for all dispatches in this step.
+    """
+    # Map channel_type to action_type
+    channel_to_action = {
+        'voice': 'call_attempt',
+        'email': 'email_attempt',
+        'sms': 'sms_attempt',
+        'whatsapp': 'whatsapp_attempt',
+    }
+    action_type = channel_to_action.get(step['channel_type'], 'call_attempt')
+
+    async with db_pool.acquire() as conn:
+        async with conn.transaction():
+            # INSERT the new step task
+            new_task_id = await conn.fetchval("""
+                INSERT INTO background_tasks (
+                    case_id, customer_id, action_type, status,
+                    current_sequence_step, sequence_id, sequence_version,
+                    check_type_config_id, previous_task_id,
+                    retry_count, max_retries, context_data,
+                    created_at, attempt_timestamp
+                ) VALUES ($1, $2, $3, 'in_progress', $4, $5, $6, $7, $8,
+                          0, $9, $10::jsonb, NOW(), NOW())
+                RETURNING id
+            """, case_id, customer_id, action_type, step['step_order'],
+                sequence_id, sequence_version, check_type_config_id,
+                previous_task_id, step['max_attempts'],
+                json.dumps({"step_name": step['step_name'], "channel_type": step['channel_type']}))
+
+            # Chain: update previous task's next_task_id
+            if previous_task_id is not None:
+                await conn.execute("""
+                    UPDATE background_tasks SET next_task_id = $1 WHERE id = $2
+                """, new_task_id, previous_task_id)
+
+    return new_task_id
+```
+
+### Timeline Data Flow (After Per-Step Tasks)
+
+```
+Step 1: dispatch_voice(task_id=101) → completed
+    ↓
+asyncio.sleep(delay)
+    ↓
+Guard: case resolved? → NO
+    ↓
+create_step_task(step=2) → task_id=103 (NEW ROW!)
+    ↓
+Step 2: dispatch_email(task_id=103) ← CORRECT task_id!
+
+Timeline query now returns:
+- task_id=101, step=1, action=call_attempt, status=completed
+- task_id=103, step=2, action=email_attempt, status=in_progress (VISIBLE!)
+```
+
+### Acceptance Criteria (Before Timeline Deployment)
+
+| Criteria | Status |
+| --- | --- |
+| Migration `052_add_task_chain_columns.sql` applied | PENDING |
+| `create_step_task()` function exists | PENDING |
+| Orchestrator uses per-step task creation | PENDING |
+| `background_tasks` query returns one row per step | PENDING |
+| Email verification links use correct task_id | PENDING |
 
 ---
