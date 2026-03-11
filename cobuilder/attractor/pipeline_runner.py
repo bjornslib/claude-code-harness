@@ -1124,13 +1124,15 @@ class PipelineRunner:
                         result_text = str(msg.result)[:500]
             except Exception as stream_exc:  # noqa: BLE001
                 # SDK may raise on unknown message types (e.g. rate_limit_event)
-                # If we got messages + result before the error, treat as success
+                # Only treat as success if result_text was captured (worker completed
+                # its task and the error occurred at the tail end of the stream).
+                # Protocol handshake messages alone do NOT indicate completion.
                 err_msg = str(stream_exc)
                 if result_text:
                     log.warning("[sdk] Stream error after result: %s", err_msg)
                 elif messages:
-                    log.warning("[sdk] Stream error after %d msgs: %s", len(messages), err_msg)
-                    return {"status": "success", "message": f"SDK completed with stream error ({len(messages)} events): {err_msg[:200]}"}
+                    log.warning("[sdk] Stream error after %d msgs (no result): %s", len(messages), err_msg)
+                    return {"status": "failed", "message": f"SDK stream error before completion ({len(messages)} events): {err_msg[:200]}"}
                 else:
                     raise  # No messages at all — propagate the error
 
@@ -1152,6 +1154,23 @@ class PipelineRunner:
             result = {"status": "failed", "message": str(exc)}
         finally:
             loop.close()
+
+        # Fix 1: Signal file as ground truth for worker completion.
+        # Workers are expected to write {signal_dir}/{node_id}.json on completion.
+        # If the SDK reports success but no signal file exists, the worker was
+        # interrupted before finishing (e.g. rate limit, OOM, premature exit).
+        if result.get("status") == "success":
+            signal_path = os.path.join(self.signal_dir, f"{node_id}.json")
+            if not os.path.exists(signal_path):
+                log.error(
+                    "[sdk] Worker %s reported success but no signal file at %s — "
+                    "likely interrupted (rate limit, OOM, etc.)",
+                    node_id, signal_path,
+                )
+                result = {
+                    "status": "failed",
+                    "message": "Worker exited without writing signal file — likely interrupted (rate limit, OOM, etc.)",
+                }
 
         elapsed = time.time() - t0
         log.info("[sdk] Worker %s finished in %.1fs  status=%s  msgs=%s",
@@ -1444,8 +1463,9 @@ class PipelineRunner:
                         result_text = str(msg.result).lower()
                         if "fail" in result_text:
                             return {"result": "fail", "reason": str(msg.result)[:300]}
-            except Exception:  # noqa: BLE001
-                pass  # Treat stream errors as auto-pass (validation is best-effort)
+            except Exception as val_exc:  # noqa: BLE001
+                log.error("[validation] Stream error for %s: %s", node_id, val_exc)
+                return {"result": "fail", "reason": f"Validation stream error: {str(val_exc)[:200]}"}
             return {"result": "pass", "reason": f"validation completed ({len(messages)} events)"}
 
         try:
