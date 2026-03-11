@@ -57,6 +57,12 @@ from cobuilder.attractor.transition import apply_transition, VALID_TRANSITIONS  
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ---------------------------------------------------------------------------
+# Rate limit retry configuration
+# ---------------------------------------------------------------------------
+_RATE_LIMIT_MAX_RETRIES = 3
+_RATE_LIMIT_BACKOFF_SECONDS = 65  # DashScope/Alibaba rate limits reset every ~60s
+
+# ---------------------------------------------------------------------------
 # Watchdog import (optional — falls back to polling if not installed)
 # ---------------------------------------------------------------------------
 
@@ -349,9 +355,25 @@ class PipelineRunner:
         log.info("Pipeline loaded: %s  nodes=%d", self.pipeline_id, len(pipeline_data.get("nodes", [])))
 
     def _load_attractor_env(self) -> None:
-        """Source .claude/attractor/.env if it exists. Sets ANTHROPIC_MODEL etc."""
-        env_path = os.path.join(_THIS_DIR, "..", "..", "attractor", ".env")
-        env_path = os.path.normpath(env_path)
+        """Source .claude/attractor/.env if it exists. Sets ANTHROPIC_MODEL etc.
+
+        Path resolution strategy:
+        1. Try relative to the DOT file (DOT files normally live in
+           .claude/attractor/pipelines/, so ``../..env`` reaches
+           .claude/attractor/.env).
+        2. Fall back to project root / .claude/attractor/.env, derived from
+           this file's location (cobuilder/attractor/ -> repo root).
+
+        Values from the file ALWAYS override existing env vars so that
+        updating .env takes effect on relaunch without restarting the shell.
+        """
+        # Strategy 1: DOT file anchor (most reliable when DOT is in the normal location)
+        dot_dir = os.path.dirname(os.path.abspath(self.dot_file))
+        env_path = os.path.normpath(os.path.join(dot_dir, "..", ".env"))
+        if not os.path.isfile(env_path):
+            # Strategy 2: project root anchor (cobuilder/attractor/ -> repo root)
+            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            env_path = os.path.join(project_root, ".claude", "attractor", ".env")
         if not os.path.isfile(env_path):
             return
         with open(env_path) as fh:
@@ -366,7 +388,7 @@ class PipelineRunner:
                     key, _, value = line.partition("=")
                     key = key.strip()
                     value = value.strip().strip('"').strip("'")
-                    if key and key not in os.environ:
+                    if key:
                         os.environ[key] = value
                         log.debug("[env] Set %s from attractor .env", key)
 
@@ -970,7 +992,43 @@ class PipelineRunner:
                 self._wake_event.set()
                 return
 
-            self._dispatch_via_sdk(node_id, worker_type, prompt, handler)
+            # Rate limit retry loop — backs off and retries on 429 / rate_limit_event.
+            for _attempt in range(1, _RATE_LIMIT_MAX_RETRIES + 1):
+                self._dispatch_via_sdk(node_id, worker_type, prompt, handler)
+                # _dispatch_via_sdk writes the signal itself; read it back to
+                # detect a rate-limit failure before deciding to retry.
+                signal_path = os.path.join(self.signal_dir, f"{node_id}.json")
+                _result: dict = {}
+                if os.path.isfile(signal_path):
+                    try:
+                        with open(signal_path) as _sf:
+                            _result = json.load(_sf)
+                    except Exception:  # noqa: BLE001
+                        pass
+                _msg = _result.get("message", "").lower()
+                _is_rate_limit = (
+                    _result.get("status") == "failed"
+                    and ("rate_limit" in _msg or "rate limit" in _msg or "429" in _msg)
+                )
+                if _is_rate_limit and _attempt < _RATE_LIMIT_MAX_RETRIES:
+                    log.warning(
+                        "[sdk] Rate limited on %s (attempt %d/%d), backing off %ds",
+                        node_id, _attempt, _RATE_LIMIT_MAX_RETRIES,
+                        _RATE_LIMIT_BACKOFF_SECONDS,
+                    )
+                    # Remove stale signal so the next attempt writes a fresh one.
+                    try:
+                        os.remove(signal_path)
+                    except OSError:
+                        pass
+                    time.sleep(_RATE_LIMIT_BACKOFF_SECONDS)
+                    continue
+                if _is_rate_limit:
+                    log.error(
+                        "[sdk] Rate limited on %s after %d attempts, giving up",
+                        node_id, _RATE_LIMIT_MAX_RETRIES,
+                    )
+                break  # Success or non-rate-limit failure — do not retry.
         except Exception as exc:  # noqa: BLE001
             log.error("[sdk] SDK dispatch failed for %s: %s", node_id, exc)
             self._write_node_signal(node_id, {

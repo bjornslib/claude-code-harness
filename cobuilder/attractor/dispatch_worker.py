@@ -66,6 +66,20 @@ def create_signal_evidence(node_id: str, status: str, sd_content: str = "", sd_p
 _ATTRACTOR_ENV_KEYS = frozenset({"ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "ANTHROPIC_MODEL"})
 
 
+# ---------------------------------------------------------------------------
+# Module-level path constants (resolved once at import time)
+# ---------------------------------------------------------------------------
+# This file lives at cobuilder/attractor/dispatch_worker.py.
+# The repo root is two levels up: cobuilder/attractor/ -> cobuilder/ -> repo root.
+_this_dir = Path(__file__).resolve().parent  # cobuilder/attractor/
+_project_root = _this_dir.parent.parent       # repo root
+
+
+def _find_attractor_env() -> Path:
+    """Return the canonical path to .claude/attractor/.env from the project root."""
+    return _project_root / ".claude" / "attractor" / ".env"
+
+
 def load_attractor_env() -> dict[str, str]:
     """Load Anthropic credentials from ``.claude/attractor/.env``.
 
@@ -85,14 +99,9 @@ def load_attractor_env() -> dict[str, str]:
         Dict of allowed credential keys → values.  Returns ``{}`` if the
         file is missing or any parse error occurs.
     """
-    # Resolve .claude/attractor/.env relative to this script's parent tree.
-    # This script lives at .claude/scripts/attractor/dispatch_worker.py, so:
-    #   script_dir           = .claude/scripts/attractor/
-    #   script_dir.parent    = .claude/scripts/
-    #   script_dir.parent.parent = .claude/
-    # Therefore the .env path is script_dir.parent.parent / "attractor" / ".env"
-    script_dir = Path(__file__).resolve().parent
-    env_path = script_dir.parent.parent / "attractor" / ".env"
+    # This file lives at cobuilder/attractor/dispatch_worker.py.
+    # The .env is at <project_root>/.claude/attractor/.env.
+    env_path = _find_attractor_env()
 
     if not env_path.exists():
         logger.debug("load_attractor_env: %s not found, skipping", env_path)

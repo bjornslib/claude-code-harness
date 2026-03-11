@@ -481,3 +481,232 @@ class TestSignalFileExistsPreservesSuccess:
 
         assert captured["payload"]["status"] == "failed"
         assert "signal file" in captured["payload"]["message"].lower()
+
+
+# ---------------------------------------------------------------------------
+# TestLoadAttractorEnvPath
+# ---------------------------------------------------------------------------
+
+
+class TestLoadAttractorEnvPath:
+    """dispatch_worker.load_attractor_env() must find .claude/attractor/.env
+    relative to the project root, not the old .claude/scripts/attractor/ path."""
+
+    def test_load_attractor_env_finds_dotenv(self, tmp_path):
+        """load_attractor_env() reads from <project_root>/.claude/attractor/.env."""
+        from cobuilder.attractor import dispatch_worker as dw_mod
+
+        # Create a fake project layout: tmp_path plays the role of _project_root.
+        dot_env_dir = tmp_path / ".claude" / "attractor"
+        dot_env_dir.mkdir(parents=True)
+        dot_env = dot_env_dir / ".env"
+        dot_env.write_text(
+            "ANTHROPIC_API_KEY=test-key-from-dotenv\n"
+            "ANTHROPIC_MODEL=qwen-test-model\n"
+            "# comment line\n"
+            "UNRELATED_KEY=should-be-ignored\n",
+            encoding="utf-8",
+        )
+
+        original_project_root = dw_mod._project_root
+        try:
+            dw_mod._project_root = tmp_path
+            result = dw_mod.load_attractor_env()
+        finally:
+            dw_mod._project_root = original_project_root
+
+        assert result.get("ANTHROPIC_API_KEY") == "test-key-from-dotenv"
+        assert result.get("ANTHROPIC_MODEL") == "qwen-test-model"
+        assert "UNRELATED_KEY" not in result, "Non-allowlisted keys must not be returned"
+
+    def test_load_attractor_env_returns_empty_if_missing(self, tmp_path):
+        """When .env is absent, load_attractor_env() returns {} without error."""
+        from cobuilder.attractor import dispatch_worker as dw_mod
+
+        original_project_root = dw_mod._project_root
+        try:
+            dw_mod._project_root = tmp_path  # no .claude/attractor/.env here
+            result = dw_mod.load_attractor_env()
+        finally:
+            dw_mod._project_root = original_project_root
+
+        assert result == {}
+
+
+# ---------------------------------------------------------------------------
+# TestPipelineRunnerEnvOverride
+# ---------------------------------------------------------------------------
+
+
+class TestPipelineRunnerEnvOverride:
+    """_load_attractor_env must OVERRIDE existing env vars, not skip them."""
+
+    def test_pipeline_runner_env_override(self, tmp_path):
+        """If ANTHROPIC_MODEL is already set in os.environ, .env must override it."""
+        from cobuilder.attractor.pipeline_runner import PipelineRunner
+
+        # Build a minimal runner with a fake dot_file path inside tmp_path.
+        # We place the .env alongside the pipeline dir structure:
+        #   tmp_path/
+        #     pipelines/   <- dot_file lives here
+        #     .env         <- _load_attractor_env should find via dotdir/../.env
+        pipelines_dir = tmp_path / "pipelines"
+        pipelines_dir.mkdir()
+        dot_file = pipelines_dir / "test.dot"
+        dot_file.write_text("digraph {}", encoding="utf-8")
+
+        env_file = tmp_path / ".env"
+        env_file.write_text("ANTHROPIC_MODEL=overridden-model\n", encoding="utf-8")
+
+        runner = PipelineRunner.__new__(PipelineRunner)
+        runner.dot_file = str(dot_file)
+        runner.signal_dir = str(tmp_path / "signals")
+
+        old_val = os.environ.get("ANTHROPIC_MODEL")
+        os.environ["ANTHROPIC_MODEL"] = "original-model"
+        try:
+            runner._load_attractor_env()
+            assert os.environ.get("ANTHROPIC_MODEL") == "overridden-model", (
+                "_load_attractor_env must override existing env vars; "
+                f"got {os.environ.get('ANTHROPIC_MODEL')!r}"
+            )
+        finally:
+            if old_val is None:
+                os.environ.pop("ANTHROPIC_MODEL", None)
+            else:
+                os.environ["ANTHROPIC_MODEL"] = old_val
+
+
+# ---------------------------------------------------------------------------
+# TestRateLimitRetry
+# ---------------------------------------------------------------------------
+
+
+def _make_runner_for_retry(signal_dir: str) -> object:
+    """Minimal PipelineRunner suitable for retry tests."""
+    from cobuilder.attractor.pipeline_runner import PipelineRunner
+
+    runner = PipelineRunner.__new__(PipelineRunner)
+    runner.signal_dir = signal_dir
+    runner.dot_path = "/tmp/test_pipeline.dot"
+    runner.dot_file = "/tmp/test_pipeline.dot"
+    runner.dot_dir = "/tmp"
+    runner.pipeline_id = "test_pipeline"
+    runner.active_workers = {}
+    runner._wake_event = threading.Event()
+    runner.retry_counts = {}
+    runner.requeue_guidance = {}
+    runner.orphan_resume_counts = {}
+    runner._signal_seq = {}
+    runner._graph_attrs = {}
+    return runner
+
+
+class TestRateLimitRetry:
+    """Rate limit retry wraps _dispatch_via_sdk with backoff and caps attempts."""
+
+    def test_rate_limit_retry_succeeds_on_second_attempt(self, tmp_path):
+        """When the first dispatch fails with rate_limit, a second attempt succeeds."""
+        from cobuilder.attractor import pipeline_runner as pr_mod
+
+        signal_dir = str(tmp_path / "signals")
+        os.makedirs(signal_dir, exist_ok=True)
+        runner = _make_runner_for_retry(signal_dir)
+
+        call_count = {"n": 0}
+
+        def _fake_dispatch_via_sdk(node_id, worker_type, prompt, handler="codergen"):
+            call_count["n"] += 1
+            signal_path = os.path.join(signal_dir, f"{node_id}.json")
+            if call_count["n"] == 1:
+                # First attempt: write a rate_limit failure signal
+                with open(signal_path, "w") as fh:
+                    json.dump({"status": "failed", "message": "rate_limit_event: 429"}, fh)
+            else:
+                # Second attempt: write success signal
+                with open(signal_path, "w") as fh:
+                    json.dump({"status": "success", "message": "done"}, fh)
+
+        runner._dispatch_via_sdk = _fake_dispatch_via_sdk
+        runner._get_target_dir = lambda: "/tmp"
+        runner._build_system_prompt = lambda wt: "sys"
+        runner._get_allowed_tools = lambda h: ["Read"]
+
+        written_signals = []
+
+        def _fake_write_node_signal(node_id, payload):
+            written_signals.append(payload)
+
+        runner._write_node_signal = _fake_write_node_signal
+
+        original_backoff = pr_mod._RATE_LIMIT_BACKOFF_SECONDS
+        try:
+            pr_mod._RATE_LIMIT_BACKOFF_SECONDS = 0  # no actual sleeping in tests
+            pr_mod._SDK_AVAILABLE = True
+
+            # Call _dispatch_agent_sdk directly (the public method with the retry loop)
+            runner._dispatch_agent_sdk(
+                node_id="impl_auth",
+                worker_type="backend-solutions-engineer",
+                prompt="do work",
+            )
+        finally:
+            pr_mod._RATE_LIMIT_BACKOFF_SECONDS = original_backoff
+
+        assert call_count["n"] == 2, f"Expected 2 dispatch attempts, got {call_count['n']}"
+        # The final signal in the signal file should be success
+        final_signal_path = os.path.join(signal_dir, "impl_auth.json")
+        with open(final_signal_path) as fh:
+            final = json.load(fh)
+        assert final["status"] == "success"
+
+    def test_rate_limit_retry_gives_up_after_max(self, tmp_path):
+        """When every attempt returns rate_limit, retry stops after MAX_RETRIES."""
+        from cobuilder.attractor import pipeline_runner as pr_mod
+
+        signal_dir = str(tmp_path / "signals")
+        os.makedirs(signal_dir, exist_ok=True)
+        runner = _make_runner_for_retry(signal_dir)
+
+        call_count = {"n": 0}
+
+        def _fake_dispatch_via_sdk(node_id, worker_type, prompt, handler="codergen"):
+            call_count["n"] += 1
+            signal_path = os.path.join(signal_dir, f"{node_id}.json")
+            with open(signal_path, "w") as fh:
+                json.dump(
+                    {"status": "failed", "message": "rate_limit_event: quota exceeded"},
+                    fh,
+                )
+
+        runner._dispatch_via_sdk = _fake_dispatch_via_sdk
+        runner._get_target_dir = lambda: "/tmp"
+        runner._build_system_prompt = lambda wt: "sys"
+        runner._get_allowed_tools = lambda h: ["Read"]
+
+        written_signals = []
+
+        def _fake_write_node_signal(node_id, payload):
+            written_signals.append(payload)
+
+        runner._write_node_signal = _fake_write_node_signal
+
+        original_backoff = pr_mod._RATE_LIMIT_BACKOFF_SECONDS
+        original_max = pr_mod._RATE_LIMIT_MAX_RETRIES
+        try:
+            pr_mod._RATE_LIMIT_BACKOFF_SECONDS = 0
+            pr_mod._RATE_LIMIT_MAX_RETRIES = 3
+            pr_mod._SDK_AVAILABLE = True
+
+            runner._dispatch_agent_sdk(
+                node_id="impl_auth",
+                worker_type="backend-solutions-engineer",
+                prompt="do work",
+            )
+        finally:
+            pr_mod._RATE_LIMIT_BACKOFF_SECONDS = original_backoff
+            pr_mod._RATE_LIMIT_MAX_RETRIES = original_max
+
+        assert call_count["n"] == 3, (
+            f"Expected exactly MAX_RETRIES=3 attempts, got {call_count['n']}"
+        )
