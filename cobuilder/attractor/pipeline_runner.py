@@ -59,8 +59,19 @@ _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 # ---------------------------------------------------------------------------
 # Rate limit retry configuration
 # ---------------------------------------------------------------------------
-_RATE_LIMIT_MAX_RETRIES = 3
-_RATE_LIMIT_BACKOFF_SECONDS = 65  # DashScope/Alibaba rate limits reset every ~60s
+# Defaults — overridable via env vars (read lazily after .env is loaded)
+_RATE_LIMIT_MAX_RETRIES_DEFAULT = 3
+_RATE_LIMIT_BACKOFF_SECONDS_DEFAULT = 65  # DashScope resets ~60s
+
+
+def _get_rate_limit_retries() -> int:
+    """Get max retries. Set ATTRACTOR_RATE_LIMIT_RETRIES=1 to disable retry."""
+    return int(os.environ.get("ATTRACTOR_RATE_LIMIT_RETRIES", str(_RATE_LIMIT_MAX_RETRIES_DEFAULT)))
+
+
+def _get_rate_limit_backoff() -> int:
+    """Get backoff seconds. Set ATTRACTOR_RATE_LIMIT_BACKOFF=0 to skip sleep."""
+    return int(os.environ.get("ATTRACTOR_RATE_LIMIT_BACKOFF", str(_RATE_LIMIT_BACKOFF_SECONDS_DEFAULT)))
 
 # ---------------------------------------------------------------------------
 # Watchdog import (optional — falls back to polling if not installed)
@@ -982,7 +993,11 @@ class PipelineRunner:
                 return
 
             # Rate limit retry loop — backs off and retries on 429 / rate_limit_event.
-            for _attempt in range(1, _RATE_LIMIT_MAX_RETRIES + 1):
+            # Configure via env: ATTRACTOR_RATE_LIMIT_RETRIES (default 3, set 1 to disable)
+            #                    ATTRACTOR_RATE_LIMIT_BACKOFF (default 65s, set 0 to skip sleep)
+            _max_retries = _get_rate_limit_retries()
+            _backoff = _get_rate_limit_backoff()
+            for _attempt in range(1, _max_retries + 1):
                 self._dispatch_via_sdk(node_id, worker_type, prompt, handler)
                 # _dispatch_via_sdk writes the signal itself; read it back to
                 # detect a rate-limit failure before deciding to retry.
@@ -999,23 +1014,33 @@ class PipelineRunner:
                     _result.get("status") == "failed"
                     and ("rate_limit" in _msg or "rate limit" in _msg or "429" in _msg)
                 )
-                if _is_rate_limit and _attempt < _RATE_LIMIT_MAX_RETRIES:
+                if _is_rate_limit and _attempt < _max_retries:
+                    # Guard: if the signal watcher already advanced this node
+                    # (e.g. worker actually succeeded but SDK stream errored),
+                    # don't retry — we'd be spawning a ghost worker.
+                    _current = self._get_node_status(node_id)
+                    if _current != "active":
+                        log.info(
+                            "[sdk] Node %s already transitioned to %s, skipping retry",
+                            node_id, _current,
+                        )
+                        break
                     log.warning(
                         "[sdk] Rate limited on %s (attempt %d/%d), backing off %ds",
-                        node_id, _attempt, _RATE_LIMIT_MAX_RETRIES,
-                        _RATE_LIMIT_BACKOFF_SECONDS,
+                        node_id, _attempt, _max_retries, _backoff,
                     )
                     # Remove stale signal so the next attempt writes a fresh one.
                     try:
                         os.remove(signal_path)
                     except OSError:
                         pass
-                    time.sleep(_RATE_LIMIT_BACKOFF_SECONDS)
+                    if _backoff > 0:
+                        time.sleep(_backoff)
                     continue
                 if _is_rate_limit:
                     log.error(
                         "[sdk] Rate limited on %s after %d attempts, giving up",
-                        node_id, _RATE_LIMIT_MAX_RETRIES,
+                        node_id, _max_retries,
                     )
                 break  # Success or non-rate-limit failure — do not retry.
         except Exception as exc:  # noqa: BLE001

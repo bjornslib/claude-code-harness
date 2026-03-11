@@ -623,6 +623,7 @@ class TestRateLimitRetry:
         runner._get_target_dir = lambda: "/tmp"
         runner._build_system_prompt = lambda wt: "sys"
         runner._get_allowed_tools = lambda h: ["Read"]
+        runner._get_node_status = lambda nid: "active"  # Node stays active during retry
 
         written_signals = []
 
@@ -631,9 +632,11 @@ class TestRateLimitRetry:
 
         runner._write_node_signal = _fake_write_node_signal
 
-        original_backoff = pr_mod._RATE_LIMIT_BACKOFF_SECONDS
+        old_retries = os.environ.get("ATTRACTOR_RATE_LIMIT_RETRIES")
+        old_backoff = os.environ.get("ATTRACTOR_RATE_LIMIT_BACKOFF")
         try:
-            pr_mod._RATE_LIMIT_BACKOFF_SECONDS = 0  # no actual sleeping in tests
+            os.environ["ATTRACTOR_RATE_LIMIT_RETRIES"] = "3"
+            os.environ["ATTRACTOR_RATE_LIMIT_BACKOFF"] = "0"  # no sleeping in tests
             pr_mod._SDK_AVAILABLE = True
 
             # Call _dispatch_agent_sdk directly (the public method with the retry loop)
@@ -643,7 +646,14 @@ class TestRateLimitRetry:
                 prompt="do work",
             )
         finally:
-            pr_mod._RATE_LIMIT_BACKOFF_SECONDS = original_backoff
+            if old_retries is None:
+                os.environ.pop("ATTRACTOR_RATE_LIMIT_RETRIES", None)
+            else:
+                os.environ["ATTRACTOR_RATE_LIMIT_RETRIES"] = old_retries
+            if old_backoff is None:
+                os.environ.pop("ATTRACTOR_RATE_LIMIT_BACKOFF", None)
+            else:
+                os.environ["ATTRACTOR_RATE_LIMIT_BACKOFF"] = old_backoff
 
         assert call_count["n"] == 2, f"Expected 2 dispatch attempts, got {call_count['n']}"
         # The final signal in the signal file should be success
@@ -675,6 +685,7 @@ class TestRateLimitRetry:
         runner._get_target_dir = lambda: "/tmp"
         runner._build_system_prompt = lambda wt: "sys"
         runner._get_allowed_tools = lambda h: ["Read"]
+        runner._get_node_status = lambda nid: "active"  # Node stays active during retry
 
         written_signals = []
 
@@ -683,11 +694,11 @@ class TestRateLimitRetry:
 
         runner._write_node_signal = _fake_write_node_signal
 
-        original_backoff = pr_mod._RATE_LIMIT_BACKOFF_SECONDS
-        original_max = pr_mod._RATE_LIMIT_MAX_RETRIES
+        old_retries = os.environ.get("ATTRACTOR_RATE_LIMIT_RETRIES")
+        old_backoff = os.environ.get("ATTRACTOR_RATE_LIMIT_BACKOFF")
         try:
-            pr_mod._RATE_LIMIT_BACKOFF_SECONDS = 0
-            pr_mod._RATE_LIMIT_MAX_RETRIES = 3
+            os.environ["ATTRACTOR_RATE_LIMIT_RETRIES"] = "3"
+            os.environ["ATTRACTOR_RATE_LIMIT_BACKOFF"] = "0"
             pr_mod._SDK_AVAILABLE = True
 
             runner._dispatch_agent_sdk(
@@ -696,8 +707,14 @@ class TestRateLimitRetry:
                 prompt="do work",
             )
         finally:
-            pr_mod._RATE_LIMIT_BACKOFF_SECONDS = original_backoff
-            pr_mod._RATE_LIMIT_MAX_RETRIES = original_max
+            if old_retries is None:
+                os.environ.pop("ATTRACTOR_RATE_LIMIT_RETRIES", None)
+            else:
+                os.environ["ATTRACTOR_RATE_LIMIT_RETRIES"] = old_retries
+            if old_backoff is None:
+                os.environ.pop("ATTRACTOR_RATE_LIMIT_BACKOFF", None)
+            else:
+                os.environ["ATTRACTOR_RATE_LIMIT_BACKOFF"] = old_backoff
 
         assert call_count["n"] == 3, (
             f"Expected exactly MAX_RETRIES=3 attempts, got {call_count['n']}"
