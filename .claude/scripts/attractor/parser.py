@@ -214,22 +214,29 @@ def _parse_nodes_and_edges(content: str, result: dict) -> None:
     # Strategy: find all "word [...]" node definitions and "word -> word [...]" edges
     # using a character-by-character approach to properly handle brackets.
 
-    # First, collect all edge definitions (src -> dst [...])
-    # Edge pattern can span multiple lines due to attributes
-    edge_pattern = re.compile(
-        r"(\w+)\s*->\s*(\w+)\s*(?:\[([^\]]*)\])?\s*;?",
+    # Collect edge definitions, supporting chains: a -> b -> c [attrs];
+    # A chain "a -> b -> c" produces edges (a,b) and (b,c).
+    # Attributes on a chain apply to the LAST edge only (standard DOT behavior).
+    chain_pattern = re.compile(
+        r"((?:\w+\s*->\s*)+\w+)\s*(?:\[([^\]]*)\])?\s*;?",
         re.DOTALL,
     )
     edge_pairs: set[tuple[str, str, str]] = set()
-    for m in edge_pattern.finditer(body):
-        src = m.group(1)
-        dst = m.group(2)
-        attr_text = m.group(3) or ""
+    for m in chain_pattern.finditer(body):
+        chain_text = m.group(1)
+        attr_text = m.group(2) or ""
+        # Split chain into individual node IDs
+        node_ids = [n.strip() for n in chain_text.split("->")]
+        node_ids = [n for n in node_ids if n]  # drop empty strings
         attrs = _parse_attr_block(attr_text) if attr_text.strip() else {}
-        edge_key = (src, dst, json.dumps(attrs, sort_keys=True))
-        if edge_key not in edge_pairs:
-            edge_pairs.add(edge_key)
-            result["edges"].append({"src": src, "dst": dst, "attrs": attrs})
+        for i in range(len(node_ids) - 1):
+            src, dst = node_ids[i], node_ids[i + 1]
+            # Only apply attrs to the last edge in the chain
+            edge_attrs = attrs if i == len(node_ids) - 2 else {}
+            edge_key = (src, dst, json.dumps(edge_attrs, sort_keys=True))
+            if edge_key not in edge_pairs:
+                edge_pairs.add(edge_key)
+                result["edges"].append({"src": src, "dst": dst, "attrs": edge_attrs})
 
     # Find all node definitions: identifier [ ... ]
     # But NOT graph/node/edge/subgraph/digraph defaults

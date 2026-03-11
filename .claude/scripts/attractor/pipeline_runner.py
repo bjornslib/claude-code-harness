@@ -378,6 +378,19 @@ class PipelineRunner:
             return target
         return self.dot_dir
 
+    def _resolve_project_bank(self) -> str:
+        """Resolve the Hindsight project bank name.
+
+        Priority: (1) DOT graph attr "project_bank", (2) derive from target_dir,
+        (3) derive from repo root.
+        """
+        explicit_bank = self._graph_attrs.get("project_bank", "").strip().strip('"').strip("'")
+        if explicit_bank:
+            return explicit_bank
+        target = self._graph_attrs.get("target_dir", "").strip().strip('"').strip("'")
+        base = os.path.basename(target) if target and os.path.isdir(target) else os.path.basename(self._get_repo_root())
+        return "claude-code-" + base.lower().replace("_", "-")
+
     def _get_repo_root(self) -> str:
         """Find the git repo root by walking up from dot_dir. Falls back to target_dir."""
         d = os.path.abspath(self.dot_dir)
@@ -1085,19 +1098,8 @@ class PipelineRunner:
             clean_env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
             # Add ATTRACTOR_SIGNAL_DIR as required by GAP-6.1
             clean_env["ATTRACTOR_SIGNAL_DIR"] = str(self.signal_dir)
-            # Ensure CLAUDE_PROJECT_BANK is set so workers use the correct Hindsight bank.
-            # Priority: (1) DOT graph attr "project_bank", (2) derive from target_dir,
-            # (3) derive from repo root.  This matters when the pipeline runner lives in
-            # the harness repo but workers target a different project.
-            if "CLAUDE_PROJECT_BANK" not in clean_env:
-                explicit_bank = self._graph_attrs.get("project_bank", "").strip().strip('"').strip("'")
-                if explicit_bank:
-                    clean_env["CLAUDE_PROJECT_BANK"] = explicit_bank
-                else:
-                    # Prefer target_dir (the project being worked on) over repo root (the harness)
-                    target = self._graph_attrs.get("target_dir", "").strip().strip('"').strip("'")
-                    base = os.path.basename(target) if target and os.path.isdir(target) else os.path.basename(self._get_repo_root())
-                    clean_env["CLAUDE_PROJECT_BANK"] = "claude-code-" + base.lower().replace("_", "-")
+            # Set CLAUDE_PROJECT_BANK — resolved bank ALWAYS overrides inherited env
+            clean_env["CLAUDE_PROJECT_BANK"] = self._resolve_project_bank()
             options = claude_code_sdk.ClaudeCodeOptions(  # type: ignore[attr-defined]
                 system_prompt=self._build_system_prompt(worker_type),
                 allowed_tools=tools,
@@ -1419,15 +1421,8 @@ class PipelineRunner:
 
         async def _run() -> dict:
             clean_env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
-            # Ensure CLAUDE_PROJECT_BANK for validation workers (same logic as implementation workers)
-            if "CLAUDE_PROJECT_BANK" not in clean_env:
-                explicit_bank = self._graph_attrs.get("project_bank", "").strip().strip('"').strip("'")
-                if explicit_bank:
-                    clean_env["CLAUDE_PROJECT_BANK"] = explicit_bank
-                else:
-                    target = self._graph_attrs.get("target_dir", "").strip().strip('"').strip("'")
-                    base = os.path.basename(target) if target and os.path.isdir(target) else os.path.basename(self._get_repo_root())
-                    clean_env["CLAUDE_PROJECT_BANK"] = "claude-code-" + base.lower().replace("_", "-")
+            # Set CLAUDE_PROJECT_BANK — resolved bank ALWAYS overrides inherited env
+            clean_env["CLAUDE_PROJECT_BANK"] = self._resolve_project_bank()
             # Base tools for validation; extend for browser-required PRDs
             validation_tools = ["Read", "Write", "Bash", "Grep", "Glob"]
             if getattr(self, "_validation_method_hint", None) == "browser-required":
@@ -2123,6 +2118,18 @@ class PipelineRunner:
         # Add handler-specific preamble (role, MCP tool loading instructions)
         preamble = self.HANDLER_PREAMBLES.get(handler, "")
         if preamble:
+            # Resolve the project bank so workers don't need to echo $CLAUDE_PROJECT_BANK
+            resolved_bank = self._resolve_project_bank()
+            preamble = preamble.replace(
+                'Bash(command="echo $CLAUDE_PROJECT_BANK")',
+                f'← project bank is: {resolved_bank}'
+            ).replace(
+                '[value from $CLAUDE_PROJECT_BANK]',
+                resolved_bank
+            ).replace(
+                '[project-bank]',
+                resolved_bank
+            )
             lines.append(f"\n{preamble}")
         if prd_ref:
             lines.append(f"PRD: {prd_ref}")
