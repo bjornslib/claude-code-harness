@@ -309,9 +309,6 @@ class PipelineRunner:
     def __init__(self, dot_path: str, resume: bool = False) -> None:
         self.dot_path = os.path.abspath(dot_path)
         self.dot_dir = os.path.dirname(self.dot_path)
-        # Each pipeline gets its own signal subdirectory to avoid cross-pipeline clutter
-        self.pipeline_id = os.path.splitext(os.path.basename(self.dot_path))[0]
-        self.signal_dir = os.path.join(self.dot_dir, "signals", self.pipeline_id)
         self.resume = resume
 
         # Load attractor .env if present (sets ANTHROPIC_MODEL, ANTHROPIC_BASE_URL, etc.)
@@ -342,12 +339,36 @@ class PipelineRunner:
         with open(self.dot_path) as fh:
             self.dot_content = fh.read()
 
-        os.makedirs(self.signal_dir, exist_ok=True)
-
+        # Parse pipeline data first — needed for signal_dir resolution
         pipeline_data = parse_dot(self.dot_content)
         self.pipeline_id = pipeline_data.get("graph_name", os.path.splitext(os.path.basename(dot_path))[0])
         self._graph_attrs = pipeline_data.get("graph_attrs", {})
-        log.info("Pipeline loaded: %s  nodes=%d", self.pipeline_id, len(pipeline_data.get("nodes", [])))
+
+        # Resolve signal_dir: prefer target_dir/.claude/signals/ when working cross-repo.
+        # This keeps all worker-visible paths inside the target project tree,
+        # preventing workers from following signal paths back to the harness.
+        # Priority: (1) DOT signal_dir attr, (2) target_dir/.claude/signals/, (3) dot_dir/signals/
+        explicit_signal_dir = self._graph_attrs.get("signal_dir", "").strip().strip('"').strip("'")
+        target_dir = self._get_target_dir()
+        if explicit_signal_dir:
+            # Resolve relative signal_dir against dot_dir (backward compat)
+            if os.path.isabs(explicit_signal_dir):
+                self.signal_dir = explicit_signal_dir
+            else:
+                self.signal_dir = os.path.join(self.dot_dir, explicit_signal_dir)
+        elif target_dir != self.dot_dir:
+            # Cross-repo: place signals in target project's .claude/ tree
+            self.signal_dir = os.path.join(target_dir, ".claude", "signals", self.pipeline_id)
+        else:
+            # Same-repo: signals next to the DOT file
+            self.signal_dir = os.path.join(self.dot_dir, "signals", self.pipeline_id)
+
+        # Evidence dir follows the same pattern (sibling of signals)
+        self.evidence_dir = os.path.join(os.path.dirname(self.signal_dir), "evidence", self.pipeline_id)
+
+        os.makedirs(self.signal_dir, exist_ok=True)
+        os.makedirs(self.evidence_dir, exist_ok=True)
+        log.info("Pipeline loaded: %s  nodes=%d  signal_dir=%s", self.pipeline_id, len(pipeline_data.get("nodes", [])), self.signal_dir)
 
     def _load_attractor_env(self) -> None:
         """Source .claude/attractor/.env if it exists. Sets ANTHROPIC_MODEL etc."""
@@ -2111,10 +2132,16 @@ class PipelineRunner:
                     except OSError:
                         pass
 
+        target_dir = self._get_target_dir()
         lines = [
             f"# Task: {label}",
             f"Node ID: {nid}",
             f"Handler: {handler}",
+            f"\n## Project Boundary",
+            f"Your project root: {target_dir}",
+            f"ALL source code exploration and changes MUST happen inside this directory.",
+            f"Do NOT explore or modify files outside this directory.",
+            f"Evidence directory: {self.evidence_dir}",
         ]
 
         # Add handler-specific preamble (role, MCP tool loading instructions)
