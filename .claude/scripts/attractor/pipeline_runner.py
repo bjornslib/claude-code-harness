@@ -995,7 +995,8 @@ class PipelineRunner:
     # Base tools available to ALL handlers:
     _BASE_TOOLS: list[str] = [
         "Bash", "Read", "Write", "Edit", "Glob", "Grep", "MultiEdit",
-        "TodoWrite", "WebFetch", "WebSearch",
+        "TaskCreate", "TaskUpdate", "TaskList", "TaskGet",  # task tracking (replaces legacy TodoWrite)
+        "WebFetch", "WebSearch",
         "ToolSearch",  # MANDATORY — loads deferred MCP tool schemas
         "LSP",         # type info, definitions, diagnostics
     ]
@@ -1084,12 +1085,19 @@ class PipelineRunner:
             clean_env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
             # Add ATTRACTOR_SIGNAL_DIR as required by GAP-6.1
             clean_env["ATTRACTOR_SIGNAL_DIR"] = str(self.signal_dir)
-            # Ensure CLAUDE_PROJECT_BANK is set so workers use the shared project Hindsight bank.
-            # Derived from repo root dirname (matches ccsystem3 convention: "claude-code-<dir>").
+            # Ensure CLAUDE_PROJECT_BANK is set so workers use the correct Hindsight bank.
+            # Priority: (1) DOT graph attr "project_bank", (2) derive from target_dir,
+            # (3) derive from repo root.  This matters when the pipeline runner lives in
+            # the harness repo but workers target a different project.
             if "CLAUDE_PROJECT_BANK" not in clean_env:
-                repo_root = self._get_repo_root()
-                bank_name = "claude-code-" + os.path.basename(repo_root).lower().replace("_", "-")
-                clean_env["CLAUDE_PROJECT_BANK"] = bank_name
+                explicit_bank = self._graph_attrs.get("project_bank", "").strip().strip('"').strip("'")
+                if explicit_bank:
+                    clean_env["CLAUDE_PROJECT_BANK"] = explicit_bank
+                else:
+                    # Prefer target_dir (the project being worked on) over repo root (the harness)
+                    target = self._graph_attrs.get("target_dir", "").strip().strip('"').strip("'")
+                    base = os.path.basename(target) if target and os.path.isdir(target) else os.path.basename(self._get_repo_root())
+                    clean_env["CLAUDE_PROJECT_BANK"] = "claude-code-" + base.lower().replace("_", "-")
             options = claude_code_sdk.ClaudeCodeOptions(  # type: ignore[attr-defined]
                 system_prompt=self._build_system_prompt(worker_type),
                 allowed_tools=tools,
@@ -1170,7 +1178,16 @@ class PipelineRunner:
                          status=result.get("status"), elapsed_s=round(elapsed, 1),
                          message=result.get("message", "")[:200])
 
-        self._write_node_signal(node_id, result)
+        # Only write a completion signal if the node is still active.
+        # Workers often write their own signal file via the Write tool BEFORE the
+        # SDK stream ends.  By the time we get here the runner may have already
+        # processed that signal and transitioned the node to impl_complete.
+        # Writing a second signal would trigger a duplicate validation dispatch.
+        node_status = self._get_node_status(node_id)
+        if node_status == "active":
+            self._write_node_signal(node_id, result)
+        else:
+            log.info("[sdk] Skipping signal write for %s — node already %s", node_id, node_status)
         self.active_workers.pop(node_id, None)
         self._wake_event.set()
 
@@ -1402,6 +1419,15 @@ class PipelineRunner:
 
         async def _run() -> dict:
             clean_env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+            # Ensure CLAUDE_PROJECT_BANK for validation workers (same logic as implementation workers)
+            if "CLAUDE_PROJECT_BANK" not in clean_env:
+                explicit_bank = self._graph_attrs.get("project_bank", "").strip().strip('"').strip("'")
+                if explicit_bank:
+                    clean_env["CLAUDE_PROJECT_BANK"] = explicit_bank
+                else:
+                    target = self._graph_attrs.get("target_dir", "").strip().strip('"').strip("'")
+                    base = os.path.basename(target) if target and os.path.isdir(target) else os.path.basename(self._get_repo_root())
+                    clean_env["CLAUDE_PROJECT_BANK"] = "claude-code-" + base.lower().replace("_", "-")
             # Base tools for validation; extend for browser-required PRDs
             validation_tools = ["Read", "Write", "Bash", "Grep", "Glob"]
             if getattr(self, "_validation_method_hint", None) == "browser-required":
@@ -1466,13 +1492,22 @@ class PipelineRunner:
             signal = loop.run_until_complete(asyncio.wait_for(future, timeout=timeout))
 
         except asyncio.TimeoutError:
-            log.error("[validation] %s timed out after %ds", node_id, timeout)
-            # Write failure signal so node doesn't hang (Epic C)
-            self._write_node_signal(target_node_id, {
-                "status": "fail",
-                "result": "fail",
-                "reason": f"Validation timed out after {timeout}s",
-            })
+            # The validation agent may have already written a pass signal (via Write
+            # tool) before the SDK call completed.  The runner processes signals
+            # asynchronously, so the node may already be 'validated' by now.
+            # Only write a fail signal if the node hasn't already advanced.
+            current = self._get_node_status(target_node_id)
+            if current in ("validated", "accepted"):
+                log.info("[validation] %s timed out after %ds but node already %s — ignoring",
+                         node_id, timeout, current)
+            else:
+                log.error("[validation] %s timed out after %ds (node status: %s)",
+                          node_id, timeout, current)
+                self._write_node_signal(target_node_id, {
+                    "status": "fail",
+                    "result": "fail",
+                    "reason": f"Validation timed out after {timeout}s",
+                })
             self.active_workers.pop(node_id, None)
             self._wake_event.set()
             if _span:
