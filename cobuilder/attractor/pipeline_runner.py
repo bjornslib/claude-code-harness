@@ -1253,8 +1253,24 @@ class PipelineRunner:
                          status=result.get("status"), elapsed_s=round(elapsed, 1),
                          message=result.get("message", "")[:200])
 
-        self._write_node_signal(node_id, result)
-        self.active_workers.pop(node_id, None)
+        # Fix 5: Do NOT overwrite a worker-written success signal with an SDK failure.
+        # Race condition: worker writes success signal → signal watcher advances node
+        # to impl_complete and dispatches validation → SDK completion fires late with
+        # "failed" → overwrites success → second validation agent spawns.
+        # Guard: if node already advanced past "active", the signal watcher already
+        # processed the worker's signal — do NOT write a competing SDK signal.
+        current_node_status = self._get_node_status(node_id)
+        if current_node_status != "active":
+            log.info(
+                "[sdk] Node %s already at '%s' (signal watcher processed worker signal) — "
+                "skipping SDK signal write (sdk_status=%s)",
+                node_id, current_node_status, result.get("status"),
+            )
+            # Do NOT pop active_workers here — the validation agent may already
+            # own this slot (inserted by _dispatch_validation_agent at line 1276).
+        else:
+            self._write_node_signal(node_id, result)
+            self.active_workers.pop(node_id, None)
         self._wake_event.set()
 
     def _dispatch_validation_agent(self, node_id: str, target_node_id: str) -> None:
@@ -1757,6 +1773,12 @@ class PipelineRunner:
         if "result" in signal:
             result = signal["result"]
             if result == "pass":
+                # Guard: ignore duplicate pass signals for already-terminal nodes
+                if current_status in ("validated", "accepted"):
+                    log.debug("[signal] %s: ignoring duplicate validation PASS (already %s)",
+                              node_id, current_status)
+                    self.active_workers.pop(node_id, None)
+                    return
                 self._do_transition(node_id, "validated")
                 self._do_transition(node_id, "accepted")
                 self.active_workers.pop(node_id, None)

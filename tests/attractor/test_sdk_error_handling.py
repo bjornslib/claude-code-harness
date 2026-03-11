@@ -45,6 +45,9 @@ def _make_runner(signal_dir: str) -> object:
     runner.requeue_guidance = {}
     runner.orphan_resume_counts = {}
     runner._signal_seq = {}
+    # Default: node is still "active" (signal watcher hasn't processed yet).
+    # Tests for the race condition (Fix 5) can override this.
+    runner._get_node_status = lambda nid: "active"
     return runner
 
 
@@ -718,4 +721,119 @@ class TestRateLimitRetry:
 
         assert call_count["n"] == 3, (
             f"Expected exactly MAX_RETRIES=3 attempts, got {call_count['n']}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# TestSignalWatcherRaceCondition (Fix 5)
+# ---------------------------------------------------------------------------
+
+
+class TestSignalWatcherRaceCondition:
+    """Fix 5: SDK completion must NOT overwrite a worker-written success signal
+    when the signal watcher has already advanced the node past 'active'.
+
+    Race timeline:
+    1. Worker writes success signal
+    2. Signal watcher advances node to impl_complete, dispatches validation
+    3. SDK completion fires late with 'failed' — must NOT overwrite the signal
+    """
+
+    def test_sdk_skips_signal_write_when_node_already_advanced(self, tmp_path):
+        """When node is impl_complete (signal watcher processed), SDK must not write signal."""
+        from cobuilder.attractor import pipeline_runner as pr_mod
+
+        signal_dir = str(tmp_path / "signals")
+        os.makedirs(signal_dir, exist_ok=True)
+        runner = _make_runner(signal_dir)
+
+        # Simulate: worker wrote success, signal watcher advanced to impl_complete
+        worker_signal = {"status": "success", "message": "worker done", "files_changed": ["app.py"]}
+        signal_path = os.path.join(signal_dir, "impl_e3.json")
+        with open(signal_path, "w") as fh:
+            json.dump(worker_signal, fh)
+
+        # Node is already impl_complete (signal watcher advanced it)
+        runner._get_node_status = lambda nid: "impl_complete"
+
+        # Track whether _write_node_signal is called
+        write_calls = []
+        original_write = runner.__class__._write_node_signal
+
+        def tracking_write(self_inner, node_id, payload):
+            write_calls.append(payload)
+            original_write(self_inner, node_id, payload)
+
+        runner._write_node_signal = lambda nid, payload: write_calls.append(payload)
+
+        # Build a fake SDK that returns a failed result (stream error)
+        fake_sdk = MagicMock()
+
+        async def _fake_stream(*a, **kw):
+            raise RuntimeError("stream timeout after messages")
+
+        fake_sdk.query = _fake_stream
+        fake_sdk.ClaudeCodeOptions = MagicMock
+
+        original_sdk = pr_mod.claude_code_sdk
+        original_available = pr_mod._SDK_AVAILABLE
+        try:
+            pr_mod.claude_code_sdk = fake_sdk
+            pr_mod._SDK_AVAILABLE = True
+            runner._build_system_prompt = lambda wt: "sys"
+            runner._get_allowed_tools = lambda h: ["Read"]
+            runner._get_target_dir = lambda: "/tmp"
+            runner._dispatch_via_sdk("impl_e3", "backend-solutions-engineer", "work")
+        finally:
+            pr_mod.claude_code_sdk = original_sdk
+            pr_mod._SDK_AVAILABLE = original_available
+
+        # Signal file must still contain the WORKER's success, not SDK's failure
+        with open(signal_path) as fh:
+            final_signal = json.load(fh)
+        assert final_signal["status"] == "success", (
+            f"Worker success signal was overwritten! Got: {final_signal}"
+        )
+        assert write_calls == [], (
+            f"_write_node_signal should NOT have been called, but got {write_calls}"
+        )
+
+    def test_sdk_writes_signal_when_node_still_active(self, tmp_path):
+        """When node is still active (signal watcher hasn't processed), SDK SHOULD write signal."""
+        from cobuilder.attractor import pipeline_runner as pr_mod
+
+        signal_dir = str(tmp_path / "signals")
+        os.makedirs(signal_dir, exist_ok=True)
+        runner = _make_runner(signal_dir)
+
+        # Node is still active — signal watcher hasn't processed yet
+        runner._get_node_status = lambda nid: "active"
+
+        write_calls = []
+        runner._write_node_signal = lambda nid, payload: write_calls.append(payload)
+
+        fake_sdk = MagicMock()
+
+        async def _fake_stream(*a, **kw):
+            raise RuntimeError("stream timeout after messages")
+
+        fake_sdk.query = _fake_stream
+        fake_sdk.ClaudeCodeOptions = MagicMock
+
+        original_sdk = pr_mod.claude_code_sdk
+        original_available = pr_mod._SDK_AVAILABLE
+        try:
+            pr_mod.claude_code_sdk = fake_sdk
+            pr_mod._SDK_AVAILABLE = True
+            runner._build_system_prompt = lambda wt: "sys"
+            runner._get_allowed_tools = lambda h: ["Read"]
+            runner._get_target_dir = lambda: "/tmp"
+            runner._dispatch_via_sdk("impl_e3", "backend-solutions-engineer", "work")
+        finally:
+            pr_mod.claude_code_sdk = original_sdk
+            pr_mod._SDK_AVAILABLE = original_available
+
+        # SDK should have written a signal since node is still active
+        assert len(write_calls) == 1, (
+            f"Expected _write_node_signal to be called once, got {len(write_calls)} calls"
         )
