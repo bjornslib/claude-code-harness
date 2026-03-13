@@ -256,17 +256,23 @@ class WorkExhaustionChecker:
                 )
 
         # Non-System 3 sessions (orchestrators, workers):
-        # Always PASS — these sessions should be free to stop at any time.
-        # If tasks are pending, that's informational context for the judge.
-        # If all tasks are done, the session completed its work successfully.
-        # The old behavior (blocking when no tasks) caused orchestrators that
-        # finished ALL work to get stuck in infinite stop-hook loops.
-        return CheckResult(
-            priority=Priority.P3_TODO_CONTINUATION,
-            passed=True,
-            message=self._format_pass_message(work_state),
-            blocking=True,
-        )
+        # Original behavior: pending/in_progress tasks are a continuation signal.
+        # If tasks exist → PASS (session has work to continue)
+        # If no tasks → BLOCK (no continuation intent, but work may be available)
+        if has_unfinished_tasks:
+            return CheckResult(
+                priority=Priority.P3_TODO_CONTINUATION,
+                passed=True,
+                message=self._format_pass_message(work_state),
+                blocking=True,
+            )
+        else:
+            return CheckResult(
+                priority=Priority.P3_TODO_CONTINUATION,
+                passed=False,
+                message=self._format_non_system3_block(work_state),
+                blocking=True,
+            )
 
     @property
     def work_state_summary(self) -> str:

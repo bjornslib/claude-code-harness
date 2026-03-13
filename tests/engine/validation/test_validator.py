@@ -146,7 +146,7 @@ class TestValidatorRun:
         assert result.is_valid is True
 
     def test_run_uses_default_rules(self, minimal_valid_graph):
-        assert len(DEFAULT_RULES) == 13
+        assert len(DEFAULT_RULES) == 20
 
     def test_rule_crash_isolation(self, minimal_valid_graph):
         """A crashing rule must not suppress violations from later rules."""

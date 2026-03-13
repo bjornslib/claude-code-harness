@@ -31,7 +31,7 @@ class SdPathOnCodergen:
         violations = []
         for node in graph.nodes.values():
             # Check if it's a codergen node (box shape or handler=codergen)
-            if node.handler == "codergen":
+            if node.handler_type == "codergen":
                 sd_path = node.attrs.get("sd_path", "").strip()
                 if not sd_path:
                     violations.append(
@@ -69,7 +69,7 @@ class WorkerTypeRegistry:
     def check(self, graph: Graph) -> list[RuleViolation]:
         violations = []
         for node in graph.nodes.values():
-            if node.handler == "codergen":
+            if node.handler_type == "codergen":
                 worker_type = node.attrs.get("worker_type", "").strip()
                 if worker_type and worker_type not in VALID_WORKER_TYPES:
                     violations.append(
@@ -98,7 +98,7 @@ class WaitHumanAfterWaitSystem3:
 
         for node in graph.nodes.values():
             # Check if it's a wait.human node (likely hexagon shape with wait.human handler)
-            if node.handler == "wait_human":
+            if node.handler_type == "wait_human":
                 # Check if it has a gate_type="e2e-review" which indicates it should follow wait.system3
                 gate_mode = node.attrs.get("mode", "")
                 if gate_mode == "e2e-review":
@@ -107,12 +107,12 @@ class WaitHumanAfterWaitSystem3:
 
                     # Check if any predecessor is a wait.system3 node
                     has_system3_predecessor = any(
-                        pred.handler == "wait_system3" for pred in incoming_nodes.values()
+                        pred.handler_type == "wait_system3" for pred in incoming_nodes.values()
                     )
 
                     # Check if any predecessor is a research node (alternative valid predecessor)
                     has_research_predecessor = any(
-                        pred.handler == "research" for pred in incoming_nodes.values()
+                        pred.handler_type == "research" for pred in incoming_nodes.values()
                     )
 
                     if not (has_system3_predecessor or has_research_predecessor):
@@ -142,7 +142,7 @@ class FullClusterTopology:
 
         # Find all codergen nodes that should have the full cluster
         for node in graph.nodes.values():
-            if node.handler == "codergen":
+            if node.handler_type == "codergen":
                 # Look for the cluster starting from acceptance-test-writer
                 # Check if there's a connected sequence: acceptance-test-writer -> research -> refine -> codergen -> wait.system3 -> wait.human
 
@@ -151,7 +151,7 @@ class FullClusterTopology:
 
                 # Look for a wait.system3 downstream
                 has_wait_system3 = any(
-                    n.handler == "wait_system3" for n in codergen_successors.values()
+                    n.handler_type == "wait_system3" for n in codergen_successors.values()
                 )
 
                 if not has_wait_system3:
@@ -166,11 +166,11 @@ class FullClusterTopology:
                     continue
 
                 # For each wait.system3 found, check if it has a wait.human downstream
-                system3_nodes = [n for n in codergen_successors.values() if n.handler == "wait_system3"]
+                system3_nodes = [n for n in codergen_successors.values() if n.handler_type == "wait_system3"]
                 for sys3_node in system3_nodes:
                     sys3_downstream = self._get_downstream_nodes(graph, sys3_node.id)
                     has_wait_human = any(
-                        n.handler == "wait_human" and n.attrs.get("mode") == "e2e-review"
+                        n.handler_type == "wait_human" and n.attrs.get("mode") == "e2e-review"
                         for n in sys3_downstream.values()
                     )
 
@@ -227,7 +227,7 @@ class WaitSystem3Requirements:
         violations = []
 
         for node in graph.nodes.values():
-            if node.handler == "wait_system3":
+            if node.handler_type == "wait_system3":
                 # Check required attributes
                 gate_type = node.attrs.get("gate_type", "").strip()
                 summary_ref = node.attrs.get("summary_ref", "").strip()
@@ -281,7 +281,7 @@ class CodergenWithoutUpstreamAT:
 
         # Find all codergen nodes
         for node in graph.nodes.values():
-            if node.handler == "codergen":
+            if node.handler_type == "codergen":
                 # Check if there's an upstream acceptance-test-writer node
                 has_upstream_at_writer = self._has_upstream_node_with_handler(graph, node.id, "acceptance_test_writer")
 
@@ -307,7 +307,7 @@ class CodergenWithoutUpstreamAT:
             visited.add(current_id)
 
             current_node = graph.nodes.get(current_id)
-            if current_node and current_node.handler == handler:
+            if current_node and current_node.handler_type == handler:
                 return True
 
             # Check all incoming edges (predecessors)
@@ -343,7 +343,7 @@ class MissingSkillReference:
         violations = []
 
         for node in graph.nodes.values():
-            if node.handler == "codergen":
+            if node.handler_type == "codergen":
                 worker_type = node.attrs.get("worker_type", "").strip()
                 if worker_type:
                     # Check if the agent file exists and has skills_required
