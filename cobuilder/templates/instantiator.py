@@ -16,7 +16,7 @@ from cobuilder.templates.manifest import Manifest, load_manifest
 logger = logging.getLogger(__name__)
 
 # Default templates directory
-_DEFAULT_TEMPLATES_DIR = ".claude/attractor/templates"
+_DEFAULT_TEMPLATES_DIR = ".cobuilder/templates"
 
 
 def _slugify(value: str) -> str:

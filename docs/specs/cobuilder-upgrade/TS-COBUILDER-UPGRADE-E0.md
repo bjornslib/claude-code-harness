@@ -41,12 +41,12 @@ Epic 0 establishes the foundation by merging 5,061 lines from the `abstract-work
 - `cobuilder/engine/middleware/constraint.py` (134 LOC)
 - `cobuilder/sidecar/__init__.py` (2 LOC)
 - `cobuilder/sidecar/stream_summarizer.py` (255 LOC)
-- `.claude/attractor/templates/hub-spoke/manifest.yaml` (87 LOC)
-- `.claude/attractor/templates/hub-spoke/template.dot.j2` (217 LOC)
-- `.claude/attractor/templates/s3-lifecycle/manifest.yaml` (85 LOC)
-- `.claude/attractor/templates/s3-lifecycle/template.dot.j2` (182 LOC)
-- `.claude/attractor/templates/sequential-validated/manifest.yaml` (53 LOC)
-- `.claude/attractor/templates/sequential-validated/template.dot.j2` (113 LOC)
+- `.cobuilder/templates/hub-spoke/manifest.yaml` (87 LOC)
+- `.cobuilder/templates/hub-spoke/template.dot.j2` (217 LOC)
+- `.cobuilder/templates/s3-lifecycle/manifest.yaml` (85 LOC)
+- `.cobuilder/templates/s3-lifecycle/template.dot.j2` (182 LOC)
+- `.cobuilder/templates/sequential-validated/manifest.yaml` (53 LOC)
+- `.cobuilder/templates/sequential-validated/template.dot.j2` (113 LOC)
 - `tests/templates/__init__.py`
 - `tests/templates/test_constraints.py` (126 LOC)
 - `tests/templates/test_instantiator.py` (153 LOC)
@@ -262,4 +262,4 @@ addopts = "--cov=cobuilder --cov-report=term-missing --cov-report=html"
 | runner.py merge conflict breaks loop detection | Manual conflict resolution keeping both import blocks; run tests immediately |
 | Removing `_LOGFIRE_AVAILABLE` guards breaks environments without logfire | Add `logfire>=2.0` to hard dependencies first |
 | Coverage baseline reveals critically low numbers | Expected — this is an informational measurement, not a gate |
-| Template tests assume directory structure that differs post-merge | Check template paths in test fixtures; update if `.claude/attractor/templates/` vs `.cobuilder/templates/` |
+| Template tests assume directory structure that differs post-merge | Check template paths in test fixtures; now using `.cobuilder/templates/` |

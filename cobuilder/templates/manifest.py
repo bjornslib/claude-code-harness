@@ -386,7 +386,7 @@ def resolve_manifest_for_graph(
     Args:
         graph_attrs: Graph-level attributes from the parsed DOT file.
         templates_dir: Directory containing template directories. Defaults to
-                       .claude/attractor/templates/ relative to cwd.
+                       .cobuilder/templates/ relative to cwd.
 
     Returns:
         Parsed Manifest if _template attribute is present and manifest exists,
@@ -397,7 +397,7 @@ def resolve_manifest_for_graph(
         return None
 
     if templates_dir is None:
-        templates_dir = Path.cwd() / ".claude" / "attractor" / "templates"
+        templates_dir = Path.cwd() / ".cobuilder" / "templates"
     else:
         templates_dir = Path(templates_dir)
 
