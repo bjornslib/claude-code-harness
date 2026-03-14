@@ -14,7 +14,7 @@ Post-pipeline independent verification of E4-E6 identified 8 gaps across validat
 
 ### GAP-5.3: VALID_WORKER_TYPES incomplete
 
-**File**: `.claude/scripts/attractor/validator.py:94-99`
+**File**: `cobuilder/engine/validator.py:94-99`
 
 **Problem**: `VALID_WORKER_TYPES` has 4 types. The agent registry (`.claude/agents/`) has 6+.
 
@@ -47,7 +47,7 @@ VALID_WORKER_TYPES = {
 
 ### GAP-5.4: `node_map` NameError in `_check_cluster_topology()`
 
-**File**: `.claude/scripts/attractor/validator.py:582`
+**File**: `cobuilder/engine/validator.py:582`
 
 **Problem**: Line 582 references `node_map.get(pred, {}).get("handler")` but `node_map` is defined in `validate()` (line 143), not passed to `_check_cluster_topology()`.
 
@@ -76,7 +76,7 @@ _check_cluster_topology(nodes, edges, adj, reverse_adj, issues, node_map)
 
 ### GAP-5.5: Missing V-15 (acceptance-test-writer topology rule)
 
-**File**: `.claude/scripts/attractor/validator.py` — new rule needed
+**File**: `cobuilder/engine/validator.py` — new rule needed
 
 **Problem**: SD-E5 specifies Rule V-15: warn when a codergen cluster has no acceptance-test-writer node. Not implemented.
 
@@ -105,7 +105,7 @@ for cg_node in codergen_nodes:
 
 ### GAP-5.6: Missing V-16 (skills_required validation)
 
-**File**: `.claude/scripts/attractor/validator.py` — new rule needed
+**File**: `cobuilder/engine/validator.py` — new rule needed
 
 **Problem**: SD-E5 specifies Rule V-16: warn when an agent's `skills_required` references a non-existent skill directory. Not implemented.
 
@@ -148,7 +148,7 @@ for n in nodes:
 
 ### GAP-6.1: Missing ATTRACTOR_SIGNAL_DIR env var
 
-**File**: `.claude/scripts/attractor/pipeline_runner.py:786-797` (`_dispatch_via_sdk`)
+**File**: `cobuilder/engine/pipeline_runner.py:786-797` (`_dispatch_via_sdk`)
 
 **Problem**: SD-E6 AC-6.4 requires `ATTRACTOR_SIGNAL_DIR` env var set for worker subprocesses. The SDK dispatch builds `clean_env` from `os.environ` but never sets `ATTRACTOR_SIGNAL_DIR`.
 
@@ -163,7 +163,7 @@ clean_env["ATTRACTOR_SIGNAL_DIR"] = str(self.signal_dir)
 
 ### GAP-6.2: No skill injection from agent definitions
 
-**File**: `.claude/scripts/attractor/pipeline_runner.py:730-775` (`_dispatch_agent_sdk`)
+**File**: `cobuilder/engine/pipeline_runner.py:730-775` (`_dispatch_agent_sdk`)
 
 **Problem**: SD-E6 AC-6.3 requires skill invocations injected into worker prompt from `skills_required`. `dispatch_worker.py` does this via `load_agent_definition()` but `pipeline_runner.py`'s SDK path doesn't call it.
 
@@ -185,7 +185,7 @@ if agent_def and agent_def.get("skills_required"):
 
 ### GAP-6.3: No sd_hash in signal evidence
 
-**File**: `.claude/scripts/attractor/pipeline_runner.py` (signal write paths)
+**File**: `cobuilder/engine/pipeline_runner.py` (signal write paths)
 
 **Problem**: SD-E6 AC-6.5 requires signal evidence to include `sd_hash` field (SHA256 of frozen SD content). The runner reads `sd_path` from the DOT node but never computes or includes the hash.
 
@@ -205,7 +205,7 @@ signal_data["sd_hash"] = sd_hash
 
 ## 3. Pipeline DOT for Gap Fixes
 
-A new pipeline DOT will be created at `.claude/attractor/pipelines/PRD-HARNESS-UPGRADE-E4E6-GAPS.dot` with:
+A new pipeline DOT will be created at `.pipelines/pipelines/PRD-HARNESS-UPGRADE-E4E6-GAPS.dot` with:
 
 ```
 start -> impl_e5_gaps -> verify_e5_gaps -> impl_e6_gaps -> verify_e6_gaps -> finalize
@@ -222,8 +222,8 @@ E6 depends on E5 because `pipeline_runner.py` imports from `dispatch_worker.py` 
 
 | File | Changes |
 |------|---------|
-| `.claude/scripts/attractor/validator.py` | GAP-5.3 (worker types), GAP-5.4 (node_map param), GAP-5.5 (V-15 rule), GAP-5.6 (V-16 rule) |
-| `.claude/scripts/attractor/pipeline_runner.py` | GAP-6.1 (ATTRACTOR_SIGNAL_DIR), GAP-6.2 (skill injection), GAP-6.3 (sd_hash) |
+| `cobuilder/engine/validator.py` | GAP-5.3 (worker types), GAP-5.4 (node_map param), GAP-5.5 (V-15 rule), GAP-5.6 (V-16 rule) |
+| `cobuilder/engine/pipeline_runner.py` | GAP-6.1 (ATTRACTOR_SIGNAL_DIR), GAP-6.2 (skill injection), GAP-6.3 (sd_hash) |
 
 ## 5. Testing
 

@@ -20,7 +20,7 @@ epic: E7
 
 ## 1. Problem Statement
 
-There is no central view for CoBuilder initiatives. Managing concurrent initiatives requires switching between tmux sessions, terminal commands (`bd list`, `cobuilder pipeline status`, `cat .claude/attractor/pipelines/*.dot`), and GChat. The operator cannot answer "What initiatives exist, what phase are they in, and what needs my attention?" without synthesizing information from 4+ sources.
+There is no central view for CoBuilder initiatives. Managing concurrent initiatives requires switching between tmux sessions, terminal commands (`bd list`, `cobuilder pipeline status`, `cat .pipelines/pipelines/*.dot`), and GChat. The operator cannot answer "What initiatives exist, what phase are they in, and what needs my attention?" without synthesizing information from 4+ sources.
 
 Epic 7 delivers the **main screen** of the CoBuilder web interface: a single-page initiative list with lifecycle progress cards, a "New Initiative" creation dialog, and deep-links to Guardian tmux sessions and worktree directories. This is the entry point into the Control Tower -- the first page an operator sees.
 

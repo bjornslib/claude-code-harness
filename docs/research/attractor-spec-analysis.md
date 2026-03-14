@@ -231,19 +231,19 @@ Our harness implements a substantial subset of Attractor concepts:
 
 | Attractor Concept | Our Implementation | Status |
 |-------------------|--------------------|--------|
-| DOT-based pipeline graphs | `.claude/attractor/pipelines/*.dot` | **Implemented** |
+| DOT-based pipeline graphs | `.pipelines/pipelines/*.dot` | **Implemented** |
 | 5-stage lifecycle (PARSE/VALIDATE/INITIALIZE/EXECUTE/FINALIZE) | Schema defines all 5 stages with cs-* integration | **Implemented** |
 | Node shapes → handler types | Mdiamond, Msquare, box, hexagon, diamond, parallelogram all mapped | **Implemented** |
 | Status transitions (pending/active/impl_complete/validated/failed) | Defined in schema, tracked via DOT attributes + checkpoints | **Implemented** |
-| Checkpoint/resume | `.claude/attractor/pipelines/*-checkpoint-*.json` files exist | **Partial** — checkpoints written but no automated resume engine |
+| Checkpoint/resume | `.pipelines/checkpoints/*-checkpoint-*.json` files exist | **Partial** — checkpoints written but no automated resume engine |
 | Goal gates | `hexagon` nodes with `wait.human` handler | **Implemented** via validation agents |
 | Conditional routing | `diamond` nodes with pass/fail edges | **Implemented** in DOT structure |
 | Parallel execution | `parallelogram` fan-out/fan-in nodes | **Implemented** in DOT structure |
 | Completion promise integration | cs-* commands mapped to each lifecycle stage | **Implemented** |
 | AT (acceptance test) pairing | Every codergen node paired with tech+biz hexagons | **Implemented** |
 | Retry on failure | Dashed red edges from decision nodes back to impl nodes | **Implemented** in graph structure |
-| Signal-based coordination | `.claude/attractor/pipelines/signals/` and `.claude/attractor/signals/` | **Implemented** |
-| Runner state tracking | `.claude/attractor/runner-state/*.json` | **Implemented** |
+| Signal-based coordination | `.pipelines/pipelines/signals/` and `.pipelines/signals/` | **Implemented** |
+| Runner state tracking | `.pipelines/runner-state/*.json` | **Implemented** |
 
 ### 3.2 Critical Gaps
 

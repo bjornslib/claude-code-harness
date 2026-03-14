@@ -80,10 +80,10 @@ class InitiativeManager:
 
     Args:
         pipelines_dir: Directory where initiative DOT files are stored.
-                       Defaults to `.claude/attractor/pipelines/`.
+                       Defaults to `.pipelines/pipelines/`.
     """
 
-    def __init__(self, pipelines_dir: str = ".claude/attractor/pipelines/"):
+    def __init__(self, pipelines_dir: str = ".pipelines/pipelines/"):
         self.pipelines_dir = Path(pipelines_dir)
         self.pipelines_dir.mkdir(parents=True, exist_ok=True)
 

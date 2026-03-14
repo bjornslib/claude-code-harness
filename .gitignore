@@ -102,3 +102,6 @@ temp/
 
 # CoBuilder engine secrets — never commit
 cobuilder/engine/.env
+
+# Logfire observability state
+.logfire/

@@ -82,7 +82,7 @@ Every node can carry these attributes (set via `--set key=value`):
 
 ## Transition Engine
 
-**File**: `.claude/scripts/attractor/transition.py`
+**File**: `cobuilder/engine/transition.py`
 
 ### State Machine
 
@@ -156,7 +156,7 @@ Plus `START` → first node and last decision → `EXIT-OK` / `EXIT-FAIL` edges.
 
 ## Signal Protocol
 
-**File**: `.claude/scripts/attractor/signal_protocol.py`
+**File**: `cobuilder/engine/signal_protocol.py`
 
 Inter-layer communication for the 4-layer chain (Guardian → Runner → Orchestrator → Worker):
 

@@ -569,7 +569,7 @@ The prompt includes all file paths the Guardian needs to do its job:
 |-------------|--------|---------|
 | PRD path | DOT graph `output_path` attr on `write_prd` node | `docs/prds/dashboard-audit-trail/PRD-DASHBOARD-AUDIT-001.md` |
 | SD paths | DOT graph `output_path` attrs on `write_sd_*` nodes | List of SD file paths |
-| DOT path | `dot_path` argument | `.claude/attractor/pipelines/prd-dashboard-audit-001.dot` |
+| DOT path | `dot_path` argument | `.pipelines/pipelines/prd-dashboard-audit-001.dot` |
 | Target repo | `target_repo` argument | `/Users/theb/Documents/Windsurf/zenagent2` |
 | Worktree | DOT graph `worktree_path` attr or derived from PRD ID | `{target_repo}/.claude/worktrees/prd-dashboard-audit-001/` |
 

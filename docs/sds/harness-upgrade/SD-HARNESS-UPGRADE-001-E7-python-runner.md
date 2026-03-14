@@ -696,7 +696,7 @@ The runner is a **state machine**, not a reasoning system.
 - Tool node auto-accept: `active → validated → accepted` (no validation agent needed)
 - Validation agent dispatch with `active_workers` tracking to prevent false stuck detection
 - Resume logic: re-dispatch validation for `impl_complete` nodes on `--resume`
-- `.env` loading: `ANTHROPIC_MODEL` from `.claude/attractor/.env` takes priority
+- `.env` loading: `ANTHROPIC_MODEL` from `cobuilder/engine/.env` takes priority
 
 ### Deviations from design
 - `_dispatch_via_subprocess` method was designed but removed — all dispatch is AgentSDK only
@@ -717,4 +717,4 @@ The runner is a **state machine**, not a reasoning system.
 - Codergen nodes: AgentSDK dispatch works end-to-end
 - Signal transitions: mechanical, deterministic
 - Status chain: `pending → active → impl_complete → validated → accepted` confirmed
-- Model config: loads from `.claude/attractor/.env` (ANTHROPIC_MODEL=qwen3-coder-plus)
+- Model config: loads from `cobuilder/engine/.env` (ANTHROPIC_MODEL=qwen3-coder-plus)

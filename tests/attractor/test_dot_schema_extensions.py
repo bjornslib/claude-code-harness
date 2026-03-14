@@ -106,6 +106,16 @@ digraph "legacy_pipeline" {
         status="pending"
         bead_id="FEAT-001"
         worker_type="backend-solutions-engineer"
+        sd_path="docs/sds/SD-FEAT.md"
+        style=filled
+        fillcolor=lightyellow
+    ]
+    validate_unit [
+        handler="wait.system3"
+        shape=hexagon
+        label="Unit Test Gate"
+        gate_type="unit"
+        status="pending"
         style=filled
         fillcolor=lightyellow
     ]
@@ -134,7 +144,8 @@ digraph "legacy_pipeline" {
     ]
 
     start -> impl_feature
-    impl_feature -> validate_feature
+    impl_feature -> validate_unit
+    validate_unit -> validate_feature
     validate_feature -> decision_feature
     decision_feature -> finish [label="pass" condition="pass"]
     decision_feature -> impl_feature [label="fail" condition="fail"]
@@ -350,7 +361,15 @@ digraph "test_research_refine" {
         bead_id="G1-001"
         worker_type="backend-solutions-engineer"
         prd_ref="PRD-TEST-002"
+        sd_path="docs/sds/SD-TEST.md"
         acceptance="G1 works correctly"
+    ]
+    validate_unit_g1 [
+        handler="wait.system3"
+        shape=hexagon
+        label="Unit Test G1"
+        gate_type="unit"
+        status="pending"
     ]
     validate_g1 [
         handler="wait.human"
@@ -375,7 +394,8 @@ digraph "test_research_refine" {
     start -> research_g1
     research_g1 -> refine_g1 [label="research_complete"]
     refine_g1 -> impl_g1 [label="refine_complete"]
-    impl_g1 -> validate_g1
+    impl_g1 -> validate_unit_g1
+    validate_unit_g1 -> validate_g1
     validate_g1 -> decision_g1
     decision_g1 -> finish [label="pass" condition="pass"]
     decision_g1 -> impl_g1 [label="fail" condition="fail"]

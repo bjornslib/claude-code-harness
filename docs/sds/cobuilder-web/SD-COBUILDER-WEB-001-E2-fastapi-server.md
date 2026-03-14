@@ -63,12 +63,12 @@ class Settings(BaseSettings):
 
     project_target_repo: str
     """Absolute path to the target repository root.
-    All DOT files live under {project_target_repo}/.claude/attractor/pipelines/.
+    All DOT files live under {project_target_repo}/.pipelines/pipelines/.
     All artifacts (PRDs, SDs) are resolved relative to this root."""
 
     pipelines_dir: str = ""
     """Override for pipeline DOT directory. Defaults to
-    {project_target_repo}/.claude/attractor/pipelines/ if empty."""
+    {project_target_repo}/.pipelines/pipelines/ if empty."""
 
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:3001"]
     """Allowed CORS origins for the frontend dev server."""
@@ -82,7 +82,7 @@ class Settings(BaseSettings):
     def resolved_pipelines_dir(self) -> str:
         if self.pipelines_dir:
             return self.pipelines_dir
-        return f"{self.project_target_repo}/.claude/attractor/pipelines"
+        return f"{self.project_target_repo}/.pipelines/pipelines"
 ```
 
 Environment variable mapping:
@@ -90,7 +90,7 @@ Environment variable mapping:
 | Env Var | Field | Required | Default |
 |---------|-------|----------|---------|
 | `COBUILDER_WEB_PROJECT_TARGET_REPO` | `project_target_repo` | Yes | -- |
-| `COBUILDER_WEB_PIPELINES_DIR` | `pipelines_dir` | No | `{target_repo}/.claude/attractor/pipelines` |
+| `COBUILDER_WEB_PIPELINES_DIR` | `pipelines_dir` | No | `{target_repo}/.pipelines/pipelines` |
 | `COBUILDER_WEB_CORS_ORIGINS` | `cors_origins` | No | `["http://localhost:3000", "http://localhost:3001"]` |
 | `COBUILDER_WEB_HOST` | `host` | No | `127.0.0.1` |
 | `COBUILDER_WEB_PORT` | `port` | No | `8100` |
@@ -386,7 +386,7 @@ async def create_initiative(
 ```json
 {
     "id": "PRD-DASHBOARD-AUDIT-001",
-    "dot_path": "/Users/theb/.claude/attractor/pipelines/prd-dashboard-audit-001.dot",
+    "dot_path": "/Users/theb/.pipelines/pipelines/prd-dashboard-audit-001.dot",
     "phase": "Definition",
     "message": "Initiative created with skeleton DOT graph"
 }
@@ -662,7 +662,7 @@ async def write_signal(
 **Response 200**:
 ```json
 {
-    "signal_path": "/path/to/.claude/attractor/signals/20260312T120000Z-web-runner-INPUT_RESPONSE.json",
+    "signal_path": "/path/to/.pipelines/signals/20260312T120000Z-web-runner-INPUT_RESPONSE.json",
     "node_id": "review_prd",
     "action": "approve",
     "message": "Signal written. Pipeline runner will process the gate."

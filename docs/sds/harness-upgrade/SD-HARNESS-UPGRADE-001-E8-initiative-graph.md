@@ -2,13 +2,12 @@
 title: "SD-HARNESS-UPGRADE-001 Epic 8: Initiative Graph"
 status: draft
 type: solution-design
-last_verified: 2026-03-06
+last_verified: 2026-03-06T00:00:00.000Z
 grade: draft
 ---
-
 # SD-HARNESS-UPGRADE-001 Epic 8: Initiative Graph
 
-> **Phase 3 — Future Work (~6-12 months)**. This SD is a vision document, not an implementation spec.
+> **Phase 3 — Future Work (\~6-12 months)**. This SD is a vision document, not an implementation spec.
 
 ## 1. Problem Statement
 
@@ -25,7 +24,7 @@ A shared state object at `.claude/state/initiative.json`:
       "id": "PRD-HARNESS-UPGRADE-001",
       "title": "System 3 Self-Management Upgrade",
       "status": "in_progress",
-      "pipeline": ".claude/attractor/pipelines/PRD-HARNESS-UPGRADE-001.dot",
+      "pipeline": ".pipelines/pipelines/PRD-HARNESS-UPGRADE-001.dot",
       "phases": [
         {"id": "phase-1", "status": "complete", "epics": ["E1", "E2", "E3"]},
         {"id": "phase-2", "status": "in_progress", "epics": ["E4", "E5", "E6", "E7"]},
@@ -48,7 +47,7 @@ Benefits:
 ## 3. Files Changed
 
 | File | Change |
-|------|--------|
+| --- | --- |
 | `.claude/state/initiative.json` (new) | Initiative state schema and file |
 | `output-styles/system3-meta-orchestrator.md` | Startup reads initiative.json |
 | `pipeline_orchestrator.py` | Updates initiative.json after pipeline transitions |

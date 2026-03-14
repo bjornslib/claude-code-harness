@@ -37,7 +37,33 @@ Thank you for your interest in contributing to this Claude Code harness configur
    pytest tests/ -v
    ```
 
-## Project Structure
+## Architecture Overview
+
+### 3-Level Agent Hierarchy
+
+This project implements a sophisticated multi-agent system:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  LEVEL 1: META-ORCHESTRATOR                                         │
+│  Role: Strategic planning, OKR tracking, business validation        │
+├─────────────────────────────────────────────────────────────────────┤
+│  LEVEL 2: ORCHESTRATOR                                              │
+│  Role: Feature coordination, worker delegation via native teams     │
+├─────────────────────────────────────────────────────────────────────┤
+│  LEVEL 3: WORKERS (native teammates via Agent Teams)                │
+│  Specialists: frontend-dev-expert, backend-solutions-engineer,      │
+│               tdd-test-engineer, solution-architect                 │
+│  Role: Implementation, testing, focused execution                   │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Key Principle**: Higher levels coordinate; lower levels implement.
+- Orchestrators investigate (Read/Grep/Glob) but never implement (Edit/Write)
+- Workers implement after receiving clear requirements from orchestrators
+- Meta-orchestrators set strategic goals and validate business outcomes
+
+### Project Structure
 
 ```
 claude-harness-setup/

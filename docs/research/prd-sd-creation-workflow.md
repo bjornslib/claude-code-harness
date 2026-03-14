@@ -258,4 +258,4 @@ Guardian independently reads code and scores against blind rubric. DOT nodes tra
 | `acceptance-tests/PRD-{ID}/` | Blind acceptance tests (config repo) |
 | `.zerorepo/baseline.json` | Codebase snapshot |
 | `src/zerorepo/` | ZeroRepo implementation (14 modules) |
-| `.claude/scripts/attractor/` | Attractor CLI + runner |
+| `cobuilder/engine/` | Attractor CLI + runner |
