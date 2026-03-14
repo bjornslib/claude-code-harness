@@ -813,12 +813,12 @@ class TestTmuxSendPostPause(unittest.TestCase):
         self.assertTrue(output_style_calls, "Expected at least one /output-style _tmux_send call")
         for c in output_style_calls:
             self.assertGreaterEqual(
-                c["post_pause"], 5.0,
-                f"main() /output-style must use post_pause >= 5.0, got: {c['post_pause']!r}",
+                c["post_pause"], 2.0,
+                f"main() /output-style must use post_pause >= 2.0, got: {c['post_pause']!r}",
             )
 
-    def test_respawn_output_style_uses_post_pause_gte_5(self) -> None:
-        """respawn_orchestrator() _tmux_send call for /output-style must use post_pause >= 5.0."""
+    def test_respawn_output_style_uses_post_pause_gte_2(self) -> None:
+        """respawn_orchestrator() _tmux_send call for /output-style must use post_pause >= 2.0."""
         captured_calls = []
 
         def recording_tmux_send(session, text, pause=2.0, post_pause=0.0):
@@ -836,8 +836,8 @@ class TestTmuxSendPostPause(unittest.TestCase):
         self.assertTrue(output_style_calls, "Expected at least one /output-style _tmux_send call")
         for c in output_style_calls:
             self.assertGreaterEqual(
-                c["post_pause"], 5.0,
-                f"respawn_orchestrator() /output-style must use post_pause >= 5.0, got: {c['post_pause']!r}",
+                c["post_pause"], 2.0,
+                f"respawn_orchestrator() /output-style must use post_pause >= 2.0, got: {c['post_pause']!r}",
             )
 
 

@@ -592,7 +592,7 @@ Examples:
     parser.add_argument("--max-turns", type=int, default=DEFAULT_MAX_TURNS,
                         dest="max_turns",
                         help=f"Max SDK turns (default: {DEFAULT_MAX_TURNS})")
-    _default_model = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6")
+    _default_model = os.environ.get("ANTHROPIC_MODEL") or "claude-sonnet-4-6"
     parser.add_argument("--model", default=_default_model,
                         help=f"Claude model to use (default: {_default_model})")
     parser.add_argument("--signals-dir", default=None, dest="signals_dir",

@@ -103,16 +103,17 @@ class WaitHumanAfterWaitSystem3:
                 gate_mode = node.attrs.get("mode", "")
                 if gate_mode == "e2e-review":
                     # Get all incoming nodes (predecessors)
-                    incoming_nodes = graph.nodes_by_id({edge.source for edge in graph.edges if edge.target == node.id})
+                    incoming_node_ids = {edge.source for edge in graph.edges if edge.target == node.id}
+                    incoming_nodes = [graph.nodes[nid] for nid in incoming_node_ids if nid in graph.nodes]
 
                     # Check if any predecessor is a wait.system3 node
                     has_system3_predecessor = any(
-                        pred.handler_type == "wait_system3" for pred in incoming_nodes.values()
+                        pred.handler_type == "wait_system3" for pred in incoming_nodes
                     )
 
                     # Check if any predecessor is a research node (alternative valid predecessor)
                     has_research_predecessor = any(
-                        pred.handler_type == "research" for pred in incoming_nodes.values()
+                        pred.handler_type == "research" for pred in incoming_nodes
                     )
 
                     if not (has_system3_predecessor or has_research_predecessor):

@@ -113,12 +113,21 @@ class Node:
 
     @property
     def handler_type(self) -> str:
-        """The canonical handler type for this node's shape.
+        """The canonical handler type for this node.
+
+        For hexagon nodes (which can be wait.system3 or wait.human),
+        checks the explicit ``handler`` attribute in attrs first.
+        Falls back to SHAPE_TO_HANDLER mapping for other shapes.
 
         Returns ``"unknown"`` for shapes not in ``SHAPE_TO_HANDLER``.
         The engine's ``HandlerRegistry`` will raise ``UnknownShapeError``
         when it encounters ``"unknown"``.
         """
+        # Hexagon is dual-purpose: wait.system3 or wait.human
+        # Distinguished by explicit 'handler' attribute in attrs
+        explicit_handler = self.attrs.get("handler")
+        if explicit_handler:
+            return explicit_handler
         return SHAPE_TO_HANDLER.get(self.shape, "unknown")
 
     @property

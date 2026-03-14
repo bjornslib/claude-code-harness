@@ -33,6 +33,7 @@ import pytest
 def _make_runner(signal_dir: str) -> object:
     """Create a PipelineRunner bypassing __init__, with just the attrs we need."""
     from cobuilder.engine.pipeline_runner import PipelineRunner
+    from cobuilder.engine.providers import ProvidersFile
 
     runner = PipelineRunner.__new__(PipelineRunner)
     runner.signal_dir = signal_dir
@@ -45,6 +46,8 @@ def _make_runner(signal_dir: str) -> object:
     runner.requeue_guidance = {}
     runner.orphan_resume_counts = {}
     runner._signal_seq = {}
+    runner._graph_attrs = {}
+    runner._providers = ProvidersFile({}, default_profile=None)
     # Default: node is still "active" (signal watcher hasn't processed yet).
     # Tests for the race condition (Fix 5) can override this.
     runner._get_node_status = lambda nid: "active"
@@ -441,8 +444,8 @@ class TestSignalFileExistsPreservesSuccess:
         assert captured["payload"]["status"] == "success"
         assert "All payments implemented" in captured["payload"]["message"]
 
-    def test_signal_file_missing_converts_success_to_failed(self, tmp_path):
-        """When signal file is ABSENT and SDK reports success, result becomes failed."""
+    def test_signal_file_missing_runner_writes_on_workers_behalf(self, tmp_path):
+        """When signal file is ABSENT and SDK reports success, runner writes signal on worker's behalf."""
         from cobuilder.engine import pipeline_runner as pr_mod
 
         signal_dir = str(tmp_path / "signals")
@@ -482,8 +485,9 @@ class TestSignalFileExistsPreservesSuccess:
             pr_mod.claude_code_sdk = original_sdk
             pr_mod._SDK_AVAILABLE = original_available
 
-        assert captured["payload"]["status"] == "failed"
-        assert "signal file" in captured["payload"]["message"].lower()
+        # Runner writes signal on worker's behalf when SDK completes successfully
+        assert captured["payload"]["status"] == "success"
+        assert "Task done" in captured["payload"]["message"]
 
 
 # ---------------------------------------------------------------------------
@@ -580,6 +584,7 @@ class TestPipelineRunnerEnvOverride:
 def _make_runner_for_retry(signal_dir: str) -> object:
     """Minimal PipelineRunner suitable for retry tests."""
     from cobuilder.engine.pipeline_runner import PipelineRunner
+    from cobuilder.engine.providers import ProvidersFile
 
     runner = PipelineRunner.__new__(PipelineRunner)
     runner.signal_dir = signal_dir
@@ -594,6 +599,7 @@ def _make_runner_for_retry(signal_dir: str) -> object:
     runner.orphan_resume_counts = {}
     runner._signal_seq = {}
     runner._graph_attrs = {}
+    runner._providers = ProvidersFile({}, default_profile=None)
     return runner
 
 
@@ -610,7 +616,7 @@ class TestRateLimitRetry:
 
         call_count = {"n": 0}
 
-        def _fake_dispatch_via_sdk(node_id, worker_type, prompt, handler="codergen"):
+        def _fake_dispatch_via_sdk(node_id, worker_type, prompt, handler="codergen", target_dir="", llm_config=None):
             call_count["n"] += 1
             signal_path = os.path.join(signal_dir, f"{node_id}.json")
             if call_count["n"] == 1:
@@ -675,7 +681,7 @@ class TestRateLimitRetry:
 
         call_count = {"n": 0}
 
-        def _fake_dispatch_via_sdk(node_id, worker_type, prompt, handler="codergen"):
+        def _fake_dispatch_via_sdk(node_id, worker_type, prompt, handler="codergen", target_dir="", llm_config=None):
             call_count["n"] += 1
             signal_path = os.path.join(signal_dir, f"{node_id}.json")
             with open(signal_path, "w") as fh:

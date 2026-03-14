@@ -21,12 +21,16 @@ from typer.testing import CliRunner
 
 VALID_DOT = """
 digraph test_valid {
-    start [shape=Mdiamond label="Start"]
-    impl  [shape=box     label="Implement" prompt="Write the code"]
-    done  [shape=Msquare label="Done"]
+    start   [shape=Mdiamond  label="Start"]
+    impl    [shape=box       label="Implement" prompt="Write the code" sd_path=".taskmaster/docs/SD-TEST.md" worker_type="backend-solutions-engineer"]
+    validate [shape=hexagon  label="Validate" handler="wait_system3" gate_type="e2e" summary_ref=".claude/evidence/summary.md" bead_id="bd-test"]
+    human   [shape=hexagon   label="Human Review" handler="wait_human" mode="e2e-review"]
+    done    [shape=Msquare   label="Done"]
 
-    start -> impl
-    impl  -> done
+    start   -> impl
+    impl    -> validate
+    validate -> human
+    human   -> done
 }
 """
 
@@ -40,12 +44,16 @@ digraph test_no_start {
 
 WARNING_ONLY_DOT = """
 digraph test_warnings {
-    start [shape=Mdiamond label="Start"]
-    impl  [shape=box      label=""]
-    done  [shape=Msquare  label="Done"]
+    start   [shape=Mdiamond  label="Start"]
+    impl    [shape=box       label="" prompt="Write the code" sd_path=".taskmaster/docs/SD-TEST.md" worker_type="backend-solutions-engineer"]
+    validate [shape=hexagon  label="Validate" handler="wait_system3" gate_type="e2e" summary_ref=".claude/evidence/summary.md" bead_id="bd-test"]
+    human   [shape=hexagon   label="Human Review" handler="wait_human" mode="e2e-review"]
+    done    [shape=Msquare   label="Done"]
 
-    start -> impl
-    impl  -> done
+    start   -> impl
+    impl    -> validate
+    validate -> human
+    human   -> done
 }
 """
 

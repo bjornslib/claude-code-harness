@@ -583,6 +583,7 @@ class TestEngineRunnerCheckpointIntegration:
                 dot_path=dot_file,
                 pipelines_dir=tmp_path / "runs",
                 handler_registry=registry,
+                skip_validation=True,  # _DOT_3NODE lacks Epic 2 requirements
             )
             await runner.run()
 
@@ -611,6 +612,7 @@ class TestEngineRunnerCheckpointIntegration:
             dot_path=dot_file,
             pipelines_dir=tmp_path / "runs",
             handler_registry=registry,
+            skip_validation=True,  # _DOT_2NODE lacks Epic 2 requirements
         )
         checkpoint = await runner.run()
 
@@ -677,6 +679,7 @@ digraph pipeline {
             dot_path=dot_file,
             pipelines_dir=tmp_path / "runs",
             handler_registry=registry,
+            skip_validation=True,  # Branching DOT lacks Epic 2 requirements
         )
         await runner.run()
 

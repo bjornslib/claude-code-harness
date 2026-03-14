@@ -66,9 +66,12 @@ def _build_claude_cmd(node_id: str, prd: str, mode: str) -> str:
 
     worktree_flag = "" if mode == "sdk" else f" --worktree {shlex.quote(node_id)}"
 
+    # Use ANTHROPIC_MODEL from environment if set, otherwise default to claude-sonnet-4-6
+    model = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6")
+
     return (
         f"unset CLAUDECODE && env {env_vars} "
-        f"claude --chrome --model claude-sonnet-4-6"
+        f"claude --chrome --model {shlex.quote(model)}"
         f" --dangerously-skip-permissions{worktree_flag}"
     )
 
