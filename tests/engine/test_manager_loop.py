@@ -158,3 +158,217 @@ class TestManagerLoopHandler:
 
         assert outcome.status == OutcomeStatus.FAILURE
         assert outcome.metadata["child_returncode"] == 1
+
+
+class TestGateSignalDetection:
+    """Tests for gate signal detection and handling."""
+
+    @pytest.mark.asyncio
+    async def test_detect_gate_signal_cobuilder(self, tmp_path: Path) -> None:
+        """Test detection of GATE_WAIT_COBUILDER signal."""
+        from cobuilder.engine.handlers.manager_loop import GateType
+        from cobuilder.engine.signal_protocol import (
+            GATE_WAIT_COBUILDER,
+            write_signal,
+        )
+
+        handler = ManagerLoopHandler()
+
+        # Create signals directory
+        signals_dir = tmp_path / "signals"
+        signals_dir.mkdir(parents=True)
+
+        # Write a cobuilder gate signal
+        write_signal(
+            source="child",
+            target="parent",
+            signal_type=GATE_WAIT_COBUILDER,
+            payload={"node_id": "validate_node", "gate_type": "wait.cobuilder"},
+            signals_dir=str(signals_dir),
+        )
+
+        # Detect the gate signal
+        gate = handler._detect_gate_signal(signals_dir)
+
+        assert gate is not None
+        assert gate.gate_type == GateType.COBUILDER
+        assert gate.node_id == "validate_node"
+
+    @pytest.mark.asyncio
+    async def test_detect_gate_signal_human(self, tmp_path: Path) -> None:
+        """Test detection of GATE_WAIT_HUMAN signal."""
+        from cobuilder.engine.handlers.manager_loop import GateType
+        from cobuilder.engine.signal_protocol import (
+            GATE_WAIT_HUMAN,
+            write_signal,
+        )
+
+        handler = ManagerLoopHandler()
+
+        # Create signals directory
+        signals_dir = tmp_path / "signals"
+        signals_dir.mkdir(parents=True)
+
+        # Write a human gate signal
+        write_signal(
+            source="child",
+            target="parent",
+            signal_type=GATE_WAIT_HUMAN,
+            payload={"node_id": "approval_node", "gate_type": "wait.human"},
+            signals_dir=str(signals_dir),
+        )
+
+        # Detect the gate signal
+        gate = handler._detect_gate_signal(signals_dir)
+
+        assert gate is not None
+        assert gate.gate_type == GateType.HUMAN
+        assert gate.node_id == "approval_node"
+
+    @pytest.mark.asyncio
+    async def test_detect_no_gate_signal(self, tmp_path: Path) -> None:
+        """Test that _detect_gate_signal returns None when no gate signals exist."""
+        handler = ManagerLoopHandler()
+
+        # Create empty signals directory
+        signals_dir = tmp_path / "signals"
+        signals_dir.mkdir(parents=True)
+
+        # No gate signals present
+        gate = handler._detect_gate_signal(signals_dir)
+
+        assert gate is None
+
+    @pytest.mark.asyncio
+    async def test_handle_cobuilder_gate_auto_approve(self, tmp_path: Path) -> None:
+        """Test that cobuilder gates are auto-approved and response signal written."""
+        from cobuilder.engine.handlers.manager_loop import GateSignal, GateType
+
+        handler = ManagerLoopHandler()
+
+        # Create signals directory
+        signals_dir = tmp_path / "signals"
+        signals_dir.mkdir(parents=True)
+
+        # Create a gate signal
+        gate = GateSignal(
+            gate_type=GateType.COBUILDER,
+            node_id="validate_node",
+            prd_ref="PRD-TEST-001",
+            signal_path=signals_dir / "test-signal.json",
+        )
+
+        # Create a mock node
+        node = MagicMock()
+        node.id = "parent_node"
+
+        # Handle the gate
+        result = await handler._handle_gate(
+            gate=gate,
+            signals_dir=str(signals_dir),
+            node=node,
+        )
+
+        assert result.get("handled") is True
+
+        # Verify response signal was written
+        response_files = list(signals_dir.glob("*GATE_RESPONSE*.json"))
+        assert len(response_files) >= 1
+
+    @pytest.mark.asyncio
+    async def test_handle_human_gate_not_handled(self, tmp_path: Path) -> None:
+        """Test that human gates return not handled (requires external intervention)."""
+        from cobuilder.engine.handlers.manager_loop import GateSignal, GateType
+
+        handler = ManagerLoopHandler()
+
+        # Create signals directory
+        signals_dir = tmp_path / "signals"
+        signals_dir.mkdir(parents=True)
+
+        # Create a gate signal
+        gate = GateSignal(
+            gate_type=GateType.HUMAN,
+            node_id="approval_node",
+            prd_ref="PRD-TEST-001",
+            signal_path=signals_dir / "test-signal.json",
+        )
+
+        # Create a mock node
+        node = MagicMock()
+        node.id = "parent_node"
+
+        # Handle the gate
+        result = await handler._handle_gate(
+            gate=gate,
+            signals_dir=str(signals_dir),
+            node=node,
+        )
+
+        assert result.get("handled") is False
+        assert "human_intervention_required" in result.get("error", "")
+
+    @pytest.mark.asyncio
+    async def test_child_pipeline_with_cobuilder_gate(self, tmp_path: Path) -> None:
+        """Test that child hitting wait.cobuilder gate is handled correctly."""
+        from cobuilder.engine.signal_protocol import (
+            GATE_WAIT_COBUILDER,
+            RUNNER_EXITED,
+            write_signal,
+        )
+
+        handler = ManagerLoopHandler()
+
+        # Create a dummy DOT file
+        dot_file = tmp_path / "child.dot"
+        dot_file.write_text('digraph test { start [shape=Mdiamond]; }')
+
+        request = _make_request(
+            attrs={
+                "mode": "spawn_pipeline",
+                "sub_pipeline": str(dot_file),
+            },
+            run_dir=str(tmp_path),
+        )
+
+        # Mock subprocess that stays alive while gate is processed
+        mock_proc = AsyncMock()
+        mock_proc.returncode = None  # Process is running
+        mock_proc.pid = 12345
+        mock_proc.communicate = AsyncMock(return_value=(b"done", b""))
+
+        signals_dir = tmp_path / "nodes" / "test_node" / "sub-run" / "signals"
+
+        call_count = 0
+
+        async def mock_sleep(interval: float) -> None:
+            nonlocal call_count
+            call_count += 1
+
+            # On first call, write a cobuilder gate signal
+            if call_count == 1:
+                signals_dir.mkdir(parents=True, exist_ok=True)
+                write_signal(
+                    source="child",
+                    target="parent",
+                    signal_type=GATE_WAIT_COBUILDER,
+                    payload={"node_id": "child_gate", "prd_ref": "PRD-001"},
+                    signals_dir=str(signals_dir),
+                )
+
+            # On third call, write completion signal and set returncode
+            if call_count == 3:
+                mock_proc.returncode = 0
+                write_signal(
+                    source="runner",
+                    target="parent",
+                    signal_type=RUNNER_EXITED,
+                    payload={"status": "completed"},
+                    signals_dir=str(signals_dir),
+                )
+
+        with patch("asyncio.create_subprocess_exec", return_value=mock_proc):
+            with patch("asyncio.sleep", side_effect=mock_sleep):
+                outcome = await handler.execute(request)
+
+        assert outcome.status == OutcomeStatus.SUCCESS

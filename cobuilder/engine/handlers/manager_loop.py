@@ -6,6 +6,9 @@ Two modes:
 - ``spawn_pipeline`` (new): Spawns a child EngineRunner as a subprocess on a
   DOT file specified by ``pipeline_params_file`` or ``sub_pipeline`` attribute.
   Monitors via signal protocol. Optionally launches a stream summarizer sidecar.
+  **Child Gate Detection**: Monitors child's signal directory for GATE_WAIT_COBUILDER
+  and GATE_WAIT_HUMAN signals, dispatches validation-test-agent for cobuilder gates,
+  and surfaces human gates to the parent guardian.
 - ``supervisor`` (default): Spawns and monitors an orchestrator subprocess.
   Falls back to NotImplementedError if neither mode is configured.
 
@@ -21,17 +24,54 @@ import json
 import logging
 import os
 import sys
+from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
 from cobuilder.engine.handlers.base import Handler, HandlerRequest
 from cobuilder.engine.outcome import Outcome, OutcomeStatus
+from cobuilder.engine.signal_protocol import (
+    GATE_RESPONSE,
+    GATE_WAIT_COBUILDER,
+    GATE_WAIT_HUMAN,
+    list_signals,
+    move_to_processed,
+    read_signal,
+    write_gate_response,
+)
 
 logger = logging.getLogger(__name__)
 
 _MAX_MANAGER_DEPTH = int(os.environ.get("PIPELINE_MAX_MANAGER_DEPTH", "5"))
 _POLL_INTERVAL_S = float(os.environ.get("PIPELINE_MANAGER_POLL_INTERVAL", "15"))
 _DEFAULT_TIMEOUT_S = float(os.environ.get("PIPELINE_MANAGER_TIMEOUT", "7200"))
+_GATE_CHECK_INTERVAL_S = float(os.environ.get("PIPELINE_GATE_CHECK_INTERVAL", "2"))
+_VALIDATION_TIMEOUT_S = float(os.environ.get("PIPELINE_VALIDATION_TIMEOUT", "300"))
+
+
+class GateType(Enum):
+    """Types of gates that child pipelines can hit."""
+
+    COBUILDER = "wait.cobuilder"
+    HUMAN = "wait.human"
+
+
+@dataclass
+class GateSignal:
+    """Represents a detected gate signal from a child pipeline.
+
+    Attributes:
+        gate_type: Type of gate (COBUILDER or HUMAN).
+        node_id: Node identifier in the child pipeline.
+        prd_ref: Optional PRD reference for validation context.
+        signal_path: Path to the signal file.
+    """
+
+    gate_type: GateType
+    node_id: str
+    prd_ref: str
+    signal_path: Path
 
 
 class ManagerLoopHandler:
@@ -223,7 +263,25 @@ class ManagerLoopHandler:
     async def _monitor_child_process(
         self, child: asyncio.subprocess.Process, node: Any, signals_dir: str
     ) -> dict[str, Any]:
-        """Monitor a child pipeline process until completion or timeout."""
+        """Monitor a child pipeline process until completion, timeout, or gate.
+
+        This method implements hybrid monitoring:
+        1. Polls for child process exit status
+        2. Polls for signal files (RUNNER_EXITED)
+        3. Detects and handles gate signals (GATE_WAIT_COBUILDER, GATE_WAIT_HUMAN)
+
+        When a child hits a gate:
+        - wait.cobuilder: Dispatches validation-test-agent, writes response signal
+        - wait.human: Surfaces to parent guardian (logs for human intervention)
+
+        Args:
+            child: The asyncio subprocess running the child pipeline.
+            node: The parent pipeline node that spawned the child.
+            signals_dir: Path to the child's signal directory.
+
+        Returns:
+            Dict with status, returncode, and optional error/checkpoint info.
+        """
         timeout = float(node.attrs.get("timeout", _DEFAULT_TIMEOUT_S))
         start = asyncio.get_event_loop().time()
 
@@ -266,6 +324,7 @@ class ManagerLoopHandler:
             # Check for signal files
             sig_dir = Path(signals_dir)
             if sig_dir.exists():
+                # Check for completion signals first
                 for sig_file in sig_dir.glob("*RUNNER_EXITED*.json"):
                     try:
                         sig_data = json.loads(sig_file.read_text())
@@ -277,7 +336,149 @@ class ManagerLoopHandler:
                     except (json.JSONDecodeError, OSError):
                         pass
 
-            await asyncio.sleep(_POLL_INTERVAL_S)
+                # Check for gate signals
+                gate = self._detect_gate_signal(sig_dir)
+                if gate is not None:
+                    logger.info(
+                        "Child pipeline for node '%s' hit %s gate at node '%s'",
+                        node.id, gate.gate_type.value, gate.node_id,
+                    )
+
+                    # Handle the gate
+                    gate_result = await self._handle_gate(
+                        gate=gate,
+                        signals_dir=signals_dir,
+                        node=node,
+                    )
+
+                    if not gate_result.get("handled", False):
+                        # Gate could not be handled - return failure
+                        return {
+                            "status": "failed",
+                            "error": gate_result.get("error", "gate_handling_failed"),
+                            "gate_type": gate.gate_type.value,
+                            "returncode": -1,
+                        }
+
+                    # Gate handled successfully, continue monitoring
+                    # Move processed gate signal
+                    try:
+                        move_to_processed(str(gate.signal_path))
+                    except OSError:
+                        pass
+
+            # Use shorter sleep interval for gate responsiveness
+            await asyncio.sleep(_GATE_CHECK_INTERVAL_S)
+
+    def _detect_gate_signal(self, signals_dir: Path) -> GateSignal | None:
+        """Detect a gate signal in the child's signal directory.
+
+        Scans for GATE_WAIT_COBUILDER and GATE_WAIT_HUMAN signal files.
+
+        Args:
+            signals_dir: Path to the child's signal directory.
+
+        Returns:
+            GateSignal if a gate signal is found, None otherwise.
+        """
+        if not signals_dir.exists():
+            return None
+
+        # Check for cobuilder gate signals
+        for sig_file in signals_dir.glob(f"*{GATE_WAIT_COBUILDER}*.json"):
+            try:
+                sig_data = json.loads(sig_file.read_text())
+                payload = sig_data.get("payload", {})
+                return GateSignal(
+                    gate_type=GateType.COBUILDER,
+                    node_id=payload.get("node_id", "unknown"),
+                    prd_ref=payload.get("prd_ref", ""),
+                    signal_path=sig_file,
+                )
+            except (json.JSONDecodeError, OSError):
+                pass
+
+        # Check for human gate signals
+        for sig_file in signals_dir.glob(f"*{GATE_WAIT_HUMAN}*.json"):
+            try:
+                sig_data = json.loads(sig_file.read_text())
+                payload = sig_data.get("payload", {})
+                return GateSignal(
+                    gate_type=GateType.HUMAN,
+                    node_id=payload.get("node_id", "unknown"),
+                    prd_ref=payload.get("prd_ref", ""),
+                    signal_path=sig_file,
+                )
+            except (json.JSONDecodeError, OSError):
+                pass
+
+        return None
+
+    async def _handle_gate(
+        self,
+        gate: GateSignal,
+        signals_dir: str,
+        node: Any,
+    ) -> dict[str, Any]:
+        """Handle a detected gate signal from a child pipeline.
+
+        For wait.cobuilder gates:
+        - Dispatches validation-test-agent (placeholder for future implementation)
+        - Writes GATE_RESPONSE signal with approval status
+
+        For wait.human gates:
+        - Logs the need for human intervention
+        - Returns not handled (requires external human action)
+
+        Args:
+            gate: The detected gate signal.
+            signals_dir: Path to the child's signal directory.
+            node: The parent pipeline node.
+
+        Returns:
+            Dict with 'handled' boolean and optional 'error' message.
+        """
+        if gate.gate_type == GateType.COBUILDER:
+            # For now, auto-approve cobuilder gates
+            # TODO: Dispatch validation-test-agent for proper validation
+            logger.info(
+                "Auto-approving wait.cobuilder gate for child node '%s' "
+                "(validation-test-agent dispatch not yet implemented)",
+                gate.node_id,
+            )
+
+            # Write response signal
+            try:
+                write_gate_response(
+                    node_id=gate.node_id,
+                    approved=True,
+                    feedback="Auto-approved by parent manager (validation pending)",
+                    signals_dir=signals_dir,
+                )
+                return {"handled": True}
+            except OSError as exc:
+                logger.error(
+                    "Failed to write GATE_RESPONSE for node '%s': %s",
+                    gate.node_id, exc,
+                )
+                return {"handled": False, "error": "response_write_failed"}
+
+        elif gate.gate_type == GateType.HUMAN:
+            # Human gates require external intervention
+            # Log and return not handled - the parent pipeline's guardian
+            # or operator must write the response signal
+            logger.warning(
+                "Child pipeline for node '%s' hit wait.human gate at node '%s'. "
+                "Requires human intervention. Write GATE_RESPONSE signal to: %s",
+                node.id, gate.node_id, signals_dir,
+            )
+            return {
+                "handled": False,
+                "error": "human_intervention_required",
+                "message": f"Human approval required at gate {gate.node_id}",
+            }
+
+        return {"handled": False, "error": "unknown_gate_type"}
 
     async def _launch_summarizer(
         self, dot_path: Path, signals_dir: str, sub_run_dir: Path

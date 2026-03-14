@@ -69,6 +69,12 @@ AGENT_REGISTERED = "AGENT_REGISTERED"  # payload: {agent_id, role, name, session
 AGENT_CRASHED    = "AGENT_CRASHED"     # payload: {agent_id, role, name, crashed_at}
 AGENT_TERMINATED = "AGENT_TERMINATED"  # payload: {agent_id, role, name, terminated_at}
 
+# Gate signals (child → parent, parent → child) — Epic 4: ManagerLoopHandler Upgrade
+# Used when child pipeline hits a wait.cobuilder or wait.human gate
+GATE_WAIT_COBUILDER = "GATE_WAIT_COBUILDER"  # payload: {node_id, gate_type, prd_ref}
+GATE_WAIT_HUMAN     = "GATE_WAIT_HUMAN"      # payload: {node_id, gate_type, prd_ref}
+GATE_RESPONSE       = "GATE_RESPONSE"        # payload: {node_id, approved, feedback}
+
 
 # ---------------------------------------------------------------------------
 # Directory resolution
@@ -443,6 +449,110 @@ def write_agent_terminated(
             "role": role,
             "name": name,
             "terminated_at": terminated_at,
+        },
+        signals_dir=signals_dir,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Gate signal helpers (Epic 4: ManagerLoopHandler Upgrade)
+# ---------------------------------------------------------------------------
+
+
+def write_gate_wait_cobuilder(
+    node_id: str,
+    gate_type: str = "wait.cobuilder",
+    prd_ref: str = "",
+    signals_dir: Optional[str] = None,
+) -> str:
+    """Write a GATE_WAIT_COBUILDER signal for parent to handle.
+
+    Called by child pipeline's wait.cobuilder handler to signal the parent
+    that it has reached a validation gate and is waiting for a response.
+
+    Args:
+        node_id: Node identifier for the gate node in the child pipeline.
+        gate_type: Gate type (default: "wait.cobuilder").
+        prd_ref: Optional PRD reference for validation context.
+        signals_dir: Override the default signals directory.
+
+    Returns:
+        Absolute path to the written signal file.
+    """
+    return write_signal(
+        source="child",
+        target="parent",
+        signal_type=GATE_WAIT_COBUILDER,
+        payload={
+            "node_id": node_id,
+            "gate_type": gate_type,
+            "prd_ref": prd_ref,
+        },
+        signals_dir=signals_dir,
+    )
+
+
+def write_gate_wait_human(
+    node_id: str,
+    gate_type: str = "wait.human",
+    prd_ref: str = "",
+    signals_dir: Optional[str] = None,
+) -> str:
+    """Write a GATE_WAIT_HUMAN signal for parent to handle.
+
+    Called by child pipeline's wait.human handler to signal the parent
+    that it requires human approval.
+
+    Args:
+        node_id: Node identifier for the gate node in the child pipeline.
+        gate_type: Gate type (default: "wait.human").
+        prd_ref: Optional PRD reference for context.
+        signals_dir: Override the default signals directory.
+
+    Returns:
+        Absolute path to the written signal file.
+    """
+    return write_signal(
+        source="child",
+        target="parent",
+        signal_type=GATE_WAIT_HUMAN,
+        payload={
+            "node_id": node_id,
+            "gate_type": gate_type,
+            "prd_ref": prd_ref,
+        },
+        signals_dir=signals_dir,
+    )
+
+
+def write_gate_response(
+    node_id: str,
+    approved: bool,
+    feedback: str = "",
+    signals_dir: Optional[str] = None,
+) -> str:
+    """Write a GATE_RESPONSE signal for child to consume.
+
+    Called by parent after handling a gate (validation or human approval)
+    to signal the child whether to proceed or fail.
+
+    Args:
+        node_id: Node identifier for the gate node in the child pipeline.
+        approved: True if validation passed / human approved; False otherwise.
+        feedback: Optional feedback message (validation results or reason for rejection).
+        signals_dir: Override the default signals directory.
+
+    Returns:
+        Absolute path to the written signal file.
+    """
+    return write_signal(
+        source="parent",
+        target="child",
+        signal_type=GATE_RESPONSE,
+        payload={
+            "node_id": node_id,
+            "approved": approved,
+            "feedback": feedback,
         },
         signals_dir=signals_dir,
     )
