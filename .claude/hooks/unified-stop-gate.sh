@@ -434,7 +434,7 @@ if [[ "$SESSION_ID" == system3-* ]]; then
     fi
 
     S3_EXIT=0
-    S3_RESULT=$($TIMEOUT_CMD 20s python3 << 'S3_CHECK'
+    S3_RESULT=$($TIMEOUT_CMD 90s python3 << 'S3_CHECK'
 import json
 import sys
 import os
@@ -458,7 +458,7 @@ except Exception as e:
 S3_CHECK
 ) || S3_EXIT=$?
     if [ $S3_EXIT -eq 124 ]; then
-        echo "⚠️  System 3 judge timed out (20s), allowing stop" >&2
+        echo "⚠️  System 3 judge timed out (90s), allowing stop" >&2
         S3_RESULT='{"passed": true, "message": "Judge timed out, allowing stop"}'
     elif [ $S3_EXIT -ne 0 ] && [ -z "$S3_RESULT" ]; then
         echo "⚠️  System 3 judge failed (exit $S3_EXIT), allowing stop" >&2

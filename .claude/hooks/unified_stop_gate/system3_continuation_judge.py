@@ -642,7 +642,7 @@ class System3ContinuationJudgeChecker:
                 max_tokens=500,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
-                timeout=30.0,  # 30 second timeout
+                timeout=75.0,  # 75 second timeout (shell limit is 90s)
             )
 
             # Extract text content (only TextBlock has .text; other block types are skipped)
