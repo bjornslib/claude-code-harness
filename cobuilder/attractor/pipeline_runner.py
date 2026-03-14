@@ -399,6 +399,17 @@ class PipelineRunner:
             return target
         return self.dot_dir
 
+    def _resolve_target_dir(self, node_attrs: dict | None = None) -> str:
+        """Resolve target directory: node attr > graph attr > dot_dir."""
+        if node_attrs:
+            node_td = node_attrs.get("target_dir", "")
+            if node_td and os.path.isdir(node_td):
+                return node_td
+        graph_td = self._graph_attrs.get("target_dir", "")
+        if graph_td and os.path.isdir(graph_td):
+            return graph_td
+        return self.dot_dir
+
     def _get_repo_root(self) -> str:
         """Find the git repo root by walking up from dot_dir. Falls back to target_dir."""
         d = os.path.abspath(self.dot_dir)
@@ -563,13 +574,21 @@ class PipelineRunner:
                     "reason": f"Gate node {nid} orphaned after restart",
                 })
 
-            # If nothing is dispatchable and nothing is active, we're stuck
+            # If nothing is active, check if there are dispatchable pending nodes.
+            # A requeue or retry may have just reset nodes to pending — give the
+            # dispatch loop one more iteration before declaring stuck.
             if not self.active_workers:
                 pending_nodes = [n for n in nodes if n["attrs"].get("status", "pending") == "pending"]
                 failed_nodes = [n for n in nodes if n["attrs"].get("status", "pending") == "failed"]
-                if pending_nodes or failed_nodes:
-                    log.error("Pipeline stuck: %d pending, %d failed, 0 active workers",
-                              len(pending_nodes), len(failed_nodes))
+                if pending_nodes:
+                    # Pending nodes exist — continue to next iteration so the
+                    # dispatch logic at the top of the loop can pick them up.
+                    log.info("No active workers but %d pending nodes — re-entering dispatch loop",
+                             len(pending_nodes))
+                    continue
+                if failed_nodes and not pending_nodes:
+                    log.error("Pipeline stuck: 0 pending, %d failed, 0 active workers",
+                              len(failed_nodes))
                     self._save_checkpoint("stuck")
                     return False
                 # All nodes are in terminal states but not "complete" — recheck
@@ -839,8 +858,11 @@ class PipelineRunner:
             self._executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="worker")
         handler = attrs.get("handler", "codergen")
 
+        # Resolve per-node target_dir for worker cwd
+        resolved_target_dir = self._resolve_target_dir(attrs)
+
         # Submit the task and track the future for liveness monitoring
-        future = self._executor.submit(self._dispatch_agent_sdk, nid, worker_type, prompt, handler)
+        future = self._executor.submit(self._dispatch_agent_sdk, nid, worker_type, prompt, handler, resolved_target_dir)
 
         # Track the worker future using the advanced worker tracker
         self.worker_tracker.track_worker(nid, future)
@@ -959,16 +981,17 @@ class PipelineRunner:
     # AgentSDK dispatch
     # ------------------------------------------------------------------
 
-    def _dispatch_agent_sdk(self, node_id: str, worker_type: str, prompt: str, handler: str = "codergen") -> None:
+    def _dispatch_agent_sdk(self, node_id: str, worker_type: str, prompt: str, handler: str = "codergen", target_dir: str = "") -> None:
         """Dispatch a worker via claude_code_sdk. No headless fallback.
 
         All worker dispatch goes through AgentSDK exclusively.
         This method runs in a background thread. On completion it writes a
         signal file to {signal_dir}/{node_id}.json and sets _wake_event.
         """
+        effective_dir = target_dir or self._get_target_dir()
         worker_model = os.environ.get("ANTHROPIC_MODEL") or os.environ.get("PIPELINE_WORKER_MODEL", "claude-haiku-4-5-20251001")
         log.info("[sdk] Dispatching worker  node=%s  type=%s  model=%s  cwd=%s",
-                 node_id, worker_type, worker_model, self._get_target_dir())
+                 node_id, worker_type, worker_model, effective_dir)
 
         # Logfire span covers the entire worker lifecycle (dispatch → completion)
         _span = None
@@ -976,7 +999,7 @@ class PipelineRunner:
             _span = logfire.span(
                 "sdk_worker {node_id} ({worker_type})",
                 node_id=node_id, worker_type=worker_type,
-                model=worker_model, cwd=self._get_target_dir(),
+                model=worker_model, cwd=effective_dir,
                 sdk_version=getattr(claude_code_sdk, "__version__", "unknown"),
             )
             _span.__enter__()
@@ -998,7 +1021,7 @@ class PipelineRunner:
             _max_retries = _get_rate_limit_retries()
             _backoff = _get_rate_limit_backoff()
             for _attempt in range(1, _max_retries + 1):
-                self._dispatch_via_sdk(node_id, worker_type, prompt, handler)
+                self._dispatch_via_sdk(node_id, worker_type, prompt, handler, effective_dir)
                 # _dispatch_via_sdk writes the signal itself; read it back to
                 # detect a rate-limit failure before deciding to retry.
                 signal_path = os.path.join(self.signal_dir, f"{node_id}.json")
@@ -1133,7 +1156,7 @@ class PipelineRunner:
         extra = self._HANDLER_EXTRA_TOOLS.get(handler, self._SERENA_TOOLS)
         return self._BASE_TOOLS + extra
 
-    def _dispatch_via_sdk(self, node_id: str, worker_type: str, prompt: str, handler: str = "codergen") -> None:
+    def _dispatch_via_sdk(self, node_id: str, worker_type: str, prompt: str, handler: str = "codergen", target_dir: str = "") -> None:
         """Dispatch worker using claude_code_sdk."""
         import asyncio
 
@@ -1151,17 +1174,20 @@ class PipelineRunner:
         # Build handler-specific allowed_tools
         tools = self._get_allowed_tools(handler)
 
+        effective_dir = target_dir or self._get_target_dir()
+
         async def _run() -> dict:
             # Build clean env without CLAUDECODE
             clean_env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
             # Add ATTRACTOR_SIGNAL_DIR as required by GAP-6.1
             clean_env["ATTRACTOR_SIGNAL_DIR"] = str(self.signal_dir)
+            clean_env["PROJECT_TARGET_DIR"] = effective_dir
             options = claude_code_sdk.ClaudeCodeOptions(  # type: ignore[attr-defined]
                 system_prompt=self._build_system_prompt(worker_type),
                 allowed_tools=tools,
                 permission_mode="bypassPermissions",
                 model=worker_model,
-                cwd=self._get_target_dir(),
+                cwd=effective_dir,
                 env=clean_env,
             )
             messages = []
@@ -1216,7 +1242,7 @@ class PipelineRunner:
         if _LOGFIRE_AVAILABLE:
             logfire.info("worker_dispatch_start {node_id}",
                          node_id=node_id, worker_type=worker_type,
-                         model=worker_model, cwd=self._get_target_dir())
+                         model=worker_model, cwd=effective_dir)
 
         t0 = time.time()
         try:
@@ -1293,11 +1319,16 @@ class PipelineRunner:
             "type": "validation",
             "started_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         }
+        # Resolve target_dir from the target node's attrs
+        data = parse_dot(self.dot_content)
+        target_node = next((n for n in data["nodes"] if n["id"] == target_node_id), None)
+        resolved_target_dir = self._resolve_target_dir(target_node["attrs"] if target_node else None)
+
         # Dispatch via ThreadPoolExecutor so Logfire auto-propagates OTel context.
         if not hasattr(self, "_executor"):
             from concurrent.futures import ThreadPoolExecutor
             self._executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="worker")
-        self._executor.submit(self._run_validation_subprocess, node_id, target_node_id)
+        self._executor.submit(self._run_validation_subprocess, node_id, target_node_id, resolved_target_dir)
 
     def _get_node_status(self, node_id: str) -> str:
         """Get the current status of a node by reading the DOT file."""
@@ -1324,10 +1355,12 @@ class PipelineRunner:
         sd_path = attrs.get("sd_path", "")
         label = attrs.get("label", target_node_id).replace("\\n", " ")
 
+        resolved_dir = self._resolve_target_dir(attrs)
         lines = [
             f"# Validate: {label}",
             f"Node ID: {target_node_id}",
             f"Pipeline: {self.pipeline_id}",
+            f"Project Directory: `{resolved_dir}`",
         ]
 
         if acceptance:
@@ -1456,7 +1489,7 @@ class PipelineRunner:
 
         return "\n".join(lines)
 
-    def _run_validation_subprocess(self, node_id: str, target_node_id: str) -> None:
+    def _run_validation_subprocess(self, node_id: str, target_node_id: str, target_dir: str = "") -> None:
         """Run validation-test-agent via AgentSDK. Falls back to auto-pass if unavailable.
 
         Validation is a System 3 concern — the runner auto-advances nodes when
@@ -1485,6 +1518,7 @@ class PipelineRunner:
             return
 
         os.environ.pop("CLAUDECODE", None)
+        effective_dir = target_dir or self._get_target_dir()
         worker_model = os.environ.get("ANTHROPIC_MODEL") or os.environ.get("PIPELINE_WORKER_MODEL", "claude-haiku-4-5-20251001")
 
         # Build a rich validation prompt with acceptance criteria and context
@@ -1493,13 +1527,14 @@ class PipelineRunner:
         if _LOGFIRE_AVAILABLE:
             logfire.info("validation_dispatch {node_id}",
                          node_id=node_id, model=worker_model,
-                         cwd=self._get_target_dir())
+                         cwd=effective_dir)
 
         # Dispatch with timeout handling - Epic C
         timeout = int(os.environ.get("VALIDATION_TIMEOUT", "600"))  # 10min default
 
         async def _run() -> dict:
             clean_env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+            clean_env["PROJECT_TARGET_DIR"] = effective_dir
             # Base tools for validation; extend for browser-required PRDs
             validation_tools = ["Read", "Write", "Bash", "Grep", "Glob", "ToolSearch", "Skill"]
             if getattr(self, "_validation_method_hint", None) == "browser-required":
@@ -1519,7 +1554,7 @@ class PipelineRunner:
                 allowed_tools=validation_tools,
                 permission_mode="bypassPermissions",
                 model=worker_model,
-                cwd=self._get_target_dir(),
+                cwd=effective_dir,
                 max_turns=100,
                 env=clean_env,
             )
@@ -1812,10 +1847,14 @@ class PipelineRunner:
                     target_node = next((n for n in data["nodes"] if n["id"] == requeue_target), None)
                     if target_node:
                         t_status = target_node["attrs"].get("status", "pending")
-                        if t_status in ("impl_complete", "validated"):
+                        if t_status in ("impl_complete", "validated", "accepted"):
                             self._do_transition(requeue_target, "failed")
-                        # Cannot go directly failed -> pending in standard chain
-                        # Worker will be re-dispatched when pending
+                        # Force reset to pending so dispatch loop picks it up
+                        self._force_status(requeue_target, "pending")
+                    # Also reset the gate node itself to pending so it doesn't
+                    # appear as an orphaned active gate on the next loop iteration
+                    if node_id != requeue_target:
+                        self._force_status(node_id, "pending")
                     log.info("[signal] %s: requeue -> %s (retry %d/%d)",
                              node_id, requeue_target, retries, MAX_RETRIES)
                 self.active_workers.pop(node_id, None)
@@ -2157,6 +2196,18 @@ class PipelineRunner:
         preamble = self.HANDLER_PREAMBLES.get(handler, "")
         if preamble:
             lines.append(f"\n{preamble}")
+
+        # Inject project directory so workers know where to operate
+        resolved_dir = self._resolve_target_dir(attrs)
+        lines.append(
+            f"\n## Project Directory — MANDATORY\n"
+            f"Your working directory is: `{resolved_dir}`\n"
+            f"This is also available as `$PROJECT_TARGET_DIR` env var.\n"
+            f"ALL file operations (Read, Edit, Write, Glob, Grep, Bash) MUST target files within this directory.\n"
+            f"Do NOT navigate to or operate in any other directory.\n"
+            f"Use `Bash(command=\"pwd\")` to confirm your working directory if unsure."
+        )
+
         if prd_ref:
             lines.append(f"PRD: {prd_ref}")
         if bead_id:
