@@ -141,8 +141,24 @@ class ConditionEvaluator:
         if isinstance(node, VariableNode):
             return self._resolve_variable(node, context, missing_var_default)
         if isinstance(node, LiteralNode):
+            # Check if this bare-word string exists as a context key.
+            # This enables conditions like "outcome = success" where "outcome"
+            # is injected into context (see edge_selector.py) and should be
+            # resolved as a variable lookup rather than a string literal.
+            if isinstance(node.value, str):
+                ctx_snapshot = self._get_context_snapshot(context)
+                if node.value in ctx_snapshot:
+                    return ctx_snapshot[node.value]
             return node.value
         raise ConditionEvalError(f"Unknown value node type: {type(node)}")
+
+    def _get_context_snapshot(self, context: Any) -> dict[str, Any]:
+        """Obtain a snapshot dict from context for key lookups."""
+        if hasattr(context, "snapshot"):
+            return context.snapshot()
+        if isinstance(context, dict):
+            return context
+        return {}
 
     def _resolve_variable(
         self,
