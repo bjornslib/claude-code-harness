@@ -105,3 +105,4 @@ cobuilder/engine/.env
 
 # Logfire observability state
 .logfire/
+pinchtab/
