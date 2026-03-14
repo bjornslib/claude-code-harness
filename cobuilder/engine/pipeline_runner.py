@@ -52,6 +52,12 @@ from typing import Any, Dict, Optional, Set
 
 from cobuilder.engine.dispatch_checkpoint import save_checkpoint  # noqa: E402
 from cobuilder.engine.dispatch_parser import parse_file, parse_dot  # noqa: E402
+from cobuilder.engine.providers import (  # noqa: E402
+    get_llm_config_for_node,
+    load_providers_file,
+    ProvidersFile,
+    ResolvedLLMConfig,
+)
 from cobuilder.engine.transition import apply_transition, VALID_TRANSITIONS  # noqa: E402
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -365,6 +371,38 @@ class PipelineRunner:
         self._graph_attrs = pipeline_data.get("graph_attrs", {})
         log.info("Pipeline loaded: %s  nodes=%d", self.pipeline_id, len(pipeline_data.get("nodes", [])))
 
+        # Load providers.yaml for per-node LLM configuration (Epic 1)
+        self._providers = self._load_providers()
+
+    def _load_providers(self) -> ProvidersFile:
+        """Load providers.yaml for per-node LLM configuration.
+
+        Search order (per providers.py):
+        1. graph_attrs.providers_file in DOT file
+        2. dot_dir/providers.yaml (next to DOT file)
+        3. repo_root/providers.yaml (repo root)
+        4. Empty ProvidersFile if not found
+
+        Returns:
+            Loaded ProvidersFile, or empty ProvidersFile if not found.
+        """
+        providers_file_path = self._graph_attrs.get("providers_file")
+        manifest_dir = self.dot_dir
+        project_root = self._get_repo_root()
+
+        providers = load_providers_file(
+            providers_file_path=providers_file_path,
+            manifest_dir=manifest_dir,
+            project_root=project_root,
+        )
+        if providers.list_profiles():
+            log.info(
+                "Loaded %d LLM profile(s) from providers.yaml: %s",
+                len(providers.list_profiles()),
+                ", ".join(providers.list_profiles()),
+            )
+        return providers
+
     def _load_engine_env(self) -> None:
         """Source cobuilder/engine/.env if it exists. Sets ANTHROPIC_MODEL etc.
 
@@ -421,6 +459,53 @@ class PipelineRunner:
                 break
             d = parent
         return self._get_target_dir()
+
+    def _resolve_llm_config(
+        self,
+        node_id: str,
+        handler_type: str,
+        node_attrs: dict | None = None,
+    ) -> ResolvedLLMConfig:
+        """Resolve LLM configuration for a node using 5-layer resolution.
+
+        Resolution order (first non-null wins):
+        1. Node's llm_profile attribute → look up in providers.yaml
+        2. handler_defaults.{handler_type}.llm_profile from graph_attrs
+        3. defaults.llm_profile from graph_attrs
+        4. Environment variables (ANTHROPIC_MODEL, ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL)
+        5. Runner defaults (hardcoded fallback)
+
+        Args:
+            node_id: Node ID for logging context.
+            handler_type: Handler type (e.g., "codergen", "research", "refine").
+            node_attrs: Node attributes dict (may contain llm_profile).
+
+        Returns:
+            ResolvedLLMConfig with fully resolved values.
+        """
+        # Extract llm_profile from node attrs if present
+        node_llm_profile = None
+        if node_attrs:
+            node_llm_profile = node_attrs.get("llm_profile")
+
+        # Build a minimal manifest-like object from graph_attrs
+        class _ManifestDefaults:
+            def __init__(self, graph_attrs: dict) -> None:
+                self.llm_profile = graph_attrs.get("llm_profile")
+                self.handler_defaults = graph_attrs.get("handler_defaults", {})
+
+        manifest_defaults = _ManifestDefaults(self._graph_attrs)
+
+        return get_llm_config_for_node(
+            node=type("_Node", (), {
+                "attrs": node_attrs or {},
+                "llm_profile": node_llm_profile,
+                "handler_type": handler_type,
+                "id": node_id,
+            })(),
+            providers=self._providers,
+            manifest=type("_Manifest", (), {"defaults": manifest_defaults})(),
+        )
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -862,7 +947,7 @@ class PipelineRunner:
         resolved_target_dir = self._resolve_target_dir(attrs)
 
         # Submit the task and track the future for liveness monitoring
-        future = self._executor.submit(self._dispatch_agent_sdk, nid, worker_type, prompt, handler, resolved_target_dir)
+        future = self._executor.submit(self._dispatch_agent_sdk, nid, worker_type, prompt, handler, resolved_target_dir, attrs)
 
         # Track the worker future using the advanced worker tracker
         self.worker_tracker.track_worker(nid, future)
@@ -981,7 +1066,7 @@ class PipelineRunner:
     # AgentSDK dispatch
     # ------------------------------------------------------------------
 
-    def _dispatch_agent_sdk(self, node_id: str, worker_type: str, prompt: str, handler: str = "codergen", target_dir: str = "") -> None:
+    def _dispatch_agent_sdk(self, node_id: str, worker_type: str, prompt: str, handler: str = "codergen", target_dir: str = "", node_attrs: dict | None = None) -> None:
         """Dispatch a worker via claude_code_sdk. No headless fallback.
 
         All worker dispatch goes through AgentSDK exclusively.
@@ -989,9 +1074,13 @@ class PipelineRunner:
         signal file to {signal_dir}/{node_id}.json and sets _wake_event.
         """
         effective_dir = target_dir or self._get_target_dir()
-        worker_model = os.environ.get("ANTHROPIC_MODEL") or os.environ.get("PIPELINE_WORKER_MODEL", "claude-haiku-4-5-20251001")
-        log.info("[sdk] Dispatching worker  node=%s  type=%s  model=%s  cwd=%s",
-                 node_id, worker_type, worker_model, effective_dir)
+
+        # Resolve LLM config using 5-layer resolution (Epic 1)
+        llm_config = self._resolve_llm_config(node_id, handler, node_attrs)
+        worker_model = llm_config.model
+
+        log.info("[sdk] Dispatching worker  node=%s  type=%s  model=%s  profile=%s  cwd=%s",
+                 node_id, worker_type, worker_model, llm_config.profile_name or "default", effective_dir)
 
         # Logfire span covers the entire worker lifecycle (dispatch → completion)
         _span = None
@@ -1021,7 +1110,7 @@ class PipelineRunner:
             _max_retries = _get_rate_limit_retries()
             _backoff = _get_rate_limit_backoff()
             for _attempt in range(1, _max_retries + 1):
-                self._dispatch_via_sdk(node_id, worker_type, prompt, handler, effective_dir)
+                self._dispatch_via_sdk(node_id, worker_type, prompt, handler, effective_dir, llm_config)
                 # _dispatch_via_sdk writes the signal itself; read it back to
                 # detect a rate-limit failure before deciding to retry.
                 signal_path = os.path.join(self.signal_dir, f"{node_id}.json")
@@ -1156,15 +1245,17 @@ class PipelineRunner:
         extra = self._HANDLER_EXTRA_TOOLS.get(handler, self._SERENA_TOOLS)
         return self._BASE_TOOLS + extra
 
-    def _dispatch_via_sdk(self, node_id: str, worker_type: str, prompt: str, handler: str = "codergen", target_dir: str = "") -> None:
+    def _dispatch_via_sdk(self, node_id: str, worker_type: str, prompt: str, handler: str = "codergen", target_dir: str = "", llm_config: ResolvedLLMConfig | None = None) -> None:
         """Dispatch worker using claude_code_sdk."""
         import asyncio
 
         # Unset CLAUDECODE to avoid nested session detection
         os.environ.pop("CLAUDECODE", None)
 
-        # Worker model: ANTHROPIC_MODEL (from attractor .env) > PIPELINE_WORKER_MODEL > default
-        worker_model = os.environ.get("ANTHROPIC_MODEL") or os.environ.get("PIPELINE_WORKER_MODEL", "claude-haiku-4-5-20251001")
+        # Use resolved LLM config if provided, otherwise fall back to env defaults
+        if llm_config is None:
+            llm_config = self._resolve_llm_config(node_id, handler, None)
+        worker_model = llm_config.model
 
         # Skills are available to SDK agents via setting_sources=['user', 'project']
         # + 'Skill' in allowed_tools. Agent .md files reference skills in their body
@@ -1182,6 +1273,8 @@ class PipelineRunner:
             # Add PIPELINE_SIGNAL_DIR as required by GAP-6.1
             clean_env["PIPELINE_SIGNAL_DIR"] = str(self.signal_dir)
             clean_env["PROJECT_TARGET_DIR"] = effective_dir
+            # Apply LLM config env vars (api_key, base_url) from resolved profile
+            clean_env.update(llm_config.to_env_dict())
             options = claude_code_sdk.ClaudeCodeOptions(  # type: ignore[attr-defined]
                 system_prompt=self._build_system_prompt(worker_type),
                 allowed_tools=tools,
@@ -1519,7 +1612,10 @@ class PipelineRunner:
 
         os.environ.pop("CLAUDECODE", None)
         effective_dir = target_dir or self._get_target_dir()
-        worker_model = os.environ.get("ANTHROPIC_MODEL") or os.environ.get("PIPELINE_WORKER_MODEL", "claude-haiku-4-5-20251001")
+
+        # Resolve LLM config for validation agent (Epic 1)
+        llm_config = self._resolve_llm_config(node_id, "validation", None)
+        worker_model = llm_config.model
 
         # Build a rich validation prompt with acceptance criteria and context
         prompt = self._build_validation_prompt(target_node_id)
@@ -1535,6 +1631,8 @@ class PipelineRunner:
         async def _run() -> dict:
             clean_env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
             clean_env["PROJECT_TARGET_DIR"] = effective_dir
+            # Apply LLM config env vars (api_key, base_url) from resolved profile
+            clean_env.update(llm_config.to_env_dict())
             # Base tools for validation; extend for browser-required PRDs
             validation_tools = ["Read", "Write", "Bash", "Grep", "Glob", "ToolSearch", "Skill"]
             if getattr(self, "_validation_method_hint", None) == "browser-required":
