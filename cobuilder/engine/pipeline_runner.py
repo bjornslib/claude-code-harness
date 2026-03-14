@@ -109,7 +109,7 @@ except ImportError:
 
 try:
     import logfire
-    logfire.configure(scrubbing=False)
+    logfire.configure(service_name="cobuilder-pipeline-runner", scrubbing=False)
     _LOGFIRE_AVAILABLE = True
 except ImportError:
     logfire = None  # type: ignore[assignment]

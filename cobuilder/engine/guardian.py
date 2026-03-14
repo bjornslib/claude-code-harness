@@ -92,6 +92,7 @@ else:
     )
 
 logfire.configure(
+    service_name="cobuilder-guardian",
     send_to_logfire=_logfire_enabled,
     inspect_arguments=False,
     scrubbing=False,
@@ -134,10 +135,9 @@ def build_system_prompt(
     Returns:
         Formatted system prompt string.
     """
-    with logfire.span("guardian.build_system_prompt", pipeline_id=pipeline_id):
-        target_dir_line = f"- Target directory: {target_dir}"
-        target_dir_flag = f" --target-dir {target_dir}"
-        return f"""\
+    target_dir_line = f"- Target directory: {target_dir}"
+    target_dir_flag = f" --target-dir {target_dir}"
+    return f"""\
 You are a Headless Guardian agent (Layer 1) in a 4-layer pipeline execution system.
 
 Your role: Drive pipeline execution autonomously by reading the DOT graph, spawning
@@ -419,21 +419,20 @@ def build_initial_prompt(
     Returns:
         Formatted initial prompt string.
     """
-    with logfire.span("guardian.build_initial_prompt", pipeline_id=pipeline_id):
-        target_dir_line = f"Target directory: {target_dir}\n" if target_dir else ""
-        return (
-            f"You are the Headless Guardian for pipeline '{pipeline_id}'.\n\n"
-            f"Pipeline DOT file: {dot_path}\n"
-            f"Scripts directory: {scripts_dir}\n"
-            f"{target_dir_line}\n"
-            f"Begin by:\n"
-            f"1. Parsing the pipeline to understand the full graph\n"
-            f"2. Validating the pipeline structure\n"
-            f"3. Getting current node statuses\n\n"
-            f"Then proceed with Phase 2 (dispatch ready nodes) of the execution flow.\n\n"
-            f"If the pipeline is already partially complete (some nodes are already validated),\n"
-            f"skip those nodes and continue from the current state.\n"
-        )
+    target_dir_line = f"Target directory: {target_dir}\n" if target_dir else ""
+    return (
+        f"You are the Headless Guardian for pipeline '{pipeline_id}'.\n\n"
+        f"Pipeline DOT file: {dot_path}\n"
+        f"Scripts directory: {scripts_dir}\n"
+        f"{target_dir_line}\n"
+        f"Begin by:\n"
+        f"1. Parsing the pipeline to understand the full graph\n"
+        f"2. Validating the pipeline structure\n"
+        f"3. Getting current node statuses\n\n"
+        f"Then proceed with Phase 2 (dispatch ready nodes) of the execution flow.\n\n"
+        f"If the pipeline is already partially complete (some nodes are already validated),\n"
+        f"skip those nodes and continue from the current state.\n"
+    )
 
 
 def build_options(
@@ -1144,7 +1143,7 @@ def main(argv: list[str] | None = None) -> None:
             "initial_prompt_length": len(initial_prompt),
         }
         print(json.dumps(config, indent=2))
-        sys.exit(0)
+        return
 
     # Register Layer 0/1 (guardian) identity before starting the agent loop.
     identity_registry.create_identity(

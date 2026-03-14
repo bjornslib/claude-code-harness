@@ -110,6 +110,7 @@ else:
     )
 
 logfire.configure(
+    service_name="cobuilder-session-runner",
     send_to_logfire=_logfire_enabled,
     inspect_arguments=False,
     scrubbing=False,
@@ -180,8 +181,7 @@ def build_system_prompt(
     Returns:
         Formatted system prompt string.
     """
-    with logfire.span("runner.build_system_prompt", node_id=node_id, prd_ref=prd_ref):
-        return f"""\
+    return f"""\
 You are a Runner agent (Layer 2) in a 4-layer pipeline execution system.
 
 Your role: Monitor an orchestrator tmux session and signal the Guardian at decision points.
@@ -347,20 +347,19 @@ def build_initial_prompt(
     Returns:
         Formatted initial prompt string.
     """
-    with logfire.span("runner.build_initial_prompt", node_id=node_id, prd_ref=prd_ref):
-        return (
-            f"You are monitoring orchestrator in tmux session '{session_name}' "
-            f"implementing node '{node_id}' for {prd_ref}.\n\n"
-            f"Your assignment:\n"
-            f"- Node: {node_id}\n"
-            f"- PRD: {prd_ref}\n"
-            f"- Session: {session_name}\n"
-            f"- Acceptance criteria: {acceptance or 'See DOT file'}\n"
-            f"- Check interval: {check_interval}s\n"
-            f"- Stuck threshold: {stuck_threshold}s\n\n"
-            f"Start by checking if the orchestrator is alive, then begin the monitoring loop.\n"
-            f"Scripts directory: {scripts_dir}\n"
-        )
+    return (
+        f"You are monitoring orchestrator in tmux session '{session_name}' "
+        f"implementing node '{node_id}' for {prd_ref}.\n\n"
+        f"Your assignment:\n"
+        f"- Node: {node_id}\n"
+        f"- PRD: {prd_ref}\n"
+        f"- Session: {session_name}\n"
+        f"- Acceptance criteria: {acceptance or 'See DOT file'}\n"
+        f"- Check interval: {check_interval}s\n"
+        f"- Stuck threshold: {stuck_threshold}s\n\n"
+        f"Start by checking if the orchestrator is alive, then begin the monitoring loop.\n"
+        f"Scripts directory: {scripts_dir}\n"
+    )
 
 
 def build_options(
@@ -1257,7 +1256,7 @@ def main(argv: list[str] | None = None) -> None:
                 "initial_prompt_length": len(initial_prompt),
             }
             print(json.dumps(config, indent=2))
-            sys.exit(0)
+            return
 
         # Register runner identity before starting the agent loop
         node_id = args.node
