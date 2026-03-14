@@ -1,0 +1,17 @@
+prd_id: PRD-MODEL-MIGRATION-001
+title: "AgenCheck Model Migration + NEXTJS_BASE_URL Configuration"
+created: 2026-03-11
+features:
+  - file: e1-env-config-email-templates.feature
+    weight: 0.50
+    description: "NEXTJS_BASE_URL env var, email template rewrite with 3 CTAs, atomic variable rename, days_elapsed fix"
+  - file: e2-voice-agent-model.feature
+    weight: 0.25
+    description: "Voice agent model migration from llama-4-maverick to gpt-oss-20b"
+  - file: e3-form-filler-model.feature
+    weight: 0.25
+    description: "Form filler model migration from gpt-oss-120b to gpt-oss-20b"
+thresholds:
+  accept: 0.70
+  investigate: 0.50
+  reject: 0.50
