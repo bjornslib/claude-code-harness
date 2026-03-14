@@ -240,6 +240,15 @@ class Node:
         """PRD reference for this node.  Empty string if not set."""
         return self.attrs.get("prd_ref", "")
 
+    @property
+    def llm_profile(self) -> str | None:
+        """LLM profile name for per-node model configuration (Epic 1).
+
+        References a profile in providers.yaml. Returns None if not set.
+        Used by the 5-layer resolution in cobuilder.engine.providers.
+        """
+        return self.attrs.get("llm_profile") or None
+
 
 # ---------------------------------------------------------------------------
 # Graph

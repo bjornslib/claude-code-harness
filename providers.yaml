@@ -1,0 +1,47 @@
+# providers.yaml — LLM profile definitions for CoBuilder
+#
+# This file defines named LLM profiles that DOT nodes can reference via the
+# `llm_profile` attribute. Profile keys translate to Anthropic SDK equivalents
+# at dispatch time.
+#
+# Resolution order (first non-null wins):
+# 1. Node's llm_profile attribute → look up in this file
+# 2. handler_defaults.{handler_type}.llm_profile from manifest
+# 3. defaults.llm_profile from manifest
+# 4. Environment variables (ANTHROPIC_MODEL, ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL)
+# 5. Runner defaults (hardcoded)
+#
+# Usage in DOT:
+#   codergen_auth [
+#       shape=box
+#       handler="codergen"
+#       llm_profile="anthropic-smart"
+#       prompt="Implement authentication..."
+#   ];
+
+profiles:
+  # Anthropic Haiku — fast, cheap, good for research and summarization
+  anthropic-fast:
+    model: claude-haiku-4-5-20251001
+    api_key: $ANTHROPIC_API_KEY
+    base_url: https://api.anthropic.com
+
+  # Anthropic Sonnet — balanced, good for implementation
+  anthropic-smart:
+    model: claude-sonnet-4-5-20250514
+    api_key: $ANTHROPIC_API_KEY
+    base_url: https://api.anthropic.com
+
+  # Anthropic Opus — most capable, good for complex reasoning
+  anthropic-opus:
+    model: claude-opus-4-6
+    api_key: $ANTHROPIC_API_KEY
+    base_url: https://api.anthropic.com
+
+  # OpenRouter example — any provider speaking Anthropic API protocol works
+  # Uncomment and configure your OPENROUTER_API_KEY to use
+  #
+  # openrouter-smart:
+  #   model: anthropic/claude-sonnet-4-5
+  #   api_key: $OPENROUTER_API_KEY
+  #   base_url: https://openrouter.ai/api/v1

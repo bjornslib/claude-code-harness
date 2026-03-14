@@ -19,6 +19,14 @@ from cobuilder.engine.graph import SHAPE_TO_HANDLER, Edge, Graph, Node
 from cobuilder.engine.handlers import Handler, HandlerRegistry, HandlerRequest
 from cobuilder.engine.outcome import Outcome, OutcomeStatus
 from cobuilder.engine.parser import DotParser, parse_dot_file, parse_dot_string
+from cobuilder.engine.providers import (
+    LLMProfile,
+    ProvidersFile,
+    ResolvedLLMConfig,
+    get_llm_config_for_node,
+    load_providers_file,
+    resolve_llm_config,
+)
 from cobuilder.engine.runner import EngineRunner
 
 __all__ = [
@@ -41,6 +49,13 @@ __all__ = [
     "Handler",
     "HandlerRequest",
     "HandlerRegistry",
+    # Providers (Epic 1)
+    "LLMProfile",
+    "ProvidersFile",
+    "ResolvedLLMConfig",
+    "get_llm_config_for_node",
+    "load_providers_file",
+    "resolve_llm_config",
     # Exceptions
     "EngineError",
     "ValidationError",
