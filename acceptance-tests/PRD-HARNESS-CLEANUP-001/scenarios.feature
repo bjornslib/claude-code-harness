@@ -25,7 +25,7 @@ Feature: Gitignore patterns prevent artifact accumulation
     # Evidence to check:
     # - cat .claude/.gitignore | grep checkpoint
     # - Verify pattern matches filenames like: attractor-engine-checkpoint-20260224-104514.json
-    # - git check-ignore -v .claude/attractor/pipelines/attractor-engine-checkpoint-20260224-104514.json
+    # - git check-ignore -v .cobuilder/pipelines/attractor-engine-checkpoint-20260224-104514.json
 
     # Red flags:
     # - Pattern uses a leading slash that prevents subdirectory matching
@@ -44,7 +44,7 @@ Feature: Gitignore patterns prevent artifact accumulation
 
     # Evidence to check:
     # - cat .claude/.gitignore | grep signals
-    # - git check-ignore -v .claude/attractor/pipelines/signals/
+    # - git check-ignore -v .cobuilder/pipelines/signals/
 
     # Red flags:
     # - Pattern "signals" without path context could match unrelated signal files
@@ -62,7 +62,7 @@ Feature: Gitignore patterns prevent artifact accumulation
 
     # Evidence to check:
     # - cat .claude/.gitignore | grep runner-state
-    # - git check-ignore -v .claude/attractor/runner-state/
+    # - git check-ignore -v .cobuilder/runner-state/
 
     # Red flags:
     # - Only runner-state files ignored, not the directory itself
@@ -70,17 +70,17 @@ Feature: Gitignore patterns prevent artifact accumulation
   @scenario-claude_gitignore_checkpoints_dir_pattern
   Scenario: .claude/.gitignore ignores attractor checkpoints directory
     When I read ".claude/.gitignore"
-    Then it contains a line matching "attractor/checkpoints/"
+    Then it contains a line matching "cobuilder/checkpoints/"
 
     # Confidence scoring guide:
-    # 1.0 — Pattern present and confirmed to suppress .claude/attractor/checkpoints/
+    # 1.0 — Pattern present and confirmed to suppress .cobuilder/checkpoints/
     # 0.5 — Pattern "checkpoints/" present but anchored incorrectly
     # 0.0 — No checkpoints directory pattern in .claude/.gitignore
 
     # Evidence to check:
     # - cat .claude/.gitignore | grep "checkpoints/"
-    # - git check-ignore -v .claude/attractor/checkpoints/
-    # - Note: distinct from attractor/pipelines/*-checkpoint-*.json (individual file pattern)
+    # - git check-ignore -v .cobuilder/checkpoints/
+    # - Note: distinct from cobuilder/pipelines/*-checkpoint-*.json (individual file pattern)
 
     # Red flags:
     # - Pattern conflicts with the checkpoint file pattern (double-coverage causing confusion)
@@ -273,7 +273,7 @@ Feature: Artifact files removed and placeholder files in place
 
   @scenario-checkpoint_files_cleaned
   Scenario: Checkpoint JSON files in attractor pipelines directory are cleaned up
-    When I count JSON files matching "*-checkpoint-*.json" in ".claude/attractor/pipelines/"
+    When I count JSON files matching "*-checkpoint-*.json" in ".cobuilder/pipelines/"
     Then zero checkpoint files remain
     Or all remaining checkpoint files are already gitignored
 
@@ -284,9 +284,9 @@ Feature: Artifact files removed and placeholder files in place
     # 0.0 — All original checkpoint files still present and untracked
 
     # Evidence to check:
-    # - find .claude/attractor/pipelines/ -name "*-checkpoint-*.json" | wc -l
-    # - git status .claude/attractor/pipelines/ (should show no untracked checkpoint files)
-    # - If files remain: git check-ignore -v .claude/attractor/pipelines/<name>.json
+    # - find .cobuilder/pipelines/ -name "*-checkpoint-*.json" | wc -l
+    # - git status .cobuilder/pipelines/ (should show no untracked checkpoint files)
+    # - If files remain: git check-ignore -v .cobuilder/pipelines/<name>.json
 
     # Red flags:
     # - Checkpoint files deleted but gitignore pattern not added (will re-accumulate)

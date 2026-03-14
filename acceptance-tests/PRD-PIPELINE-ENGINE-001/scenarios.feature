@@ -32,7 +32,7 @@ Feature: F1 — Custom Recursive-Descent DOT Parser
     # - Importing any external DOT parsing library
 
   Scenario: S1.2 — Parser handles existing pipeline corpus
-    Given all .dot files in .claude/attractor/pipelines/
+    Given all .dot files in .pipelines/pipelines/
     When DotParser.parse_file() is called on each
     Then all files parse without raising ParseError
     And graph-level attributes (prd_ref, default_max_retry) are extracted
@@ -44,7 +44,7 @@ Feature: F1 — Custom Recursive-Descent DOT Parser
 
     # Evidence to check:
     # - cobuilder/engine/tests/test_parser.py — parametrised test over real .dot files
-    # - Check that test actually reads from .claude/attractor/pipelines/
+    # - Check that test actually reads from .pipelines/pipelines/
 
     # Red flags:
     # - Hardcoded test DOT strings only (no real file corpus test)

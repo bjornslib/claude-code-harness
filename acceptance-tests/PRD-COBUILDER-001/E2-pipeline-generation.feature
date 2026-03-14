@@ -179,7 +179,7 @@ Feature: RepoMap-Native Pipeline Generation with LLM Enrichment
     Given an SD file and a tracked repository exist
     When I run "cobuilder pipeline create --sd SD-FILE.md --repo REPO"
     Then the command chains: auto-init → node collection → TaskMaster → beads → enrichment → DOT → SD v2
-    And a valid DOT file is produced at .claude/attractor/pipelines/<initiative>.dot
+    And a valid DOT file is produced at .pipelines/pipelines/<initiative>.dot
     And the exit code is 0 on success
 
     # Confidence scoring guide:

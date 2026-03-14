@@ -537,7 +537,7 @@ ENGINE_CHECKPOINT_VERSION = "1.0.0"
 ### 4.6 Checkpoint Directory Structure
 
 ```
-.claude/attractor/pipelines/
+.pipelines/pipelines/
   <pipeline_id>-run-<timestamp>/      # run_dir, created by CheckpointManager
     checkpoint.json                   # EngineCheckpoint (atomic write)
     checkpoint.json.tmp               # Temporary write target (deleted after rename)
@@ -786,7 +786,7 @@ class Graph:
 - [ ] Extracts graph-level attributes: `prd_ref`, `promise_id`, `label`, `default_max_retry`, `retry_target`, `fallback_retry_target`
 - [ ] Raises `ParseError` with line number and snippet for malformed DOT
 - [ ] Does not import `graphviz`, `pydot`, or any non-stdlib DOT library
-- [ ] Parses all `.dot` files in `.claude/attractor/pipelines/` without error (regression test corpus)
+- [ ] Parses all `.dot` files in `.pipelines/pipelines/` without error (regression test corpus)
 
 ### AC-F3: HandlerRegistry
 
@@ -1079,13 +1079,13 @@ The 3-node pipeline test (`test_runner.py::test_linear_pipeline_end_to_end`) use
 
 ### Test File Corpus
 
-The tests use existing `.dot` files from `.claude/attractor/pipelines/` as a parse regression corpus:
+The tests use existing `.dot` files from `.pipelines/pipelines/` as a parse regression corpus:
 
 ```python
 # test_parser.py:
 import glob
 
-DOT_CORPUS = glob.glob(".claude/attractor/pipelines/*.dot")
+DOT_CORPUS = glob.glob(".pipelines/pipelines/*.dot")
 
 @pytest.mark.parametrize("dot_file", DOT_CORPUS)
 def test_parser_handles_existing_pipelines(dot_file):
@@ -1128,7 +1128,7 @@ The `asyncio-mode=auto` flag (from `pytest-asyncio`) is required because handler
 
 Deliverables: `graph.py`, `outcome.py`, `context.py`, `exceptions.py`, `parser.py`, `test_parser.py`, `test_graph.py`
 
-Success criteria: Parser handles all existing DOT files in `.claude/attractor/pipelines/`. `PipelineContext` thread-safety tests pass.
+Success criteria: Parser handles all existing DOT files in `.pipelines/pipelines/`. `PipelineContext` thread-safety tests pass.
 
 Dependencies: None.
 
@@ -1178,7 +1178,7 @@ Dependencies: Phase 4.
 
 | Risk | Severity | Likelihood | Mitigation |
 | --- | --- | --- | --- |
-| DOT parser fails on edge cases in existing pipelines | High | Medium | Use corpus test over all `.claude/attractor/pipelines/*.dot` files from day 1. Fix parser before proceeding to runner. |
+| DOT parser fails on edge cases in existing pipelines | High | Medium | Use corpus test over all `.pipelines/pipelines/*.dot` files from day 1. Fix parser before proceeding to runner. |
 | `asyncio.TaskGroup` fan-out leaves zombied tmux sessions on cancellation | High | Medium | `ParallelHandler` catches `asyncio.CancelledError` and writes `KILL_ORCHESTRATOR` signal for each abandoned session. |
 | CodergenHandler signal polling blocks the event loop | Medium | High | All polling is `async` with `await asyncio.sleep(poll_interval)` — never `time.sleep()`. |
 | Checkpoint writes fail on full disk | Medium | Low | `CheckpointManager.save()` catches `OSError`, logs error, but does NOT crash the engine — it continues and retries the next checkpoint. Losing a checkpoint is recoverable; crashing is not. |
@@ -1235,5 +1235,5 @@ pytest cobuilder/engine/tests/test_parser.py -v  # includes corpus test
 | `ATTRACTOR_TOOL_TIMEOUT` | `300` | Seconds before ToolHandler raises TimeoutError |
 | `ATTRACTOR_HUMAN_GATE_TIMEOUT` | `0` | Seconds before WaitHumanHandler times out (0 = indefinite) |
 | `ATTRACTOR_GIT_COMMIT_PER_NODE` | `0` | If `1`, create a git commit after each successful node |
-| `ATTRACTOR_RUN_DIR_ROOT` | `.claude/attractor/pipelines` | Base directory for run directories |
+| `ATTRACTOR_RUN_DIR_ROOT` | `.pipelines/pipelines` | Base directory for run directories |
 | `ATTRACTOR_SIGNALS_DIR` | git-root auto-detected | Override signals directory (existing signal_protocol.py convention) |

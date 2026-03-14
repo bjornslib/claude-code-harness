@@ -122,13 +122,13 @@ Feature: .claude Directory Cleanup Validation
   @E8
   Scenario: Signal directories are empty
     When I check ".claude/message-bus/signals/"
-    And I check ".claude/attractor/pipelines/signals/"
+    And I check ".cobuilder/pipelines/signals/"
     Then both directories contain zero files (excluding .gitkeep)
     # Scoring: 1.0 = both empty | 0.5 = one empty | 0.0 = neither empty
 
   @E8
   Scenario: Stale attractor checkpoints consolidated
-    When I count JSON checkpoint files in ".claude/attractor/pipelines/"
+    When I count JSON checkpoint files in ".cobuilder/pipelines/"
     Then at most 1 checkpoint file remains per pipeline (the latest)
     # Scoring: 1.0 = consolidated | 0.5 = reduced but not minimal | 0.0 = unchanged
 

@@ -5,7 +5,7 @@ Feature: Pure Python DOT Runner
   # for graph traversal, eliminating ~$4.91 per pipeline run.
   # Prerequisite: E7.1 (Worker Prompt Restructuring)
   # SD: docs/sds/harness-upgrade/SD-HARNESS-UPGRADE-001-E7-python-runner.md
-  # Evidence: .claude/attractor/ATTRACTOR-E2E-ANALYSIS.md (Issue 4)
+  # Evidence: .pipelines/ATTRACTOR-E2E-ANALYSIS.md (Issue 4)
 
   @feature-F7.2.1 @weight-0.03
   Scenario: S7.2.1 — pipeline_runner.py exists and has CLI

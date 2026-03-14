@@ -27,8 +27,8 @@
 - Configurable poll interval (30s) and stall threshold (5 min)
 
 ### Monitoring Mechanisms
-- Signal directory polling (.claude/attractor/signals/)
-- DOT file monitoring (.claude/attractor/pipelines/*.dot)
+- Signal directory polling (.cobuilder/signals/)
+- DOT file monitoring (.cobuilder/pipelines/*.dot)
 - State change tracking with mtime comparison
 - Anomaly detection for unexpected states
 

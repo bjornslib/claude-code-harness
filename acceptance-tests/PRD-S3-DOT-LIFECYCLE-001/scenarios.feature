@@ -131,7 +131,7 @@ Feature: Definition Pipeline — PRD to .dot in One Command
     And ZeroRepo generate runs with the PRD as spec
     And the delta is exported to Attractor-compatible .dot
     And attractor validate passes on the generated .dot
-    And the .dot is stored at .claude/attractor/pipelines/<PRD-ID>.dot
+    And the .dot is stored at .pipelines/pipelines/<PRD-ID>.dot
 
     # Confidence scoring guide:
     # 1.0 — Full pipeline runs end-to-end, .dot at correct path, validate passes
@@ -144,7 +144,7 @@ Feature: Definition Pipeline — PRD to .dot in One Command
     # - .claude/skills/orchestrator-multiagent/scripts/zerorepo-pipeline.sh exists
     # - Script has stages: init, generate, export, validate, annotate, init-promise
     # - Run the script on a test PRD and check output path
-    # - .claude/attractor/pipelines/ directory structure
+    # - .pipelines/pipelines/ directory structure
 
     # Red flags:
     # - Script only wraps zerorepo-run-pipeline.py without attractor steps
@@ -155,7 +155,7 @@ Feature: Definition Pipeline — PRD to .dot in One Command
   Scenario: Definition stage creates checkpoint and completion promise
     Given the definition pipeline has produced a valid .dot
     When the pipeline completes
-    Then a checkpoint is saved at .claude/attractor/checkpoints/<PRD-ID>-definition.json
+    Then a checkpoint is saved at .pipelines/checkpoints/<PRD-ID>-definition.json
     And a completion promise is created with one AC per hexagon validation gate
     And a summary report is printed showing node counts by type and worker_type
 

@@ -169,7 +169,7 @@ Feature: F3 — Example DOT File Reset
   Description: full-initiative.dot example file has all nodes in clean/pending state with no test pollution.
 
   Scenario: example_dot_all_pending
-    Given the file .claude/attractor/examples/full-initiative.dot exists
+    Given the file .cobuilder/examples/full-initiative.dot exists
     When the attractor CLI parses it for status
     Then ALL nodes show status="pending" (or have no status attribute, defaulting to pending)
     And specifically validate_backend_tech is NOT in "active" state
@@ -183,9 +183,9 @@ Feature: F3 — Example DOT File Reset
     # 1.0 — All nodes clean, verified by running: python3 cli.py status full-initiative.dot (all show pending)
     #
     # Evidence to Check:
-    #   - .claude/attractor/examples/full-initiative.dot file content
+    #   - .cobuilder/examples/full-initiative.dot file content
     #   - grep for 'status="active"' or 'status="validated"' or 'status="failed"' (should be zero matches)
-    #   - Run: python3 .claude/scripts/attractor/cli.py status .claude/attractor/examples/full-initiative.dot
+    #   - Run: python3 cobuilder/engine/cli.py status .cobuilder/examples/full-initiative.dot
     #
     # Red Flags:
     #   - File was modified but validate_backend_tech still has status="active"

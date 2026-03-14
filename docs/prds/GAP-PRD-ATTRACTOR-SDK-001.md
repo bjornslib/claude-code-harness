@@ -156,7 +156,7 @@ All monitoring tools are tmux-specific. There is no SDK-mode monitoring path.
 
 ### Gap D: Signal Directory Mismatch (HIGH)
 
-**Current**: Runner writes signals to the impl repo's `.claude/attractor/signals/` directory. Guardian's `wait_for_signal.py` watches the harness repo's signals directory. They never find each other.
+**Current**: Runner writes signals to the impl repo's `.pipelines/signals/` directory. Guardian's `wait_for_signal.py` watches the harness repo's signals directory. They never find each other.
 
 **Target**: Signal directory should be deterministic and shared. Options:
 1. Both use `--signals-dir` pointing to same absolute path

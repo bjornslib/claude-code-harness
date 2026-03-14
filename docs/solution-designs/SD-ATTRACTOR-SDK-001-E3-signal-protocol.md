@@ -11,8 +11,8 @@
 ## 1. Problem
 
 Guardian and runner use different signal directories:
-- Guardian reads from harness repo: `claude-harness-setup/.claude/attractor/signals/`
-- Runner writes to impl repo worktree: `zenagent/.claude/worktrees/verify-check-002/.claude/attractor/signals/`
+- Guardian reads from harness repo: `claude-harness-setup/.cobuilder/signals/`
+- Runner writes to impl repo worktree: `zenagent/.claude/worktrees/verify-check-002/.cobuilder/signals/`
 
 Result: Guardian's `wait_for_signal.py` never finds runner's RUNNER_EXITED signal. Guardian waits full 600s timeout, then discovers signal on filesystem scan of the wrong directory.
 
@@ -158,7 +158,7 @@ def resolve_signals_dir(dot_path: str | None = None, signals_dir: str | None = N
         return os.path.join(os.path.dirname(os.path.abspath(dot_path)), "signals")
     # Fallback to git root
     git_root = _find_git_root(os.getcwd())
-    return os.path.join(git_root or ".", ".claude", "attractor", "signals")
+    return os.path.join(git_root or ".", ".pipelines", "signals")
 ```
 
 All signal read/write functions should accept an optional `signals_dir` parameter and use this resolver. Replace any bare `open()` signal writes with the atomic `write_signal()` helper above.

@@ -29,7 +29,7 @@ Queried Hindsight (bank: `claude-code-agencheck`) before finalising this design.
 **Relevant prior learnings:**
 - **13 dead files** in `.claude/scripts/attractor/` were identified in the 2026-03-04 cleanup audit (POC scripts, tmux-era tools, deprecated signal protocol CLIs). These are confirmed dead and safe to delete.
 - **Subprocess spawning pattern** (validated 2026-03-03): use `subprocess.Popen` with `os.environ` merge, unset `CLAUDECODE` in child, consume both stdout/stderr to prevent deadlock. This must be preserved exactly in the migrated code — it is not "implementation detail noise", it is a safety invariant.
-- **Signal Directory Resolution pattern** (validated 2026-03-03): priority-based fallback (`explicit override → DOT-scoped → git root`). Keep this logic unchanged; only update the root fallback path from `.claude/attractor/signals/` to `.cobuilder/signals/`.
+- **Signal Directory Resolution pattern** (validated 2026-03-03): priority-based fallback (`explicit override → DOT-scoped → git root`). Keep this logic unchanged; only update the root fallback path from `.cobuilder/signals/` to `.cobuilder/signals/`.
 - **`agents_app` in `cobuilder/cli.py`** is an empty Typer group — confirmed dead code to wire or remove.
 - **Import collision risk**: never import submodules in `__init__.py`; import specific functions to avoid circular imports (confirmed by prior Railway debugging sessions).
 - **Perplexity unavailable** during this session (quota exceeded). XDG spec sourced from freedesktop.org directly via Brave Search.

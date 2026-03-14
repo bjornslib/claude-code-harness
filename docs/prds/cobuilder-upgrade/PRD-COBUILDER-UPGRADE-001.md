@@ -3,30 +3,29 @@ title: "CoBuilder Upgrade: Templates, Worktrees & Guardian Meta-Pipeline"
 prd_id: PRD-COBUILDER-UPGRADE-001
 status: draft
 type: prd
-created: 2026-03-14
-last_verified: 2026-03-14
+created: 2026-03-14T00:00:00.000Z
+last_verified: 2026-03-14T00:00:00.000Z
 grade: authoritative
 owner: theb
-note: "This is the LAST document using PRD/SD terminology. E6 migrates to Business Spec (BS) / Technical Spec (TS)."
+note: This is the LAST document using PRD/SD terminology. E6 migrates to Business Spec (BS) / Technical Spec (TS).
 ---
-
 # PRD-COBUILDER-UPGRADE-001: CoBuilder Upgrade — Templates, Worktrees & Guardian Meta-Pipeline
 
 ## 1. Problem Statements
 
 | ID | Problem | Impact |
-|----|---------|--------|
+| --- | --- | --- |
 | P1 | **No reusable pipeline topologies.** Every initiative requires authoring a DOT graph from scratch. Common structural patterns (research-refine-codergen, hub-spoke validation) are copy-pasted and diverge. | Slow initiative boot, topology bugs, inconsistent gate placement |
 | P2 | **No stable worktree management.** Worktrees are created ad-hoc via shell commands. No idempotent `get_or_create`, no existing-branch support, no lifecycle tracking, no human-gated cleanup. | Disk waste, branch pollution, agent confusion when worktrees vanish mid-run |
 | P3 | **No Guardian meta-pipeline.** The CoBuilder Guardian's lifecycle (research → refine → plan → execute → validate → evaluate) is implicit prose. No executable representation that can be paused, resumed, inspected, or looped. | No audit trail, no bounded retry, no programmatic introspection |
 | P4 | **No per-node LLM configuration.** All workers use the same model, API key, and base URL. Cannot mix providers (Anthropic, OpenRouter, local) or models (Haiku for research, Opus for codergen) within one pipeline. | Over-spend on cheap tasks, cannot leverage specialized models, single-provider lock-in |
-| P5 | **Runtime state mixed into `.claude/`.** Pipeline DOT files, signal files, and transition logs live under `.claude/attractor/`. This repo ships publicly on GitHub — runtime state would pollute the published repo. | Accidental commits of signal/state files; fragile `.gitignore` rules |
+| P5 | **Runtime state mixed into ****`.claude/`****.** Pipeline DOT files, signal files, and transition logs live under `.claude/attractor/`. This repo ships publicly on GitHub — runtime state would pollute the published repo. **RESOLVED:** Runtime state migrated to `.pipelines/` (gitignored). | Accidental commits of signal/state files; fragile `.gitignore` rules |
 | P6 | **Stale terminology and fragmented guardian skill.** `system3-meta-orchestrator`, `s3-guardian`, `wait.system3`, agent teams, tmux spawning — legacy concepts that confuse new contributors and leak into agent prompts as cognitive momentum. PRD/SD naming is project-specific rather than generalised. | Contributor confusion, stale mental models in agent prompts, inconsistent vocabulary |
 
 ## 2. Goals
 
 | ID | Goal | Success Metric | Priority |
-|----|------|---------------|----------|
+| --- | --- | --- | --- |
 | G1 | **Template library**: Ship 3 parameterized DOT templates (sequential-validated, hub-spoke, cobuilder-lifecycle) with Jinja2 rendering and `manifest.yaml` constraints | `cobuilder template list` shows 3 entries; each instantiates valid DOT | P0 |
 | G2 | **Constraint enforcement**: Static constraints (topology, path, loop bounds, nesting depth) validated at instantiation; dynamic constraints (NodeStateMachine) enforced at runtime via ConstraintMiddleware | Invalid graphs rejected before dispatch; illegal transitions blocked | P0 |
 | G3 | **Stable worktrees**: `WorktreeManager.get_or_create(id, branch=)` returns a path idempotently, supporting both new and existing branches. Cleanup gated behind `wait.human`. Worktree target set at DOT graph level. | Worktrees survive runner restarts; cleanup never happens without human approval | P0 |
@@ -42,7 +41,7 @@ note: "This is the LAST document using PRD/SD terminology. E6 migrates to Busine
 ## 3. User Stories
 
 | ID | As a... | I want to... | So that... |
-|----|---------|-------------|-----------|
+| --- | --- | --- | --- |
 | US1 | CoBuilder Guardian | instantiate a pipeline from a template with parameters | the structural patterns are reusable while per-initiative nodes and prompts are authored fresh |
 | US2 | Pipeline runner | resolve model/key/url per node via named profiles at dispatch time | I can mix Haiku research with Sonnet implementation in one graph |
 | US3 | CoBuilder Guardian | have my lifecycle (research→plan→execute→validate) be a runnable pipeline | my decisions are auditable and my process is bounded |
@@ -124,7 +123,7 @@ profiles:
 All profile keys translate to their Anthropic SDK equivalents at dispatch time:
 
 | Profile Key | Anthropic SDK Equivalent | Environment Variable |
-|-------------|--------------------------|---------------------|
+| --- | --- | --- |
 | `model` | `model` in `ClaudeCodeOptions` | `ANTHROPIC_MODEL` |
 | `api_key` | `ANTHROPIC_API_KEY` in worker env | `ANTHROPIC_API_KEY` |
 | `base_url` | `ANTHROPIC_BASE_URL` in worker env | `ANTHROPIC_BASE_URL` |
@@ -133,7 +132,7 @@ Any provider speaking the Anthropic API protocol works transparently. The worker
 
 #### Resolution Order (first non-null wins)
 
-1. **Node `llm_profile`** — profile on the DOT node → look up in `providers.yaml`
+1. **Node ****`llm_profile`** — profile on the DOT node → look up in `providers.yaml`
 2. **Handler defaults** — `defaults.handler_defaults.{handler_type}.llm_profile` in manifest
 3. **Manifest defaults** — `defaults.llm_profile` in manifest
 4. **Environment variables** — `ANTHROPIC_MODEL`, `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`
@@ -405,13 +404,13 @@ docs/specs/
 ## 5. Technical Decisions
 
 | ID | Decision | Rationale | Alternatives Considered |
-|----|----------|-----------|------------------------|
+| --- | --- | --- | --- |
 | TD1 | **SDK over tmux for all dispatch** | Zero tmux complexity. AgentSDK provides structured output, error handling, and process management. | tmux (rejected: fragile, no structured output) |
-| TD2 | **Named profiles in `providers.yaml`** | Centralizes provider config. DOT nodes stay clean (`llm_profile="anthropic-fast"`). Keys translate to Anthropic equivalents at dispatch time. | Inline DOT attrs (rejected: clutters graphs), vault (rejected: over-engineering) |
+| TD2 | **Named profiles in ****`providers.yaml`** | Centralizes provider config. DOT nodes stay clean (`llm_profile="anthropic-fast"`). Keys translate to Anthropic equivalents at dispatch time. | Inline DOT attrs (rejected: clutters graphs), vault (rejected: over-engineering) |
 | TD3 | **Full branch merge of abstract-workflow-system** | 1,023 LOC of validated code (constraints, instantiator, manifest, state machine, middleware, ManagerLoopHandler). | Cherry-pick (rejected: fragile), rewrite (rejected: waste) |
 | TD4 | **WorktreeManager as shared infrastructure** | Runner, CLI, and future web server all need worktree management. Single class prevents divergence. | Runner-only (rejected: duplication), CLI-only (rejected: runner needs programmatic access) |
 | TD5 | **Parent monitors child signals (not just exit code)** | Prevents deadlock when child pipeline hits `wait.cobuilder` gate. Parent sees gate signal, handles it, writes response, child continues. | Simple `await proc.wait()` (rejected: deadlocks on gates) |
-| TD6 | **Rename attractor→engine, extract to `.pipelines/`** | `cobuilder/engine/` is the natural package name (already contains state_machine, middleware). `.pipelines/` at repo root (gitignored) cleanly separates runtime state from version-controlled config. | Keep attractor (rejected: opaque jargon), `.runner/` (rejected: too generic) |
+| TD6 | **Rename attractor→engine, extract to ****`.pipelines/`** | `cobuilder/engine/` is the natural package name (already contains state_machine, middleware). `.pipelines/` at repo root (gitignored) cleanly separates runtime state from version-controlled config. | Keep attractor (rejected: opaque jargon), `.runner/` (rejected: too generic) |
 | TD7 | **Migrate PRD→BS, SD→TS** | Generalises terminology. Business Spec / Technical Spec are industry-neutral. Per-initiative directories group related specs. | Keep PRD/SD (rejected: project-specific jargon) |
 | TD8 | **wait.human before pipeline launch (configurable)** | Safety default: guardian never launches pipelines without human approval. Configurable via `permissions.require_human_before_launch` in manifest for future autonomous operation. | Always require (rejected: blocks automation), never require (rejected: unsafe) |
 | TD9 | **No backward compatibility** | We are the only users. Committing fully to the upgrade avoids carrying legacy patterns. All existing pipelines will be migrated. | Backward compat (rejected: maintenance burden for zero users) |
@@ -427,7 +426,7 @@ docs/specs/
 ## 7. Risks
 
 | Risk | Likelihood | Impact | Mitigation |
-|------|-----------|--------|------------|
+| --- | --- | --- | --- |
 | Observability optional instead of mandatory: Logfire is imported defensively and skipped if missing (see `_LOGFIRE_AVAILABLE` in runner), and no CI enforces span presence | High | High | E0.2 audits all spans; E5 CI enforces span presence via `CaptureLogfire` test assertions. Convert defensive imports to hard requirements in `cobuilder/engine/` package |
 | Merge conflicts from abstract-workflow-system | Medium | Medium | Merge early (E0), resolve conflicts before new code |
 | Child gate deadlock if signal monitoring fails | Low | High | E2E test: parent detects child `wait.cobuilder`, handles, child resumes |
@@ -471,7 +470,7 @@ docs/specs/
 **E0.3: Test Coverage Baseline**
 - **Goal**: Establish coverage measurement infrastructure and measure baseline before any refactoring.
 - Configure `pytest-cov` with `pyproject.toml` settings:
-  ```toml
+```toml
   [tool.coverage.run]
   source = ["cobuilder"]
   omit = ["*/tests/*", "*/__pycache__/*"]
@@ -480,7 +479,7 @@ docs/specs/
   fail_under = 0  # Baseline measurement only — gate enforced in E5
   show_missing = true
   exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:"]
-  ```
+```
 - Run baseline coverage measurement and record results
 - Identify critical gaps (known: `engine/handlers/` at ~10%, `repomap/models/` at 0%, `repomap/serena/` at 33%)
 - Create prioritized test gap backlog for downstream epics to consume
@@ -742,7 +741,7 @@ directory = "htmlcov"
 ## 9. Implementation Status
 
 | Epic | Status | Notes |
-|------|--------|-------|
+| --- | --- | --- |
 | E0: Merge Template System + ManagerLoopHandler | **Done** | E0.1 Code Merge, E0.2 Logfire Preservation, E0.3 Coverage Baseline (67%), E0.4 Fix 195 test failures (0 remaining) |
 | E1: Per-Node LLM Profiles | **Done** | `providers.yaml` with 5 Anthropic + 2 Alibaba Cloud profiles. `cobuilder/engine/providers.py` (530 LOC). 53 unit tests. Integrated into pipeline_runner dispatch. |
 | E2: Rename attractor→engine + .pipelines/ | **Done** | 34 files moved, 17 env vars renamed ATTRACTOR_→PIPELINE_, `.pipelines/` gitignored, `dispatch_parser.py`/`dispatch_checkpoint.py` preserved. 109 files changed, zero regressions. |
@@ -758,7 +757,7 @@ directory = "htmlcov"
 ## 10. Dependencies
 
 | Epic | Depends On | Relationship |
-|------|-----------|-------------|
+| --- | --- | --- |
 | E0 | `abstract-workflow-system` branch | Source code |
 | E1 | E0 | Profiles integrate with manifest schema from template system |
 | E2 | E0 | Rename targets the merged codebase |
@@ -776,7 +775,7 @@ directory = "htmlcov"
 This spec provides **backend infrastructure** that the CoBuilder Web spec consumes:
 
 | This Spec Provides | CoBuilder Web Consumes |
-|-------------------|----------------------|
+| --- | --- |
 | `WorktreeManager` | Worktree endpoints |
 | `EngineRunner` with per-node config | Pipeline launcher |
 | Template instantiation | Initiative lifecycle — graph creation |

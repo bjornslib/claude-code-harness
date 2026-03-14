@@ -55,7 +55,7 @@
         "id": 60,
         "title": "Create zerorepo-pipeline.sh workflow script",
         "description": "Implement the single-command workflow script that orchestrates the complete definition pipeline from PRD to executable DOT graph",
-        "details": "Create `.claude/skills/orchestrator-multiagent/scripts/zerorepo-pipeline.sh` that executes: zerorepo init (if needed), zerorepo generate with PRD spec, export to DOT, attractor validate, attractor annotate, attractor init-promise. Store output at `.claude/attractor/pipelines/<PRD-ID>.dot` and create checkpoints.",
+        "details": "Create `.claude/skills/orchestrator-multiagent/scripts/zerorepo-pipeline.sh` that executes: zerorepo init (if needed), zerorepo generate with PRD spec, export to DOT, attractor validate, attractor annotate, attractor init-promise. Store output at `.cobuilder/pipelines/<PRD-ID>.dot` and create checkpoints.",
         "testStrategy": "End-to-end workflow testing with sample PRD, verify each pipeline stage completes, validate checkpoint creation and file placement.",
         "priority": "high",
         "dependencies": [
@@ -107,7 +107,7 @@
         "id": 64,
         "title": "Update System 3 DOT Navigation section",
         "description": "Modify the System 3 meta-orchestrator output style to integrate ZeroRepo-generated pipeline navigation",
-        "details": "Update `.claude/output-styles/system3-meta-orchestrator.md` DOT Navigation section to reference ZeroRepo-generated pipelines, include automatic pipeline reading from `.claude/attractor/pipelines/<INITIATIVE>.dot`, and document the integration workflow.",
+        "details": "Update `.claude/output-styles/system3-meta-orchestrator.md` DOT Navigation section to reference ZeroRepo-generated pipelines, include automatic pipeline reading from `.cobuilder/pipelines/<INITIATIVE>.dot`, and document the integration workflow.",
         "testStrategy": "Review updated output style, verify integration points are documented, test System 3 workflow with generated pipelines.",
         "priority": "high",
         "dependencies": [
