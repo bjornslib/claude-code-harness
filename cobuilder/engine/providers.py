@@ -156,15 +156,23 @@ class ProvidersFile:
             base_url: https://openrouter.ai/api/v1
     """
 
-    def __init__(self, profiles: dict[str, LLMProfile], source_path: str | None = None):
+    def __init__(
+        self,
+        profiles: dict[str, LLMProfile],
+        source_path: str | None = None,
+        default_profile: str | None = None,
+    ):
         """Initialize with pre-parsed profiles.
 
         Args:
             profiles: Dict mapping profile name → LLMProfile.
             source_path: Path to the source file (for error messages).
+            default_profile: Name of the default profile to use when no
+                llm_profile is specified on a node and no manifest defaults apply.
         """
         self._profiles = profiles
         self._source_path = source_path
+        self.default_profile = default_profile
 
     def get(self, name: str) -> LLMProfile | None:
         """Get a profile by name.
@@ -236,12 +244,21 @@ class ProvidersFile:
 
             profiles[name] = profile
 
+        default_profile = raw.get("default_profile")
+        if default_profile and default_profile not in profiles:
+            logger.warning(
+                "default_profile '%s' not found in profiles, ignoring",
+                default_profile,
+            )
+            default_profile = None
+
         logger.info(
-            "Loaded %d LLM profile(s) from %s",
+            "Loaded %d LLM profile(s) from %s (default=%s)",
             len(profiles),
             path,
+            default_profile or "<none>",
         )
-        return cls(profiles, source_path=str(path))
+        return cls(profiles, source_path=str(path), default_profile=default_profile)
 
     @classmethod
     def empty(cls) -> "ProvidersFile":
@@ -399,6 +416,25 @@ def resolve_llm_config(
                     profile_name=manifest_profile_name,
                     resolution_source="manifest_default",
                 )
+
+    # Layer 3.5: providers.yaml default_profile
+    if providers.default_profile:
+        profile = providers.get(providers.default_profile)
+        if profile:
+            resolved_api_key = resolve_env_var(profile.api_key)
+            logger.debug(
+                "Node '%s' using providers.yaml default_profile '%s' (model=%s)",
+                node_id,
+                providers.default_profile,
+                profile.model,
+            )
+            return ResolvedLLMConfig(
+                model=profile.model,
+                api_key=resolved_api_key,
+                base_url=profile.base_url,
+                profile_name=providers.default_profile,
+                resolution_source="providers_default",
+            )
 
     # Layer 4: Environment variables
     env_model = os.environ.get("ANTHROPIC_MODEL")

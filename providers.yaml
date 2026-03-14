@@ -19,6 +19,10 @@
 #       prompt="Implement authentication..."
 #   ];
 
+# Default profile — used when no llm_profile is set on a node and no
+# handler_defaults or manifest defaults override it. Layer 5 fallback.
+default_profile: alibaba-glm5
+
 profiles:
   # Anthropic Haiku — fast, cheap, good for research and summarization
   anthropic-fast:
@@ -37,6 +41,17 @@ profiles:
     model: claude-opus-4-6
     api_key: $ANTHROPIC_API_KEY
     base_url: https://api.anthropic.com
+
+  # Alibaba Cloud DashScope — GLM-5 and Qwen3 models via Anthropic-compatible API
+  alibaba-glm5:
+    model: glm-5
+    api_key: $DASHSCOPE_API_KEY
+    base_url: https://coding-intl.dashscope.aliyuncs.com/apps/anthropic
+
+  alibaba-qwen3:
+    model: qwen3-coder-plus
+    api_key: $DASHSCOPE_API_KEY
+    base_url: https://coding-intl.dashscope.aliyuncs.com/apps/anthropic
 
   # OpenRouter example — any provider speaking Anthropic API protocol works
   # Uncomment and configure your OPENROUTER_API_KEY to use

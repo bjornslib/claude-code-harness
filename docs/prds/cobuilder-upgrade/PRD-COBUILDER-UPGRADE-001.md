@@ -743,11 +743,11 @@ directory = "htmlcov"
 
 | Epic | Status | Notes |
 |------|--------|-------|
-| E0: Merge Template System + ManagerLoopHandler | Not Started | 1,023 LOC + ManagerLoopHandler ready in abstract-workflow-system. Sub-epics: E0.1 Code Merge, E0.2 Logfire Preservation, E0.3 Coverage Baseline |
-| E1: Per-Node LLM Profiles | Not Started | providers.yaml with named profiles |
-| E2: Rename attractor→engine + .pipelines/ | Not Started | Package + runtime state extraction |
+| E0: Merge Template System + ManagerLoopHandler | **Done** | E0.1 Code Merge, E0.2 Logfire Preservation, E0.3 Coverage Baseline (67%), E0.4 Fix 195 test failures (0 remaining) |
+| E1: Per-Node LLM Profiles | **Done** | `providers.yaml` with 5 Anthropic + 2 Alibaba Cloud profiles. `cobuilder/engine/providers.py` (530 LOC). 53 unit tests. Integrated into pipeline_runner dispatch. |
+| E2: Rename attractor→engine + .pipelines/ | **Done** | 34 files moved, 17 env vars renamed ATTRACTOR_→PIPELINE_, `.pipelines/` gitignored, `dispatch_parser.py`/`dispatch_checkpoint.py` preserved. 109 files changed, zero regressions. |
 | E3: Stable Worktree Management | Not Started | Existing branch support, DOT graph-level config |
-| E4: ManagerLoopHandler Upgrade | Not Started | Child signal monitoring (prevent gate deadlocks). Requires Logfire span preservation + 80% handler coverage |
+| E4: ManagerLoopHandler Upgrade | **In Progress** | Child signal monitoring (prevent gate deadlocks). Close handler. E2E guardian subprocess test. |
 | E5: GitHub Publication Readiness | Not Started | Secret scrubbing, LICENSE, CI/CD with 90% coverage gate |
 | E6: cobuilder-guardian + Terminology Migration | Not Started | system3→cobuilder, PRD→BS, SD→TS |
 | E7: cobuilder-lifecycle Template | Not Started | Self-driving guardian template |
