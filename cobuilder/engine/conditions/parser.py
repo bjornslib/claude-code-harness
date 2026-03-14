@@ -62,6 +62,12 @@ _LITERAL_TYPES: frozenset[TokenType] = frozenset(
     }
 )
 
+# Simple labels that are valid as standalone conditions (no comparison operator needed).
+# These are used for decision routing in DOT pipelines (e.g., condition="pass").
+_SIMPLE_LABELS: frozenset[str] = frozenset(
+    {"pass", "fail", "partial", "success", "error"}
+)
+
 
 class ConditionParser:
     """Parses a condition expression string into an AST.
@@ -168,7 +174,13 @@ class ConditionParser:
         return self._parse_atom()
 
     def _parse_atom(self) -> ASTNode:
-        """atom := '(' expr ')' | comparison"""
+        """atom := '(' expr ')' | simple_label | comparison
+
+        simple_label := BARE_WORD (where word is in _SIMPLE_LABELS set)
+
+        Simple labels like "pass", "fail", "partial", "success", "error" are valid
+        standalone conditions for decision routing in DOT pipelines.
+        """
         if self._peek().type == TokenType.LPAREN:
             self._consume(TokenType.LPAREN)
             expr = self._parse_or()
@@ -181,6 +193,21 @@ class ConditionParser:
                 )
             self._consume(TokenType.RPAREN)
             return expr
+
+        # Check for simple label (e.g., "pass", "fail") as standalone condition.
+        # These are valid for decision routing without requiring a comparison operator.
+        tok = self._peek()
+        if tok.type == TokenType.BARE_WORD and tok.value in _SIMPLE_LABELS:
+            self._consume()
+            return LiteralNode(value=tok.value)
+
+        # Check for boolean literals (true/false) as standalone conditions.
+        # These are tokenized as BOOLEAN, not BARE_WORD, so need separate handling.
+        # The token value is already a Python bool (True/False), use it directly.
+        if tok.type == TokenType.BOOLEAN:
+            self._consume()
+            return LiteralNode(value=tok.value)  # type: ignore[arg-type]
+
         return self._parse_comparison()
 
     def _parse_comparison(self) -> ComparisonNode:

@@ -43,6 +43,16 @@ def _default_condition_evaluator(condition: str, context, outcome: Outcome) -> b
             ctx = PipelineContext(context)
         else:
             ctx = context
+
+        # Inject outcome status so conditions like "outcome = success" work.
+        # The parser treats "outcome" as a bare word/variable, so we provide
+        # it in the context for lookup during evaluation.
+        if isinstance(ctx, dict):
+            ctx["outcome"] = outcome.status.value
+        else:
+            # PipelineContext uses update() method to add values
+            ctx.update({"outcome": outcome.status.value})
+
         return _real_evaluate_condition(condition, ctx, missing_var_default=False)
     except (ConditionEvalError, ConditionParseError, ConditionLexError) as exc:
         _log.warning("condition_eval_error edge=%s error=%s", condition, exc)
