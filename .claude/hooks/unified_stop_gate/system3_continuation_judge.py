@@ -235,10 +235,7 @@ class System3ContinuationJudgeChecker:
         transcript_path = self.session.transcript_path
         print(f"[System3Judge] transcript_path from hook input: {transcript_path!r}", file=sys.stderr)
         if not transcript_path or not os.path.exists(transcript_path):
-            # Fallback: search ~/.claude/projects/*/ for any .jsonl whose internal
-            # sessionId field matches self.session.session_id (the hook input's session_id).
-            # Note: CLAUDE_SESSION_ID env var != hook input session_id. Hook input session_id
-            # is the UUID that also names the transcript file.
+            # Fallback 1: search by session_id (works when hook input session_id == transcript filename UUID)
             try:
                 import glob
                 session_id = self.session.session_id
@@ -248,10 +245,24 @@ class System3ContinuationJudgeChecker:
                     if matches:
                         transcript_path = matches[0]
                         print(f"[System3Judge] Found transcript via session_id fallback: {transcript_path}", file=sys.stderr)
-                    else:
-                        print(f"[System3Judge] session_id fallback found no match for: {session_id}", file=sys.stderr)
             except Exception as e:
-                print(f"[System3Judge] Fallback search failed: {e}", file=sys.stderr)
+                print(f"[System3Judge] session_id fallback failed: {e}", file=sys.stderr)
+
+        if not transcript_path or not os.path.exists(transcript_path):
+            # Fallback 2: most recently modified .jsonl in the project's transcript dir.
+            # CLAUDE_SESSION_ID (system3-*) != transcript UUID filename, so session_id search
+            # fails. The most recently modified transcript is the current session.
+            try:
+                import glob
+                project_dir = os.environ.get('CLAUDE_PROJECT_DIR', os.getcwd())
+                safe_project = project_dir.replace('/', '-').lstrip('-')
+                search_pattern = os.path.expanduser(f"~/.claude/projects/-{safe_project}/*.jsonl")
+                matches = sorted(glob.glob(search_pattern), key=os.path.getmtime, reverse=True)
+                if matches:
+                    transcript_path = matches[0]
+                    print(f"[System3Judge] Found transcript via most-recent fallback: {transcript_path}", file=sys.stderr)
+            except Exception as e:
+                print(f"[System3Judge] most-recent fallback failed: {e}", file=sys.stderr)
 
         # Final check: if still no transcript, skip judge
         if not transcript_path or not os.path.exists(transcript_path):
