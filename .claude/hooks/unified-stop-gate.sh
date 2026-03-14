@@ -492,19 +492,22 @@ if [ -d "$PROJECT_ROOT/.beads" ] && command -v bd &>/dev/null; then
     IMPL_COMPLETE_WORK=$(bd list --status=impl_complete 2>/dev/null | grep -E '(beads-|bd-)' | head -5) || IMPL_COMPLETE_WORK=""
 fi
 
-# Build final message
-MSG_PARTS="✅ ${PROMISE_MESSAGE}"
+# Build final message — judge verdict first for visibility
+MSG_PARTS=""
+
+# System 3 judge verdict always shown first (even on approve)
+if [ -n "$S3_MSG" ]; then
+    MSG_PARTS="🧠 Judge: ${S3_MSG}"
+fi
+
+# Promise status
+MSG_PARTS="${MSG_PARTS}
+✅ ${PROMISE_MESSAGE}"
 
 # Add Step 4 work-state context if available (even when passing)
 if [ -n "$STEP4_MSG" ]; then
     MSG_PARTS="${MSG_PARTS}
 📊 ${STEP4_MSG}"
-fi
-
-# Add System 3 judge result if present
-if [ -n "$S3_MSG" ]; then
-    MSG_PARTS="${MSG_PARTS}
-🧠 ${S3_MSG}"
 fi
 
 # Only show work section if there's actual work (not just "No open issues")
