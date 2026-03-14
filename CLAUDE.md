@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Purpose
 
-This is a **Claude Code harness setup** repository that provides a complete configuration framework for multi-agent AI orchestration using Claude Code. It contains no application code—only configuration, skills, hooks, and orchestration tools.
+This is a **Claude Code harness setup** repository that provides a complete configuration framework for multi-agent AI orchestration using Claude Code. It contains configuration, skills, hooks, orchestration tools, and the **CoBuilder pipeline execution engine** (`cobuilder/`).
 
 ## Architecture
 
@@ -43,6 +43,8 @@ This setup implements a sophisticated multi-agent system with three distinct lev
 | System 3 | `ccsystem3` | Launch meta-orchestrator with completion promises |
 | Orchestrator | `launchorchestrator [epic-name]` | Launch in isolated worktree (via tmux) |
 | Worker | `Task(subagent_type="...", team_name="...", name="...")` | Spawned as native teammate by orchestrator (team lead) |
+| Pipeline | `python3 cobuilder/engine/pipeline_runner.py --dot-file <path.dot>` | Execute a DOT pipeline (zero LLM cost for runner) |
+| Pipeline (resume) | `python3 cobuilder/engine/pipeline_runner.py --dot-file <path.dot> --resume` | Resume a pipeline from last checkpoint |
 
 ## Directory Structure
 
@@ -74,6 +76,49 @@ This setup implements a sophisticated multi-agent system with three distinct lev
 ├── state/                        # Runtime state tracking
 ├── agents/                       # Agent configurations
 └── tests/                        # Hook and workflow tests
+
+cobuilder/                        # Pipeline execution engine (Python package)
+├── engine/                       # Core runner, handlers, dispatch, signal protocol
+│   ├── pipeline_runner.py        # Main DOT pipeline state machine (zero LLM)
+│   ├── guardian.py               # Guardian agent launcher (Layers 0/1)
+│   ├── session_runner.py         # Session monitoring runner (Layer 2)
+│   ├── handlers/                 # Node handler implementations
+│   │   ├── codergen.py           # box — LLM/orchestrator nodes
+│   │   ├── manager_loop.py       # house — recursive sub-pipeline management
+│   │   ├── wait_human.py         # diamond — human gate nodes
+│   │   └── [base, close, conditional, exit, fan_in, parallel, start, tool]
+│   ├── signal_protocol.py        # Atomic JSON signal file I/O
+│   ├── providers.py              # LLM profile resolution (providers.yaml)
+│   ├── dispatch_worker.py        # AgentSDK worker dispatch utilities
+│   ├── dispatch_parser.py        # DOT file parsing utilities
+│   ├── checkpoint.py             # Pydantic-based pipeline state checkpointing
+│   ├── generate.py               # Pipeline DOT generation from beads tasks
+│   ├── cli.py                    # Attractor CLI (parse/validate/status/transition/…)
+│   ├── run_research.py           # Research node agent (Context7 + Perplexity)
+│   ├── run_refine.py             # Refine node agent (rewrites SD from research)
+│   └── .env                      # LLM credentials (DASHSCOPE_API_KEY, etc.)
+├── templates/                    # Template instantiation system
+│   ├── instantiator.py           # Jinja2 DOT template renderer
+│   ├── constraints.py            # Static constraint validation
+│   └── manifest.py               # Template manifest loader
+└── repomap/                      # Codebase intelligence for context injection
+
+.pipelines/                       # Runtime pipeline state (git-ignored)
+├── pipelines/                    # DOT pipeline files and checkpoints
+│   ├── *.dot                     # Active pipeline graphs
+│   ├── *-checkpoint-*.json       # Periodic checkpoint snapshots
+│   ├── signals/                  # Per-pipeline signal directories
+│   │   └── {pipeline_id}/        # Worker result signals
+│   └── evidence/                 # Validation evidence artifacts
+
+.cobuilder/                       # Template library
+└── templates/                    # Jinja2 DOT templates
+    ├── sequential-validated/     # Linear pipeline with validation gates
+    ├── hub-spoke/                # Fan-out parallel dispatch
+    ├── s3-lifecycle/             # System 3 lifecycle pipeline
+    └── cobuilder-lifecycle/      # CoBuilder self-upgrade pipeline
+
+providers.yaml                    # Named LLM profiles (root-level, shared config)
 ```
 
 ## Core Systems
@@ -197,10 +242,16 @@ Each orchestrator session should have:
 | `CLAUDE_OUTPUT_STYLE` | Active output style (system3/orchestrator) | Claude Code CLI |
 | `CLAUDE_PROJECT_DIR` | Project root directory | Claude Code CLI |
 | `ANTHROPIC_API_KEY` | API authentication | `.mcp.json` env |
+| `ANTHROPIC_BASE_URL` | Override API base URL (e.g. DashScope proxy) | `cobuilder/engine/.env` |
 | `PERPLEXITY_API_KEY` | Perplexity API key | `.mcp.json` env |
 | `BRAVE_API_KEY` | Brave search API key | `.mcp.json` env |
 | `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` | Enable native Agent Teams (`1`) | `.claude/settings.json` or spawn script |
 | `CLAUDE_CODE_TASK_LIST_ID` | Shared task list ID for team coordination | Spawn script |
+| `DASHSCOPE_API_KEY` | Alibaba DashScope API key (GLM-5/Qwen3 via Anthropic protocol) | `cobuilder/engine/.env` |
+| `PIPELINE_SIGNAL_DIR` | Override signal file directory for pipeline runner | Environment |
+| `PIPELINE_RATE_LIMIT_RETRIES` | Max retries on rate-limit errors (default: 3) | `cobuilder/engine/.env` |
+| `PIPELINE_RATE_LIMIT_BACKOFF` | Backoff seconds on rate-limit (default: 65) | `cobuilder/engine/.env` |
+| `PIPELINE_MAX_MANAGER_DEPTH` | Max recursive sub-pipeline depth (default: 5) | Environment |
 
 ## Testing
 
@@ -271,6 +322,162 @@ When running as an orchestrator (Level 2):
 4. **No exceptions**: Even "simple" changes must be delegated
 
 This separation ensures proper testing, validation, and architectural consistency.
+
+---
+
+## CoBuilder Pipeline Engine
+
+The `cobuilder/` package is the primary pipeline execution system. It runs DOT-defined multi-agent pipelines with zero LLM cost for graph traversal.
+
+### Architecture
+
+```
+System 3 (Opus LLM)
+    |
+    pipeline_runner.py  (Python state machine, $0, <1s graph ops)
+        |
+        Workers  (AgentSDK: codergen, research, refine, validation)
+```
+
+The runner has **zero LLM intelligence**. It parses DOT, dispatches AgentSDK workers, watches signal files via watchdog, and transitions node states mechanically.
+
+### pipeline_runner.py
+
+Main runner. Parses a DOT pipeline file, finds dispatchable nodes, launches AgentSDK workers per node, and drives the status chain:
+
+```
+pending -> active -> impl_complete -> validated -> accepted
+                  \-> failed
+```
+
+Worker result signals (written to `.pipelines/pipelines/signals/{pipeline_id}/`):
+```json
+{"status": "success"|"failed", "files_changed": [...], "message": "..."}
+```
+
+Validation result signals:
+```json
+{"result": "pass"|"fail"|"requeue", "reason": "...", "requeue_target": "node_id"}
+```
+
+On `requeue`: the runner mechanically sets the requeue target back to `pending`.
+
+### Node Types
+
+| Shape | Handler | Purpose |
+|-------|---------|---------|
+| `box` | `codergen` | LLM implementation node — dispatches orchestrator or SDK worker |
+| `tab` | `research` | Research node — runs `run_research.py` (Context7 + Perplexity via Haiku) |
+| `note` | `refine` | Refine node — runs `run_refine.py` (rewrites SD from research evidence) |
+| `house` | `manager_loop` | Recursive sub-pipeline node — spawns child `pipeline_runner.py` |
+| `diamond` | `wait.cobuilder` | Gate requiring System 3 validation before proceeding |
+| `diamond` | `wait.human` | Gate requiring human input via `AskUserQuestion` |
+
+### LLM Profiles (providers.yaml)
+
+Named profiles are defined in `providers.yaml` at the repo root. DOT nodes reference profiles via `llm_profile="..."`. The runner resolves the profile to Anthropic SDK parameters at dispatch time.
+
+Key profiles:
+
+| Profile | Model | Provider |
+|---------|-------|----------|
+| `anthropic-fast` | `claude-haiku-4-5-20251001` | Anthropic |
+| `anthropic-smart` | `claude-sonnet-4-5-20250514` | Anthropic |
+| `anthropic-opus` | `claude-opus-4-6` | Anthropic |
+| `alibaba-glm5` | `glm-5` | DashScope (default, near-$0 cost) |
+| `alibaba-qwen3` | `qwen3-coder-plus` | DashScope |
+
+Credentials are loaded from `cobuilder/engine/.env`. The file supports `$VAR` expansion (e.g. `ANTHROPIC_API_KEY=$DASHSCOPE_API_KEY` routes Anthropic-protocol calls through DashScope).
+
+### Signal Protocol
+
+All inter-layer communication uses atomic JSON signal files (`write-then-rename`). Signal files are stored in `.claude/attractor/signals/` (or `PIPELINE_SIGNALS_DIR` override).
+
+Naming convention: `{timestamp}-{source}-{target}-{signal_type}.json`
+
+Key signal types: `NEEDS_REVIEW`, `VALIDATION_PASSED`, `VALIDATION_FAILED`, `GATE_WAIT_COBUILDER`, `GATE_WAIT_HUMAN`, `GATE_RESPONSE`, `RUNNER_EXITED`, `AGENT_REGISTERED`
+
+Processed signals are moved to `signals/processed/` after consumption.
+
+### guardian.py
+
+Layers 0/1 bridge. Launches guardian agent processes via AgentSDK, monitors for terminal-targeted signals, handles escalations and pipeline completion events. Supports single-guardian and parallel multi-guardian launch via `--multi <configs.json>`.
+
+### session_runner.py (runner.py)
+
+Layer 2 monitoring runner. Monitors an orchestrator tmux session and communicates status back to the guardian via signal files.
+
+### handlers/
+
+Node handler implementations. Each handler receives a `HandlerRequest` and returns an `Outcome`. The `manager_loop` handler supports recursive sub-pipeline spawning with child gate detection (`GATE_WAIT_COBUILDER`, `GATE_WAIT_HUMAN`).
+
+### Checkpoint System
+
+`checkpoint.py` provides Pydantic-based pipeline state persistence. Checkpoints are written atomically after each node transition to `.pipelines/pipelines/*-checkpoint-*.json`. Use `--resume` flag to restore from the latest checkpoint.
+
+### Template System (.cobuilder/templates/)
+
+Jinja2 DOT templates in `.cobuilder/templates/`. Instantiated via `cobuilder/templates/instantiator.py`. Available templates:
+
+- `sequential-validated` — Linear pipeline with validation gates after each codergen node
+- `hub-spoke` — Fan-out parallel dispatch to multiple workers
+- `s3-lifecycle` — System 3 full lifecycle (research → design → implement → validate)
+- `cobuilder-lifecycle` — CoBuilder self-upgrade pipeline pattern
+
+### Logfire Observability
+
+Service names for filtering traces:
+- `cobuilder-pipeline-runner` — Pipeline runner spans
+- `cobuilder-guardian` — Guardian agent spans
+- `cobuilder-session-runner` — Session runner spans
+
+### CLI (cli.py)
+
+Full subcommand interface for pipeline management:
+
+```bash
+python3 cobuilder/engine/cli.py status <file.dot>           # Show node states
+python3 cobuilder/engine/cli.py validate <file.dot>         # Check topology
+python3 cobuilder/engine/cli.py transition <file.dot> <node> <status>  # Manual transition
+python3 cobuilder/engine/cli.py checkpoint save <file.dot>  # Save checkpoint
+python3 cobuilder/engine/cli.py generate --prd <PRD-REF>    # Generate DOT from beads
+python3 cobuilder/engine/cli.py dashboard <file.dot>        # Unified lifecycle dashboard
+```
+
+### Haiku Sub-Agent Monitoring Pattern
+
+After launching `pipeline_runner.py`, System 3 spawns a **blocking** (foreground) Haiku sub-agent monitor to watch for state transitions without sleep-polling:
+
+```python
+Task(
+    subagent_type="general-purpose",
+    model="haiku",
+    run_in_background=False,  # blocking — System 3 waits for result
+    prompt="Monitor DOT file <path> and signal dir <signals_path>. "
+           "Complete with a status report when: any node fails, pipeline stalls >5min, "
+           "all nodes reach terminal state, gate node detected, or 10-min timeout."
+)
+```
+
+Monitor completion statuses and System 3 actions:
+
+| Monitor Reports | System 3 Action |
+|-----------------|----------------|
+| All nodes terminal (`accepted`) | Run blind Gherkin E2E, close uber-epic |
+| Node failed | Inspect signal, send guidance, re-launch runner |
+| `wait.cobuilder` gate detected | Run validation agent, write `GATE_RESPONSE` signal |
+| `wait.human` gate detected | Call `AskUserQuestion`, write `GATE_RESPONSE` signal |
+| Stall (>5 min no progress) | Send unblocking guidance to orchestrator |
+| 10-min timeout | Evaluate state, re-launch monitor |
+
+Cyclic pattern:
+```
+System 3  ->  launch monitor  ->  monitor watches DOT/signals
+                                  monitor COMPLETES with report
+System 3  <-  handle report   <-  (re-launch monitor if work remains)
+```
+
+---
 
 ## Agent Directory (Worker Selection Menu)
 

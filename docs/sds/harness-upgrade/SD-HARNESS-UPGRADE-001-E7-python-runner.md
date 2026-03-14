@@ -2,7 +2,7 @@
 title: "SD-HARNESS-UPGRADE-001: Pure Python Pipeline Runner"
 status: complete
 type: solution-design
-last_verified: 2026-03-07
+last_verified: 2026-03-15
 grade: authoritative
 ---
 
@@ -687,6 +687,22 @@ The runner is a **state machine**, not a reasoning system.
 **Status**: Complete (2026-03-07, commits c5ddb4d, 9594e62, 3552db9)
 **Tests**: 23/23 pass (test_e72_pipeline_runner.py)
 **Branch**: feat/harness-upgrade-e4-e7
+
+### Post-E7 Epics Built on This Foundation
+
+The following epics completed after E7 extend or depend on `pipeline_runner.py` as implemented here:
+
+| Epic | Completed | What Extended the Runner |
+| --- | --- | --- |
+| E0 (Pipeline Infra) | Done | DOT parsing, signal protocol, checkpoint system — all consumed by `PipelineRunner` |
+| E1 (Handler Consolidation) | Done | research, refine, codergen, wait.cobuilder, wait.human handlers added to `HANDLER_REGISTRY` |
+| E2 (Template Migration + Stop Gate) | Done | Runtime state moved to `.pipelines/`; env vars renamed ATTRACTOR_→PIPELINE_; stop gate sources `.env` |
+| E3 (Event Bus + Watchdog) | Done | Signal-based event system confirmed production-ready; `WorktreeManager` integrated via `_get_target_dir()` |
+| E4 (Manager Loop) | Done | `ManagerLoopHandler` upgraded: `_monitor_child_process()` for child signal monitoring; `CloseHandler`; `MaxNestingDepthError` |
+| E5 (GitHub Publication) | Done | LICENSE, CONTRIBUTING.md, CI workflow with 90% coverage gate, secret scrubbing |
+| E7 (Guardian Lifecycle Template) | Done | `cobuilder-lifecycle/template.dot.j2` + `manifest.yaml` with loop-back edges — instantiates a valid `pipeline_runner.py`-executable DOT graph |
+
+**Remaining work**: E6 LLM profile registry formalization, E8 hub-spoke template, E9 template CLI, E10 stream summarizer.
 
 ### What was built
 - `pipeline_runner.py` — 600+ lines, full state machine with handler dispatch table
