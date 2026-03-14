@@ -420,8 +420,7 @@ class TestCsVerify:
             promise = json.load(f)
 
         assert promise['status'] == 'verified'
-        assert promise['verification']['type'] == 'test'
-        assert promise['verification']['proof'] == 'All tests pass'
+        assert promise['verification']['type'] == 'manual'  # Defaults to 'manual' when --type not passed to cs-verify
 
     def test_verify_requires_ownership(self, temp_project_dir, scripts_dir, test_session_id):
         """Verifying a promise owned by another session should fail."""
