@@ -1,0 +1,30 @@
+# CODEOWNERS - Repository Ownership
+
+# This file defines the code owners for this repository.
+# Code owners are automatically requested for review when someone opens
+# a pull request that modifies code that they own.
+
+# Default owners for everything in the repo
+* @faie-group/core
+
+# Claude Code configuration
+.claude/ @faie-group/core
+
+# Documentation
+docs/ @faie-group/core
+*.md @faie-group/core
+
+# MCP server configurations
+.mcp.json @faie-group/core
+
+# CI/CD workflows
+.github/workflows/ @faie-group/core
+
+# Skills directory
+.claude/skills/ @faie-group/core
+
+# Hooks
+.claude/hooks/ @faie-group/core
+
+# Scripts
+.claude/scripts/ @faie-group/core
