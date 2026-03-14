@@ -229,22 +229,29 @@ class System3ContinuationJudgeChecker:
                 blocking=True,
             )
 
-        # Guard: Check if transcript exists, with fallback to session_id search
+        # Guard: Check if transcript exists.
+        # Claude Code passes transcript_path as a common field in all hook inputs.
+        # The shell script exports it via CLAUDE_HOOK_INPUT → SessionInfo.from_hook_input().
         transcript_path = self.session.transcript_path
+        print(f"[System3Judge] transcript_path from hook input: {transcript_path!r}", file=sys.stderr)
         if not transcript_path or not os.path.exists(transcript_path):
-            # Fallback: try to find transcript using session_id
+            # Fallback: search ~/.claude/projects/*/ for any .jsonl whose internal
+            # sessionId field matches self.session.session_id (the hook input's session_id).
+            # Note: CLAUDE_SESSION_ID env var != hook input session_id. Hook input session_id
+            # is the UUID that also names the transcript file.
             try:
                 import glob
                 session_id = self.session.session_id
-                if session_id:
-                    # Search for matching transcript in ~/.claude/projects/*/{session_id}.jsonl
+                if session_id and session_id != 'unknown':
                     search_pattern = os.path.expanduser(f"~/.claude/projects/*/{session_id}.jsonl")
                     matches = glob.glob(search_pattern)
                     if matches:
-                        transcript_path = matches[0]  # Use first match
-                        print(f"[System3Judge] Found transcript via session_id: {transcript_path}", file=sys.stderr)
+                        transcript_path = matches[0]
+                        print(f"[System3Judge] Found transcript via session_id fallback: {transcript_path}", file=sys.stderr)
+                    else:
+                        print(f"[System3Judge] session_id fallback found no match for: {session_id}", file=sys.stderr)
             except Exception as e:
-                print(f"[System3Judge] Fallback transcript search failed: {e}", file=sys.stderr)
+                print(f"[System3Judge] Fallback search failed: {e}", file=sys.stderr)
 
         # Final check: if still no transcript, skip judge
         if not transcript_path or not os.path.exists(transcript_path):
@@ -627,18 +634,22 @@ class System3ContinuationJudgeChecker:
             # Use strict prompt for System 3, light prompt for everything else
             system_prompt = SYSTEM3_JUDGE_SYSTEM_PROMPT if self._is_strict else LIGHT_JUDGE_SYSTEM_PROMPT
 
+            # Get model from environment (ANTHROPIC_MODEL from cobuilder/engine/.env), fall back to Haiku 4.5 if not specified
+            model = os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
+
             response = client.messages.create(
-                model="claude-haiku-4-5-20251001",
+                model=model,
                 max_tokens=500,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
                 timeout=30.0,  # 30 second timeout
             )
 
-            # Extract text content
+            # Extract text content (only TextBlock has .text; other block types are skipped)
+            from anthropic.types import TextBlock
             text_content = ''
             for block in response.content:
-                if hasattr(block, 'text'):
+                if isinstance(block, TextBlock):
                     text_content += block.text
 
             if not text_content:
