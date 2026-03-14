@@ -75,3 +75,45 @@ def capture_logfire():
         metrics_reader=metrics_reader,
         log_exporter=log_exporter,
     )
+
+    # Cleanup: reset logfire configuration to prevent state pollution
+    # between tests. This ensures subsequent tests start with a clean slate.
+    try:
+        logfire.configure(
+            send_to_logfire=False,
+            console=False,
+        )
+    except Exception:
+        # Ignore cleanup errors - logfire may not be in a configurable state
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Async event loop fixture for proper isolation
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="function")
+def event_loop():
+    """Create a fresh event loop for each test that needs async operations.
+
+    This fixture provides proper isolation for async tests when pytest-asyncio
+    is not in auto mode. It ensures that each test gets a fresh event loop
+    and that the loop is properly cleaned up after the test.
+
+    This prevents the "RuntimeWarning: coroutine was never awaited" errors
+    that occur when tests share event loop state.
+    """
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    yield loop
+    # Cleanup: cancel all pending tasks and close the loop
+    try:
+        pending = asyncio.all_tasks(loop)
+        for task in pending:
+            task.cancel()
+        if pending:
+            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+    finally:
+        loop.close()
+        asyncio.set_event_loop(None)

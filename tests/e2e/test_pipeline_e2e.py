@@ -96,7 +96,7 @@ class TestParseAndValidateDotFile:
         graph = parse_dot_file(_FIXTURE_DOT)
         assert graph.nodes["start"].shape == "Mdiamond"
         assert graph.nodes["done"].shape == "Msquare"
-        assert graph.nodes["check"].shape == "box"
+        assert graph.nodes["check"].shape == "parallelogram"
         assert graph.nodes["decide"].shape == "diamond"
 
     def test_conditional_edges_have_condition_attrs(self):

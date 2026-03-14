@@ -86,7 +86,7 @@ class TestSimplePipelineE2E:
         # E1: Parse DOT file directly
         graph = parse_dot_file(str(SIMPLE_PIPELINE))
 
-        # Verify graph structure
+        # Verify graph structure (3 nodes: start, impl_task, finalize)
         assert graph is not None
         assert len(graph.nodes) == 3
         assert graph.prd_ref == "PRD-EXAMPLE-001"

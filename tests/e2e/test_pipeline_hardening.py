@@ -21,12 +21,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# Add the attractor scripts directory to sys.path for direct imports
-_ATTRACTOR_DIR = str(Path(__file__).resolve().parent.parent.parent / ".claude" / "scripts" / "attractor")
-if _ATTRACTOR_DIR not in sys.path:
-    sys.path.insert(0, _ATTRACTOR_DIR)
-
-from pipeline_runner import (
+# Import from the canonical module (not the deprecated scripts path)
+from cobuilder.attractor.pipeline_runner import (
     AdvancedWorkerTracker,
     PipelineRunner,
     WorkerInfo,
@@ -178,7 +174,9 @@ class TestEpicH:
 
     def test_check_worker_liveness_writes_fail_signal_on_exception(self, tmp_path):
         """When a tracked future has an exception and no signal file, a fail signal is written."""
-        runner = _make_runner(tmp_path)
+        # Use DOT with active status so liveness check will write signal
+        active_dot = MINIMAL_DOT.replace('status="pending"', 'status="active"')
+        runner = _make_runner(tmp_path, active_dot)
 
         # Create a future that already failed
         future = Future()
@@ -202,7 +200,9 @@ class TestEpicH:
 
     def test_check_worker_liveness_writes_fail_signal_on_silent_completion(self, tmp_path):
         """When a future completes without exception or signal file, a fail signal is written."""
-        runner = _make_runner(tmp_path)
+        # Use DOT with active status so liveness check will write signal
+        active_dot = MINIMAL_DOT.replace('status="pending"', 'status="active"')
+        runner = _make_runner(tmp_path, active_dot)
 
         future = Future()
         future.set_result(None)  # Completed silently, no signal
@@ -244,7 +244,9 @@ class TestEpicH:
 
     def test_check_worker_liveness_handles_timed_out_workers(self, tmp_path):
         """Timed-out workers detected by update_worker_states get fail signals."""
-        runner = _make_runner(tmp_path)
+        # Use DOT with active status so liveness check will write signal
+        active_dot = MINIMAL_DOT.replace('status="pending"', 'status="active"')
+        runner = _make_runner(tmp_path, active_dot)
 
         # Use a very short timeout
         runner.worker_tracker.default_timeout = 1
@@ -482,11 +484,11 @@ class TestEpicB:
         with open(runner.dot_path) as fh:
             updated_content = fh.read()
 
-        from parser import parse_dot
-        data = parse_dot(updated_content)
-        node1 = next(n for n in data["nodes"] if n["id"] == "node1")
-        assert node1["attrs"]["status"] == "failed", \
-            f"Expected status='failed' on disk, got '{node1['attrs']['status']}'"
+        from cobuilder.engine.parser import parse_dot_string
+        graph = parse_dot_string(updated_content)
+        node1 = graph.nodes["node1"]
+        assert node1.attrs["status"] == "failed", \
+            f"Expected status='failed' on disk, got '{node1.attrs.get('status')}'"
 
     def test_force_status_survives_reload_cycle(self, tmp_path):
         """Status set by _force_status persists across a new PipelineRunner instantiation."""
@@ -499,10 +501,10 @@ class TestEpicB:
         with patch.object(PipelineRunner, "_load_attractor_env"):
             runner2 = PipelineRunner(dot_path, resume=True)
 
-        from parser import parse_dot
-        data = parse_dot(runner2.dot_content)
-        node1 = next(n for n in data["nodes"] if n["id"] == "node1")
-        assert node1["attrs"]["status"] == "failed"
+        from cobuilder.engine.parser import parse_dot_string
+        graph = parse_dot_string(runner2.dot_content)
+        node1 = graph.nodes["node1"]
+        assert node1.attrs["status"] == "failed"
 
     def test_persist_requeue_guidance_writes_file(self, tmp_path):
         """_persist_requeue_guidance writes guidance text to signals/guidance/{node_id}.txt."""
@@ -553,8 +555,8 @@ class TestEpicC:
         # Set a very short timeout via env var
         with patch.dict(os.environ, {"VALIDATION_TIMEOUT": "1"}):
             # Mock SDK to be "available" but hang
-            with patch("pipeline_runner._SDK_AVAILABLE", True), \
-                 patch("pipeline_runner.claude_code_sdk") as mock_sdk:
+            with patch("cobuilder.attractor.pipeline_runner._SDK_AVAILABLE", True), \
+                 patch("cobuilder.attractor.pipeline_runner.claude_code_sdk") as mock_sdk:
 
                 # Make the SDK query hang forever (will hit timeout)
                 import asyncio
@@ -582,8 +584,8 @@ class TestEpicC:
         runner = _make_runner(tmp_path, IMPL_COMPLETE_DOT)
         os.makedirs(runner.signal_dir, exist_ok=True)
 
-        with patch("pipeline_runner._SDK_AVAILABLE", True), \
-             patch("pipeline_runner.claude_code_sdk") as mock_sdk:
+        with patch("cobuilder.attractor.pipeline_runner._SDK_AVAILABLE", True), \
+             patch("cobuilder.attractor.pipeline_runner.claude_code_sdk") as mock_sdk:
 
             # Make ClaudeCodeOptions raise to simulate a crash BEFORE the async for loop.
             # This triggers the outer Exception handler (Epic C) which writes a fail signal.
@@ -606,8 +608,8 @@ class TestEpicC:
         # Verify with a 2-second timeout that timeout triggers quickly
         start_time = time.time()
         with patch.dict(os.environ, {"VALIDATION_TIMEOUT": "2"}):
-            with patch("pipeline_runner._SDK_AVAILABLE", True), \
-                 patch("pipeline_runner.claude_code_sdk") as mock_sdk:
+            with patch("cobuilder.attractor.pipeline_runner._SDK_AVAILABLE", True), \
+                 patch("cobuilder.attractor.pipeline_runner.claude_code_sdk") as mock_sdk:
 
                 import asyncio
 
@@ -632,8 +634,8 @@ class TestEpicC:
         runner = _make_runner(tmp_path, IMPL_COMPLETE_DOT)
         os.makedirs(runner.signal_dir, exist_ok=True)
 
-        with patch("pipeline_runner._SDK_AVAILABLE", False), \
-             patch("pipeline_runner.claude_code_sdk", None):
+        with patch("cobuilder.attractor.pipeline_runner._SDK_AVAILABLE", False), \
+             patch("cobuilder.attractor.pipeline_runner.claude_code_sdk", None):
             runner._run_validation_subprocess("node1", "node1")
 
         signal_path = os.path.join(runner.signal_dir, "node1.json")

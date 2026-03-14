@@ -2,10 +2,10 @@ digraph test_e2e {
   graph [pipeline_id="test-e2e-001"]
 
   start [shape=Mdiamond label="BEGIN"]
-  check [shape=box label="validate input" handler="tool"]
+  check [shape=parallelogram label="validate input"]
   decide [shape=diamond label="check status"]
-  process [shape=box label="process data" handler="tool"]
-  retry_node [shape=box label="retry handler" handler="tool" max_retries="2"]
+  process [shape=parallelogram label="process data"]
+  retry_node [shape=parallelogram label="retry handler" max_retries="2"]
   done [shape=Msquare label="END"]
 
   start -> check

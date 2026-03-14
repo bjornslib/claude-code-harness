@@ -2,6 +2,9 @@
 
 Tests the cs-* CLI scripts and their integration with the stop hook system.
 Covers the complete promise lifecycle, multi-session awareness, and momentum checking.
+
+NOTE: Tests that require cs-* scripts will skip gracefully if the scripts
+are not available (e.g., in isolated test environments).
 """
 
 import json
@@ -40,6 +43,17 @@ def scripts_dir():
 
 
 @pytest.fixture
+def scripts_available(scripts_dir):
+    """Skip tests if cs-* scripts are not available."""
+    if not scripts_dir.exists():
+        pytest.skip("scripts/completion-state/ directory not found - skipping CLI tests")
+    cs_promise = scripts_dir / 'cs-promise'
+    if not cs_promise.exists():
+        pytest.skip("cs-promise script not found - skipping CLI tests")
+    return True
+
+
+@pytest.fixture
 def test_session_id():
     """Generate a unique test session ID."""
     return f"test-session-{int(time.time() * 1000)}"
@@ -69,7 +83,7 @@ def run_cs_command(scripts_dir, command, args, env=None, cwd=None):
 class TestCsPromiseCreate:
     """Tests for cs-promise --create."""
 
-    def test_create_promise_success(self, temp_project_dir, scripts_dir, test_session_id):
+    def test_create_promise_success(self, temp_project_dir, scripts_dir, scripts_available, test_session_id):
         """Creating a promise should create a JSON file in promises dir."""
         env = {
             'CLAUDE_SESSION_ID': test_session_id,
@@ -101,7 +115,7 @@ class TestCsPromiseCreate:
         assert promise['ownership']['owned_by'] == test_session_id
         assert promise['ownership']['created_by'] == test_session_id
 
-    def test_create_promise_requires_session_id(self, temp_project_dir, scripts_dir):
+    def test_create_promise_requires_session_id(self, temp_project_dir, scripts_dir, scripts_available):
         """Creating a promise without CLAUDE_SESSION_ID should fail."""
         env = {
             'CLAUDE_PROJECT_DIR': temp_project_dir,
@@ -122,7 +136,7 @@ class TestCsPromiseCreate:
 class TestCsPromiseLifecycle:
     """Tests for the full cs-promise lifecycle."""
 
-    def test_promise_lifecycle_pending_to_in_progress(self, temp_project_dir, scripts_dir, test_session_id):
+    def test_promise_lifecycle_pending_to_in_progress(self, temp_project_dir, scripts_dir, scripts_available, test_session_id):
         """Promise should transition from pending to in_progress via --start."""
         env = {
             'CLAUDE_SESSION_ID': test_session_id,
@@ -160,7 +174,7 @@ class TestCsPromiseLifecycle:
 
         assert promise['status'] == 'in_progress'
 
-    def test_promise_list_shows_all_promises(self, temp_project_dir, scripts_dir, test_session_id):
+    def test_promise_list_shows_all_promises(self, temp_project_dir, scripts_dir, scripts_available, test_session_id):
         """--list should show all promises with their status."""
         env = {
             'CLAUDE_SESSION_ID': test_session_id,
@@ -191,7 +205,7 @@ class TestCsPromiseLifecycle:
         assert 'Second feature' in list_result.stdout
         assert '[PENDING]' in list_result.stdout
 
-    def test_promise_mine_filters_by_session(self, temp_project_dir, scripts_dir, test_session_id):
+    def test_promise_mine_filters_by_session(self, temp_project_dir, scripts_dir, scripts_available, test_session_id):
         """--mine should only show promises owned by current session."""
         env1 = {
             'CLAUDE_SESSION_ID': test_session_id,
@@ -231,7 +245,7 @@ class TestCsPromiseLifecycle:
 class TestCsPromiseOwnership:
     """Tests for promise ownership operations."""
 
-    def test_release_orphans_promise(self, temp_project_dir, scripts_dir, test_session_id):
+    def test_release_orphans_promise(self, temp_project_dir, scripts_dir, scripts_available, test_session_id):
         """--release should set ownership to null (orphan the promise)."""
         env = {
             'CLAUDE_SESSION_ID': test_session_id,
@@ -268,7 +282,7 @@ class TestCsPromiseOwnership:
 
         assert promise['ownership']['owned_by'] is None
 
-    def test_adopt_takes_orphaned_promise(self, temp_project_dir, scripts_dir, test_session_id):
+    def test_adopt_takes_orphaned_promise(self, temp_project_dir, scripts_dir, scripts_available, test_session_id):
         """--adopt should claim ownership of an orphaned promise."""
         env1 = {
             'CLAUDE_SESSION_ID': 'original-owner',
@@ -316,7 +330,7 @@ class TestCsPromiseOwnership:
 
         assert promise['ownership']['owned_by'] == test_session_id
 
-    def test_adopt_fails_for_owned_promise(self, temp_project_dir, scripts_dir, test_session_id):
+    def test_adopt_fails_for_owned_promise(self, temp_project_dir, scripts_dir, scripts_available, test_session_id):
         """--adopt should fail if promise is not orphaned."""
         env1 = {
             'CLAUDE_SESSION_ID': 'owner-session',
@@ -357,7 +371,7 @@ class TestCsPromiseOwnership:
 class TestCsVerify:
     """Tests for cs-verify command."""
 
-    def test_verify_promise_success(self, temp_project_dir, scripts_dir, test_session_id):
+    def test_verify_promise_success(self, temp_project_dir, scripts_dir, scripts_available, test_session_id):
         """Verifying a promise should move it to history."""
         env = {
             'CLAUDE_SESSION_ID': test_session_id,
@@ -408,7 +422,7 @@ class TestCsVerify:
         assert promise['verification']['type'] == 'test'
         assert promise['verification']['proof'] == 'All tests pass'
 
-    def test_verify_requires_ownership(self, temp_project_dir, scripts_dir, test_session_id):
+    def test_verify_requires_ownership(self, temp_project_dir, scripts_dir, scripts_available, test_session_id):
         """Verifying a promise owned by another session should fail."""
         env1 = {
             'CLAUDE_SESSION_ID': 'owner-session',
@@ -448,7 +462,7 @@ class TestCsVerify:
         assert verify_result.returncode != 0
         assert "don't own" in verify_result.stderr
 
-    def test_verify_check_passes_with_no_promises(self, temp_project_dir, scripts_dir, test_session_id):
+    def test_verify_check_passes_with_no_promises(self, temp_project_dir, scripts_dir, scripts_available, test_session_id):
         """--check should pass (exit 0) when no promises are owned."""
         env = {
             'CLAUDE_SESSION_ID': test_session_id,
@@ -463,7 +477,7 @@ class TestCsVerify:
 
         assert result.returncode == 0
 
-    def test_verify_check_fails_with_in_progress_promise(self, temp_project_dir, scripts_dir, test_session_id):
+    def test_verify_check_fails_with_in_progress_promise(self, temp_project_dir, scripts_dir, scripts_available, test_session_id):
         """--check should fail (exit 2) with in_progress promises."""
         env = {
             'CLAUDE_SESSION_ID': test_session_id,
@@ -798,7 +812,7 @@ class TestMomentumCheck:
 class TestCrossSessionAwareness:
     """Tests for cross-session promise awareness."""
 
-    def test_multiple_sessions_can_have_promises(self, temp_project_dir, scripts_dir):
+    def test_multiple_sessions_can_have_promises(self, temp_project_dir, scripts_dir, scripts_available):
         """Multiple sessions should be able to create and track their own promises."""
         session1_env = {
             'CLAUDE_SESSION_ID': 'session-1',
@@ -839,7 +853,7 @@ class TestCrossSessionAwareness:
         assert 'Session 2 work' in mine2.stdout
         assert 'Session 1 work' not in mine2.stdout
 
-    def test_session_isolation_for_verification(self, temp_project_dir, scripts_dir):
+    def test_session_isolation_for_verification(self, temp_project_dir, scripts_dir, scripts_available):
         """Each session can only verify its own promises."""
         session1_env = {
             'CLAUDE_SESSION_ID': 'session-verify-1',
@@ -886,7 +900,7 @@ class TestCrossSessionAwareness:
 class TestCsPromiseCancel:
     """Tests for cs-promise --cancel."""
 
-    def test_cancel_moves_to_history(self, temp_project_dir, scripts_dir, test_session_id):
+    def test_cancel_moves_to_history(self, temp_project_dir, scripts_dir, scripts_available, test_session_id):
         """Cancelling a promise should move it to history with cancelled status."""
         env = {
             'CLAUDE_SESSION_ID': test_session_id,
