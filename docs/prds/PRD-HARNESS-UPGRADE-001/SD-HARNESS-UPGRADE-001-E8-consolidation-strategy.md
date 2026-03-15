@@ -2,7 +2,7 @@
 title: "SD: Attractor-to-CoBuilder Consolidation Strategy — Probabilistic Analysis"
 status: active
 type: architecture
-last_verified: 2026-03-09
+last_verified: 2026-03-09T00:00:00.000Z
 grade: authoritative
 sd_id: SD-HARNESS-UPGRADE-001-E8-CONSOLIDATION
 parent_prd: PRD-HARNESS-UPGRADE-001

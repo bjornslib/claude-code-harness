@@ -3,7 +3,7 @@ title: "SD-SEQ-PROGRESSION-001: Check Sequence Progression Implementation"
 status: active
 type: reference
 grade: authoritative
-last_verified: 2026-03-09
+last_verified: 2026-03-09T00:00:00.000Z
 research_validated: true
 ---
 # SD-SEQ-PROGRESSION-001: Check Sequence Progression Implementation

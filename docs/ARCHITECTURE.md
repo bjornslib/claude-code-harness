@@ -2,7 +2,7 @@
 title: ZeroRepo Architecture
 status: active
 type: reference
-last_verified: 2026-02-08
+last_verified: 2026-02-08T00:00:00.000Z
 ---
 # ZeroRepo Architecture
 

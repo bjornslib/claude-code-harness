@@ -3,7 +3,7 @@ title: "PRD-DASHBOARD-AUDIT-001: Dashboard Audit Trail & Stable References"
 status: draft
 type: guide
 grade: authoritative
-last_verified: 2026-03-09
+last_verified: 2026-03-09T00:00:00.000Z
 ---
 # PRD-DASHBOARD-AUDIT-001: Dashboard Audit Trail & Stable References
 

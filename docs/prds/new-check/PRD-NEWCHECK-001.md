@@ -3,7 +3,7 @@ title: "PRD-NEWCHECK-001: New Check Page"
 status: active
 type: guide
 grade: authoritative
-last_verified: 2026-03-07
+last_verified: 2026-03-07T00:00:00.000Z
 ---
 # PRD-NEWCHECK-001: New Check Page
 

@@ -3,7 +3,7 @@ title: "SD-DASHBOARD-AUDIT-FRONTEND-001: Case Detail Page Frontend Redesign"
 status: draft
 type: guide
 grade: authoritative
-last_verified: 2026-03-09
+last_verified: 2026-03-09T00:00:00.000Z
 ---
 # SD-DASHBOARD-AUDIT-FRONTEND-001: Case Detail Page Frontend Redesign
 

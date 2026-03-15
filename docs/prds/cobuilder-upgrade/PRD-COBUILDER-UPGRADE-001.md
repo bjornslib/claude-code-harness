@@ -4,7 +4,7 @@ prd_id: PRD-COBUILDER-UPGRADE-001
 status: draft
 type: reference
 created: 2026-03-14T00:00:00.000Z
-last_verified: 2026-03-15
+last_verified: 2026-03-15T00:00:00.000Z
 grade: authoritative
 owner: theb
 note: This is the LAST document using PRD/SD terminology. E6 migrates to Business Spec (BS) / Technical Spec (TS).

@@ -2,7 +2,7 @@
 title: "SD-SEQ-RETRY-LOOP-001: Continuous Retry Loop Until Final Status"
 status: active
 type: reference
-last_verified: 2026-03-10
+last_verified: 2026-03-10T00:00:00.000Z
 ---
 # SD-SEQ-RETRY-LOOP-001: Continuous Retry Loop Until Final Status
 

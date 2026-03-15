@@ -2,7 +2,7 @@
 title: "SD-HARNESS-UPGRADE-001 Epic 12: Graduated Autonomy Model"
 status: draft
 type: reference
-last_verified: 2026-03-06
+last_verified: 2026-03-06T00:00:00.000Z
 grade: draft
 ---
 # SD-HARNESS-UPGRADE-001 Epic 12: Graduated Autonomy Model

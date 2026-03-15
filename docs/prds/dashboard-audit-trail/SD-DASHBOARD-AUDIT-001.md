@@ -3,7 +3,7 @@ title: "SD-DASHBOARD-AUDIT-001: Checks Dashboard — Stable References, Audit Tr
 status: active
 type: architecture
 grade: authoritative
-last_verified: 2026-03-09
+last_verified: 2026-03-09T00:00:00.000Z
 ---
 # SD-DASHBOARD-AUDIT-001: Checks Dashboard Reverse Engineering Design
 

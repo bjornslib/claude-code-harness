@@ -3,7 +3,7 @@ title: "SD-DASHBOARD-AUDIT-001: Dashboard Audit Trail & Stable References"
 status: draft
 type: reference
 grade: authoritative
-last_verified: 2026-03-11
+last_verified: 2026-03-11T00:00:00.000Z
 ---
 # SD-DASHBOARD-AUDIT-001: Dashboard Audit Trail & Stable References
 

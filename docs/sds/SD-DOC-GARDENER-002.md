@@ -347,8 +347,8 @@ python3 -c "import json; b=json.load(open('/tmp/before.json')); a=json.load(open
 
 | Epic | Status | Date | Commit |
 |------|--------|------|--------|
-| E1: Extended Frontmatter Schema | Remaining | - | - |
-| E2: Implementation Status Body Check | Remaining | - | - |
-| E3: Misplaced Document Detection | Remaining | - | - |
-| E4: Config & Quality Grades | Remaining | - | - |
-| E5: Auto-Remediation Run | Remaining | - | - |
+| E1: Extended Frontmatter Schema | Done | 2026-03-15 | Pipeline impl_e1_e4 |
+| E2: Implementation Status Body Check | Done | 2026-03-15 | Pipeline impl_e1_e4 |
+| E3: Misplaced Document Detection | Done | 2026-03-15 | Pipeline impl_e1_e4 |
+| E4: Config & Quality Grades | Done | 2026-03-15 | Pipeline impl_e1_e4 |
+| E5: Auto-Remediation Run | Done | 2026-03-15 | Pipeline impl_e5 |
