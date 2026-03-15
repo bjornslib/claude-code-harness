@@ -19,8 +19,11 @@
 
 set -e
 
-# Resolve paths relative to this script's location
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve paths relative to this script's REAL location (not symlink)
+# When invoked via .git/hooks/pre-push symlink, BASH_SOURCE[0] returns
+# the symlink path. We need the actual target to compute .claude/ paths.
+REAL_SCRIPT="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || readlink "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(cd "$(dirname "$REAL_SCRIPT")" && pwd)"
 CLAUDE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 GARDENER="$CLAUDE_DIR/scripts/doc-gardener/gardener.py"
 

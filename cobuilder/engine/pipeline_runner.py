@@ -1978,6 +1978,13 @@ class PipelineRunner:
                     log.error("[signal] %s: validation FAIL (retry %d/%d) -> failed permanently",
                               node_id, retries, MAX_RETRIES)
                 else:
+                    # Store failure reason so re-dispatched worker gets context
+                    failure_reason = signal.get("reason", "validation failed (no reason provided)")
+                    self.requeue_guidance[node_id] = (
+                        f"Your previous attempt failed validation.\n"
+                        f"Error: {failure_reason}\n"
+                        f"Fix the issue and re-signal completion."
+                    )
                     # Reset to pending for retry (impl_complete -> failed -> active -> pending)
                     if current_status == "impl_complete":
                         self._do_transition(node_id, "failed")
@@ -1991,9 +1998,16 @@ class PipelineRunner:
 
             elif result == "requeue":
                 requeue_target = signal.get("requeue_target", node_id)
+                requeue_reason = signal.get("reason", "validation requested requeue")
                 retries = self.retry_counts.get(requeue_target, 0) + 1
                 self.retry_counts[requeue_target] = retries
                 if retries < MAX_RETRIES:
+                    # Store failure reason for re-dispatched worker
+                    self.requeue_guidance[requeue_target] = (
+                        f"Your previous implementation was rejected by validation.\n"
+                        f"Reason: {requeue_reason}\n"
+                        f"Fix the issue and re-signal completion."
+                    )
                     # Transition requeue_target back to pending via failed
                     target_node = next((n for n in data["nodes"] if n["id"] == requeue_target), None)
                     if target_node:
@@ -2005,6 +2019,11 @@ class PipelineRunner:
                     # Also reset the gate node itself to pending so it doesn't
                     # appear as an orphaned active gate on the next loop iteration
                     if node_id != requeue_target:
+                        self.requeue_guidance[node_id] = (
+                            f"Validation gate node reset to pending after requeue.\n"
+                            f"Original target: {requeue_target}\n"
+                            f"Reason: {requeue_reason}"
+                        )
                         self._force_status(node_id, "pending")
                     log.info("[signal] %s: requeue -> %s (retry %d/%d)",
                              node_id, requeue_target, retries, MAX_RETRIES)
@@ -2059,6 +2078,13 @@ class PipelineRunner:
                         log.error("[signal] %s: worker failed permanently (retry %d/%d)",
                                   node_id, retries, MAX_RETRIES)
                     else:
+                        # Store failure reason for re-dispatched worker
+                        self.requeue_guidance[node_id] = (
+                            f"Your previous implementation failed.\n"
+                            f"Error: {failure_msg}\n"
+                            f"Fix the issue and re-signal completion."
+                        )
+                        self._persist_requeue_guidance(node_id, self.requeue_guidance[node_id])
                         # Reset to pending for retry via force_status
                         self._force_status(node_id, "pending")
                         log.warning("[signal] %s: worker failed (retry %d/%d) — reset to pending for retry",

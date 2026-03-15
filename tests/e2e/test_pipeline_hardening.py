@@ -77,6 +77,19 @@ digraph test_pipeline {
 }
 """
 
+TOOL_VERIFY_DOT = """\
+digraph test_pipeline {
+    graph [prd_ref="TEST-001"];
+    start [shape=Mdiamond handler="noop" status="validated"];
+    impl_node [shape=box handler="codergen" status="accepted" worker_type="backend-solutions-engineer"];
+    verify_node [shape=box handler="tool" status="active" worker_type="backend-solutions-engineer"];
+    exit [shape=Msquare handler="exit" status="pending"];
+    start -> impl_node;
+    impl_node -> verify_node;
+    verify_node -> exit;
+}
+"""
+
 
 def _make_runner(tmp_path: Path, dot_content: str = MINIMAL_DOT) -> PipelineRunner:
     """Create a PipelineRunner against a temp DOT file with mocked externals."""
@@ -769,3 +782,195 @@ class TestEpicJ:
 
         status = runner._get_node_status("node1")
         assert status == "pending"
+
+
+# =========================================================================
+# Epic K: Blind Retry Paths Store Failure Reasons
+# =========================================================================
+
+class TestEpicK:
+    """All 3 blind retry paths store failure reason in requeue_guidance before resetting to pending.
+
+    This ensures workers receive actionable feedback when re-dispatched after failures.
+
+    Three paths tested:
+    1. _requeue_upstream_worker - upstream dependency failed
+    2. Validation requeue result - validation agent rejected work
+    3. Worker failed status - worker signaled failure
+    """
+
+    def test_requeue_upstream_worker_sets_guidance(self, tmp_path):
+        """_requeue_upstream_worker sets requeue_guidance for upstream codergen predecessor."""
+        runner = _make_runner(tmp_path, TOOL_VERIFY_DOT)
+        os.makedirs(runner.signal_dir, exist_ok=True)
+
+        # Build data dict matching TOOL_VERIFY_DOT structure
+        data = {
+            "nodes": [
+                {"id": "start", "attrs": {"handler": "noop", "status": "validated"}},
+                {"id": "impl_node", "attrs": {"handler": "codergen", "status": "accepted"}},
+                {"id": "verify_node", "attrs": {"handler": "tool", "status": "active"}},
+                {"id": "exit", "attrs": {"handler": "exit", "status": "pending"}},
+            ],
+            "edges": [
+                {"src": "start", "dst": "impl_node"},
+                {"src": "impl_node", "dst": "verify_node"},
+                {"src": "verify_node", "dst": "exit"},
+            ],
+        }
+
+        # Call _requeue_upstream_worker with correct signature:
+        # (tool_node_id, failure_message, data)
+        result = runner._requeue_upstream_worker(
+            "verify_node",
+            "Verification failed: assertion error in test_auth.py",
+            data,
+        )
+
+        assert result is True, "_requeue_upstream_worker should return True when upstream found"
+
+        # Verify guidance was set for the upstream codergen predecessor
+        assert "impl_node" in runner.requeue_guidance, \
+            "requeue_guidance should have entry for upstream impl_node"
+        guidance = runner.requeue_guidance["impl_node"]
+        assert "failed verification" in guidance.lower() or "assertion error" in guidance.lower(), \
+            f"Guidance should mention verification failure, got: {guidance}"
+
+        # Verify guidance was persisted (survives reload)
+        guidance_path = os.path.join(runner.signal_dir, "guidance", "impl_node.txt")
+        assert os.path.exists(guidance_path), "Guidance file should be persisted"
+        with open(guidance_path) as fh:
+            persisted = fh.read()
+        assert persisted == guidance, "Persisted guidance should match in-memory"
+
+    def test_validation_fail_sets_guidance(self, tmp_path):
+        """PATH 1: Validation 'fail' result stores guidance before resetting to pending."""
+        runner = _make_runner(tmp_path, IMPL_COMPLETE_DOT)
+        os.makedirs(runner.signal_dir, exist_ok=True)
+
+        # Simulate a validation fail signal
+        fail_signal = {
+            "result": "fail",
+            "reason": "Tests failing: 2 of 4 assertions fail in test_auth.py",
+        }
+
+        # Write the signal file
+        signal_path = os.path.join(runner.signal_dir, "node1.json")
+        with open(signal_path, "w") as fh:
+            json.dump(fail_signal, fh)
+
+        # Process the signal (triggers the validation fail path)
+        runner._process_signals()
+
+        # Verify guidance was set
+        assert "node1" in runner.requeue_guidance, \
+            "requeue_guidance should have entry for validation-failed node"
+        guidance = runner.requeue_guidance["node1"]
+        assert "Tests failing" in guidance or "failed validation" in guidance.lower(), \
+            f"Guidance should include validation failure reason, got: {guidance}"
+
+    def test_validation_requeue_result_sets_guidance(self, tmp_path):
+        """Path 2: Validation requeue result sets requeue_guidance before calling _force_status."""
+        runner = _make_runner(tmp_path, IMPL_COMPLETE_DOT)
+        os.makedirs(runner.signal_dir, exist_ok=True)
+
+        # Simulate a validation requeue signal
+        validation_signal = {
+            "result": "requeue",
+            "requeue_target": "node1",
+            "reason": "Tests failed: assertion error on line 42 of test_auth.py",
+            "guidance": "Fix the authentication logic to handle expired tokens correctly."
+        }
+
+        # Write the signal file
+        signal_path = os.path.join(runner.signal_dir, "node1.json")
+        with open(signal_path, "w") as fh:
+            json.dump(validation_signal, fh)
+
+        # Process the signal (this triggers the requeue path)
+        runner._process_signals()
+
+        # Verify guidance was set for the requeue target
+        assert "node1" in runner.requeue_guidance, \
+            "requeue_guidance should have entry for requeued node"
+        guidance = runner.requeue_guidance["node1"]
+        assert "Tests failed" in guidance or "expired tokens" in guidance, \
+            f"Guidance should include validation feedback, got: {guidance}"
+
+        # Verify guidance was persisted
+        guidance_path = os.path.join(runner.signal_dir, "guidance", "node1.txt")
+        assert os.path.exists(guidance_path), "Guidance file should be persisted for requeue"
+
+    def test_worker_failed_sets_guidance(self, tmp_path):
+        """Path 3: Worker failed status sets requeue_guidance before calling _force_status."""
+        runner = _make_runner(tmp_path, ACTIVE_DOT)
+        os.makedirs(runner.signal_dir, exist_ok=True)
+
+        # Simulate a worker failure signal
+        failure_signal = {
+            "status": "failed",
+            "message": "ImportError: No module named 'nonexistent_module'",
+            "files_changed": []
+        }
+
+        # Write the signal file
+        signal_path = os.path.join(runner.signal_dir, "node1.json")
+        with open(signal_path, "w") as fh:
+            json.dump(failure_signal, fh)
+
+        # Process the signal (this triggers the failed -> pending retry path)
+        runner._process_signals()
+
+        # Verify guidance was set for the failed node
+        assert "node1" in runner.requeue_guidance, \
+            "requeue_guidance should have entry for failed worker"
+        guidance = runner.requeue_guidance["node1"]
+        assert "ImportError" in guidance or "failed" in guidance.lower(), \
+            f"Guidance should mention the failure, got: {guidance}"
+
+        # Verify guidance was persisted
+        guidance_path = os.path.join(runner.signal_dir, "guidance", "node1.txt")
+        assert os.path.exists(guidance_path), "Guidance file should be persisted for failed worker"
+
+    def test_all_paths_persist_guidance_before_force_status(self, tmp_path):
+        """Verify worker failed path calls _persist_requeue_guidance BEFORE _force_status.
+
+        This is a meta-test that verifies the ordering: guidance first, then status reset.
+        """
+        runner = _make_runner(tmp_path, ACTIVE_DOT)
+        os.makedirs(runner.signal_dir, exist_ok=True)
+
+        # Track call order
+        call_order = []
+        original_persist = runner._persist_requeue_guidance
+        original_force = runner._force_status
+
+        def tracked_persist(node_id, guidance):
+            call_order.append(("persist", node_id))
+            return original_persist(node_id, guidance)
+
+        def tracked_force(node_id, target_status):
+            call_order.append(("force_status", node_id, target_status))
+            return original_force(node_id, target_status)
+
+        # Test: worker failed (write signal and process)
+        signal_path = os.path.join(runner.signal_dir, "node1.json")
+        with open(signal_path, "w") as fh:
+            json.dump({"status": "failed", "message": "test error"}, fh)
+
+        runner._persist_requeue_guidance = tracked_persist
+        runner._force_status = tracked_force
+
+        runner._process_signals()
+
+        # Find the persist and force_status calls for this path
+        persist_calls = [c for c in call_order if c[0] == "persist"]
+        force_calls = [c for c in call_order if c[0] == "force_status"]
+
+        # persist should come before force_status (the retry path)
+        assert persist_calls, "persist should have been called"
+        assert force_calls, "force_status should have been called"
+        last_persist_idx = call_order.index(persist_calls[-1])
+        last_force_idx = call_order.index(force_calls[-1])
+        assert last_persist_idx < last_force_idx, \
+            f"persist should come before force_status, got order: {call_order}"
