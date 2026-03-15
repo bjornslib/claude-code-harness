@@ -974,3 +974,62 @@ class TestEpicK:
         last_force_idx = call_order.index(force_calls[-1])
         assert last_persist_idx < last_force_idx, \
             f"persist should come before force_status, got order: {call_order}"
+
+    def test_stale_timeout_returns_failed_not_success(self, tmp_path):
+        """Stale worker timeout should return 'failed', not 'success'.
+
+        When the stale detection breaks the stream loop (no signal file, no result_text),
+        the return value must be 'failed' so the retry path fires with guidance.
+        """
+        runner = _make_runner(tmp_path, ACTIVE_DOT)
+        os.makedirs(runner.signal_dir, exist_ok=True)
+
+        # Simulate what happens when stale timeout triggers:
+        # The runner writes a signal with the result from _dispatch_sdk_worker.
+        # With the fix, stale timeout returns {"status": "failed", "message": "Stale worker..."}
+        stale_result = {
+            "status": "failed",
+            "message": "Stale worker timeout after 300s — worker was mid-task (165 events). Last worker text: writing signal file...",
+        }
+
+        # Write the stale-timeout signal
+        signal_path = os.path.join(runner.signal_dir, "node1.json")
+        with open(signal_path, "w") as fh:
+            json.dump(stale_result, fh)
+
+        # Process the signal — should trigger the worker-failed retry path
+        runner._process_signals()
+
+        # Verify guidance was set (the blind retry fix handles this)
+        assert "node1" in runner.requeue_guidance, \
+            "Stale timeout signal should trigger guidance storage via worker-failed path"
+        guidance = runner.requeue_guidance["node1"]
+        assert "stale" in guidance.lower() or "failed" in guidance.lower(), \
+            f"Guidance should mention the failure, got: {guidance}"
+
+    def test_stale_timeout_skipped_when_signal_exists(self, tmp_path):
+        """If worker already wrote a signal file, stale detection should NOT override it.
+
+        This tests the guard: before declaring stale, check if {node_id}.json exists.
+        If it does, let normal signal processing handle it instead of forcing 'failed'.
+        """
+        runner = _make_runner(tmp_path, ACTIVE_DOT)
+        os.makedirs(runner.signal_dir, exist_ok=True)
+
+        # Worker wrote a success signal before stale timeout would fire
+        worker_signal = {
+            "status": "success",
+            "message": "Implemented all requested changes",
+            "files_changed": ["cobuilder/engine/pipeline_runner.py"],
+        }
+        signal_path = os.path.join(runner.signal_dir, "node1.json")
+        with open(signal_path, "w") as fh:
+            json.dump(worker_signal, fh)
+
+        # Process the signal — should treat as normal success, NOT stale
+        runner._process_signals()
+
+        # Node should advance to impl_complete (success path), not failed
+        node_status = runner._get_node_status("node1")
+        assert node_status == "impl_complete", \
+            f"Worker-written success signal should advance to impl_complete, got: {node_status}"

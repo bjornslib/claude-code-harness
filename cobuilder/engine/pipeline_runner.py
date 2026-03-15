@@ -1300,6 +1300,7 @@ class PipelineRunner:
             messages = []
             result_text = ""
             _first_msg_logged = False
+            _stale_triggered = False  # Track if we broke due to stale timeout
 
             # Stale-detection state
             last_activity = time.time()
@@ -1323,9 +1324,18 @@ class PipelineRunner:
                             idle_seconds >= _STALE_WORKER_TIMEOUT
                             and "signal" in last_worker_text.lower()
                         ):
+                            # Before declaring stale, check if worker already wrote its signal
+                            _sig_path = os.path.join(self.signal_dir, f"{node_id}.json")
+                            if os.path.exists(_sig_path):
+                                log.info(
+                                    "[sdk] Stale timeout reached for %s but signal file exists — "
+                                    "letting normal signal processing handle it",
+                                    node_id,
+                                )
+                                break  # Signal file exists; exit loop normally (not stale)
                             log.warning(
                                 "[sdk] Stale worker detected for %s: no activity for %.0fs, "
-                                "last text mentioned 'signal' — forcing completion",
+                                "last text mentioned 'signal' — forcing incomplete",
                                 node_id, idle_seconds,
                             )
                             if _LOGFIRE_AVAILABLE:
@@ -1333,7 +1343,8 @@ class PipelineRunner:
                                     "stale_worker_timeout {node_id} after {idle_s}s",
                                     node_id=node_id, idle_s=round(idle_seconds),
                                 )
-                            break  # Exit loop — fallback below writes signal on worker's behalf
+                            _stale_triggered = True
+                            break  # Exit loop — stale timeout, NOT success
                         continue  # Not stale yet; keep waiting
                     except StopAsyncIteration:
                         break  # Stream ended normally
@@ -1383,6 +1394,15 @@ class PipelineRunner:
 
             if result_text:
                 return {"status": "success", "message": result_text}
+            if _stale_triggered:
+                return {
+                    "status": "failed",
+                    "message": (
+                        f"Stale worker timeout after {_STALE_WORKER_TIMEOUT}s — worker was mid-task "
+                        f"when session was terminated ({len(messages)} events). "
+                        f"Last worker text: {last_worker_text[:200]}"
+                    ),
+                }
             return {"status": "success", "message": f"SDK worker completed ({len(messages)} events)"}
 
         if _LOGFIRE_AVAILABLE:
