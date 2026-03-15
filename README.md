@@ -1,6 +1,6 @@
-# Claude Code Harness Setup
+# CoBuilder Harness Setup
 
-A complete configuration framework for multi-agent AI orchestration using Claude Code. This repository provides the CoBuilder pipeline engine, skills, hooks, and orchestration tools for building sophisticated AI-powered development workflows.
+A coding harness for multi-agent AI autonomous coding. This repository provides the CoBuilder pipeline engine, skills, hooks, and orchestration tools for building sophisticated AI-powered development workflows.
 
 ## Getting Started
 
