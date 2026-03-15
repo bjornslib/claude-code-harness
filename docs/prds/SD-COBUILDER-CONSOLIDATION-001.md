@@ -573,3 +573,9 @@ These are validated safety properties (2026-03-03), not style preferences. Do no
 **The `ATTRACTOR_SIGNAL_DIR` env var override is a forever contract.** Existing orchestrators, pipelines, and monitoring scripts in the wild use it. It must remain resolution priority #1 in `signal_protocol.py` permanently.
 
 **The cobuilder CLI is the integration test.** If `cobuilder pipeline status .cobuilder/examples/simple-pipeline.dot` works at the end of each phase, the migration is on track.
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

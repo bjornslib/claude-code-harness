@@ -134,3 +134,9 @@ const submitPayload = {
 - Voice session → submit → verify egress runs, PostCheckProcessor uses voice transcript
 - Mixed session → submit → verify both transcripts processed
 - Chat-only session → close browser → verify room cleanup completes without error
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

@@ -4,7 +4,7 @@ prd_id: PRD-COBUILDER-UPGRADE-001
 status: draft
 type: reference
 created: 2026-03-14T00:00:00.000Z
-last_verified: 2026-03-15T00:00:00.000Z
+last_verified: 2026-03-15
 grade: authoritative
 owner: theb
 note: This is the LAST document using PRD/SD terminology. E6 migrates to Business Spec (BS) / Technical Spec (TS).
@@ -784,3 +784,9 @@ This spec provides **backend infrastructure** that the CoBuilder Web spec consum
 | Signal file protocol | SSE bridge — event source |
 
 The two specs can be developed in parallel. CoBuilder Web depends on E3 (worktrees) and E1 (per-node config).
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+| --- | --- | --- | --- |
+| - | Remaining | - | - |

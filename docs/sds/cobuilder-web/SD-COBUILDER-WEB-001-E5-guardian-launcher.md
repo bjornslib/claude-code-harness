@@ -782,3 +782,9 @@ E2 (Web Server) ┘                                       |
 **Likelihood**: Low. The Guardian validates by reading code and running acceptance tests, not by interacting with a browser.
 
 **Mitigation**: The `--chrome` flag can be added to `_build_claude_command()` if browser-based validation becomes a Guardian requirement. Currently omitted to reduce resource usage (Chrome DevTools protocol connection).
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

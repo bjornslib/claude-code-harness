@@ -370,3 +370,9 @@ Thank you for your time.
 - `email_outreach.py` is a SEPARATE flow (JWT token-based) — not touched
 - HTML templates in `agencheck-communication-agent/email-templates/` are for education verification — not touched
 - Database column names (`employer_contact_name`, `hr_contact_name`) are internal and do NOT change
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

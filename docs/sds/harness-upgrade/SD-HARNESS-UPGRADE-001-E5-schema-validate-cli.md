@@ -136,3 +136,9 @@ After E7.2 validation period, `--mode=python` becomes the default. All worker di
 - AC-5.5: `--mode=python` flag accepted by runner.py (dispatch to E7.2's PipelineRunner)
 - AC-5.6: Acceptance-test-writer topology rule (V-15) warns when codergen cluster lacks AT writer
 - AC-5.7: Skills validation (V-16) warns when agent's `skills_required` references non-existent skill directory
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

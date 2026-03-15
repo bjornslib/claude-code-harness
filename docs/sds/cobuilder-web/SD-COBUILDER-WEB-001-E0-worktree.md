@@ -542,3 +542,9 @@ For this epic, the `cleanup()` method is the primary defense. The PRD notes that
 **Risk:** Other tools (e.g., `spawn_orchestrator.py`) use Claude's native `--worktree` flag, which creates worktrees at `.claude/worktrees/<name>/` with branch `worktree-<name>`. These could collide with `WorktreeManager`-created worktrees if the names overlap.
 
 **Mitigation:** Convention separation. `spawn_orchestrator.py` uses node IDs as names (e.g., `impl_auth`), while `WorktreeManager` uses PRD IDs (e.g., `PRD-COBUILDER-WEB-001`). PRD IDs always contain uppercase and hyphens, making accidental collision extremely unlikely. The `list_active()` filter uses path prefix matching, so it only returns worktrees it created.
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

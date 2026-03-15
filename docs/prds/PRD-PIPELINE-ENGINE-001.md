@@ -532,3 +532,9 @@ All 4 are in the E3↔E1 integration boundary (edge selector condition evaluatio
 - s3-guardian skill: Updated across 5 files to promote headless, demote tmux to legacy
 
 **Rationale**: Headless mode provides structured JSON output, no terminal dependency, and deterministic signal file completion detection — enabling fully automated pipeline execution without tmux session management overhead.
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

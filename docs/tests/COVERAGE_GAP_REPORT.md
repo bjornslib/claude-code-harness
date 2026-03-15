@@ -61,3 +61,9 @@ generated_from: component_test_map.json
 ---
 
 *This report is generated from `component_test_map.json` and should be updated whenever test specs change.*
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

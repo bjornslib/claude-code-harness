@@ -3,7 +3,7 @@ title: "PRD-NEWCHECK-001: New Check Page"
 status: active
 type: guide
 grade: authoritative
-last_verified: 2026-03-07T00:00:00.000Z
+last_verified: 2026-03-07
 ---
 # PRD-NEWCHECK-001: New Check Page
 
@@ -133,3 +133,9 @@ On error: show inline error banner on the form.
 - [ ] Cancel button returns to `/checks-dashboard`
 - [ ] Error from API is shown as inline error banner
 - [ ] Page inherits checks-dashboard layout (sidebar + shared nav visible)
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+| --- | --- | --- | --- |
+| - | Remaining | - | - |

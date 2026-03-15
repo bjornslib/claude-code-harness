@@ -133,3 +133,9 @@ worker_type: enum [
 - AC-4.2: `agent-schema.md` `worker_type` enum includes all 6 types with descriptions
 - AC-4.3: `dispatch_worker.py` loads agent definition and injects `Skill()` invocations from `skills_required`
 - AC-4.4: Missing agent definition is a hard error (not silent fallback to generic prompt)
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

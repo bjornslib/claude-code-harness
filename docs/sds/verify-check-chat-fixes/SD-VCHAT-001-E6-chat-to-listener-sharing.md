@@ -105,3 +105,9 @@ The existing extraction pipeline in `process_transcription_data()` already:
 ## Risk
 
 - Double extraction: Both `process_chat_transcription()` (in-process) and `process_transcription_data()` (listener) will extract from the same chat message. This is acceptable — the listener's extraction is the canonical one, and the in-process one provides immediate SSE feedback. Field updates are idempotent.
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

@@ -426,3 +426,9 @@ Build the pipeline execution engine. Everything else — loop detection, express
 - [Stanford Law: Built by Agents, Tested by Agents, Trusted by Whom?](https://law.stanford.edu/2026/02/08/built-by-agents-tested-by-agents-trusted-by-whom/)
 - [GitHub Agentic Adoption Study (arXiv)](https://arxiv.org/html/2601.18341v1)
 - [Ry Walker Research: StrongDM Factory](https://rywalker.com/research/strongdm-factory)
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

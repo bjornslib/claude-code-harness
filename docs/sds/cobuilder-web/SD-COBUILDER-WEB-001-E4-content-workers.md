@@ -593,3 +593,9 @@ options = claude_code_sdk.ClaudeCodeOptions(
 - Add a `model` attribute to DOT nodes and have the runner read it (future enhancement, not in E4 scope)
 
 The agent definition frontmatter specifies `model: sonnet`, but the runner currently ignores frontmatter model preferences and uses the environment variable. This is a known gap; for E4, the environment variable approach is sufficient.
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

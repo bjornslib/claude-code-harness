@@ -47,3 +47,9 @@ The `load_attractor_env()` function in `dispatch_worker.py` already parses `.cla
 3. `ANTHROPIC_BASE_URL` from `.env` is also propagated to research/refine scripts
 4. `spawn_orchestrator.py` tmux command remains hardcoded to `claude-sonnet-4-6`
 5. All existing tests pass (no regressions)
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

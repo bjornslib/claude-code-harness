@@ -1069,3 +1069,9 @@ If multiple uvicorn workers are needed in the future, the file-level lock from `
 **Risk**: The phase detection reads the DOT file at request time. If the pipeline runner transitions a node between the list request and the user viewing the result, the displayed phase may be stale.
 
 **Mitigation**: Acceptable for REST polling. The SSE event bridge (E3) provides real-time updates. The REST endpoints are designed for initial page load, not live tracking.
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

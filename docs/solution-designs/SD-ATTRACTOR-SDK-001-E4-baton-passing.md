@@ -344,3 +344,9 @@ The `additional_context` parameter in `spawn_worker_sdk()` (E1) accepts Seance c
 
 3. **Validation worker timeout?** Validation should be faster than implementation — it only reads and runs tests.
    - **Recommendation**: 60-turn limit for validation workers (vs 100 for implementation workers). 5-minute timeout.
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

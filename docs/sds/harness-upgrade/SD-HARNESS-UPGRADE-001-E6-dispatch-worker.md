@@ -139,3 +139,9 @@ The `wait.cobuilder` gate dispatches a `validation-test-agent` (with `--mode=pip
 - AC-6.3: Skill invocations injected into worker initial prompt from `skills_required`
 - AC-6.4: `ATTRACTOR_SIGNAL_DIR` env var set for worker subprocesses
 - AC-6.5: Signal evidence includes `sd_hash` field (SHA256 of frozen SD content)
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

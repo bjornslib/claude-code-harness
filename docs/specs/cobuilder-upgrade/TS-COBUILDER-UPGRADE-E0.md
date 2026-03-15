@@ -263,3 +263,9 @@ addopts = "--cov=cobuilder --cov-report=term-missing --cov-report=html"
 | Removing `_LOGFIRE_AVAILABLE` guards breaks environments without logfire | Add `logfire>=2.0` to hard dependencies first |
 | Coverage baseline reveals critically low numbers | Expected — this is an informational measurement, not a gate |
 | Template tests assume directory structure that differs post-merge | Check template paths in test fixtures; now using `.cobuilder/templates/` |
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

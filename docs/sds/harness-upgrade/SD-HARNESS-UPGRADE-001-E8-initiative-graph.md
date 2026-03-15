@@ -2,7 +2,7 @@
 title: "SD-HARNESS-UPGRADE-001 Epic 8: Initiative Graph"
 status: draft
 type: reference
-last_verified: 2026-03-06T00:00:00.000Z
+last_verified: 2026-03-06
 grade: draft
 ---
 # SD-HARNESS-UPGRADE-001 Epic 8: Initiative Graph
@@ -57,3 +57,9 @@ Benefits:
 - AC-8.1: `initiative.json` schema defined with validation
 - AC-8.2: System 3 startup reads initiative state from file
 - AC-8.3: Pipeline transitions update initiative state
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+| --- | --- | --- | --- |
+| - | Remaining | - | - |

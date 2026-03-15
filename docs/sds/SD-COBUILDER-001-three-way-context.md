@@ -161,3 +161,9 @@ Then it produces identical output to the current two-way version.
 
 Small enhancement — 1 worker, ~200 lines of new code + ~100 lines of tests.
 Single orchestrator session, estimated 30-60 minutes.
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

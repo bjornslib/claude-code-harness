@@ -259,3 +259,9 @@ Guardian independently reads code and scores against blind rubric. DOT nodes tra
 | `.zerorepo/baseline.json` | Codebase snapshot |
 | `src/zerorepo/` | ZeroRepo implementation (14 modules) |
 | `cobuilder/engine/` | Attractor CLI + runner |
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

@@ -78,3 +78,9 @@ After evaluating the BMAD method (10 named specialist agents across 4 phases), w
 - **Technical Writer (Paige)** — doc-gardener + orchestrator covers this; revisit if doc volume grows
 - **Quick Flow Solo Dev (Barry)** — fast-track single agent for small tasks; revisit for maintenance workflows
 - **Analyst (Mary)** — merged into `solution-design-architect`; split only if PRD phase becomes bottleneck
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

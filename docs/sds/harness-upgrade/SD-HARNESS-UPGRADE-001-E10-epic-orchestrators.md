@@ -2,7 +2,7 @@
 title: "SD-HARNESS-UPGRADE-001 Epic 10: Epic-Scoped Orchestrators + Parallel Execution"
 status: draft
 type: reference
-last_verified: 2026-03-06T00:00:00.000Z
+last_verified: 2026-03-06
 grade: draft
 ---
 # SD-HARNESS-UPGRADE-001 Epic 10: Epic-Scoped Orchestrators + Parallel Execution
@@ -43,3 +43,9 @@ Key design decisions:
 - AC-10.1: Independent epics execute in parallel
 - AC-10.2: Dependent epics respect ordering
 - AC-10.3: Worktree isolation prevents cross-epic file conflicts
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+| --- | --- | --- | --- |
+| - | Remaining | - | - |

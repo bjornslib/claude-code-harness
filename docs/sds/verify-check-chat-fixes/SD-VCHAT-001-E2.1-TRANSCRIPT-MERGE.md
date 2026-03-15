@@ -302,3 +302,9 @@ userdata["chat_history"].append({"role": "user", "content": text, ...})
 - Unit test: `deduplicate_by_proximity()` with overlapping timestamps
 - Integration: Mixed session → verify sub_threads has both channels
 - Regression: Chat-only and voice-only sessions still store correctly
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

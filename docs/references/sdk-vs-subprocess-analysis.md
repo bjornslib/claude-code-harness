@@ -521,3 +521,9 @@ This replaces the current tmux-based `_tool_spawn_orchestrator` for headless wor
 ---
 
 *Research sources: Anthropic Agent SDK documentation (platform.claude.com/docs/en/agent-sdk), Claude Code documentation (code.claude.com), and direct examination of `.claude/scripts/attractor/runner_tools.py` and `spawn_orchestrator.py`.*
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

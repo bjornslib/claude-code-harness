@@ -109,3 +109,9 @@ No external script needed — the contract is a doc-gardener-compatible markdown
 - AC-2.1: PRD Contract template exists with required sections (invariants, scope freeze, compliance flags)
 - AC-2.2: Phase 0 workflow includes contract generation step (Step 0.2.5)
 - AC-2.3: `wait.cobuilder` gate logic includes contract validation when `contract_ref` is set
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

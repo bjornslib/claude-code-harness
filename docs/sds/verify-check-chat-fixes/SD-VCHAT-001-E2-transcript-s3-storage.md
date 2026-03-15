@@ -139,3 +139,9 @@ def build_combined_transcript(voice, chat):
 - Chat-only session: verify S3 file exists at expected key, PostCheckProcessor evaluates it
 - Voice-only session: verify existing behavior unchanged
 - Mixed session: verify both files exist, PostCheckProcessor merges chronologically
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

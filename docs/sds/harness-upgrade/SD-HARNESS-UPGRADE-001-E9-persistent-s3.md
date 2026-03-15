@@ -2,7 +2,7 @@
 title: "SD-HARNESS-UPGRADE-001 Epic 9: Persistent System 3 Controller"
 status: draft
 type: reference
-last_verified: 2026-03-06T00:00:00.000Z
+last_verified: 2026-03-06
 grade: draft
 ---
 # SD-HARNESS-UPGRADE-001 Epic 9: Persistent System 3 Controller
@@ -51,3 +51,9 @@ persistent_s3.py (long-running)
 - AC-9.1: Persistent controller runs as a daemon process
 - AC-9.2: State survives process restart via checkpoint
 - AC-9.3: LLM invoked only for reasoning, not state management
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+| --- | --- | --- | --- |
+| - | Remaining | - | - |

@@ -97,3 +97,9 @@ Four issues degrade the chat-mode employment verification experience:
 - Modifying the frontend's `buildSnapshot()` or `FormEventEmitter` components.
 - Adding new data channel event types.
 - Voice mode changes (voice already has the correct pattern).
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

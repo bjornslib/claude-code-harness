@@ -42,3 +42,9 @@ This aligns the schema with the Gherkin acceptance tests which do not list Count
 - Typing into a field with a validation error immediately clears the error (onChange mode)
 - Submitting the form without filling Country does not show a Country validation error
 - All other form behaviour (POST /api/verify, redirect, Cancel) unchanged
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

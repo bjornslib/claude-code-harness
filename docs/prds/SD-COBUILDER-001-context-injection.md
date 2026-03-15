@@ -683,3 +683,9 @@ The PRD (Section 6, Epic 3) lists 6 acceptance criteria. This SD maps them to fe
 | s3-guardian skill (SKILL.md) documents RepoMap context injection in Phase 0 | F3.3 | Not done | No Phase 0 section exists |
 | TaskMaster tasks include file paths and delta classification from RepoMap context | F3.4 | Not done | Depends on F3.1 |
 | Output is reproducible: same input → same output | F3.2 | Complete | Deterministic algorithm, no LLM, hash-stable baseline |
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

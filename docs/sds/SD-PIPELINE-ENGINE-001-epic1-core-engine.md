@@ -1237,3 +1237,9 @@ pytest cobuilder/engine/tests/test_parser.py -v  # includes corpus test
 | `ATTRACTOR_GIT_COMMIT_PER_NODE` | `0` | If `1`, create a git commit after each successful node |
 | `ATTRACTOR_RUN_DIR_ROOT` | `.pipelines/pipelines` | Base directory for run directories |
 | `ATTRACTOR_SIGNALS_DIR` | git-root auto-detected | Override signals directory (existing signal_protocol.py convention) |
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

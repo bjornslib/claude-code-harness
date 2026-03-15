@@ -183,3 +183,9 @@ Workers write signals to this directory. Runner polls this directory. Mismatch w
 - AC-3.3: Guardian reflection protocol at wait.cobuilder documented (signal file check + Hindsight reflect + requeue decision)
 - AC-3.4: Session handoff format documented with required sections
 - AC-3.5: Living narrative append protocol documented with per-epic entry format
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

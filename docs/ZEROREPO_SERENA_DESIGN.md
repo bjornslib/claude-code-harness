@@ -334,3 +334,9 @@ The ontology would help identify features the codebase SHOULD have but DOESN'T â
 ---
 
 **Note**: The ontology is likely still needed for maximum coverage, but the codebase baseline + PRD pipeline provides immediate practical value without it. We can add the ontology layer later as a coverage enhancement.
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

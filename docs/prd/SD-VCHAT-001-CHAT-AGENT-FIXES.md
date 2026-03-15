@@ -276,3 +276,9 @@ user_message = f"""## VERIFICATION CONTEXT
 - **E1 test**: Send a `FORM_STATE_SNAPSHOT` with `trigger="discrepancy"` in chat mode. Verify the agent's instructions contain the form state section. Verify conversation history is preserved.
 - **E2 test**: Send `EMPLOYMENT_GATE` with `value="confirmed"`. Verify no agent response is generated. Send with `value="denied"`. Verify response includes candidate name and company.
 - **E3 test**: Invoke form filler agent with a verifier statement like "he left last month". Verify extracted end_date uses the correct absolute date.
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

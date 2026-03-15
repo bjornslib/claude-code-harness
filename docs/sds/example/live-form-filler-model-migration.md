@@ -135,3 +135,9 @@ Check that:
 - The gpt-oss-20b model is available through Groq's OpenAI-compatible API
 - No database or API changes required
 - This is a model substitution only - behavior should remain consistent
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

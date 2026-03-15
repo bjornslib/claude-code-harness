@@ -94,3 +94,9 @@ The only change is backend: making the agent emit chat text on `form_events` so 
 
 - **Duplicate extraction**: If user speaks AND types simultaneously, both pipelines process. Mitigate: form_filler_agent is idempotent (same field value won't re-trigger update).
 - **Latency**: Adding an extra publish_data call per chat message. Cost: ~1ms per message. Negligible.
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

@@ -823,3 +823,9 @@ None. Epic 7 is a greenfield frontend build. The backend API endpoints it consum
 | OQ-1 | Should the initiative list auto-sort by `updated_at` or by phase priority (reviews first)? | UX ordering | Default: reviews first (initiatives with `pending_reviews.length > 0` sort to top), then by `updated_at` descending. Add a sort dropdown in v2. |
 | OQ-2 | Should "View Worktree" open Finder or VS Code? | UX preference | Offer both: primary click opens VS Code (`code {path}`), secondary action (right-click / dropdown) opens Finder. If `code` is not in PATH, fall back to Finder. |
 | OQ-3 | What happens when the backend returns a DOT file with no `label` attribute? | Display fallback | Use the `prd_id` as the card title. Display a warning icon indicating the initiative has no description. |
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

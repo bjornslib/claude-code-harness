@@ -94,3 +94,9 @@ This buffer is read by `_inject_voice_context` and also uploaded to S3 by E2.
 - Start chat → escalate to voice → confirm 2 fields → end call → return to chat
 - Verify chat agent says something like "Welcome back! During the call we confirmed [fields]. Let's continue with [remaining fields]."
 - Verify agent does NOT re-ask confirmed fields
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

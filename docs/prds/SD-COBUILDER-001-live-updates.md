@@ -951,3 +951,9 @@ This must complete in under 10 seconds on the local machine. If it does not, pro
 ### The Debounce Dict Is Not Thread-Safe
 
 `_last_refresh_times` is a module-level dict. It is not protected by a lock. This is intentional — `transition.py` is invoked as a CLI subprocess, so each invocation is a separate process and there is no concurrency within a process. If the bridge is ever called from a multi-threaded context in the future, this will need a `threading.Lock`. For now, leave it as-is.
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

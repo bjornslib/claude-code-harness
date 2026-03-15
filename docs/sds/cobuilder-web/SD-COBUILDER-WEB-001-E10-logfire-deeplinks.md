@@ -251,3 +251,9 @@ The `LogfireEmitter` (or the runner's pipeline completion code) passes the pipel
 | **Missing span_id on node.completed** -- LogfireMiddleware fails to capture span context | Low | Low | The middleware has try/except around span_id extraction (lines 148-155); on failure it sets `span_id=None`, and the frontend gracefully hides the link. |
 | **Pipeline-level span_id not emitted** -- `pipeline.completed` currently has no span_id | Certain | Medium | Requires the one-line `EventBuilder.pipeline_completed()` change described in Section 6. Without it, only node-level links work; pipeline-level "View Full Trace" is hidden. |
 | **Logfire URL format changes** -- Pydantic updates their URL scheme | Very Low | Medium | URL construction is isolated in a single function (`buildLogfireUrl`). A format change requires updating one line. |
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

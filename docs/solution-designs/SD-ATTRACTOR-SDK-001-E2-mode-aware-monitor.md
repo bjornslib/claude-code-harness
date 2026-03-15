@@ -376,3 +376,9 @@ The following pitfalls apply when using Claude Agent SDK for worker spawning:
 | `runner_agent.py` | Mode-aware `build_monitor_prompt()`, full status handling in state machine |
 | `tests/test_sdk_monitor.py` | **NEW** — unit tests |
 | `tests/test_runner_state_machine.py` | Updated tests for all status transitions |
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

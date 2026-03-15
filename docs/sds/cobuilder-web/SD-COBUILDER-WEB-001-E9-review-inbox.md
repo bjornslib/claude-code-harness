@@ -1371,3 +1371,9 @@ When no reviews are pending, the Pending tab shows an empty state with icon and 
 **Mitigation:**
 - History endpoint returns only the most recent 100 entries by default (configurable via `?limit=N` query parameter).
 - Future enhancement: periodic archival of history older than 30 days into a single JSONL file.
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

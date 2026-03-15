@@ -227,3 +227,9 @@ When E2 renames `cobuilder/attractor/` to `cobuilder/engine/dispatch/` (or simil
 - **`capfire` fixture**: Provided automatically by logfire's pytest plugin when logfire is installed.
   Equivalent to `capture_logfire` — both use `TestExporter` internally.
 - **Example span assertion test**: `tests/engine/test_logfire_spans.py`
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

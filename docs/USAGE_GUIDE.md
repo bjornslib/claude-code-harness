@@ -1151,3 +1151,9 @@ All configuration fields can be overridden via environment variables with the `Z
 ---
 
 *See also: [README](README.md) | [Architecture](ARCHITECTURE.md) | [Configuration](CONFIGURATION.md) | [Modules](MODULES.md) | [Evaluation](EVALUATION.md) | [Production Readiness](PRODUCTION_READINESS.md)*
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

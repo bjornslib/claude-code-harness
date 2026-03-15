@@ -1119,3 +1119,9 @@ Map to PRD-COBUILDER-UPGRADE-001 Epic 2 acceptance criteria:
 | `.claude/documentation/concern-queue-schema.md` | EDIT | PIPELINE_SIGNAL_DIR, .pipelines/ paths |
 | `guardian-workflow.md` | EDIT | PIPELINE_SIGNAL_DIR, .pipelines/ paths |
 | `.cobuilder/examples/*.dot` (4 files) | EDIT | Schema comment path |
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

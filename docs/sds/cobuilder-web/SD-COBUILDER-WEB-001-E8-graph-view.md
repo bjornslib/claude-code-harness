@@ -781,3 +781,9 @@ Steps 2-3 can proceed in parallel. Steps 4 and 5 can proceed in parallel. Step 8
 - Both use the same DOT node ID string (e.g., `impl_backend`). The parser (`cobuilder/attractor/parser.py`) extracts node IDs, and `EventBuilder` uses the same IDs.
 - Add a dev-mode console warning when an SSE event references a `node_id` not found in the SVG node map.
 - Include node map size in the connection status indicator for debugging.
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

@@ -40,3 +40,9 @@ grade: authoritative
 | Version | Date | Reason |
 |---------|------|--------|
 | v1 | {DATE} | Initial contract generation |
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

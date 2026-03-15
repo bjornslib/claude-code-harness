@@ -129,3 +129,9 @@ The `/verify-check/[task_id]` page supports both chat and voice verification mod
 - PostCheckProcessor generates valid reports for chat-only, voice-only, and mixed sessions
 - Zero errors on room cleanup for any session type
 - User cannot distinguish mode switch from natural conversation flow
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

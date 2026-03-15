@@ -299,3 +299,9 @@ RESUMABLE_HANDLERS = frozenset({"codergen", "research", "refine", "acceptance-te
 | Epic J: Validation Spam | ✅ Implemented | Terminal state guard prevents redundant dispatch |
 
 The pipeline runner implementation is already quite robust regarding the critical reliability patterns. The research shows that most of the reliability fixes have already been implemented, which explains why the system has been stable in production use.
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

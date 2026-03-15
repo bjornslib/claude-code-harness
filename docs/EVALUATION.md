@@ -1211,3 +1211,9 @@ Common optimizations:
 - Low cache hit rate → enable `EmbeddingCache` and `LLMResponseCache`
 - Slow localization → pre-extract functions once, reuse across tasks
 - High generation cost → use `BatchedFunctionGenerator` for batch prompts
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

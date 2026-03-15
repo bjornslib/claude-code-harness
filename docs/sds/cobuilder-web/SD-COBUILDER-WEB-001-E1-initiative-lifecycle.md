@@ -977,3 +977,9 @@ The gate type is inferred from the node ID:
 **Likelihood**: Very low -- extensions happen only when the runner is paused at a `wait.human` gate (the gate that just got approved). **Impact**: Medium -- runner could read a partially-written file.
 
 **Mitigation**: File locking prevents concurrent reads during write. The atomic write pattern (`tmp + rename`) ensures the runner always reads a complete file. The runner already re-reads the DOT file after each `wait.human` resolution, which is when the extension has already completed.
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

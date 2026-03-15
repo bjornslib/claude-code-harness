@@ -115,3 +115,9 @@ The `acceptance-test-writer` node generates blind Gherkin tests from the PRD bef
 - AC-1.3: At least one existing pipeline example updated to demonstrate the full cluster topology
 - AC-1.4: `wait.cobuilder` executor clarified as Python runner (not LLM), with Chrome MCP dependency for browser E2E tests
 - AC-1.5: Requeue mechanism documented: failed `wait.cobuilder` can transition predecessor codergen back to `pending`
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

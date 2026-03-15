@@ -358,3 +358,9 @@ After amendments, Epic 2 (validation) is the cleanest, best-specified epic and i
 ---
 
 *This report was produced by independent design review. All concerns are actionable. No concern requires redesigning the overall architecture.*
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

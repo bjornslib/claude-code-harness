@@ -71,3 +71,9 @@ If `sendText` sends mode_switch but JSON parsing fails (unlikely but defensive):
 - Click "End Call" → verify no "I see you're switching modes" response
 - Verify only natural greeting appears (from E3)
 - Verify regular chat messages still work normally
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

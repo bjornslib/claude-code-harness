@@ -814,3 +814,9 @@ The restructure is complete when all of the following are true:
 5. **The attractor `cli.py` is NOT the same as cobuilder `cli.py`**: The attractor `cli.py` provides the `attractor` subcommands (status, transition, annotate, etc.). These should be merged as `cobuilder pipeline <subcommand>` entries in the unified CLI, not as a standalone script.
 
 6. **`ANTHROPIC_API_KEY` and `ATTRACTOR_SIGNALS_DIR` env vars**: These must remain functional. `dispatch_worker.load_attractor_env()` currently walks up from `_THIS_DIR` to find `.claude/attractor/.env`. After migration, the lookup should use `ATTRACTOR_ENV_FILE` env var first, then fall back to `{project_root}/.claude/attractor/.env`.
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

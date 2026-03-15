@@ -40,3 +40,9 @@ grade: authoritative
 | Version | Date | Reason |
 |---------|------|--------|
 | v1 | 2026-03-07 | Initial contract generation for PRD-HARNESS-UPGRADE-001 |
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

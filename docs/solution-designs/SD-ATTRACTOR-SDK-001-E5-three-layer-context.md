@@ -315,3 +315,9 @@ async def spawn_worker_sdk(
 2. **How much of .claude/agents/*.md should be the system_prompt?** Some agent definitions include tool examples, common patterns, and contextual guidance that may not be relevant for pipeline workers. Consider a `## Pipeline Worker Role` section in each agent file that is extracted as the system_prompt, with the rest available for reference. Alternatively, keep it simple: the entire file is the system_prompt.
 
 3. **Should this epic also formalize the MCP research task?** AC-1.8 (E1) requires researching MCP tool needs per worker type. E5 could be where the research results are formalized into `WORKER_CONFIGS`. Recommendation: E1 does initial research and populates a minimal config; E5 formalizes it into the registry pattern.
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

@@ -230,3 +230,9 @@ E6 depends on E5 because `pipeline_runner.py` imports from `dispatch_worker.py` 
 - Unit: Each gap fix has its own acceptance criterion above
 - Integration: Run `cobuilder pipeline validate` on the E4-E6 pipeline DOT — should pass with no errors
 - E2E: Run the gap-fix pipeline itself through `pipeline_runner.py` — validates the runner fixes itself
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

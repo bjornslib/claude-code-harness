@@ -175,3 +175,9 @@ if os.path.exists(gate_marker):
 - AC-7.3.5: `monitoring-patterns.md` Section 8 documents System 3 response handlers for both `wait.cobuilder` (Gherkin E2E) and `wait.human` (AskUserQuestion) gates
 - AC-7.3.6: s3-guardian SKILL.md Quick Reference updated with gate monitoring guidance
 - AC-7.3.7: All existing pipeline tests pass (no regressions from marker enrichment or cleanup)
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

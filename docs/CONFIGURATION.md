@@ -473,3 +473,9 @@ Configuration resolution follows this priority (highest to lowest):
 4. **Pydantic model defaults** (defined in each config class)
 
 Each module's configuration class can be instantiated independently for programmatic use, or configured through the global `ZeroRepoConfig` and TOML file for CLI usage.
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

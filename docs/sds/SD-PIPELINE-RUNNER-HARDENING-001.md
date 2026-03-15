@@ -1257,3 +1257,9 @@ def _dispatch_validation_agent(self, node_id, target_node_id):
   - **RESOLVED**: No. Logfire already provides structured tracing. Adding JSON logs would duplicate without value.
 - **Q4**: Is there value in a `--dry-run` mode that validates the pipeline without dispatching workers?
   - **RESOLVED**: Yes — `cobuilder pipeline validate` already does this for graph structure. Adding `--dry-run` to runner would validate dispatch config without actual execution. Low priority (P2).
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

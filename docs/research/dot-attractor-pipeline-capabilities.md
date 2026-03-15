@@ -210,3 +210,9 @@ Shows node status distribution with ASCII bar charts. Known limitation: `estimat
 3. **No estimated completion**: Dashboard can't estimate because timestamps aren't in DOT attributes
 4. **No standalone diff command**: Regression detection referenced in memory but not implemented as standalone CLI
 5. **No live SD context injection**: Nodes have `solution_design` attribute but generate.py doesn't populate it from SDs
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

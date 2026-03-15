@@ -419,3 +419,9 @@ When switching to voice mode:
 ### Project
 - Project ID: `738488051630944753`
 - Stitch URL: https://stitch.withgoogle.com/projects/738488051630944753
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

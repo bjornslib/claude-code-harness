@@ -878,3 +878,9 @@ function usePipelineEvents(initiativeId: string) {
 ```
 
 `EventSource` handles reconnection automatically. The browser sends `Last-Event-ID` on reconnect. The server replays missed events. The client receives a gap-free stream without application-level reconnection code.
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

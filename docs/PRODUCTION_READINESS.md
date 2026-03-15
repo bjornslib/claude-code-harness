@@ -272,3 +272,9 @@ ZeroRepo is a single-process, synchronous CLI application. All LLM calls, embedd
 | v0.4.0 | Planned | Async, performance optimization |
 | v0.5.0 | Planned | Distribution, scaling |
 | v1.0.0 | Planned | Production-ready release |
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

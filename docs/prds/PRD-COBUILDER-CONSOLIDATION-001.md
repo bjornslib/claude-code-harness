@@ -317,3 +317,9 @@ The following remaining hardening epics from PRD-HARNESS-UPGRADE-001 / SD-PIPELI
 | E4+E5: Code Migration + Import Surgery | Pending | — | — | Combined. Worktree isolation. Includes absorbed hardening F. |
 | E6: CLI Unification | Pending | — | — | Depends on E4+E5 |
 | E7: Documentation Updates | Pending | — | — | Depends on E4+E5+E6 |
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

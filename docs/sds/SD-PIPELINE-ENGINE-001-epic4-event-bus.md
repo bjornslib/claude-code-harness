@@ -816,3 +816,9 @@ This epic can be parallelised into two tracks after F1 and F2 are complete:
 3. **`context.updated`**** event volume — AMD-3 RESOLVED**: `context.updated` is now emitted ONCE per completed node (by `runner.py`, after merging `outcome.context_updates`), not per-mutation. The `emit_on_update` callback has been removed from `PipelineContext` — context is fully decoupled from the event bus. This reduces event volume from potentially thousands per pipeline run to N (where N = number of nodes).
 
 4. **Signal type ****`PIPELINE_COMPLETE`**: The `signal_protocol.py` currently has `NODE_COMPLETE` but not `PIPELINE_COMPLETE`. The `SignalBridge` can use `NODE_COMPLETE` as a stopgap with `node_id = "__pipeline__"`, but adding `PIPELINE_COMPLETE` to `signal_protocol.py` is the clean solution. This is a one-line addition to the constants block.
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

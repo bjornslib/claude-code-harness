@@ -50,3 +50,9 @@ script demonstrating PydanticAI's `run_stream()` API.
 ## Implementation Notes
 
 <!-- TO BE FILLED BY REFINE WORKER -->
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

@@ -213,7 +213,7 @@ Below is a complete, copy-pasteable template for new test specifications:
 ```markdown
 ---
 title: "Test Title Here"
-type: e2e-browser
+type: reference
 service: frontend
 port: 5001
 prerequisites:
@@ -277,3 +277,9 @@ docs/tests/
 - Use lowercase kebab-case: `{category}-{description}.md`
 - Prefix with test category: `chat-`, `api-`, `visual-`, `auth-`, etc.
 - Keep names concise but descriptive
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

@@ -332,3 +332,9 @@ Epic 5 depends on Epic 4 (stable SDK pipeline) — it is an optimization, not a 
 - Priority: P2
 - Depends on: Epic 4
 - Files: modify `worker_backend.py` (read from `.claude/agents/`), new MCP tool config per worker type, modify `spawn_runner.py` (env var identity layer)
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

@@ -119,3 +119,9 @@ Check that:
 - `agencheck-communication-agent/livekit_prototype/cli_poc/voice_agent/config.py`
 - `agencheck-communication-agent/livekit_prototype/cli_poc/voice_agent/tests/conftest.py`
 - `agencheck-support-agent/.env` (for GROQ_API_KEY)
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

@@ -647,3 +647,9 @@ Both samueljklee (Python) and attractor-c demonstrate that a hand-rolled parser 
 - [anishkny/attractor (Python)](https://github.com/anishkny/attractor)
 - [bborn/attractor-ruby (Ruby)](https://github.com/bborn/attractor-ruby)
 - [Simon Willison — How StrongDM's AI team build serious software](https://simonwillison.net/2026/Feb/7/software-factory/)
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

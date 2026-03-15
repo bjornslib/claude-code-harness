@@ -94,3 +94,9 @@ cd pinchtab
 go build -o bin/pinchtab ./cmd/pinchtab
 cp bin/pinchtab ~/.npm-global/lib/node_modules/pinchtab/bin/pinchtab
 ```
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

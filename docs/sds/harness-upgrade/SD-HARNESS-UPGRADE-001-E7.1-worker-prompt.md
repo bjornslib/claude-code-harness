@@ -153,3 +153,9 @@ Apply same principle to `guardian.py`'s `build_system_prompt()`:
 - SD content is **inlined** into the initial prompt (not just a path reference) — eliminates a Read round-trip for the worker
 - Tool examples kept in system prompt as well as reference file — workers need them immediately, not after a Read
 - Boolean format note (`true`/`false` not `True`/`False`) added to prevent common Python-to-CLI errors
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

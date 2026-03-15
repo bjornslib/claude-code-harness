@@ -961,3 +961,9 @@ async def _health_check(self, run: PipelineRun) -> bool:
 - `launch()` checks `self._runs[initiative_id]` and raises `ValueError` if a run is already active (status in `RUNNING`, `STARTING`, `GATE_WAITING`, or `RESTARTING`).
 - The web router should also enforce this at the HTTP layer (409 Conflict response).
 - Terminal states (`COMPLETED`, `FAILED`, `STOPPED`) allow re-launch, which creates a fresh run.
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

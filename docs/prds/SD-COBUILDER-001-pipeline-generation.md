@@ -651,3 +651,9 @@ acceptance_criteria_enriched:
   - "Every codergen node carries solution_design attribute"
   - "cobuilder pipeline validate returns 0 errors on generated DOT"
 ```
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

@@ -286,3 +286,9 @@ Once all 4 parallel groups are complete and the gate passes, a final `coverage_i
 | Coverage improvement introduces flaky tests | Each new test must pass in both isolated and full-suite context before merge |
 | Cat 8 investigation reveals more root causes | Group D research node must complete before codergen node starts; if new categories emerge, create sub-tasks under Group D rather than expanding scope |
 | Trivial fixes interact unexpectedly | Run Group A in isolation first; its failures are mechanical and should not affect other groups |
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

@@ -586,3 +586,9 @@ The dashboard timeline groups by `current_sequence_step` and shows the latest at
 - [ ] Dashboard API query (`SELECT * FROM background_tasks WHERE case_id = ?`) returns one entry per step with correct step_order
 - [ ] Email verification links (`/verify/{task_id}`) reference the current step's task, not a previous step's task
 - [ ] No duplicate step tasks created on orchestrator restart (idempotency guard)
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

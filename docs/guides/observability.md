@@ -111,3 +111,9 @@ python .claude/skills/mcp-skills/executor.py --skill logfire --call '{
   "arguments": {}
 }'
 ```
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

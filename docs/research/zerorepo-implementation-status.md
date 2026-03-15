@@ -163,3 +163,9 @@ Uses `claude-sonnet-4-6` via LiteLLM. Timeout fix: explicit kwarg required (env 
 | E2E | `d76b1e0` | +12,291 | Full pipeline validated |
 
 **Total**: 52 files, ~23,500 lines of code
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

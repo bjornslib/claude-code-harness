@@ -734,3 +734,9 @@ The following epics completed after E7 extend or depend on `pipeline_runner.py` 
 - Signal transitions: mechanical, deterministic
 - Status chain: `pending → active → impl_complete → validated → accepted` confirmed
 - Model config: loads from `cobuilder/engine/.env` (ANTHROPIC_MODEL=qwen3-coder-plus)
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

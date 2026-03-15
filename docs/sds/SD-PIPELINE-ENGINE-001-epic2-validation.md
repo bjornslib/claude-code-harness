@@ -1137,3 +1137,9 @@ Single `backend-solutions-engineer` worker. The validation module is pure Python
 ---
 
 *Solution design authored for PRD-PIPELINE-ENGINE-001 Epic 2. Implementation target: **`cobuilder/engine/validation/`**. All rule numbering and behavior is derived from attractor-rb's 13-rule validation set, adapted to the Python type system and the engine's Graph model.*
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

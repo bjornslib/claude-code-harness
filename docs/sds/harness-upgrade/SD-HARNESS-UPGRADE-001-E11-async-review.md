@@ -2,7 +2,7 @@
 title: "SD-HARNESS-UPGRADE-001 Epic 11: Async Human Review Queue"
 status: draft
 type: reference
-last_verified: 2026-03-06T00:00:00.000Z
+last_verified: 2026-03-06
 grade: draft
 ---
 # SD-HARNESS-UPGRADE-001 Epic 11: Async Human Review Queue
@@ -50,3 +50,9 @@ Pipeline node reaches wait.human
 - AC-11.1: `wait.human` does not block other independent pipeline nodes
 - AC-11.2: Review requests appear in GChat with approve/reject actions
 - AC-11.3: GChat response triggers signal file creation
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+| --- | --- | --- | --- |
+| - | Remaining | - | - |

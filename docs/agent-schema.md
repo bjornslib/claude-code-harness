@@ -36,3 +36,9 @@ The following values are valid for the `worker_type` field in pipeline configura
 ## Skills Injection
 
 Agents can specify required skills in the `skills_required` field in the frontmatter. When an agent is dispatched, the system will automatically inject skill invocations for each skill listed in this field before the agent begins work.
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

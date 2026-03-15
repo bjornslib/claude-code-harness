@@ -1333,3 +1333,9 @@ spec_parser ──> ontology ──> graph_construction ──> selection
 **High-level** (depend on mid-level): `graph_construction`, `selection`, `codegen`, `evaluation`
 
 **Top-level** (depends on everything): `cli`
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

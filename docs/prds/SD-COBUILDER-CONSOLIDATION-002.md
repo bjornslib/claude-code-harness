@@ -746,3 +746,9 @@ Each D-Order Step has its own gate test (defined in Section 5). Overall completi
 Steps 4-7 can then be completed in a subsequent initiative.
 
 **Security action required immediately** (outside this SD): `private.pem` in the repo root is a live private key committed to version control. Rotate the key and rewrite git history with `git filter-repo --path private.pem --invert-paths` before any new PRs land on `main`.
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

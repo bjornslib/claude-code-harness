@@ -490,3 +490,9 @@ Workers run with `setting_sources=None` — they get NO MCP tools unless explici
 3. **Test clean-room isolation**: Verify worker does NOT see harness MCP servers or hooks
 4. **Define MCP requirements per worker type**: Research and populate `WORKER_MCP_SERVERS`
 5. **Integration smoke test**: Spawn one worker via SDK, verify it completes, verify git commits appear, verify pull-based completion record is written
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

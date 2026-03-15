@@ -116,3 +116,9 @@ graph = Graph(nodes=[SearchNode, FormatNode])
 2. Do NOT recreate httpx.AsyncClient per request (anti-pattern) — the SD correctly reuses the client.
 3. pydantic-graph automatically persists state after each node, benefiting interrupted execution workflows.
 4. PydanticAI reached V1 in Sep 2025 — API stable through all v1.x releases.
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

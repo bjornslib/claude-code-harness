@@ -542,3 +542,9 @@ This makes `.claude/settings.json` a thin bridge that reads from `cobuilder.toml
 ### The One Decision That Changes Everything
 
 If the team accepts the Symlink Bridge (Idea 2), Phases 4 and 5 collapse into a single `ln -sf` command and a `.gitignore` entry. Estimated effort drops from 3-4 days to 2 hours. The prerequisite is confirming that all `cobuilder/orchestration/*.py` files use relative imports (they do — `cobuilder/engine/runner.py` imports via `from cobuilder.engine.checkpoint import...`). The symlink is safe.
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

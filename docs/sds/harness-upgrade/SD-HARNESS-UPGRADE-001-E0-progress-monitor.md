@@ -138,3 +138,9 @@ Handler type mapping:
 - AC-0.4: s3-guardian SKILL.md includes "Creating a New Pipeline" quick-start with inline DOT example
 - AC-0.5: Handler type mapping table in SKILL.md covers all 8 handler types
 - AC-0.6: `references/dot-pipeline-creation.md` exists with full DOT format reference
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

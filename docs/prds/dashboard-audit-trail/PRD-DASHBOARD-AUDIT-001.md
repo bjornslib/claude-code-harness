@@ -3,7 +3,7 @@ title: "PRD-DASHBOARD-AUDIT-001: Dashboard Audit Trail & Stable References"
 status: draft
 type: guide
 grade: authoritative
-last_verified: 2026-03-09T00:00:00.000Z
+last_verified: 2026-03-09
 ---
 # PRD-DASHBOARD-AUDIT-001: Dashboard Audit Trail & Stable References
 
@@ -440,3 +440,9 @@ The `cases` table intentionally has no `check_type_id` FK. `case_type` (VARCHAR)
 - Dependency-graph view for non-linear workflows (Architect 6)
 - Real-time WebSocket status updates
 - CSV/PDF export of audit trail
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+| --- | --- | --- | --- |
+| - | Remaining | - | - |

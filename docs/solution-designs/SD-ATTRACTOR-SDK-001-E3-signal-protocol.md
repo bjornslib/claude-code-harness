@@ -234,3 +234,9 @@ The current 5-second polling loop in `wait_for_signal.py` is adequate for single
 - **PID liveness checks and stdout tailing** — Epic 2 (Mode-Aware Runner Monitor)
 - **Git log polling reliability** — Epic 2; note that relying solely on `git log` for completion detection is fragile. Epic 2 should supplement or replace this with process-level signals
 - **CLAUDECODE environment variable isolation** — Epic 1 (Worker Backend); the runner must unset `CLAUDECODE` before spawning workers to prevent nested session conflicts
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

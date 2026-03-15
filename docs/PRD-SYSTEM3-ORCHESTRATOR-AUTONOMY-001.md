@@ -382,3 +382,9 @@ This PRD is considered implemented when:
 2. At least one full initiative executes end-to-end under the new phase-gated loop.
 3. A monthly governance report can be generated directly from repository artifacts and event traces.
 4. No known plaintext credentials remain in tracked docs/configuration.
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

@@ -3,7 +3,7 @@ title: "SD-DASHBOARD-AUDIT-FRONTEND-001: Case Detail Page Frontend Redesign"
 status: draft
 type: guide
 grade: authoritative
-last_verified: 2026-03-09T00:00:00.000Z
+last_verified: 2026-03-09
 ---
 # SD-DASHBOARD-AUDIT-FRONTEND-001: Case Detail Page Frontend Redesign
 
@@ -585,3 +585,9 @@ Status labels come exclusively from the backend `status_label` field — no fron
 - **Solution**: Import from CI-generated `statusLabels.ts` constants rather than hardcoding
 
 ---
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+| --- | --- | --- | --- |
+| - | Remaining | - | - |
