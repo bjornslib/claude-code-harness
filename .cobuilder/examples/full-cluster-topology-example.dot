@@ -75,7 +75,7 @@ digraph "PRD-EXAMPLE-FULL-CLUSTER" {
     e2e_gate [
         shape=hexagon
         label="E2E Validation Gate\nAutomated Testing"
-        handler="wait.system3"
+        handler="wait.cobuilder"
         gate_type="e2e"
         contract_ref="docs/prds/example/prd-contract.md"
         summary_ref=".claude/summaries/E1-gate-summary.md"

@@ -37,14 +37,14 @@ mcp__hindsight__retain(
 - {lesson_2}
 
 """,
-    context="s3-guardian-validations",
-    bank_id="system3-orchestrator"
+    context="cobuilder-validations",
+    bank_id="cobuilder-guardian"
 )
 ```
 
 **When**: After Phase 4 validation scoring completes.
 **Why**: Captures patterns for future guardian sessions to reference.
-**Required fields**: `context="s3-guardian-validations"`, `bank_id="system3-orchestrator"` (always).
+**Required fields**: `context="cobuilder-validations"`, `bank_id="cobuilder-guardian"` (always).
 
 ### Step 2: Store to Project Bank (Team Context)
 
@@ -64,11 +64,11 @@ mcp__hindsight__retain(
 **Why**: Other sessions in this project can quickly understand validation outcomes.
 **Required fields**: `context="project-validations"`, `bank_id=PROJECT_BANK` (auto-derived).
 
-## PRD Contract Generation and Validation (New in v0.6.0)
+## BS Contract Generation and Validation (New in v0.6.0)
 
-With the addition of PRD Contract artifacts, Phase 0 now includes Step 0.2.5 for contract generation and validation gates now check contract compliance.
+With the addition of Business Spec (BS) Contract artifacts, Phase 0 now includes Step 0.2.5 for contract generation and validation gates now check contract compliance.
 
-### Step 0.2.5: PRD Contract Generation
+### Step 0.2.5: BS Contract Generation
 
 During Phase 0, a `prd-contract.md` is automatically generated at `docs/prds/{initiative}/prd-contract.md`. This contract contains:
 - Domain invariants that must hold regardless of implementation approach
@@ -78,7 +78,7 @@ During Phase 0, a `prd-contract.md` is automatically generated at `docs/prds/{in
 ### Contract Validation in Gates
 
 When a `wait.cobuilder` node has `contract_ref` attribute, the validation includes:
-- Reading the PRD Contract specified by contract_ref
+- Reading the BS Contract specified by contract_ref
 - Verifying each domain invariant holds in the current codebase
 - Checking that no files outside the frozen scope were modified
 - Verifying each compliance flag's condition is met
@@ -90,7 +90,7 @@ Before marking promise AC as complete:
 
 ```bash
 # Verify both Hindsight operations succeeded
-echo "✓ Private bank (system3-orchestrator) retains guardian validation"
+echo "✓ Private bank (cobuilder-guardian) retains guardian validation"
 echo "✓ Project bank ($CLAUDE_PROJECT_BANK) retains project context"
 echo "✓ Both mcp__hindsight__retain() calls executed without error"
 echo "✓ PRD Contract generated and validated if required"
@@ -106,7 +106,7 @@ cs-promise --meet <promise-id> --ac-id AC-5 \
 | Mistake | Fix |
 |---------|--------|
 | Storing only to private bank (forget project bank) | Execute BOTH steps above |
-| Using wrong `bank_id` value | Private = `"system3-orchestrator"`, Project = environment `$CLAUDE_PROJECT_BANK` |
-| Forgetting `context=` parameter | Must include: `context="s3-guardian-validations"` for private, `context="project-validations"` for project |
+| Using wrong `bank_id` value | Private = `"cobuilder-guardian"`, Project = environment `$CLAUDE_PROJECT_BANK` |
+| Forgetting `context=` parameter | Must include: `context="cobuilder-validations"` for private, `context="project-validations"` for project |
 | Storing BEFORE validation completes | Store ONLY after Phase 4 verdict determined |
 | Storing results but not meeting promise AC | Meeting the AC is how System 3 knows validation is complete |

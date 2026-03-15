@@ -13,7 +13,7 @@ When S3 calls `AskUserQuestion` and the `gchat-ask-user-forward.py` hook blocks 
 
 The block reason from the hook contains:
 - `thread_name` (e.g., `spaces/AAQAOmyvAfE/threads/xyz`) — identifies the GChat thread
-- `marker_path` (e.g., `.claude/state/gchat-forwarded-ask/system3-20260222-a1b2c3d4.json`) — tracks resolution status
+- `marker_path` (e.g., `.claude/state/gchat-forwarded-ask/cobuilder-20260222-a1b2c3d4.json`) — tracks resolution status
 
 Parse these from the block reason string.
 

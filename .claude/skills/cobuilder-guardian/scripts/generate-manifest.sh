@@ -29,7 +29,7 @@ IMPL_REPO="${3:-/path/to/implementation/repo}"
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # --- Resolve acceptance-tests directory ---
-# Look for the config repo root by finding .claude/skills/s3-guardian
+# Look for the config repo root by finding .claude/skills/cobuilder-guardian
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONFIG_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
@@ -68,7 +68,7 @@ cat > "$TESTS_DIR/manifest.yaml" << MANIFEST_EOF
 prd_id: "${PRD_ID}"
 prd_title: "${PRD_TITLE}"
 created_at: "${TIMESTAMP}"
-created_by: "s3-guardian"
+created_by: "cobuilder-guardian"
 impl_repo: "${IMPL_REPO}"
 
 # Scoring thresholds — adjust per initiative

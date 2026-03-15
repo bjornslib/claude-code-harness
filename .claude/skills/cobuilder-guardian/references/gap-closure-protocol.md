@@ -19,7 +19,7 @@ When Phase 4 validation identifies gaps in the implementation, System 3 must aut
 ```
 Gap Identified During Phase 4 Validation
     ↓
-Is gap in PRD scope? (Reference PRD Section 8 epics)
+Is gap in BS scope? (Reference BS Section 8 epics)
     ├─ NO → Escalate to wait.human (out-of-scope, document as informational)
     ├─ YES ↓
     │
@@ -36,19 +36,19 @@ Is gap in PRD scope? (Reference PRD Section 8 epics)
     │       │           └─ NO → Escalate to wait.human with evidence
 ```
 
-### Decision Node: "Is Gap in PRD Scope?"
+### Decision Node: "Is Gap in BS Scope?"
 
-Reference the PRD Section 8 (initiatives/epics) to determine if the gap aligns with declared requirements.
+Reference the Business Spec (BS) Section 8 (initiatives/epics) to determine if the gap aligns with declared requirements.
 
 **In-scope examples:**
 - Missing validation from acceptance criteria
 - Feature partially implemented but rubric expects complete
-- Test scenario that explicitly maps to PRD requirement
+- Test scenario that explicitly maps to BS requirement
 
 **Out-of-scope examples:**
 - Code style/naming convention violations
-- Performance optimization (not in PRD acceptance criteria)
-- Enhancement beyond PRD requirements
+- Performance optimization (not in BS acceptance criteria)
+- Enhancement beyond BS requirements
 - Documentation gap (not in scope of code validation)
 
 ### Decision Node: "Fixable Without Decisions?"
@@ -133,7 +133,7 @@ revalidate_gap_x1 -> e1_review [label="validated"];
 
 **Important**: Fix-it nodes are dispatched BEFORE the wait.human gate, so all closable gaps are resolved before user consultation.
 
-### Step 3: Create Minimal Solution Design
+### Step 3: Create Minimal Technical Spec
 
 ```markdown
 # SD-NEWCHECK-001-FIX-X1.md
@@ -154,7 +154,7 @@ Re-run scenario F2-S3, assert passes.
 None — this is a pure bug fix, no trade-offs.
 ```
 
-**Keep it minimal**: This SD is NOT a full feature design — it's a targeted fix. 3-4 paragraphs max.
+**Keep it minimal**: This TS is NOT a full feature design — it's a targeted fix. 3-4 paragraphs max.
 
 ### Step 4: Create Corresponding Bead
 
@@ -189,7 +189,7 @@ python3 .claude/scripts/attractor/runner.py --spawn \
 ```
 
 Worker receives:
-- Minimal SD (fix-gap-x1.md)
+- Minimal TS (fix-gap-x1.md)
 - Acceptance criteria (re-run scenario, assert pass)
 - Clear mandate: close this gap, nothing more
 
@@ -210,7 +210,7 @@ python3 .claude/scripts/attractor/cli.py node-modify \
 bd update $BEAD_ID --status=done
 
 # If still fails:
-# Update SD with new evidence
+# Update TS with new evidence
 # Re-dispatch fix-it with corrected guidance
 ```
 
@@ -279,11 +279,11 @@ Do NOT create a fix-it node if any of these apply:
 
 **Escalation summary**: "Gap requires design decision. Requires user/designer input."
 
-### 3. Gap is Outside PRD Scope
+### 3. Gap is Outside BS Scope
 
 **Example**: "Code doesn't follow company style guide"
 
-**Escalation summary**: "Gap is out of scope for PRD-XXX. Noted as informational, not blocking."
+**Escalation summary**: "Gap is out of scope for BS-XXX. Noted as informational, not blocking."
 
 ### 4. Gap Requires User Clarification
 
@@ -347,7 +347,7 @@ Example:
 
 **Gap**: Import error in logs
 
-**Fix-it SD**:
+**Fix-it TS**:
 ```markdown
 ## Missing Import
 
@@ -362,7 +362,7 @@ Import `B` from module `X` at line N in file `A.py`.
 
 **Gap**: Test fails because mock not configured
 
-**Fix-it SD**:
+**Fix-it TS**:
 ```markdown
 ## Mock Configuration
 
@@ -378,7 +378,7 @@ Reference existing mocks in file Y for pattern.
 
 **Gap**: Element has wrong CSS class or inline style
 
-**Fix-it SD**:
+**Fix-it TS**:
 ```markdown
 ## CSS Class Update
 
@@ -394,7 +394,7 @@ Reference design system in docs/design/colors.md for approved classes.
 
 **Gap**: Validation check missing from acceptance criteria
 
-**Fix-it SD**:
+**Fix-it TS**:
 ```markdown
 ## Add Validation
 
@@ -411,7 +411,7 @@ Emit error message: "Invalid email format" on failure.
 
 **Gap**: Feature that was working is now broken
 
-**Fix-it SD** (with urgency):
+**Fix-it TS** (with urgency):
 ```markdown
 ## Regression Fix (P0)
 
@@ -466,7 +466,7 @@ bd update bead_id --status=done
 - **Total**: ~10 minutes
 
 **Medium gaps** (multi-file, <15min fix):
-- Create fix-it node + minimal SD: <3 minutes
+- Create fix-it node + minimal TS: <3 minutes
 - Dispatch: <1 minute
 - Worker completes: <15 minutes
 - Re-validate: <3 minutes
@@ -483,11 +483,11 @@ bd update bead_id --status=done
 | Anti-Pattern | Problem | Fix |
 |--------------|---------|-----|
 | Escalating a clearly fixable gap | Interrupts user unnecessarily | Analyze decision tree, create fix-it |
-| Creating fix-it for out-of-scope gap | Scope creep, confuses priorities | Check PRD Section 8, escalate instead |
+| Creating fix-it for out-of-scope gap | Scope creep, confuses priorities | Check BS Section 8, escalate instead |
 | Skipping re-validation after fix | Gap may still exist, false confidence | Always re-run Gherkin scenario |
 | Creating one mega fix-it for 5 gaps | Combines unrelated work, harder to debug | Create separate fix-it per root cause |
 | Ignoring cascading gaps (depth > 3) | Infinite loop risk, time waste | Track depth counter, escalate at threshold |
-| Using architectural SD for trivial fix | Bloats context, confuses workers | Keep fix-it SDs to 3-4 paragraphs max |
+| Using architectural TS for trivial fix | Bloats context, confuses workers | Keep fix-it TSs to 3-4 paragraphs max |
 | Forgetting to create bead for fix-it | Pipeline loses visibility, unsyncable | Always `bd create` before DOT node-add |
 | Reporting gap at wait.human when fixable | User sees incomplete solution | Close autonomously first, then wait.human |
 

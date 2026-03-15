@@ -7,13 +7,15 @@ grade: authoritative
 
 ## Phase 0: PRD Design & Challenge
 
-When the guardian is initiating a new initiative (rather than validating an existing one), it must first design the PRD, create the pipeline infrastructure, and challenge its own design before proceeding to acceptance test creation.
+When the guardian is initiating a new initiative (rather than validating an existing one), it must first design the Business Spec (BS), create the pipeline infrastructure, and challenge its own design before proceeding to acceptance test creation.
 
-**Skip Phase 0 if**: A finalized PRD already exists at the implementation repo's `docs/prds/PRD-{ID}.md` and has been reviewed. Proceed directly to Phase 1.
+**Skip Phase 0 if**: A finalized BS already exists at the implementation repo's `docs/prds/PRD-{ID}.md` and has been reviewed. Proceed directly to Phase 1.
 
-### Step 0.1: PRD Authoring with CoBuilder RepoMap Context
+> **Note on file paths**: New Business Specs (BS) are written to `docs/specs/business/`. Historical specs remain in `docs/prds/`.
 
-Before writing the PRD, understand the current codebase structure using CoBuilder's RepoMap context command:
+### Step 0.1: Business Spec (BS) Authoring with CoBuilder RepoMap Context
+
+Before writing the Business Spec (BS), understand the current codebase structure using CoBuilder's RepoMap context command:
 
 ```bash
 # Generate structured YAML codebase context filtered to the relevant PRD scope
@@ -81,21 +83,21 @@ Also gather domain context from Hindsight:
 ```python
 PROJECT_BANK = os.environ.get("CLAUDE_PROJECT_BANK", "claude-harness-setup")
 domain_context = mcp__hindsight__reflect(
-    query=f"Architecture patterns, prior PRDs, and design decisions for {initiative_domain}",
+    query=f"Architecture patterns, prior Business Specs (BS), and design decisions for {initiative_domain}",
     budget="mid",
     bank_id=PROJECT_BANK
 )
 ```
 
-Using RepoMap context and Hindsight context, write the PRD to `docs/prds/PRD-{ID}.md` in the impl repo. The PRD must include:
+Using RepoMap context and Hindsight context, write the Business Spec (BS) to `docs/specs/business/PRD-{ID}.md` in the impl repo (historical specs remain in `docs/prds/`). The BS must include:
 - YAML frontmatter with `prd_id`, `title`, `status`, `created`
 - Goals section (maps to journey tests)
 - Epic breakdown with acceptance criteria per epic
 - Technical approach (informed by RepoMap delta analysis — what's `new` vs `existing` vs `modified`)
 
-#### Injecting RepoMap Context into SD Creation
+#### Injecting RepoMap Context into Technical Spec (TS) Creation
 
-When delegating SD creation to a `solution-design-architect`, inject the RepoMap YAML directly into the prompt. This ensures the SD references actual file paths, uses real interface signatures, and respects protected files:
+When delegating Technical Spec (TS) creation to a `solution-design-architect`, inject the RepoMap YAML directly into the prompt. This ensures the TS references actual file paths, uses real interface signatures, and respects protected files:
 
 ```python
 # Generate RepoMap context (capture output as string)
@@ -107,9 +109,9 @@ context_yaml = Bash(
 Task(
     subagent_type="solution-design-architect",
     prompt=f"""
-    Create a Solution Design for Epic {epic_num} of {prd_id}.
+    Create a Technical Spec (TS) for Epic {epic_num} of {prd_id}.
 
-    ## PRD Reference
+    ## Business Spec (BS) Reference
     Read: {prd_path}
 
     ## Codebase Context (RepoMap — read carefully before designing)
@@ -121,7 +123,7 @@ Task(
     - Reference EXISTING modules by their actual file paths
     - Scope MODIFIED modules to specific changes needed
     - Design NEW modules with suggested structure from RepoMap
-    - Respect protected_files — do not include them in File Scope unless PRD requires changes
+    - Respect protected_files — do not include them in File Scope unless the BS requires changes
     - Use key_interfaces for accurate API contracts in your design
     """
 )
@@ -197,7 +199,7 @@ else:
 "
 ```
 
-**MANDATORY**: Every `codergen` node in the pipeline MUST be preceded by a `research → refine` chain. This was introduced in v0.4.1 — research nodes validate framework patterns via Context7/Perplexity, refine nodes rewrite the SD with findings as first-class content. Bare codergen nodes risk implementing against outdated API patterns. If step 5 fails, add the missing research/refine nodes via `cobuilder pipeline node-add` and `cobuilder pipeline edge-add` before proceeding to Checkpoint A.
+**MANDATORY**: Every `codergen` node in the pipeline MUST be preceded by a `research → refine` chain. This was introduced in v0.4.1 — research nodes validate framework patterns via Context7/Perplexity, refine nodes rewrite the TS with findings as first-class content. Bare codergen nodes risk implementing against outdated API patterns. If step 5 fails, add the missing research/refine nodes via `cobuilder pipeline node-add` and `cobuilder pipeline edge-add` before proceeding to Checkpoint A.
 
 The `cobuilder pipeline create` command performs 7 steps automatically:
 1. Checks/auto-creates RepoMap baseline (`ensure_baseline`)
@@ -212,7 +214,7 @@ The `cobuilder pipeline create` command performs 7 steps automatically:
 
 ### Checkpoint A: PRD & Pipeline Review
 
-Before proceeding to Task Master parsing, pause and present the user with a summary of what Phase 0 has produced so far. This is the last opportunity to adjust PRD scope or pipeline structure before the task hierarchy is locked in.
+Before proceeding to Task Master parsing, pause and present the user with a summary of what Phase 0 has produced so far. This is the last opportunity to adjust Business Spec (BS) scope or pipeline structure before the task hierarchy is locked in.
 
 **Gather summary data**:
 
@@ -229,8 +231,8 @@ SD_COUNT=$(ls ${IMPL_REPO}/docs/prds/SD-*.md 2>/dev/null | wc -l | tr -d ' ')
 **Present to user via AskUserQuestion**:
 
 Compose a summary message that includes:
-- PRD title, goal count, and epic count
-- Per-epic: title, SD file path, number of acceptance criteria
+- BS title, goal count, and epic count
+- Per-epic: title, Technical Spec (TS) file path, number of acceptance criteria
 - Pipeline summary: total nodes (research/refine/codergen breakdown), edge count, chain validation status
 - Estimated implementation scope (node count as proxy for effort)
 
@@ -238,23 +240,23 @@ Then call `AskUserQuestion` with these options:
 
 | Option | Label | Description |
 |--------|-------|-------------|
-| 1 | Continue to Task Master (Recommended) | PRD scope and pipeline look correct — proceed to parse PRD into tasks and sync to beads |
-| 2 | Adjust PRD scope | I want to modify epics, acceptance criteria, or technology choices before proceeding |
+| 1 | Continue to Task Master (Recommended) | Business Spec (BS) scope and pipeline look correct — proceed to parse BS into tasks and sync to beads |
+| 2 | Adjust BS scope | I want to modify epics, acceptance criteria, or technology choices before proceeding |
 | 3 | Regenerate pipeline | Pipeline structure needs changes — re-run `cobuilder pipeline create` with different parameters |
-| 4 | Review files first | Show me the file paths so I can review the PRD and SDs manually before deciding |
+| 4 | Review files first | Show me the file paths so I can review the Business Spec (BS) and Technical Specs (TS) manually before deciding |
 
 **Response handling**:
 
 | User Choice | Guardian Action |
 |-------------|-----------------|
 | Continue to Task Master | Proceed to Step 0.3 |
-| Adjust PRD scope | Wait for user edits or apply specified changes to PRD, then re-run Step 0.2 (pipeline creation + chain validation) and present Checkpoint A again |
+| Adjust BS scope | Wait for user edits or apply specified changes to the BS, then re-run Step 0.2 (pipeline creation + chain validation) and present Checkpoint A again |
 | Regenerate pipeline | Re-run `cobuilder pipeline create` with user-specified adjustments, re-validate chains, and present Checkpoint A again |
-| Review files first | List all relevant file paths (PRD, SDs, pipeline DOT file) so the user can inspect them, then re-present Checkpoint A |
+| Review files first | List all relevant file paths (BS, Technical Specs (TS), pipeline DOT file) so the user can inspect them, then re-present Checkpoint A |
 
 ### Step 0.3: Parse PRD with Task Master
 
-Use Task Master to decompose the PRD into structured tasks, then sync to beads:
+Use Task Master to decompose the Business Spec (BS) into structured tasks, then sync to beads:
 
 ```python
 # Parse PRD into tasks
@@ -291,7 +293,7 @@ $CLI checkpoint save pipeline.dot
 
 ### RepoMap Context Injection (Phase 0 Step 2.5)
 
-Before delegating SD creation to solution-design-architect, generate codebase context:
+Before delegating Technical Spec (TS) creation to solution-design-architect, generate codebase context:
 
 ```bash
 # Generate structured YAML context for the repo
@@ -306,9 +308,9 @@ context_yaml = Bash("cobuilder repomap context --name {repo_name} --prd {prd_id}
 Task(
     subagent_type="solution-design-architect",
     prompt=f"""
-    Create a Solution Design for Epic {epic_num} of {prd_id}.
+    Create a Technical Spec (TS) for Epic {epic_num} of {prd_id}.
 
-    ## PRD Reference
+    ## Business Spec (BS) Reference
     Read: {prd_path}
 
     ## Codebase Context (RepoMap — read carefully before designing)
@@ -320,7 +322,7 @@ Task(
     - Reference EXISTING modules by their actual file paths
     - Scope MODIFIED modules to specific changes needed
     - Design NEW modules with suggested structure from RepoMap
-    - Respect protected_files — do not include them in File Scope unless PRD requires changes
+    - Respect protected_files — do not include them in File Scope unless the BS requires changes
     - Use key_interfaces for accurate API contracts in your design
     """
 )
@@ -331,9 +333,9 @@ Task(
 
 ### Step 0.4: Design Challenge Protocol (MANDATORY)
 
-Before proceeding to Phase 1, the guardian MUST challenge its own PRD design by spawning a solution-architect agent that independently evaluates the design.
+Before proceeding to Phase 1, the guardian MUST challenge its own Business Spec (BS) design by spawning a solution-architect agent that independently evaluates the design.
 
-**Why this matters**: The guardian wrote the PRD — it cannot objectively evaluate its own design. Independent challenge prevents proceeding with flawed architecture, missed edge cases, or technology choices that seem reasonable but have known pitfalls.
+**Why this matters**: The guardian wrote the BS — it cannot objectively evaluate its own design. Independent challenge prevents proceeding with flawed architecture, missed edge cases, or technology choices that seem reasonable but have known pitfalls.
 
 #### Launch Design Challenge Agent
 
@@ -342,17 +344,17 @@ Task(
     subagent_type="solution-design-architect",
     description="Challenge PRD-{ID} design via parallel solutioning + research",
     prompt=f"""
-    You are reviewing PRD-{prd_id} as an independent design challenger.
+    You are reviewing Business Spec PRD-{prd_id} as an independent design challenger.
 
     ## MANDATORY First Actions
     1. Skill("parallel-solutioning") with the prompt:
-       "Review and challenge the solution design in docs/prds/PRD-{prd_id}.md.
+       "Review and challenge the Business Spec (BS) at docs/prds/PRD-{prd_id}.md.
        Identify architectural weaknesses, missing edge cases, scalability concerns,
        and alternative approaches."
        - This spawns 7 architects with diverse reasoning strategies
        - Each architect must identify weaknesses, alternatives, and risks
 
-    2. Skill("research-first") for each major technology choice in the PRD:
+    2. Skill("research-first") for each major technology choice in the BS:
        - Validate framework versions and API compatibility
        - Check for deprecations or known issues
        - Cross-reference with context7 docs for current best practices
@@ -382,7 +384,7 @@ Task(
 | AMEND | Apply changes, re-run 0.3 | Select which amendments to accept |
 | REDESIGN | Revisit Step 0.1 | Confirm restart or narrow scope |
 
-**Anti-pattern**: Ignoring AMEND/REDESIGN verdicts because "it's probably fine" or "we already created beads." The cost of fixing a flawed design after implementation is 10x the cost of fixing the PRD.
+**Anti-pattern**: Ignoring AMEND/REDESIGN verdicts because "it's probably fine" or "we already created beads." The cost of fixing a flawed design after implementation is 10x the cost of fixing the BS.
 
 ### Checkpoint B: Design Challenge Review
 
@@ -460,8 +462,8 @@ Then call `AskUserQuestion` with these options:
 
 | User Choice | Guardian Action |
 |-------------|-----------------|
-| Restart Phase 0 | Return to Step 0.1 with architect feedback as context, create new PRD |
-| Narrow scope | Work with user to define reduced scope, then restart from Step 0.1 with narrower PRD |
+| Restart Phase 0 | Return to Step 0.1 with architect feedback as context, create new Business Spec (BS) |
+| Narrow scope | Work with user to define reduced scope, then restart from Step 0.1 with narrower BS |
 | Override and proceed | Log override to Hindsight with explicit risk acknowledgment, continue to Phase 1 |
 
 #### Evidence Storage

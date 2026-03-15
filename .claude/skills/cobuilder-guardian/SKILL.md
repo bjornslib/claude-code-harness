@@ -1,20 +1,20 @@
 ---
-name: s3-guardian
-description: This skill should be used when System 3 needs to act as an independent guardian angel — designing PRDs with CoBuilder RepoMap context injection, challenging designs via parallel solutioning, dispatching workers via AgentSDK pipelines, creating blind Gherkin acceptance tests and executable browser test scripts from PRDs, monitoring orchestrator progress, independently validating claims against acceptance criteria using gradient confidence scoring (0.0-1.0), autonomously accepting or rejecting implementations based on gradient confidence scoring thresholds (0.70+ for ACCEPT), autonomously closing validation gaps via Phase 4.5 gap closure protocol (creating fix-it codergen nodes), and setting session promises. Use when asked to "spawn and monitor an orchestrator", "create acceptance tests for a PRD", "validate orchestrator claims", "act as guardian angel", "independently verify implementation work", "autonomously close validation gaps", "create fix-it nodes", "design and challenge a PRD", "validation thresholds", "gradient scoring decision", or "bead creation for gaps".
+name: cobuilder-guardian
+description: This skill should be used when the CoBuilder Guardian needs to act as an independent guardian angel — designing PRDs with CoBuilder RepoMap context injection, challenging designs via parallel solutioning, dispatching workers via AgentSDK pipelines, creating blind Gherkin acceptance tests and executable browser test scripts from PRDs, monitoring orchestrator progress, independently validating claims against acceptance criteria using gradient confidence scoring (0.0-1.0), autonomously accepting or rejecting implementations based on gradient confidence scoring thresholds (0.70+ for ACCEPT), autonomously closing validation gaps via Phase 4.5 gap closure protocol (creating fix-it codergen nodes), and setting session promises. Use when asked to "spawn and monitor an orchestrator", "create acceptance tests for a PRD", "validate orchestrator claims", "act as guardian angel", "independently verify implementation work", "autonomously close validation gaps", "create fix-it nodes", "design and challenge a PRD", "validation thresholds", "gradient scoring decision", or "bead creation for gaps".
 version: 0.8.0
-title: "S3 Guardian"
+title: "CoBuilder Guardian"
 status: active
 last_verified: 2026-03-09
 ---
 
-# S3 Guardian — Independent Validation Pattern
+# CoBuilder Guardian — Independent Validation Pattern
 
-The guardian angel pattern provides independent, blind validation of System 3 meta-orchestrator work. A guardian session creates acceptance tests from PRDs, stores them outside the implementation repo where meta-orchestrators cannot see them, dispatches workers via AgentSDK pipelines (`pipeline_runner.py --dot-file`), and independently validates claims against a gradient confidence rubric.
+The guardian angel pattern provides independent, blind validation of CoBuilder Guardian work. A guardian session creates acceptance tests from Business Specs (BS), stores them outside the implementation repo where meta-orchestrators cannot see them, dispatches workers via AgentSDK pipelines (`pipeline_runner.py --dot-file`), and independently validates claims against a gradient confidence rubric.
 
 ```
 Guardian (this session, config repo)
     |
-    |-- Designs PRDs with CoBuilder RepoMap context (Phase 0)
+    |-- Designs Business Specs (BS) with CoBuilder RepoMap context (Phase 0)
     |-- Challenges own designs via parallel-solutioning + research-first (Phase 0)
     |-- Creates blind Gherkin acceptance tests (stored here, NOT in impl repo)
     |-- Generates executable browser test scripts for UX prototypes
@@ -53,7 +53,7 @@ The guardian operates with a specific mindset that distinguishes it from passive
 
 - **Investigate root causes, not symptoms.** When a Docker container crashes, don't stop at the error message — trace the import chain, read the Dockerfile, understand WHY it fails.
 - **Ask "what else?"** When one fix lands, ask what it unlocked. When a test passes, ask what it doesn't cover. When a feature works, ask about edge cases.
-- **Cross-reference independently.** Read the PRD, then read the code, then read the tests. Do they tell the same story? Gaps between these three are where bugs live.
+- **Cross-reference independently.** Read the Business Spec (BS), then read the code, then read the tests. Do they tell the same story? Gaps between these three are where bugs live.
 - **Follow your intuition.** If something feels incomplete or too easy, it probably is. Dig deeper.
 
 ### Push for Completion
@@ -65,7 +65,7 @@ The guardian operates with a specific mindset that distinguishes it from passive
 
 ### Injecting Disposition Into Meta-Orchestrators
 
-When spawning or guiding S3 meta-orchestrators, include disposition guidance in prompts:
+When spawning or guiding CoBuilder Guardian meta-orchestrators, include disposition guidance in prompts:
 
 ```
 Be curious about failures — trace root causes, don't accept surface explanations.
@@ -89,7 +89,7 @@ Hindsight stores patterns from prior sessions. These patterns are valuable conte
 |---------------|------------------------|------------|
 | "Spawn orchestrator in worktree via tmux" | "Create DOT pipeline, then spawn orchestrator" | Follow the skill — create pipeline first |
 | "Use bd create for tasks" | "Use cli.py node add with AT pairing" | Follow the skill — use pipeline nodes |
-| "Mark impl_complete and notify S3" | "Transition node to impl_complete in pipeline" | Follow the skill — use pipeline transitions |
+| "Mark impl_complete and notify CoBuilder" | "Transition node to impl_complete in pipeline" | Follow the skill — use pipeline transitions |
 
 ### Mandatory Rule
 
@@ -126,7 +126,7 @@ See **[references/path-setup.md](references/path-setup.md)** for complete PATH c
 ## Step 0: Promise Creation
 
 See **[references/session-promise-template.md](references/session-promise-template.md)** for:
-- Work-type-aware promise patterns (validation, research, PRD design, implementation, maintenance, multi-initiative)
+- Work-type-aware promise patterns (validation, research, Business Spec (BS) design, implementation, maintenance, multi-initiative)
 - CLI creation patterns with example ACs
 - Promise ID tracking guidance
 
@@ -136,12 +136,12 @@ See **[references/session-promise-template.md](references/session-promise-templa
 
 | Phase | Purpose | Reference |
 |-------|---------|-----------|
-| **Phase 0** | PRD authoring with CoBuilder RepoMap context injection, DOT pipeline creation (with research→refine→codergen chain validation), Task Master parsing, design challenge. **2 user checkpoints**: Checkpoint A (after pipeline creation) and Checkpoint B (after design challenge) | [references/phase0-prd-design.md](references/phase0-prd-design.md) |
+| **Phase 0** | Business Spec (BS) authoring with CoBuilder RepoMap context injection, DOT pipeline creation (with research→refine→codergen chain validation), Task Master parsing, design challenge. **2 user checkpoints**: Checkpoint A (after pipeline creation) and Checkpoint B (after design challenge) | [references/phase0-prd-design.md](references/phase0-prd-design.md) |
 | **Phase 1** | Generate per-epic Gherkin tests, journey tests, and executable browser test scripts | [references/gherkin-test-patterns.md](references/gherkin-test-patterns.md) |
 | **Phase 2** | Orchestrator spawning via `spawn_orchestrator.py`, headless/SDK/tmux dispatch, DOT-driven dispatch | [references/guardian-workflow.md](references/guardian-workflow.md) |
 | **Phase 3** | Monitoring cadence, pause-and-check pattern, intervention triggers, AskUserQuestion handling | [references/monitoring-patterns.md](references/monitoring-patterns.md) |
 | **Phase 4** | Independent validation, evidence gathering, DOT pipeline integration, regression detection. **Acceptance thresholds**: ACCEPT ≥ 0.70 (auto-create fix-it beads for minor gaps), INVESTIGATE 0.50-0.69, REJECT < 0.50. **Bead closure**: 6-step workflow for creating and tracking fix-it work. | [references/validation-scoring.md](references/validation-scoring.md), [references/guardian-workflow.md § 5.X](references/guardian-workflow.md), [references/guardian-workflow.md § 6.5](references/guardian-workflow.md) |
-| **Phase 5** | Session closing: update PRD and SD implementation status, close related beads, store Hindsight reflections, verify promises, commit. **MANDATORY**: PRD/SD status updates and bead closure must happen together — never close beads without updating implementation status in the source documents. | (inline — see Session Closing Protocol below) |
+| **Phase 5** | Session closing: update Business Spec (BS) and Technical Spec (TS) implementation status, close related beads, store Hindsight reflections, verify promises, commit. **MANDATORY**: BS/TS status updates and bead closure must happen together — never close beads without updating implementation status in the source documents. | (inline — see Session Closing Protocol below) |
 
 **Load the relevant reference when entering each phase. Do not load all references at once.**
 
@@ -151,14 +151,14 @@ See **[references/session-promise-template.md](references/session-promise-templa
 
 Before ending any session that completed implementation or validation work:
 
-1. **Update PRD implementation status**: Add or update an "Implementation Status" section in the PRD with per-epic status (Done/In Progress/Deferred/Remaining), dates, and commit references.
-2. **Update SD implementation status**: Add or update the SD's implementation priority table with current status per epic and update the `last_verified` frontmatter date.
+1. **Update Business Spec (BS) implementation status**: Add or update an "Implementation Status" section in the BS with per-epic status (Done/In Progress/Deferred/Remaining), dates, and commit references.
+2. **Update Technical Spec (TS) implementation status**: Add or update the TS's implementation priority table with current status per epic and update the `last_verified` frontmatter date.
 3. **Close related beads**: Close all beads for completed epics with descriptive close reasons. Reference the commits.
 4. **Store Hindsight reflections**: Retain session summary to both private and project banks.
 5. **Verify promises**: Run `cs-verify --promise <id>` for all session promises.
 6. **Commit**: Stage and commit all status updates.
 
-**The Iron Rule**: Bead closure and PRD/SD status updates are a single atomic operation. Never close a bead without updating the corresponding PRD/SD status. Never update status without closing the bead. This ensures the source documents remain the single source of truth for implementation progress.
+**The Iron Rule**: Bead closure and BS/TS status updates are a single atomic operation. Never close a bead without updating the corresponding BS/TS status. Never update status without closing the bead. This ensures the source documents remain the single source of truth for implementation progress.
 
 ---
 
@@ -176,7 +176,7 @@ See **[references/session-promise-template.md](references/session-promise-templa
 
 See **[references/hindsight-validation-checklist.md](references/hindsight-validation-checklist.md)** for:
 - Phase 4 completion: storing results to private and project banks
-- PRD Contract generation and validation (Step 0.2.5)
+- Business Spec (BS) Contract generation and validation (Step 0.2.5)
 - Completion verification before closing promise
 - Common mistakes to avoid
 
@@ -208,7 +208,7 @@ Each level adds independent verification. The key constraint: each guardian stor
 
 | Phase | Key Action | Reference |
 |-------|------------|-----------|
-| 0. PRD Design | Write PRD, ZeroRepo analysis, pipeline, design challenge | [references/phase0-prd-design.md](references/phase0-prd-design.md) |
+| 0. BS Design | Write Business Spec (BS), ZeroRepo analysis, pipeline, design challenge | [references/phase0-prd-design.md](references/phase0-prd-design.md) |
 | 1. Acceptance Tests | Gherkin rubrics + executable browser tests (Step 3) | [gherkin-test-patterns.md](references/gherkin-test-patterns.md) |
 | 2. Orchestrator Spawn | DOT dispatch, SDK / tmux patterns, wisdom inject | [guardian-workflow.md](references/guardian-workflow.md) |
 | 3. Monitoring | DOT polling (SDK), signal-file monitoring, progress monitoring | [monitoring-patterns.md](references/monitoring-patterns.md) |
@@ -317,9 +317,9 @@ Load these reference files when entering each phase or when you need detailed gu
 | Reference File | When to Load |
 |---|---|
 | [references/path-setup.md](references/path-setup.md) | Setting up cs-promise CLI PATH and shell invocation patterns |
-| [references/session-promise-template.md](references/session-promise-template.md) | Creating and tracking completion promises (guardian validation, research, PRD design, etc.) |
+| [references/session-promise-template.md](references/session-promise-template.md) | Creating and tracking completion promises (guardian validation, research, Business Spec (BS) design, etc.) |
 | [references/hindsight-validation-checklist.md](references/hindsight-validation-checklist.md) | Storing validation results to Hindsight after Phase 4 |
-| [references/phase0-prd-design.md](references/phase0-prd-design.md) | Phase 0: PRD authoring, pipeline creation, design challenge |
+| [references/phase0-prd-design.md](references/phase0-prd-design.md) | Phase 0: Business Spec (BS) authoring, pipeline creation, design challenge |
 | [references/gherkin-test-patterns.md](references/gherkin-test-patterns.md) | Phase 1: Writing Gherkin acceptance tests and executable browser tests |
 | [references/guardian-workflow.md](references/guardian-workflow.md) | Phase 2-3: Orchestrator spawning, monitoring patterns, intervention triggers |
 | [references/validation-scoring.md](references/validation-scoring.md) | Phase 4: Independent validation, evidence gathering, gap closure protocol |
@@ -331,12 +331,13 @@ Load these reference files when entering each phase or when you need detailed gu
 
 ---
 
-**Version**: 0.9.0
+**Version**: 1.0.0
 **Dependencies**: cs-promise CLI (requires PATH setup — see Prerequisites section), pipeline_runner.py + claude_code_sdk (primary dispatch), tmux (tmux mode — interactive, lower API cost), Hindsight MCP, ccsystem3 shell function, Task Master MCP, ZeroRepo
-**Integration**: system3-orchestrator skill, completion-promise skill, acceptance-test-writer skill, parallel-solutioning skill, research-first skill
+**Integration**: cobuilder-guardian skill, completion-promise skill, acceptance-test-writer skill, parallel-solutioning skill, research-first skill
 **Theory**: Independent verification eliminates self-reporting bias in agentic systems
 
 **Changelog**:
+- v1.0.0: Terminology migration — prose-level renaming only. "PRD" → "Business Spec (BS)" and "Solution Design/SD" → "Technical Spec (TS)" throughout descriptive prose in SKILL.md and all reference files. Code identifiers (`prd_ref`, `sd_path`), file-identifier strings like `PRD-XXX-001`, historical changelog entries, and content inside code blocks are unchanged. New spec file paths: `docs/specs/business/` (BS) and `docs/specs/technical/` (TS) for future specs; historical specs remain in `docs/prds/` and `docs/sds/`.
 - v0.9.0: Added Phase 5 (Session Closing Protocol) as mandatory final phase. PRD/SD implementation status updates and bead closure are now an atomic operation — never one without the other. This ensures source documents remain the single source of truth for progress tracking.
 - v0.8.0: Added validation acceptance thresholds (ACCEPT ≥ 0.70, INVESTIGATE 0.50-0.69, REJECT < 0.50) and bead closure process references throughout. Updated `description` field with autonomous threshold-based accept/reject capability and new trigger keywords ("validation thresholds", "gradient scoring decision", "bead creation for gaps"). Expanded Phase 4 row in Guardian Workflow Phases table with threshold summary and references to guardian-workflow.md §§ 5.X and 6.5. Added Phase 4.6 Bead Closure row to Quick Reference table. Bumped `last_verified` to 2026-03-09.
 - v0.7.0: Removed headless mode (`--mode headless`, `spawn_orchestrator.py --mode headless`, `_build_headless_worker_cmd`, `run_headless_worker`). Headless mode is dead code — all dispatch now uses AgentSDK via `pipeline_runner.py`. Updated architecture diagram, mode table, SDK Mode Entry Points section, dependencies line. Deleted test_headless_dispatch.py and test_headless_worker.py. Two dispatch modes remain: Pipeline (PRIMARY) and tmux (interactive). Root cause: no API credits, headless = `claude -p` = API-billed, made it dead code.

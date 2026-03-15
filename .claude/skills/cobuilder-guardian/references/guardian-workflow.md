@@ -38,7 +38,7 @@ cs-status 2>/dev/null || echo "ERROR: completion-state scripts not found"
 which ccsystem3 2>/dev/null || type ccsystem3 2>/dev/null
 ```
 
-### 1.2 PRD Verification
+### 1.2 Business Spec (BS) Verification
 
 ```bash
 # Check PRD exists
@@ -70,7 +70,7 @@ Before creating acceptance tests, gather institutional knowledge about the initi
 previous = mcp__hindsight__reflect(
     f"Previous guardian validations for PRD-{prd_id} or similar initiatives",
     budget="mid",
-    bank_id="system3-orchestrator"
+    bank_id="cobuilder-guardian"
 )
 
 # Check for known patterns in the implementation domain
@@ -87,9 +87,9 @@ Use findings to calibrate acceptance test expectations and thresholds.
 
 ## 2. Acceptance Test Generation
 
-### 2.1 Read and Analyze PRD
+### 2.1 Read and Analyze Business Spec (BS)
 
-Read the entire PRD document. Extract a structured feature list:
+Read the entire Business Spec (BS) document. Extract a structured feature list:
 
 ```
 Feature Extraction Template:
@@ -163,7 +163,7 @@ Each scenario follows this template:
 Generate the manifest using the template script:
 
 ```bash
-.claude/skills/s3-guardian/scripts/generate-manifest.sh PRD-{ID} "PRD Title"
+.claude/skills/cobuilder-guardian/scripts/generate-manifest.sh PRD-{ID} "PRD Title"
 ```
 
 Then populate the generated `manifest.yaml` with:
@@ -176,7 +176,7 @@ Then populate the generated `manifest.yaml` with:
 
 Before proceeding to meta-orchestrator spawning, verify acceptance test quality:
 
-1. **Coverage check**: Every PRD feature has at least one scenario
+1. **Coverage check**: Every BS feature has at least one scenario
 2. **Weight sum**: Exactly 1.00
 3. **Scoring guides**: Every scenario has a 0.0-1.0 calibration guide
 4. **Evidence specificity**: Each scenario references concrete files or behaviors, not vague descriptions
@@ -205,7 +205,7 @@ cs-promise --start <promise-id>
 
 ### 3.2 Spawn Meta-Orchestrator
 
-**DEFAULT**: Use `pipeline_runner.py --dot-file` to launch workers via AgentSDK (see system3-meta-orchestrator output style → DOT Graph Navigation for full pattern).
+**DEFAULT**: Use `pipeline_runner.py --dot-file` to launch workers via AgentSDK (see cobuilder-guardian output style → DOT Graph Navigation for full pattern).
 
 For interactive sessions where human observation matters, use `spawn_orchestrator.py --mode tmux`:
 
@@ -220,7 +220,7 @@ python3 "${IMPL_REPO}/.claude/scripts/attractor/spawn_orchestrator.py" \
     --prd "${PRD_ID}" \
     --repo-root "${IMPL_REPO}" \
     --mode tmux \
-    --prompt "You are the System 3 meta-orchestrator. Invoke Skill('s3-guardian') first. Then read PRD-${PRD_ID} at .taskmaster/docs/PRD-${PRD_ID}.md. Parse tasks with Task Master. Spawn orchestrators as needed. Report when all epics are complete."
+    --prompt "You are the CoBuilder Guardian. Invoke Skill('cobuilder-guardian') first. Then read PRD-${PRD_ID} at .taskmaster/docs/PRD-${PRD_ID}.md. Parse tasks with Task Master. Spawn orchestrators as needed. Report when all epics are complete."
 
 # The orchestrator runs in a tmux session: tmux new-session -d -s "s3-${INITIATIVE}" ...
 # Monitor via: tmux capture-pane -t "s3-${INITIATIVE}" -p
@@ -315,7 +315,7 @@ When intervention is needed, follow this decision tree:
    - After 5 occurrences: consider restarting the headless process with a different approach
 
 2. **Scope Creep** (detected via git diff against expected file scope):
-   - Compare current work against PRD scope
+   - Compare current work against BS scope
    - If meta-orchestrator is working on unrelated features: re-launch with scoped prompt
    - If meta-orchestrator is over-engineering: remind of scope boundaries in re-launch
 
@@ -435,7 +435,7 @@ See [validation-scoring.md](validation-scoring.md) Section 10 for the complete k
 
 For each gap identified in Sections 5.3-5.3b:
 
-1. **Is gap in PRD scope?** (Check against PRD Section 8 epics)
+1. **Is gap in BS scope?** (Check against BS Section 8 epics)
    - NO → Mark as informational, do not create fix-it
    - YES → Continue
 
@@ -457,7 +457,7 @@ For each gap identified in Sections 5.3-5.3b:
 
 For each gap decided for autonomous closure:
 
-1. **Create minimal Solution Design** (3-4 paragraphs, specific fix only)
+1. **Create minimal Technical Spec (TS)** (3-4 paragraphs, specific fix only)
    - Path: `docs/sds/fix-gap-{gap_id}.md`
    - Acceptance: "Gherkin scenario {scenario_name} passes; no regressions introduced"
    - Example: Missing import, test mock configuration, CSS class, validation check
@@ -834,9 +834,9 @@ bd update "FIX-G1" --status=done --notes="Fix-it node completed by worker, re-va
 bd update "FIX-G1" --notes="Gap confirmed closed in re-validation, signature: {validation_score}"
 ```
 
-### Solution Design Requirements for Fix-It Nodes
+### Technical Spec (TS) Requirements for Fix-It Nodes
 
-Each fix-it node requires a minimal Solution Design document:
+Each fix-it node requires a minimal Technical Spec (TS) document:
 
 ```markdown
 ---
@@ -877,7 +877,7 @@ title: "FIX-G1: Missing Email Validation"
 ---
 ```
 
-The SD is minimal because it's closing a specific gap, not designing a feature. Focus on **what changed**, **how to verify**, and **what could break**.
+The TS is minimal because it's closing a specific gap, not designing a feature. Focus on **what changed**, **how to verify**, and **what could break**.
 
 ### Timeline for In-Flight Modification
 
@@ -983,12 +983,12 @@ mv "${SIGNAL_DIR}"/*-s3-${INITIATIVE}-*.json "${SIGNAL_DIR}/processed/" 2>/dev/n
 
 ## 7. Timeline Reference
 
-Typical guardian session timeline for a medium-complexity PRD:
+Typical guardian session timeline for a medium-complexity Business Spec (BS):
 
 | Phase | Duration | Activities |
 |-------|----------|------------|
 | Pre-flight | 5 min | Environment checks, Hindsight queries |
-| Acceptance test creation | 15-30 min | PRD analysis, Gherkin writing, manifest creation |
+| Acceptance test creation | 15-30 min | BS analysis, Gherkin writing, manifest creation |
 | Meta-orchestrator spawning | 2-5 min | Headless dispatch via spawn_orchestrator.py, verification |
 | Monitoring | 1-3 hours | Continuous oversight, periodic interventions |
 | Independent validation | 15-30 min | Evidence gathering, scoring, report generation |
@@ -999,7 +999,7 @@ Typical guardian session timeline for a medium-complexity PRD:
 
 ## Guardian Phase 2: Orchestrator Spawning (Full Reference)
 
-> Extracted from s3-guardian SKILL.md — complete orchestrator spawning procedure including DOT dispatch, tmux patterns, SDK mode, and wisdom injection.
+> Extracted from cobuilder-guardian SKILL.md — complete orchestrator spawning procedure including DOT dispatch, tmux patterns, SDK mode, and wisdom injection.
 
 ### Overview
 
@@ -1057,21 +1057,21 @@ research_impl_auth -> impl_auth [label="research_complete"];
 ```
 
 **What research nodes do:**
-1. Read the Solution Design document
+1. Read the Technical Spec (TS) document
 2. Validate framework patterns via Context7 (docs) and Perplexity (cross-validation)
-3. **Update the SD directly** with corrected patterns — no side-channel injection needed
+3. **Update the TS directly** with corrected patterns — no side-channel injection needed
 4. Write evidence to `.claude/evidence/{node_id}/research-findings.json`
 5. Persist learnings to Hindsight (LLM-driven reflect + retain)
 
-**Key design insight**: The SD is the single source of truth. Research nodes correct the SD itself, so downstream orchestrators get current patterns automatically by reading the SD they already reference.
+**Key design insight**: The TS is the single source of truth. Research nodes correct the TS itself, so downstream orchestrators get current patterns automatically by reading the TS they already reference.
 
 Research runs synchronously before codergen dispatch (~15-30s, Haiku model, ~$0.02). The guardian handles dispatch and state transitions internally.
 
-**Known limitation**: Research validates against *latest published docs* but does not check the *locally installed version*. If the local environment has an older version (e.g., pydantic-ai 1.58.0 vs documented 1.63.0), API attribute names may differ. Mitigation: pin dependency versions in the SD or add a local version check to the research prompt.
+**Known limitation**: Research validates against *latest published docs* but does not check the *locally installed version*. If the local environment has an older version (e.g., pydantic-ai 1.58.0 vs documented 1.63.0), API attribute names may differ. Mitigation: pin dependency versions in the TS or add a local version check to the research prompt.
 
-### Refine Nodes (SD Cleanup After Research)
+### Refine Nodes (TS Cleanup After Research)
 
-Refine nodes (`handler="refine"`, `shape=note`) sit between research and codergen. They rewrite the Solution Design with research findings as first-class content, removing annotation artifacts.
+Refine nodes (`handler="refine"`, `shape=note`) sit between research and codergen. They rewrite the Technical Spec (TS) with research findings as first-class content, removing annotation artifacts.
 
 **DOT attributes:**
 
@@ -1079,14 +1079,14 @@ Refine nodes (`handler="refine"`, `shape=note`) sit between research and coderge
 |-----------|----------|-------------|
 | `handler` | Yes | Must be `"refine"` |
 | `shape` | Yes | Must be `"note"` |
-| `solution_design` | Yes | Path to the SD file to rewrite |
+| `solution_design` | Yes | Path to the TS file to rewrite |
 | `evidence_path` | Yes | Path to upstream research evidence (`research-findings.json`) |
 | `prd_ref` | Recommended | PRD identifier for traceability |
 
 **What refine nodes do:**
 1. Read the upstream research evidence file (`research-findings.json`)
-2. Call `mcp__hindsight__reflect` to surface prior SD rewrite patterns
-3. Rewrite the SD — integrating validated patterns as native content, removing annotation artifacts
+2. Call `mcp__hindsight__reflect` to surface prior TS rewrite patterns
+3. Rewrite the TS — integrating validated patterns as native content, removing annotation artifacts
 4. Write `refine-findings.json` to `.claude/evidence/{node_id}/`
 
 **Key design**: Refine agents have restricted tools — only Read, Edit, Write, and Hindsight. No internet access, no Bash. This ensures the refine step is purely a rewrite operation, not additional research.
@@ -1097,7 +1097,7 @@ Refine nodes (`handler="refine"`, `shape=note`) sit between research and coderge
 - `// Context7: ...`
 - `> Note: Based on research findings ...`
 
-**Timing**: ~30-60s per node, Sonnet model (needs editorial judgment for SD rewriting).
+**Timing**: ~30-60s per node, Sonnet model (needs editorial judgment for TS rewriting).
 
 **Pipeline flow**: `research (Haiku, ~15s) → refine (Sonnet, ~30-60s) → codergen`
 
@@ -1124,7 +1124,7 @@ The guardian automatically:
 
 ### Research-Only Pipeline Dispatch
 
-Pipelines that contain **only research and refine nodes** (no codergen) are a valid and common use case — for example, batch-validating Solution Designs against current framework documentation before starting implementation.
+Pipelines that contain **only research and refine nodes** (no codergen) are a valid and common use case — for example, batch-validating Technical Specs (TSs) against current framework documentation before starting implementation.
 
 **The entry point is the same**: `launch_guardian.py` (or `guardian_agent.py` directly). The guardian detects that no codergen nodes exist and completes after all research/refine chains validate. Do NOT call `run_research.py` per-node — that is a Layer 2 internal tool invoked by the guardian, not a user-facing pipeline driver.
 
@@ -1221,11 +1221,11 @@ python3 .claude/scripts/attractor/launch_guardian.py \
 
 Before spawning orchestrators (any mode), verify:
 - [ ] Implementation repo exists and is accessible
-- [ ] PRD exists in `.taskmaster/docs/PRD-{ID}.md` (business artifact)
-- [ ] SD exists per epic in `.taskmaster/docs/SD-{ID}.md` (technical spec; Task Master input)
-- [ ] Acceptance tests have been created from SD (Phase 1 complete)
+- [ ] Business Spec (BS) exists in `.taskmaster/docs/PRD-{ID}.md`
+- [ ] Technical Spec (TS) exists per epic in `.taskmaster/docs/SD-{ID}.md` (Task Master input)
+- [ ] Acceptance tests have been created from the TS (Phase 1 complete)
 - [ ] DOT pipeline exists AND validates: `cobuilder pipeline validate <pipeline.dot>` exits 0. If missing, STOP and run Step 0.2 first — do NOT proceed to spawn without a pipeline.
-- [ ] DOT codergen nodes have `solution_design` attribute pointing to their SD file
+- [ ] DOT codergen nodes have `solution_design` attribute pointing to their TS file
 - [ ] Research nodes precede codergen nodes with correct `downstream_node` edges
 - [ ] No existing process/session with the same node name
 - [ ] Hindsight wisdom gathered from project bank
@@ -1675,4 +1675,4 @@ Then retain the outcome to Hindsight and report to user.
 ---
 
 **Reference Version**: 0.1.0
-**Parent Skill**: s3-guardian
+**Parent Skill**: cobuilder-guardian

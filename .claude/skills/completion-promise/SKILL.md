@@ -378,7 +378,7 @@ Bash(f"cs-promise --feature 'Feature' --epic E1 --criteria 'Criterion'")
 # Store to Hindsight for meta-awareness
 mcp__hindsight__retain(
     content=f"Session started with completion promise: {summary}",
-    context="system3-completion-tracking"
+    context="cobuilder-completion-tracking"
 )
 ```
 
@@ -606,6 +606,6 @@ When you run `cs-verify --promise <id>`, Gate 2:
 
 **Version**: 2.0.0
 **Dependencies**: jq, bash
-**Integration**: system3-meta-orchestrator, stop-gate.py
+**Integration**: cobuilder-meta-orchestrator, stop-gate.py
 **Inspired By**: Ralph Wiggum plugin (completion promise pattern)
 **Breaking Changes (v2.0)**: `cs-promise --create` now requires at least one `--ac` flag. Per-criterion evidence via `cs-promise --meet` replaces bulk `--proof` for structured accountability.

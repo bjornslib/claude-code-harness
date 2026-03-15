@@ -206,7 +206,7 @@ meta_patterns = mcp__hindsight__reflect(
     3. Capability notes and confidence levels
     """,
     budget="mid",
-    bank_id="system3-orchestrator"
+    bank_id="cobuilder-guardian"
 )
 
 # Query shared bank for domain knowledge
@@ -242,4 +242,4 @@ wisdom = f"""
 **Related Files:**
 - [SKILL.md](SKILL.md) - Main orchestrator skill
 - [WORKERS.md](WORKERS.md) - Worker delegation via native Agent Teams
-- [s3-guardian SKILL.md](../s3-guardian/SKILL.md) - Spawn workflow
+- [cobuilder-guardian SKILL.md](../cobuilder-guardian/SKILL.md) - Spawn workflow

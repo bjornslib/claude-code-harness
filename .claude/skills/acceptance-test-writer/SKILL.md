@@ -243,11 +243,11 @@ Create all files in `acceptance-tests/PRD-XXX/`:
 ## Guardian Mode (--mode=guardian)
 
 Generates per-epic Gherkin acceptance test scenarios with confidence scoring guides, for use by
-the s3-guardian skill. Output goes in `acceptance-tests/PRD-{ID}/` (same as standard mode but
+the cobuilder-guardian skill. Output goes in `acceptance-tests/PRD-{ID}/` (same as standard mode but
 Gherkin `.feature` format instead of YAML).
 
 ### When to Use
-- Invoked by s3-guardian in Phase 1 to create the blind acceptance rubric
+- Invoked by cobuilder-guardian in Phase 1 to create the blind acceptance rubric
 - Replaces the guardian's manual Steps 1-4 (read PRD, extract features, write Gherkin, create manifest)
 
 ### Invocation
@@ -376,8 +376,8 @@ Generates Gherkin journey scenarios from the PRD's **Goals / Business Objectives
 
 ### When to Use
 - After generating per-epic tests (run `--mode=guardian` first)
-- Invoked by s3-guardian in Phase 1 to create blind journey tests
-- Invoked by system3-orchestrator's post-completion smoke gate
+- Invoked by cobuilder-guardian in Phase 1 to create blind journey tests
+- Invoked by cobuilder's post-completion smoke gate
 
 ### Invocation
 ```

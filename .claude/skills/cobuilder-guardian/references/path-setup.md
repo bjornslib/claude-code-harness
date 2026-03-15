@@ -33,7 +33,7 @@ Bash(export PATH=... && cs-promise --create "..." && cs-promise --list)  # All i
 
 ## The Complete Init Pattern
 
-For any session using cs-promise (guardian validation, PRD design, etc.):
+For any session using cs-promise (guardian validation, Business Spec (BS) design, etc.):
 
 ```bash
 #!/bin/bash

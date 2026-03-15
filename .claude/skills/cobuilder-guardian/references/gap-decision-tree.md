@@ -20,7 +20,7 @@ Visual guide and concrete examples for analyzing validation gaps discovered duri
                 │
                 ▼
         ┌──────────────┐
-        │ In PRD Scope?│  (Check Section 8)
+        │ In BS Scope?│  (Check Section 8)
         └──────┬───────┘
        YES │   │ NO
            │   └──────────────────────┐
@@ -78,7 +78,7 @@ Visual guide and concrete examples for analyzing validation gaps discovered duri
 **Gap**: `ImportError: cannot import name 'validate_email' from 'forms'`
 
 **Analysis:**
-- ✅ In-scope? Yes (validation is in PRD)
+- ✅ In-scope? Yes (validation is in BS)
 - ✅ Fixable? Yes (deterministic)
 - ✅ Not a judgment? Correct (clear from error)
 
@@ -99,7 +99,7 @@ fix_import_a1 [
 ];
 ```
 
-**SD** (minimal):
+**TS** (minimal):
 ```markdown
 # Fix: Missing Import
 
@@ -129,7 +129,7 @@ Verify: Test suite passes without import errors
 **Pattern**:
 Look at similar test setup in same file. Mock needs to return the expected structure.
 
-**SD**:
+**TS**:
 ```markdown
 # Fix: Configure Mock Return Value
 
@@ -156,7 +156,7 @@ Reference existing mock pattern in line 15: `mock.MagicMock(return_value=...)`
 
 **Decision**: **CREATE FIX-IT**
 
-**SD**:
+**TS**:
 ```markdown
 # Fix: Apply Correct Button Class
 
@@ -187,7 +187,7 @@ Verify: Visual matches mockup (blue, white text)
 **Pattern**:
 Regressions **always** get autonomous fix-it nodes. System 3 should not escalate a feature that previously worked.
 
-**SD**:
+**TS**:
 ```markdown
 # Fix: Logout Regression (P0)
 
@@ -221,7 +221,7 @@ Verify: Gherkin scenario F2-S1 returns to PASSED
 **Gap**: API endpoint returns user ID but acceptance criteria expect email
 
 **Analysis**:
-- ✅ In-scope? Yes (API contract is PRD requirement)
+- ✅ In-scope? Yes (API contract is BS requirement)
 - ❌ Fixable autonomously? No (requires design decision)
 - ❓ Which should it return? (judgment call)
 
@@ -254,7 +254,7 @@ correct, or should it be updated? Impacts all callers.
 **Gap**: Form field order doesn't match mockup, tests pass but UX feels wrong
 
 **Analysis**:
-- ✅ In-scope? Yes (form layout is part of PRD)
+- ✅ In-scope? Yes (form layout is part of BS)
 - ❌ Fixable autonomously? No (requires UX/design decision)
 - ❓ Is this mockup the final design? (judgment call)
 
@@ -288,9 +288,9 @@ final design direction? If yes, approve fix-it creation.
 **Gap**: Code has inconsistent naming convention (camelCase vs snake_case)
 
 **Analysis**:
-- ❌ In-scope? No (code style is not in PRD Section 8)
+- ❌ In-scope? No (code style is not in BS Section 8)
 - ✅ Fixable? Technically yes, but...
-- ❓ Is this PRD scope? No.
+- ❓ Is this BS scope? No.
 
 **Decision**: **ESCALATE (or IGNORE)**
 
@@ -301,9 +301,9 @@ final design direction? If yes, approve fix-it creation.
 **Evidence**:
 - Some variables: camelCase
 - Some variables: snake_case
-- No style guide in PRD acceptance criteria
+- No style guide in BS acceptance criteria
 
-**Why not autonomous**: Out-of-scope for PRD-EXAMPLE-001.
+**Why not autonomous**: Out-of-scope for BS-EXAMPLE-001.
 Code style is a separate concern (linter/formatter, not feature).
 
 **Action**: Note as informational. Not a blocker for acceptance.
@@ -319,7 +319,7 @@ Defer to separate code quality initiative if needed.
 **Gap**: Gherkin scenario says "check password strength" but no specifics on what "strong" means
 
 **Analysis**:
-- ✅ In-scope? Yes (password validation in PRD)
+- ✅ In-scope? Yes (password validation in BS)
 - ❌ Fixable? Not without knowing criteria
 - ❓ What makes password strong? (ambiguous requirement)
 
@@ -440,7 +440,7 @@ def decide_gap_action(gap):
 
     # Check 1: Scope
     if not is_in_prd_scope(gap):
-        return ESCALATE("Out of PRD scope")
+        return ESCALATE("Out of BS scope")
 
     # Check 2: Fixability
     if requires_architectural_decision(gap):
@@ -517,7 +517,7 @@ Gap 4 appears: Would take ~5 more minutes = 32 total
 | Anti-Pattern | Problem | Correct Approach |
 |--------------|---------|------------------|
 | Escalating every minor gap | Interrupts user unnecessarily | Analyze decision tree, create low-risk fixes |
-| Creating fix-it for out-of-scope gap | Scope creep | Check PRD Section 8 first |
+| Creating fix-it for out-of-scope gap | Scope creep | Check BS Section 8 first |
 | Skipping cascade depth check | Infinite loop risk | Track depth, escalate at threshold |
 | Assuming fix won't break others | False confidence | Consider downstream impacts |
 | Creating mega fix-it for 5 gaps | Harder to debug | Create separate fix-it per root cause |
@@ -534,7 +534,7 @@ Gap Found: Test fails with "IndexError: list index out of range"
 Code: response.contacts[0].email
 
 Analysis:
-✅ In-scope? Yes (contact list in PRD)
+✅ In-scope? Yes (contact list in BS)
 ✅ Fixable? Yes (probably missing initialization)
 ✅ Low-risk? Yes (clear root cause)
 
@@ -590,7 +590,7 @@ Check this list before deciding to escalate:
 - **[ ] Ambiguity**: Could the fix be interpreted two different ways?
 - **[ ] Design**: Does fixing this require a UX/design decision?
 - **[ ] Architecture**: Would this change impact other components?
-- **[ ] Scope**: Is this truly in the PRD requirements?
+- **[ ] Scope**: Is this truly in the BS requirements?
 - **[ ] Risk**: Could this fix break an untested feature?
 - **[ ] Policy**: Does this violate company/project policies?
 - **[ ] Cascade**: Have we exceeded 3 iterations of fixes?

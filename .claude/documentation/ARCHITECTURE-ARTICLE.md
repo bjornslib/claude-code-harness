@@ -543,7 +543,7 @@ The Claude Code Harness Setup is the configuration framework that powers this ar
 
 **Key directories**:
 - `.claude/scripts/attractor/` — Guardian, Runner, signal protocol, CLI
-- `.claude/skills/s3-guardian/` — Guardian skill with blind validation pattern
+- `.claude/skills/cobuilder-guardian/` — Guardian skill with blind validation pattern
 - `.claude/skills/system3-orchestrator/` — System 3 meta-orchestration
 - `.claude/skills/orchestrator-multiagent/` — Worker coordination patterns
 - `.claude/scripts/completion-state/` — Promise tracking CLI

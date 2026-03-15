@@ -206,7 +206,7 @@ Track error occurrences across monitoring cycles. Maintain a mental count:
 
 | Duration | Expected Progress | Red Flag If |
 |----------|------------------|-------------|
-| 0-15 min | PRD reading, task parsing | Still configuring environment |
+| 0-15 min | BS reading, task parsing | Still configuring environment |
 | 15-45 min | First workers spawned, implementation starting | No workers spawned yet |
 | 45-90 min | Multiple features implemented, tests running | Only 1 feature done |
 | 90-120 min | Most features complete, validation beginning | Less than 50% done |
@@ -229,7 +229,7 @@ A growing TODO count suggests the operator is deferring work rather than complet
 
 - `NEEDS_INPUT` signal with no response for 5+ minutes
 - Process has died (no PID) but work is incomplete
-- Operator is clearly working on wrong PRD or wrong repo (from git diff)
+- Operator is clearly working on wrong BS or wrong repo (from git diff)
 - `ORCHESTRATOR_STUCK` signal received
 
 ### Usually Wait
@@ -241,7 +241,7 @@ A growing TODO count suggests the operator is deferring work rather than complet
 ### Never Intervene
 
 - Operator's coding style differs from preference (implementation detail)
-- Operator chose a different technical approach than expected (as long as it meets PRD)
+- Operator chose a different technical approach than expected (as long as it meets BS)
 - Operator process is alive and within expected time bounds
 - Recent signal shows normal progress
 
@@ -576,7 +576,7 @@ tmux capture-pane -t "s3-{initiative}" -p -S -50 | grep -iE "compact|context|tok
 # Verify session exists
 tmux has-session -t "s3-{initiative}" 2>/dev/null && echo "ALIVE" || echo "DEAD"
 
-# List all system3 sessions
+# List all cobuilder sessions
 tmux list-sessions 2>/dev/null | grep "^s3-"
 ```
 
@@ -613,7 +613,7 @@ tmux send-keys -t "s3-{initiative}" Enter
 | `[Y/n]` | Enter (accept default yes) |
 | Permission to use tool X | Down, Enter (approve) |
 | "Should I continue?" | Enter (yes) |
-| "Which option?" with choices | Read choices, select most aligned with PRD scope |
+| "Which option?" with choices | Read choices, select most aligned with BS scope |
 | "Should I stop?" | Depends on progress -- assess first |
 
 ### tmux Important Caveats
@@ -784,4 +784,4 @@ Task(
 ---
 
 **Reference Version**: 0.3.0
-**Parent Skill**: s3-guardian
+**Parent Skill**: cobuilder-guardian

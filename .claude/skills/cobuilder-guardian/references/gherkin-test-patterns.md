@@ -8,7 +8,7 @@ grade: authoritative
 
 # Gherkin Test Patterns for Blind Validation
 
-Syntax, conventions, and calibration guides for writing Gherkin-style acceptance tests used in the S3 Guardian pattern.
+Syntax, conventions, and calibration guides for writing Gherkin-style acceptance tests used in the CoBuilder Guardian pattern.
 
 ---
 
@@ -66,7 +66,7 @@ Feature: {Feature Name}
 
 ### Weight Assignment Process
 
-1. **List all features** from the PRD
+1. **List all features** from the Business Spec (BS)
 2. **Rank by business impact**: "If this feature is completely missing, how badly does the initiative fail?"
 3. **Assign initial weights** based on ranking:
    - Top feature: 0.25-0.35
@@ -87,7 +87,7 @@ Feature: {Feature Name}
 
 ### Example Weight Distribution
 
-For a data pipeline PRD with 5 features:
+For a data pipeline Business Spec (BS) with 5 features:
 
 ```yaml
 features:
@@ -185,7 +185,7 @@ The `manifest.yaml` file defines metadata, features, and thresholds for an accep
 prd_id: "PRD-{ID}"
 prd_title: "{PRD Title}"
 created_at: "{ISO 8601 timestamp}"
-created_by: "s3-guardian"
+created_by: "cobuilder-guardian"
 impl_repo: "/absolute/path/to/implementation/repo"
 
 # Scoring thresholds (configurable per initiative)
@@ -286,7 +286,7 @@ claude-harness-setup/                    # Config repo (guardian lives here)
 │       └── dashboard_scenarios.feature
 ├── .claude/
 │   └── skills/
-│       └── s3-guardian/                 # This skill
+│       └── cobuilder-guardian/          # This skill
 └── ...
 ```
 
@@ -304,7 +304,7 @@ This example is based on a real Prefect pipeline validation session.
 prd_id: "PRD-PREFECT-001"
 prd_title: "Prefect Pipeline Integration"
 created_at: "2026-02-19T10:00:00+11:00"
-created_by: "s3-guardian"
+created_by: "cobuilder-guardian"
 impl_repo: "/Users/theb/Documents/Windsurf/zenagent3/zenagent/agencheck"
 
 thresholds:
@@ -550,29 +550,29 @@ Feature: Observability
 ---
 
 **Reference Version**: 0.1.0
-**Parent Skill**: s3-guardian
+**Parent Skill**: cobuilder-guardian
 
 ---
 
 ## Guardian Phase 1: Acceptance Test Creation Workflow
 
-> Extracted from s3-guardian SKILL.md — full Phase 1 procedure for generating blind acceptance tests from Solution Design documents.
+> Extracted from cobuilder-guardian SKILL.md — full Phase 1 procedure for generating blind acceptance tests from Technical Spec documents.
 
-Generate blind acceptance tests from **Solution Design (SD) documents** before any implementation begins.
-The SD is the correct input because it contains:
+Generate blind acceptance tests from **Technical Spec (TS) documents** before any implementation begins.
+The TS is the correct input because it contains:
 - **Business Context section** — the goals and success metrics the tests should validate
 - **Section 6: Acceptance Criteria per Feature** — Gherkin-ready criteria for each feature
 
-The PRD (business artifact) provides the broader context, but the SD contains the structured,
+The Business Spec (BS) provides the broader context, but the TS contains the structured,
 feature-level acceptance criteria that `acceptance-test-writer` needs to generate meaningful tests.
 
 This phase uses `acceptance-test-writer` in two modes: `--mode=guardian` for per-epic Gherkin scenarios,
 and `--mode=journey` for cross-layer business journey scenarios.
 
 **Document lookup**:
-- SD files are in the implementation repo at: `.taskmaster/docs/SD-{CATEGORY}-{NUMBER}-{epic-slug}.md`
-- PRD files are at: `.taskmaster/docs/PRD-{CATEGORY}-{DESCRIPTOR}.md`
-- Both live in `.taskmaster/docs/` — SDs can be read directly from the impl repo path
+- TS files are in the implementation repo at: `.taskmaster/docs/SD-{CATEGORY}-{NUMBER}-{epic-slug}.md`
+- BS files are at: `.taskmaster/docs/PRD-{CATEGORY}-{DESCRIPTOR}.md`
+- Both live in `.taskmaster/docs/` — TSs can be read directly from the impl repo path
 
 ### Step 1: Generate Per-Epic Gherkin Tests (Guardian Mode)
 
@@ -580,7 +580,7 @@ Invoke the acceptance-test-writer skill in guardian mode. This generates the per
 scenarios with confidence scoring guides that will be used for Phase 4 validation.
 
 ```python
-# Source the SD document — it has the structured acceptance criteria
+# Source the TS document — it has the structured acceptance criteria
 # The --prd flag identifies the parent PRD for test organisation
 Skill("acceptance-test-writer", args="--source=/path/to/impl-repo/.taskmaster/docs/SD-{ID}.md --prd=PRD-{ID} --mode=guardian")
 ```
@@ -595,21 +595,21 @@ This creates:
 - `acceptance-tests/PRD-{ID}/scenarios.feature` — Gherkin scenarios with confidence scoring guides
 
 **Verify the output:**
-- [ ] All SD features (Section 4: Functional Decomposition) represented with weights summing to 1.0
+- [ ] All TS features (Section 4: Functional Decomposition) represented with weights summing to 1.0
 - [ ] Each scenario has a confidence scoring guide (0.0 / 0.5 / 1.0 anchors)
-- [ ] Evidence references are specific (file names, function names, test names from SD File Scope)
+- [ ] Evidence references are specific (file names, function names, test names from TS File Scope)
 - [ ] Red flags section present for each scenario
 - [ ] manifest.yaml has valid thresholds (default: accept=0.60, investigate=0.40)
 - [ ] **Every feature has `validation_method`** — one of: `browser-required`, `api-required`, `code-analysis`, `doc-review`, `e2e-test`, `hybrid`. This is enforced by validator.py Rule 16; pipelines will fail validation without it.
 
-If the acceptance-test-writer cannot find a Goals section in the SD, use the SD's Business Context
-section (Section 1) or derive objectives from the parent PRD's Goals (Section 2).
+If the acceptance-test-writer cannot find a Goals section in the TS, use the TS's Business Context
+section (Section 1) or derive objectives from the parent BS's Goals (Section 2).
 
 ### Step 2: Generate Journey Tests (Journey Mode)
 
-After generating per-epic Gherkin, generate blind journey tests from the **PRD** — not the SD.
+After generating per-epic Gherkin, generate blind journey tests from the **Business Spec (BS)** — not the TS.
 Journey tests are cross-epic: they verify end-to-end business flows that span multiple epics and
-cannot be validated by any single SD. The PRD's Goals and User Stories sections define these flows.
+cannot be validated by any single TS. The BS's Goals and User Stories sections define these flows.
 
 ```python
 # Source the PRD — journey tests must capture cross-epic business outcomes
@@ -621,7 +621,7 @@ This creates `acceptance-tests/PRD-{ID}/journeys/` in the config repo (where met
 Journey tests are generated BEFORE the meta-orchestrator is spawned — they stay blind throughout.
 
 **Verify the output:**
-- [ ] At least one `J{N}.feature` file exists per PRD business objective (Goals section / Section 2)
+- [ ] At least one `J{N}.feature` file exists per BS business objective (Goals section / Section 2)
 - [ ] Scenarios cross epic boundaries — a journey that stays within one epic is a mis-scoped scenario
 - [ ] `runner_config.yaml` is present with sensible service URLs
 - [ ] Each scenario crosses at least 2 system layers and ends with a business outcome assertion
@@ -631,9 +631,9 @@ Journey tests are generated BEFORE the meta-orchestrator is spawned — they sta
 repo (claude-harness-setup), never in the implementation repo. Meta-orchestrators and their workers never see
 the rubric or the journeys. This enables truly independent validation.
 
-### Step 3: Generate Executable Browser Test Scripts (MANDATORY for UX PRDs)
+### Step 3: Generate Executable Browser Test Scripts (MANDATORY for UX Business Specs)
 
-**Trigger condition**: If the manifest.yaml contains ANY feature with `validation_method: browser-required`, this step is MANDATORY. Skip for PRDs with only `code-analysis` and `api-required` features.
+**Trigger condition**: If the manifest.yaml contains ANY feature with `validation_method: browser-required`, this step is MANDATORY. Skip for BSs with only `code-analysis` and `api-required` features.
 
 The Gherkin scenarios from Step 1 are scoring rubrics — they guide confidence scoring but are not directly executable. This step generates companion executable test scripts that can be run by a tdd-test-engineer agent against a live frontend using claude-in-chrome MCP tools.
 

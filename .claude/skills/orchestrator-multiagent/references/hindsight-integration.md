@@ -10,7 +10,7 @@ grade: authoritative
 
 The orchestrator uses Hindsight as extended memory to learn from experience and avoid repeating mistakes.
 
-**Architecture Context**: For Hindsight's role in System 3's memory-driven philosophy and dual-bank architecture, see `system3-meta-orchestrator.md` → "Dual-Bank Startup Protocol" section.
+**Architecture Context**: For Hindsight's role in CoBuilder's memory-driven philosophy and dual-bank architecture, see `cobuilder-guardian.md` → "Dual-Bank Startup Protocol" section.
 
 ## Core Principle
 

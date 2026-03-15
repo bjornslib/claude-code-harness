@@ -64,7 +64,7 @@ implement_feature [label="Implement Feature"
                  llm=sonnet
                  file_path="src/main.py"
                  folder_path="src/"
-                 prompt="Implement the core feature as specified in the SD"]
+                 prompt="Implement the core feature as specified in the TS"]
 ```
 
 **Purpose**: Code generation and implementation tasks
@@ -88,7 +88,7 @@ research_api [label="Research API"
 **Worker Type**: Haiku (cost-effective)
 **LLM Required**: Yes
 
-### `refine` - SD Rewriting with Findings
+### `refine` - TS Rewriting with Findings
 
 ```dot
 refine_sd [label="Refine Solution Design"
@@ -101,7 +101,7 @@ refine_sd [label="Refine Solution Design"
           prompt="Update SD with research findings"]
 ```
 
-**Purpose**: Rewrite Solution Design with research findings
+**Purpose**: Rewrite Technical Spec (TS) with research findings
 **Worker Type**: Sonnet (for quality refinement)
 **LLM Required**: Yes
 
@@ -332,4 +332,4 @@ attempt_retry -> success_handler [label="success"]
 ---
 
 **Reference Version**: 1.0.0
-**Parent Skill**: s3-guardian
+**Parent Skill**: cobuilder-guardian

@@ -63,7 +63,7 @@ Thresholds are configurable per initiative in `manifest.yaml`. Adjust based on:
 | Initiative criticality | Prototype, exploration | Production, customer-facing |
 | Time pressure | Tight deadline, MVP | No deadline pressure |
 | Iteration plan | Will have follow-up sessions | This is the final session |
-| Scope complexity | Small, well-defined PRD | Large, ambiguous PRD |
+| Scope complexity | Small, well-defined BS | Large, ambiguous BS |
 
 **Example**: A prototype pipeline might use `accept: 0.50` while a production auth system might use `accept: 0.75`.
 
@@ -337,8 +337,8 @@ mcp__hindsight__retain(
     ### Scoring Calibration Notes
     - {any adjustments to scoring guides for future use}
     """,
-    context="s3-guardian-validations",
-    bank_id="system3-orchestrator"
+    context="cobuilder-validations",
+    bank_id="cobuilder-guardian"
 )
 ```
 
@@ -370,11 +370,11 @@ mcp__hindsight__retain(
 
 ### Feature Not Attempted
 
-If a feature shows zero evidence of implementation (score 0.0), it receives its full weight as a penalty. A PRD with one critical feature (weight 0.30) completely missing will score at most 0.70.
+If a feature shows zero evidence of implementation (score 0.0), it receives its full weight as a penalty. A Business Spec (BS) with one critical feature (weight 0.30) completely missing will score at most 0.70.
 
 ### Feature Over-Implemented
 
-If a feature exceeds PRD requirements, score it at 1.0 (the maximum). Do not award bonus points. The purpose of validation is to verify PRD compliance, not to reward over-engineering.
+If a feature exceeds BS requirements, score it at 1.0 (the maximum). Do not award bonus points. The purpose of validation is to verify BS compliance, not to reward over-engineering.
 
 ### Ambiguous Evidence
 
@@ -384,9 +384,9 @@ If evidence is unclear — the implementation exists but its correctness is unce
 2. Note the ambiguity in the rationale
 3. If the ambiguity affects the overall decision (score is near a threshold), attempt to resolve it by running the code or tests
 
-### Operator Claims Not In PRD
+### Operator Claims Not In BS
 
-If the operator implemented features not in the PRD, ignore them for scoring purposes. They do not increase or decrease the score. Note them in the validation report as "out of scope additions" for the oversight team's awareness.
+If the operator implemented features not in the Business Spec (BS), ignore them for scoring purposes. They do not increase or decrease the score. Note them in the validation report as "out of scope additions" for the oversight team's awareness.
 
 ### Tests Exist But Fail
 
@@ -488,7 +488,7 @@ Every gap identified during Phase 4 scoring must be classified as **closable** o
 
 | Classification | Definition | Action |
 |---|---|---|
-| **Closable** | Gap is in-scope (PRD Section 8), fixable without architectural/UX decisions, and low-risk | Create fix-it codergen node, re-dispatch pipeline |
+| **Closable** | Gap is in-scope (BS Section 8), fixable without architectural/UX decisions, and low-risk | Create fix-it codergen node, re-dispatch pipeline |
 | **Not Closable** | Gap requires user decision, is out-of-scope, or poses high risk | Escalate to wait.human with evidence |
 
 **Reference**: See [gap-decision-tree.md](gap-decision-tree.md) for detailed visual flowchart and decision logic.
@@ -593,21 +593,21 @@ fix_gap_1 [
 - `label` — human-readable gap description
 - `handler="codergen"` — always use codergen for fix-it nodes
 - `worker_type` — route to appropriate specialist (see gap-decision-tree.md)
-- `sd_path` — minimal solution design document for the gap
+- `sd_path` — minimal Technical Spec (TS) document for the gap
 - `acceptance` — how to verify the gap is closed
 - `priority` — P0 for regressions, P1 for high-severity closures, P2 for low-risk
 - `status="pending"` — runner will dispatch when it reaches this node
 
-#### Step 4: Create Minimal Solution Design Documents
+#### Step 4: Create Minimal Technical Spec (TS) Documents
 
-Each fix-it node needs a Solution Design that constrains the scope. Document:
+Each fix-it node needs a Technical Spec (TS) that constrains the scope. Document:
 - **Gap Title** — exact title from gap list
 - **In-scope Changes** — specific files and lines to modify
 - **Acceptance Criteria** — how to verify closure
 - **Risk Assessment** — why this is safe to close autonomously
 - **Related Gaps** — cascade detection (if fixing G1 might create new gaps)
 
-Example minimal SD:
+Example minimal TS:
 
 ```markdown
 # Fix: Missing validation on email field
@@ -799,7 +799,7 @@ Cascade depth: {iteration_count}
 
 ## Guardian Phase 4: Independent Validation (Full Reference)
 
-> Extracted from s3-guardian SKILL.md — complete validation procedure including evidence gathering, DOT pipeline integration, regression detection, scoring method construction, evidence gates, journey tests, verdict delivery, and results storage.
+> Extracted from cobuilder-guardian SKILL.md — complete validation procedure including evidence gathering, DOT pipeline integration, regression detection, scoring method construction, evidence gates, journey tests, verdict delivery, and results storage.
 
 ### Phase 4: Independent Validation
 
@@ -833,7 +833,7 @@ cd /path/to/impl-repo && pytest --tb=short 2>&1 | tail -20
 
 #### DOT Pipeline Integration
 
-When the initiative uses a `.dot` attractor pipeline, Phase 4 validation is node-driven. Each hexagon node in the pipeline graph represents a single validation gate. The guardian reads node attributes directly rather than inferring scope from PRD text.
+When the initiative uses a `.dot` attractor pipeline, Phase 4 validation is node-driven. Each hexagon node in the pipeline graph represents a single validation gate. The guardian reads node attributes directly rather than inferring scope from BS text.
 
 ##### Reading Validation Scope from Hexagon Nodes
 
@@ -1027,7 +1027,7 @@ Only when all autonomously-fixable gaps are closed does System 3 transition the 
 
 For each gap identified in Phase 4:
 
-1. **Is gap in PRD scope?** (Reference PRD Section 8 epics)
+1. **Is gap in BS scope?** (Reference BS Section 8 epics)
    - NO → Note as informational, do not escalate
    - YES → Continue to step 2
 
@@ -1052,7 +1052,7 @@ When System 3 decides to close a gap autonomously:
 1. **Create the fix-it node in DOT** (e.g., `fix_gap_1`)
    - Handler: `codergen`
    - Worker type: Determined by gap (backend-solutions-engineer, frontend-dev-expert, or tdd-test-engineer)
-   - SD path: Minimal Solution Design (3-4 paragraphs, specific fix only)
+   - TS path: Minimal Technical Spec (TS) (3-4 paragraphs, specific fix only)
    - Acceptance: "Gherkin scenario X passes; no regressions introduced"
    - Epic ID: FIX-X1 (temporary, for tracking)
    - Bead ID: Real bead ID created via `bd create`
@@ -1093,7 +1093,7 @@ Escalate a gap to `wait.human` if any of these apply:
 |--------|---------|
 | Requires architectural redesign | API contract needs to return different field structure |
 | Requires UX/design decision | Button should be different color or form layout should change |
-| Outside PRD scope | Code doesn't follow company style guide; not a PRD requirement |
+| Outside BS scope | Code doesn't follow company style guide; not a BS requirement |
 | Requires user clarification | "Is feature X supposed to work with legacy API Y?" |
 | Would introduce cascading risk | Fixing this requires removing dependency X that other code depends on |
 | Iteration limit exceeded | 3 cascading fix-it nodes and gaps still appearing |
@@ -1241,11 +1241,11 @@ cs-promise --meet <id> --ac-id AC-4.5 \
 ### Step 5a: Validation Method-Specific Prompt Construction
 
 Before dispatching scoring agents for each feature, provide the scoring agent with both:
-- The **Gherkin scenario** (blind rubric from Phase 1, generated from the SD)
-- The **SD document** for this epic (`solution_design` attribute on the DOT node, or from
+- The **Gherkin scenario** (blind rubric from Phase 1, generated from the TS)
+- The **TS document** for this epic (`solution_design` attribute on the DOT node, or from
   `.taskmaster/docs/SD-{CATEGORY}-{NUMBER}-{epic-slug}.md`)
 
-The SD contains the file scope, API contracts, and per-feature acceptance criteria that tell
+The TS contains the file scope, API contracts, and per-feature acceptance criteria that tell
 the scoring agent exactly what "done" looks like. Without it, agents score on gut feel rather
 than specification.
 
@@ -1326,8 +1326,8 @@ This gate ensures that even if a scoring agent ignores the prompt prepend, its s
 
 After computing the per-feature weighted score, execute the journey tests in `journeys/`.
 
-Journey tests were generated from the **PRD** (`PRD-{ID}.md`) — they verify cross-epic business
-flows that no single orchestrator owns. The runner should be given the PRD for context so it can
+Journey tests were generated from the **Business Spec (BS)** (`PRD-{ID}.md`) — they verify cross-epic business
+flows that no single orchestrator owns. The runner should be given the BS for context so it can
 understand *why* each step exists, not just whether it passes.
 
 **Execution approach** — spawn a tdd-test-engineer sub-agent:
@@ -1416,8 +1416,8 @@ mcp__hindsight__retain(
     ### Gaps Found: {gaps}
     ### Lessons: {lessons}
     """,
-    context="s3-guardian-validations",
-    bank_id="system3-orchestrator"
+    context="cobuilder-validations",
+    bank_id="cobuilder-guardian"
 )
 
 # Store to project bank (shared, for team awareness)
@@ -1431,4 +1431,4 @@ mcp__hindsight__retain(
 ---
 
 **Reference Version**: 0.1.0
-**Parent Skill**: s3-guardian
+**Parent Skill**: cobuilder-guardian

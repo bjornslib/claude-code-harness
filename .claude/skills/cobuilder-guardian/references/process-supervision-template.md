@@ -41,7 +41,7 @@ validation = mcp__hindsight__reflect(
     GENERALIZABILITY: What contexts does this apply to?
     """,
     budget="high",  # Deep reasoning for validation
-    bank_id="system3-orchestrator"
+    bank_id="cobuilder-guardian"
 )
 
 # Parse and decide
@@ -49,15 +49,15 @@ if "VALID" in validation and confidence > 0.7:
     # Store as validated pattern
     mcp__hindsight__retain(
         content=format_pattern(pattern, validation),
-        context="system3-patterns",
-        bank_id="system3-orchestrator"
+        context="cobuilder-patterns",
+        bank_id="cobuilder-guardian"
     )
 else:
     # Store as anti-pattern with failure analysis
     mcp__hindsight__retain(
         content=format_anti_pattern(pattern, validation),
-        context="system3-anti-patterns",
-        bank_id="system3-orchestrator"
+        context="cobuilder-anti-patterns",
+        bank_id="cobuilder-guardian"
     )
 ```
 
