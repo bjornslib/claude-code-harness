@@ -1,344 +1,328 @@
-# CoBuilder Harness Setup
+# CoBuilder
 
-A coding harness for multi-agent AI autonomous coding. This repository provides the CoBuilder pipeline engine, skills, hooks, and orchestration tools for building sophisticated AI-powered development workflows.
+**Define your process. Let AI build, test, and validate.**
 
-## Getting Started
+CoBuilder is a pipeline execution engine for Claude Code that turns product requirements into working software through autonomous multi-agent workflows. You define the process as a graph, CoBuilder runs it — dispatching research agents, coding agents, and validation agents, each with carefully scoped context and tools.
+
+```
+You (ideate, architect, refine)
+ │
+ ▼
+CoBuilder Pipeline (pure Python, $0 graph traversal)
+ │
+ ├─→ Research agents    validate framework patterns before coding
+ ├─→ Coding agents      implement features with scoped context
+ ├─→ Validation agents  independently verify the work
+ └─→ Guardian           runs blind acceptance tests you never showed the builders
+```
+
+The pipeline runner has zero LLM intelligence. It reads a DOT graph, dispatches workers via Claude's AgentSDK, watches for signal files, and transitions node states mechanically. All the smarts are in the agents it spawns — and in the process you design.
+
+## Why CoBuilder?
+
+Traditional AI coding assistants work one prompt at a time. CoBuilder gives you:
+
+- **Process enforcement** — Define a pipeline (research → refine → build → validate) and the runner follows it programmatically. No skipping steps.
+- **Context isolation** — Each agent knows just enough about its surroundings. A coding agent gets the technical spec for its epic, not the entire codebase. A validation agent gets acceptance criteria, not implementation details.
+- **Independent verification** — A process separate from all other agents independently verifies if the build output meets the original goals. Acceptance tests are written *before* implementation and stored where builders can't see them.
+- **Any process you want** — The DOT graph format lets you define whatever workflow your team needs. Sequential, parallel fan-out, human approval gates, recursive sub-pipelines.
+- **Near-zero orchestration cost** — The pipeline runner is pure Python. Only agent dispatches cost tokens. Research nodes run on Haiku (~$0.02 each). You can route any node to DashScope models (GLM-5, Qwen3) at near-zero cost.
+
+## Quick Start
 
 ### Prerequisites
 
 - Python 3.11+
-- Node.js 18+ (for MCP servers)
-- Git
-- Anthropic API key
+- Claude Code CLI with AgentSDK (`pip install claude-code-sdk`)
+- An Anthropic API key (or DashScope key for cost-effective execution)
 
-### Quick Setup
+### Installation
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/faie-group/claude-harness-setup.git
-   cd claude-harness-setup
-   ```
-
-2. **Install Python dependencies**
-   ```bash
-   pip install -e ".[dev]"
-   ```
-
-3. **Configure environment variables**
-   ```bash
-   cp .mcp.json.example .mcp.json
-   # Edit .mcp.json and add your API keys
-   ```
-
-4. **Configure CoBuilder engine credentials**
-   ```bash
-   cp cobuilder/engine/.env.example cobuilder/engine/.env
-   # Edit .env with your LLM provider credentials (DashScope or Anthropic)
-   ```
-
-5. **Run tests to verify setup**
-   ```bash
-   pytest tests/ -v
-   ```
-
-### MCP Server Setup
-
-This harness uses several MCP (Model Context Protocol) servers:
-
-| Server | Purpose | Required Env Var |
-|--------|---------|------------------|
-| `sequential-thinking` | Multi-step reasoning | None |
-| `context7` | Framework documentation | None |
-| `perplexity` | Web research | `PERPLEXITY_API_KEY` |
-| `brave-search` | Web search | `BRAVE_API_KEY` |
-| `serena` | IDE assistant patterns | None |
-| `hindsight` | Long-term memory | None (local HTTP) |
-| `logfire-mcp` | Observability queries | `LOGFIRE_READ_TOKEN` |
-
-### External Dependencies
-
-The harness relies on several external tools. Install them before first use:
-
-#### Required (Core Pipeline Functionality)
-
-| Dependency | Install Command | Purpose |
-|-----------|----------------|---------|
-| Claude Code SDK | `pip install claude-code-sdk` | AgentSDK worker dispatch (pipeline_runner.py uses this) |
-| Pydantic Logfire | `pip install logfire` | Pipeline observability — span tracing for all worker dispatches |
-| Logfire MCP | `uvx logfire-mcp@latest` | Query Logfire traces from Claude Code sessions |
-
-#### Required MCP Servers (configured in `.mcp.json`)
-
-| Server | Install | Required Key | Purpose |
-|--------|---------|-------------|---------|
-| Context7 | `npx -y @upstash/context7-mcp@latest` | None | Framework documentation lookup (used by research nodes) |
-| Hindsight | Local HTTP server on `localhost:8888` | None | Long-term institutional memory across sessions |
-| Serena | `uvx --from git+https://github.com/oraios/serena serena-mcp-server` | None | Semantic code navigation (find_symbol, references) |
-| Perplexity | `npx -y @perplexity-ai/mcp-server` | `PERPLEXITY_API_KEY` | Web research for research nodes |
-| Brave Search | `npx -y @modelcontextprotocol/server-brave-search` | `BRAVE_API_KEY` | Web search fallback |
-| Sequential Thinking | `npx -y @modelcontextprotocol/server-sequential-thinking` | None | Multi-step reasoning chains |
-| Task Master | `npx -y --package=task-master-ai task-master-ai` | None | Task decomposition and tracking |
-| Beads | `uv run` (from beads-mcp directory) | None | Git-backed issue tracking |
-
-#### Optional
-
-| Dependency | Install | Purpose |
-|-----------|---------|---------|
-| Stitch MCP | `npx -y stitch-mcp` | Cross-service integration |
-| Google Chat Bridge | Custom MCP server in `mcp-servers/google-chat-bridge/` | GChat notifications for AskUserQuestion |
-
-> **Note**: MCP servers are configured in `.mcp.json`. Copy from `.mcp.json.example` and add your API keys.
-
-## Architecture
-
-### 3-Level Agent Hierarchy
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│  LEVEL 1: META-ORCHESTRATOR (System 3)                              │
-│  Role: Strategic planning, OKR tracking, business validation        │
-│  Launch: ccsystem3                                                  │
-├─────────────────────────────────────────────────────────────────────┤
-│  LEVEL 2: PIPELINE ENGINE (Python, $0 cost)                         │
-│  Role: DOT graph traversal, worker dispatch, signal monitoring      │
-│  Launch: python3 cobuilder/engine/pipeline_runner.py --dot-file ... │
-├─────────────────────────────────────────────────────────────────────┤
-│  LEVEL 3: WORKERS (AgentSDK dispatch)                               │
-│  Types: research, refine, codergen, validation-test-agent           │
-│  Role: Implementation, testing, focused execution                   │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-**Key Principle**: Higher levels coordinate; lower levels implement. The pipeline engine has zero LLM intelligence — it only parses DOT graphs, dispatches AgentSDK workers, and applies mechanical signal transitions.
-
-### CoBuilder Pipeline Engine
-
-The primary capability of this harness. Pipelines are defined as DOT graphs and executed by a pure Python state machine that dispatches LLM workers via AgentSDK.
-
-**Execute a pipeline:**
 ```bash
-python3 cobuilder/engine/pipeline_runner.py --dot-file .pipelines/pipelines/my-pipeline.dot
+git clone https://github.com/bjornslib/claude-code-harness.git
+cd claude-code-harness
+
+# Install the CoBuilder package
+pip install -e ".[dev]"
+
+# Configure LLM credentials
+cp cobuilder/engine/.env.example cobuilder/engine/.env
+# Edit .env with your API keys
 ```
 
-**Resume from checkpoint after interruption:**
-```bash
-python3 cobuilder/engine/pipeline_runner.py --dot-file .pipelines/pipelines/my-pipeline.dot --resume
-```
+### Run Your First Pipeline
 
-**Instantiate a pipeline from a template:**
+1. **Start with a template** — CoBuilder ships with reusable pipeline topologies:
+
 ```bash
 python3 cobuilder/templates/instantiator.py sequential-validated \
   --param initiative_id=my-feature \
-  --param epic_count=3
+  --param epic_count=3 \
+  --output .pipelines/pipelines/my-feature.dot
 ```
 
-#### Pipeline Workflow
+2. **Edit the DOT file** — Add your prompts, spec paths, and worker types to each node.
 
-A typical pipeline follows the research → refine → codergen → validate pattern:
+3. **Run it:**
+
+```bash
+python3 cobuilder/engine/pipeline_runner.py --dot-file .pipelines/pipelines/my-feature.dot
+```
+
+4. **Resume after interruption:**
+
+```bash
+python3 cobuilder/engine/pipeline_runner.py --dot-file .pipelines/pipelines/my-feature.dot --resume
+```
+
+The runner dispatches agents, watches for their signal files, auto-dispatches validation agents at completion, and transitions the pipeline forward. You can monitor progress with:
+
+```bash
+python3 cobuilder/engine/cli.py status .pipelines/pipelines/my-feature.dot
+```
+
+## How It Works
+
+### The Pipeline
+
+A CoBuilder pipeline is a DOT graph where each node is an agent task:
 
 ```dot
-digraph my_initiative {
-    graph [target_dir="/path/to/project" worktree_id="my-initiative"];
+digraph my_feature {
+    graph [target_dir="/path/to/project"];
 
     research_e1 [
-        shape=tab
-        handler="research"
-        label="Research: Current framework patterns"
+        shape=tab  handler="research"
+        label="Research: Validate API patterns"
         llm_profile="anthropic-fast"
-        status="pending"
-    ];
-
-    refine_e1 [
-        shape=tab
-        handler="refine"
-        label="Refine: Update Technical Spec"
-        llm_profile="anthropic-smart"
-        status="pending"
     ];
 
     codergen_e1 [
-        shape=box
-        handler="codergen"
-        label="Implement: Backend auth"
+        shape=box  handler="codergen"
+        label="Implement: User authentication"
         llm_profile="anthropic-smart"
-        ts_path="docs/specs/my-feature/TS-MY-FEATURE-E1.md"
         worker_type="backend-solutions-engineer"
-        status="pending"
+        ts_path="docs/specs/auth-TS-E1.md"
     ];
 
     validate_e1 [
-        shape=hexagon
-        handler="wait.cobuilder"
+        shape=hexagon  handler="wait.cobuilder"
         label="Validate: E1"
-        status="pending"
     ];
 
-    research_e1 -> refine_e1 -> codergen_e1 -> validate_e1;
+    research_e1 -> codergen_e1 -> validate_e1;
 }
 ```
 
-#### Signal-Based Worker Communication
+**Node types** define what each agent does:
 
-Workers and validation agents communicate with the runner exclusively via signal files in `.pipelines/signals/`. The runner never calls LLMs for graph traversal — it reads signal results and applies transitions mechanically:
+| Shape | Handler | What It Does |
+|-------|---------|-------------|
+| `tab` | `research` | Validates framework patterns via Context7/Perplexity, updates the technical spec |
+| `note` | `refine` | Rewrites the spec with research findings as first-class content |
+| `box` | `codergen` | Implements features — the coding agent, dispatched with scoped context |
+| `hexagon` | `wait.cobuilder` | Validation gate — auto-dispatches an independent validation agent |
+| `octagon` | `wait.human` | Human approval gate — pauses pipeline until you respond |
+| `house` | `manager_loop` | Recursive sub-pipeline — spawns a child pipeline runner |
 
-| Signal Result | Transition Applied |
-|--------------|-------------------|
-| `success` | `active` → `impl_complete` |
-| `pass` | `impl_complete` → `validated` |
-| `fail` | any → `failed` |
-| `requeue` | predecessor back to `pending` |
+### The Status Chain
 
-#### Status Chain
+Every node progresses through a deterministic status chain:
 
 ```
 pending → active → impl_complete → validated → accepted
                  \→ failed
 ```
 
-### Template System
+The runner applies transitions mechanically based on signal files. No LLM reasoning involved in graph traversal.
 
-Reusable pipeline topologies defined as Jinja2 templates. Templates provide structural patterns; initiative-specific content (prompts, spec paths) is authored per-initiative after instantiation.
+### Signal-Based Communication
 
-**Available templates** (in `.cobuilder/templates/`):
+Agents communicate with the runner exclusively via JSON signal files:
 
-| Template | Description | Use When |
-|----------|-------------|----------|
-| `sequential-validated` | Linear pipeline with research→refine→codergen chains | Standard feature development |
-| `hub-spoke` | Central coordinator with N parallel spoke workers | Parallel implementation work |
-| `cobuilder-lifecycle` | Full lifecycle pipeline (research → design → implement → validate) | Strategic oversight and self-driving cycle |
+```json
+// Worker completion
+{"status": "success", "files_changed": ["src/auth.py"], "message": "Implemented JWT validation"}
 
-**Instantiate a template:**
-```bash
-python3 cobuilder/templates/instantiator.py cobuilder-lifecycle \
-  --param initiative_id=my-initiative \
-  --output .pipelines/pipelines/my-initiative.dot
+// Validation result
+{"result": "pass", "reason": "All 12 acceptance criteria met"}
+
+// Requeue (send work back for revision)
+{"result": "requeue", "requeue_target": "codergen_e1", "reason": "Missing error handling for expired tokens"}
 ```
 
-Each template ships with a `manifest.yaml` defining parameters, constraints (topology, path, loop bounds, nesting depth), and default LLM profiles per handler type.
+Signal files use atomic writes (temp file → rename) to prevent corruption if a process crashes mid-write.
 
 ### Per-Node LLM Configuration
 
-DOT nodes reference named profiles from `cobuilder/engine/providers.yaml`. Mix providers and models within a single pipeline:
-
-```yaml
-# providers.yaml — available LLM profiles
-default_profile: alibaba-glm5
-
-profiles:
-  anthropic-fast:
-    model: claude-haiku-4-5-20251001
-    api_key: $ANTHROPIC_API_KEY
-    base_url: https://api.anthropic.com
-
-  anthropic-smart:
-    model: claude-sonnet-4-5-20250514
-    api_key: $ANTHROPIC_API_KEY
-    base_url: https://api.anthropic.com
-
-  anthropic-opus:
-    model: claude-opus-4-6
-    api_key: $ANTHROPIC_API_KEY
-    base_url: https://api.anthropic.com
-
-  alibaba-glm5:
-    model: glm-5
-    api_key: $DASHSCOPE_API_KEY
-    base_url: https://coding-intl.dashscope.aliyuncs.com/apps/anthropic
-
-  alibaba-qwen3:
-    model: qwen3-coder-plus
-    api_key: $DASHSCOPE_API_KEY
-    base_url: https://coding-intl.dashscope.aliyuncs.com/apps/anthropic
-```
+Mix models and providers within a single pipeline via `cobuilder/engine/providers.yaml`:
 
 | Profile | Model | Cost | Best For |
 |---------|-------|------|----------|
-| `alibaba-glm5` | GLM-5 | ~$0 | Default for all nodes; near-zero cost via DashScope |
+| `alibaba-glm5` | GLM-5 | ~$0 | Default; near-zero cost via DashScope |
 | `alibaba-qwen3` | Qwen3-coder-plus | ~$0 | Alternative DashScope model |
-| `anthropic-fast` | Haiku 4.5 | $ | Research, summarization, lightweight tasks |
+| `anthropic-fast` | Haiku 4.5 | $ | Research, summarization |
 | `anthropic-smart` | Sonnet 4.5 | $$ | Implementation, code generation |
-| `anthropic-opus` | Opus 4.6 | $$$ | Complex reasoning, architecture decisions |
+| `anthropic-opus` | Opus 4.6 | $$$ | Complex reasoning, architecture |
 
-Profile resolution order (first non-null wins): node attr → handler defaults → manifest defaults → env vars → runner defaults.
+Each node specifies `llm_profile="..."` to control which model runs it. Research on Haiku, implementation on Sonnet, validation on Haiku — optimise cost per task.
 
-### Directory Structure
+## Pipeline Templates
+
+Reusable topologies in `.cobuilder/templates/`:
+
+| Template | Pattern | Use When |
+|----------|---------|----------|
+| `sequential-validated` | Linear: research → refine → build → validate per epic | Standard feature development |
+| `hub-spoke` | Fan-out: central coordinator dispatches N parallel workers | Parallel implementation across epics |
+| `cobuilder-lifecycle` | Full cycle: research → design → human gate → build → validate → close | End-to-end initiative management |
+
+Templates are Jinja2 DOT files with parametrised variables. Each ships with a `manifest.yaml` defining parameters, constraints, and default LLM profiles.
+
+```bash
+# Instantiate a lifecycle pipeline
+python3 cobuilder/templates/instantiator.py cobuilder-lifecycle \
+  --param initiative_id=auth-v2 \
+  --param business_spec_path=docs/specs/auth-v2.md \
+  --output .pipelines/pipelines/auth-v2.dot
+```
+
+## The 3-Layer Architecture
 
 ```
-.claude/
-├── CLAUDE.md                     # Configuration directory documentation
-├── settings.json                 # Core settings (hooks, permissions)
-├── output-styles/                # Automatically loaded agent behaviors
-├── skills/                       # Explicitly invoked agent skills
+┌──────────────────────────────────────────────────────────┐
+│  LAYER 0: GUARDIAN (Your Terminal)                        │
+│  Strategic planning, blind acceptance tests, final verdict│
+│  Skill: cobuilder-guardian                                │
+├──────────────────────────────────────────────────────────┤
+│  LAYER 1: PIPELINE RUNNER (Python, $0)                    │
+│  DOT parsing, AgentSDK dispatch, signal monitoring        │
+│  Entry: pipeline_runner.py --dot-file <path>              │
+├──────────────────────────────────────────────────────────┤
+│  LAYER 2: WORKERS (AgentSDK)                              │
+│  research · refine · codergen · validation                │
+│  Each = isolated claude_code_sdk.query() call             │
+└──────────────────────────────────────────────────────────┘
+```
+
+**Layer 0 (Guardian)** is the strategic layer. It writes acceptance tests before implementation begins, creates the pipeline, launches the runner, and after all nodes complete, runs blind Gherkin E2E tests against a rubric the builders never saw.
+
+**Layer 1 (Runner)** is the mechanical layer. Pure Python, zero LLM cost. It parses the DOT graph, dispatches AgentSDK workers, monitors signal files via watchdog, and transitions node states. It also auto-dispatches validation agents when coding nodes complete.
+
+**Layer 2 (Workers)** are the execution layer. Each worker is a standalone `claude_code_sdk.query()` call with handler-specific tools and scoped context. Workers never validate their own work — that's always a separate peer agent.
+
+## The Claude Code Harness
+
+CoBuilder is part of a broader Claude Code configuration framework. The harness provides:
+
+### Skills (20+)
+
+Explicitly invoked capabilities that give agents specialised knowledge:
+
+| Category | Skills |
+|----------|--------|
+| Orchestration | `cobuilder-guardian`, `orchestrator-multiagent`, `completion-promise` |
+| Research | `research-first`, `explore-first-navigation` |
+| Validation | `acceptance-test-writer`, `acceptance-test-runner`, `codebase-quality` |
+| Frontend | `frontend-design`, `design-to-code`, `react-best-practices` |
+| Infrastructure | `railway-*` (10 skills for Railway deployment) |
+| MCP Wrappers | `mcp-skills/*` (GitHub, Playwright, shadcn, Logfire, etc.) |
+
+### Output Styles
+
+Automatically loaded behaviour definitions that shape how agents operate:
+
+- **`cobuilder-guardian`** — Layer 0: strategic planning, blind validation, sceptical curiosity
+- **`orchestrator`** — Layer 2 coordinator: investigation allowed, implementation delegated
+
+### Hooks
+
+Lifecycle automation that enforces process compliance:
+
+| Hook | When | What |
+|------|------|------|
+| Session Start | Claude boots | Detect agent role, load MCP skills |
+| User Prompt | Before each prompt | Remind orchestrators of delegation rules |
+| Stop Gate | Before session ends | Validate completion promises, check open work |
+| Pre-Compact | Before context compression | Flush memory to Hindsight |
+| Notification | On alerts | Forward to webhooks (GChat, etc.) |
+
+### MCP Integration
+
+Progressive disclosure wrappers for 9+ MCP servers — Context7 (framework docs), Perplexity (web research), Serena (semantic code navigation), Hindsight (institutional memory), and more. Wrappers reduce context usage by 90%+ compared to native MCP loading.
+
+## Deploying to a Project
+
+The harness is designed to be symlinked or copied into your application repositories:
+
+```bash
+# Symlink approach (all projects share one harness)
+ln -s ~/claude-code-harness/.claude /path/to/your-project/.claude
+ln -s ~/claude-code-harness/.mcp.json /path/to/your-project/.mcp.json
+
+# Or use the deploy script
+python3 .claude/skills/setup-harness/deploy-harness.sh /path/to/your-project
+```
+
+Update once in the harness → all projects get the update automatically.
+
+## Directory Structure
+
+```
+cobuilder/                        # Pipeline execution engine
+├── engine/                       # Core: runner, handlers, dispatch, signals
+│   ├── pipeline_runner.py        # Main state machine ($0 graph traversal)
+│   ├── handlers/                 # Node handlers (codergen, research, refine, wait.*, etc.)
+│   ├── providers.py + .yaml      # LLM profile resolution
+│   ├── signal_protocol.py        # Atomic JSON signal I/O
+│   ├── checkpoint.py             # Pipeline state persistence
+│   └── cli.py                    # CLI: status, validate, transition, dashboard
+├── templates/                    # Template instantiation (Jinja2)
+└── repomap/                      # Codebase intelligence for context injection
+
+.claude/                          # Claude Code configuration
+├── output-styles/                # Auto-loaded agent behaviours
+├── skills/                       # 20+ invocable capabilities
 ├── hooks/                        # Lifecycle event handlers
 ├── scripts/                      # CLI utilities
-├── commands/                     # Slash commands
-└── documentation/                # Architecture decisions and guides
+└── settings.json                 # Core configuration
 
-cobuilder/
-├── engine/                       # Pipeline runner, handlers, state machine
-│   ├── pipeline_runner.py        # Main entry point (zero LLM cost)
-│   ├── handlers/                 # research, refine, codergen, wait.*, close
-│   ├── state_machine.py          # Node state transitions
-│   ├── middleware/               # ConstraintMiddleware, event bus
-│   ├── providers.py              # LLM profile resolution (5-layer)
-│   └── signal_protocol.py        # Signal file I/O
-├── templates/                    # Template instantiator + constraints
-└── worktrees/                    # WorktreeManager (idempotent lifecycle)
-
-.cobuilder/
-└── templates/                    # Jinja2 pipeline templates
-    ├── sequential-validated/
-    ├── hub-spoke/
-    └── cobuilder-lifecycle/
-
+.cobuilder/templates/             # Pipeline template library (Jinja2 DOT)
 .pipelines/                       # Runtime state (gitignored)
-├── pipelines/                    # Active DOT pipeline files
-├── signals/                      # Worker signal files
-└── checkpoints/                  # Pipeline state snapshots
 ```
-
-## Key Features
-
-- **3-level agent hierarchy** — Meta-Orchestrator (LLM) → Pipeline Engine (Python, $0) → Workers (AgentSDK)
-- **Pipeline-as-code via DOT graph definitions** — topology, handler types, constraints, and LLM profiles all declared in one file
-- **4 worker handler types** — `research`, `refine`, `codergen`, `validation` (dispatched as AgentSDK agents)
-- **DashScope/Alibaba Cloud integration** — cost-effective pipeline execution via `qwen3-coder-plus` and compatible models
-- **Signal-based worker communication** — workers write JSON signal files; runner applies transitions mechanically without LLM reasoning
-- **Automatic validation gates** — `wait.cobuilder` nodes trigger validation-test-agent dispatch automatically
-- **Human review gates** — `wait.human` nodes emit GChat notifications and wait for manual signal file response
-- **Pipeline templates** — Jinja2 parametrization for reusable topologies with constraint enforcement
-- **Per-node LLM profiles** — mix Haiku (research) and Sonnet (codergen) within one pipeline via `cobuilder/engine/providers.yaml`
-- **Logfire observability** — full span tracing with service naming (`worker_dispatch_start`, `worker_first_message`, `worker_tool`)
-- **Blind acceptance testing** — Gherkin rubrics stored outside implementation repo for unbiased E2E validation
-- **Completion promise tracking** — verifiable session goals with acceptance criteria
-- **Hindsight memory** — long-term institutional memory across sessions via local HTTP server
-- **Git worktree isolation** — `WorktreeManager.get_or_create()` for idempotent parallel development
-- **Doc-gardener linting** — automated documentation quality enforcement with frontmatter and cross-link validation
 
 ## Testing
 
-### Run All Tests
 ```bash
+# Run all tests
 pytest tests/ -v
-```
 
-### Run with Coverage
-```bash
+# Run with coverage
 pytest tests/ -v --cov=cobuilder --cov-report=term-missing
+
+# Run hook tests
+pytest .claude/tests/hooks/ -v
 ```
 
-### Coverage Requirements
-- Minimum coverage: **90%**
-- CI enforces this on all PRs
+## Validated In Production
+
+CoBuilder has been validated through real feature delivery:
+
+| Initiative | Nodes | Files Changed | Cost | Duration |
+|-----------|-------|---------------|------|----------|
+| Zustand store rewrite | 22 | 12 files, +764 lines | $9.00 | ~20 min |
+| PydanticAI web search agent | 5 | 3 files | ~$0.10 | ~2 min |
+| CoBuilder self-upgrade (E0-E7) | 40+ | 190 files | ~$15 | ~4 hours |
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for:
-- Architecture overview
-- Setup steps
-- Testing guidelines
-- Code style requirements
-- Template creation
+Contributions welcome. See [ARCHITECTURE.md](ARCHITECTURE.md) for the full technical reference.
+
+Key areas where help is needed:
+- Pipeline templates for common workflows
+- Handler implementations for new node types
+- Test coverage improvement (target: 50%+)
+- Documentation and examples
 
 ## License
 
