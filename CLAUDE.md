@@ -524,11 +524,11 @@ When reasoning includes "test" or "testing", STOP and ask: "Am I writing NEW tes
 
 ## Documentation Standards
 
-All markdown files in `.claude/` must follow these standards, enforced by the **doc-gardener** linter (`scripts/doc-gardener/lint.py`).
+All markdown files in `.claude/` and `docs/` must follow documentation standards, enforced by the **doc-gardener** linter (`scripts/doc-gardener/lint.py`). The linter supports **target-specific schemas** — `.claude/` and `docs/` have different required fields and valid types, controlled via config files.
 
 ### Documentation Directory Map
 
-Files in these directories are **linted and require frontmatter**:
+**`.claude/` directories** (linted, require frontmatter):
 
 | Directory | Purpose | Default Grade |
 |-----------|---------|---------------|
@@ -538,7 +538,21 @@ Files in these directories are **linted and require frontmatter**:
 | `documentation/` | Architecture docs, ADRs, guides | `reference` |
 | `commands/` | Slash command definitions | `reference` |
 
-Files in these directories are **skipped** (runtime state, not documentation):
+**`docs/` directories** (linted, require extended frontmatter):
+
+| Directory | Purpose | Default Grade |
+|-----------|---------|---------------|
+| `prds/` | Product Requirement Documents | `authoritative` |
+| `sds/` | Solution Design documents | `authoritative` |
+| `solution-designs/` | Solution Design documents (alternate) | `authoritative` |
+| `research/` | Research documents and spikes | `reference` |
+| `references/` | Reference material | `reference` |
+| `guides/` | How-to guides | `reference` |
+| `tests/` | Test documentation | `reference` |
+| `specs/` | Technical specifications | `reference` |
+| `design-references/` | Design reference material | `reference` |
+
+**Skipped directories** (runtime state, not documentation):
 
 | Directory | Purpose |
 |-----------|---------|
@@ -553,23 +567,40 @@ Also skipped: `documentation/gardening-report.md` (auto-generated).
 
 ### Frontmatter Requirements
 
-Every `.md` file in a linted directory must have YAML frontmatter:
+Frontmatter requirements differ by target directory:
+
+**`.claude/` files** (minimal schema):
 
 ```yaml
 ---
-title: "Human-Readable Title"           # REQUIRED - string
+title: "Human-Readable Title"           # REQUIRED
 status: active                          # REQUIRED - active | draft | archived | deprecated
 type: skill                             # Recommended - skill | agent | output-style | hook | command | guide | architecture | reference | config
-last_verified: 2026-02-19              # Recommended - YYYY-MM-DD format
+last_verified: 2026-02-19              # Recommended - YYYY-MM-DD
 grade: authoritative                    # Recommended - authoritative | reference | archive | draft
 ---
 ```
 
-**Required fields**: `title`, `status`. Missing frontmatter is auto-fixable (the gardener generates it from filename and context).
+**`docs/` files** (extended schema):
+
+```yaml
+---
+title: "Human-Readable Title"           # REQUIRED
+description: "One-line purpose summary"  # REQUIRED - non-empty, max 200 chars
+version: "1.0.0"                        # REQUIRED - semver N.N.N
+last-updated: 2026-03-15               # REQUIRED - YYYY-MM-DD
+status: active                          # REQUIRED - active | draft | archived | deprecated
+type: prd                               # REQUIRED - prd | sd | epic | specification | research | guide | reference | architecture
+grade: authoritative                    # Recommended
+prd_id: PRD-XXX-NNN                    # CONDITIONAL - required for PRDs
+---
+```
+
+Missing frontmatter is auto-fixable — the gardener generates it from filename, directory, git history, and content.
 
 ### Lint Check Categories
 
-The doc-gardener checks 5 categories:
+The doc-gardener checks 7 categories:
 
 | Category | What It Checks | Severity | Auto-fixable |
 |----------|---------------|----------|-------------|
@@ -578,14 +609,46 @@ The doc-gardener checks 5 categories:
 | **naming** | Directory and file naming conventions (see below) | warning | No |
 | **staleness** | `last_verified` > 90 days → `warning`; > 60 days (authoritative only) → `info` | warning/info | Yes (downgrades grade) |
 | **grades-sync** | Frontmatter `grade` matches `quality-grades.json` defaults | info | Yes (updates frontmatter) |
+| **implementation-status** | PRD/SD/Epic/Spec docs must have `## Implementation Status` section | warning | Yes (appends template) |
+| **misplaced-document** | PRD/SD/Epic/Spec content outside `docs/` is flagged | warning | No (manual move) |
+
+### Implementation Status Check
+
+**Applies to**: Files where frontmatter `type` is `prd`, `sd`, `epic`, or `specification`, OR filename matches `PRD-*`, `SD-*`. Files with `status: draft` are exempt.
+
+**Required**: An `## Implementation Status` heading (H2) with a status table:
+
+```markdown
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| E1: Foundation | Done | 2026-03-15 | abc1234 |
+| E2: Validation | In Progress | - | - |
+```
+
+Auto-fix appends a template section with "Remaining" status.
+
+### Misplaced Document Detection
+
+Any `.md` file outside `docs/` whose filename or content indicates PRD/SD/Epic/Specification content is flagged. Detection checks:
+1. Filename pattern: `PRD-*.md`, `SD-*.md`
+2. Frontmatter: `type: prd|sd|epic|specification` or `prd_id:`/`prd_ref:` fields
+3. Headings: H1/H2 containing `PRD-` or `SD-` identifiers
+
+**Excluded paths** (allowed to contain such content):
+- `.claude/skills/`, `.claude/output-styles/`, `.claude/commands/`, `.claude/evidence/`, `.claude/narrative/`
+- `acceptance-tests/`, `node_modules/`, `.git/`, `.pipelines/`, `.cobuilder/`
 
 ### Naming Conventions
 
 | Item | Convention | Pattern | Examples |
 |------|-----------|---------|----------|
 | Directories | `kebab-case` | `^[a-z0-9]+(-[a-z0-9]+)*$` | `orchestrator-multiagent/`, `doc-gardener/` |
+| | Doc-ID prefixed dirs | `^(SD\|PRD\|...)-[A-Za-z0-9][-A-Za-z0-9.]*$` | `SD-DOC-GARDENER-002/` |
 | Top-level docs | `UPPER-CASE.md` | Exact match set | `CLAUDE.md`, `SKILL.md`, `README.md`, `INDEX.md`, `CHANGELOG.md` |
 | Regular files | `kebab-case.md` | `^[a-z0-9]+(-[a-z0-9]+)*\.md$` | `decision-time-guidance.md` |
+| Doc-ID files | `PREFIX-name.md` | `^(SD\|PRD\|TS\|EPIC\|...)-*.md$` | `PRD-DOC-GARDENER-002.md`, `SD-EXAMPLE-001.md` |
 | ADR/spec prefixes | `ADR-NNN-kebab.md` | Mixed case prefix | `ADR-001-output-style-reliability.md` |
 | Version-prefixed | `vN.N-kebab.md` | Version prefix | `v3.9-migration-guide.md` |
 | Private files | `_underscore.md` | Leading underscore | `_internal-notes.md` |
@@ -600,7 +663,7 @@ The doc-gardener checks 5 categories:
 
 ### Cross-Link Integrity
 
-All relative markdown links (`[text](path)`) in `.claude/` must resolve to existing files. The linter:
+All relative markdown links (`[text](path)`) must resolve to existing files. The linter:
 - Strips code blocks and inline code before scanning
 - Resolves paths relative to the file containing the link
 - Reports unresolvable links as errors (not auto-fixable)
@@ -618,20 +681,33 @@ Documents are graded by reliability and maintenance commitment:
 
 Default grades per directory are defined in `scripts/doc-gardener/quality-grades.json`.
 
+### Config Files
+
+| File | Scope | Purpose |
+|------|-------|---------|
+| `.claude/scripts/doc-gardener/docs-gardener.config.json` | Both `.claude/` and `docs/` | Primary config with target-specific required fields, docs types, implementation status rules, misplaced document exclusions |
+| `.claude/scripts/doc-gardener/quality-grades.json` | Both | Default grades per directory |
+
 ### Doc-Gardener Commands
 
 ```bash
-# Report violations (dry-run, no changes)
-python3 .claude/scripts/doc-gardener/gardener.py --report
+# Lint .claude/ only (default target)
+python3 .claude/scripts/doc-gardener/lint.py
 
-# Apply auto-fixes and generate report
+# Lint docs/ with extended schema
+python3 .claude/scripts/doc-gardener/lint.py --target docs/ --config .claude/scripts/doc-gardener/docs-gardener.config.json
+
+# Lint both .claude/ and docs/ (uses config targets)
+python3 .claude/scripts/doc-gardener/lint.py --config .claude/scripts/doc-gardener/docs-gardener.config.json
+
+# Auto-fix and generate report
 python3 .claude/scripts/doc-gardener/gardener.py --execute
+
+# Auto-fix docs/ specifically
+python3 .claude/scripts/doc-gardener/gardener.py --target docs/ --config .claude/scripts/doc-gardener/docs-gardener.config.json --execute
 
 # Machine-readable output
 python3 .claude/scripts/doc-gardener/lint.py --json
-
-# Lint only (exit code 0=clean, 1=violations)
-python3 .claude/scripts/doc-gardener/lint.py
 
 # Bypass on push (emergency only)
 DOC_GARDENER_SKIP=1 git push
