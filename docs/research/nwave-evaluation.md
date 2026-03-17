@@ -419,35 +419,74 @@ Start with **Approach A** (prompt injection) — it's zero infrastructure cost a
 
 ## Deep Dive: Hook-Based Worker Enforcement
 
-### How nWave's DES Hooks Work
+### How nWave's DES Hooks Actually Work (From Source)
 
-nWave registers three Claude Code hooks that form a enforcement cage around the DELIVER wave:
+nWave registers **8 hooks** across 5 lifecycle events in `hooks.json`:
 
-| Hook Type | Matcher | Purpose |
-|-----------|---------|---------|
-| `PreToolUse` | `Edit\|Write\|Bash` | Blocks source code writes unless a DES task is active and in the correct TDD phase |
-| `SubagentStop` | `*` | Validates that the returning subagent completed all 5 TDD phases before allowing return |
-| `PostToolUse` | `Edit\|Write` | Logs written files for audit trail, validates template sections |
+| Hook Type | Matcher | Handler | Purpose |
+|-----------|---------|---------|---------|
+| `PreToolUse` | `Agent` | `pre-task` | Validates DES markers before any subagent dispatch |
+| `PreToolUse` | `Write` | `pre-write` | Blocks source writes unless DES subagent is active |
+| `PreToolUse` | `Edit` | `pre-edit` | Same as Write guard |
+| `PreToolUse` | `Bash` | inline shell | Blocks direct `execution-log.json` manipulation |
+| `PostToolUse` | `Agent` | `post-tool-use` | Injects failure notifications if subagent failed |
+| `SubagentStop` | `*` | `subagent-stop` | **Blocks exit** if TDD phases incomplete |
+| `SessionStart` | `startup` | `session-start` | Housekeeping + update check |
+| `SubagentStart` | `*` | `subagent-start` | DES task registration |
 
-The enforcement state is tracked via "DES step files" — JSON files that record:
+All hooks route through `claude_code_hook_adapter.py` which dispatches to handler modules.
 
-```json
-{
-  "step_id": "01-01",
-  "phase": "GREEN",
-  "agent": "software-crafter",
-  "started_at": "2026-03-17T10:00:00Z",
-  "turns": 12,
-  "files_modified": ["src/auth.py", "tests/test_auth.py"],
-  "phases_completed": ["PREPARE", "RED_ACCEPTANCE", "RED_UNIT"]
-}
+#### Two Sentinel Files Control Everything
+
+The entire enforcement system relies on just **two signal files**:
+
+| File | Path | Meaning |
+|------|------|---------|
+| `DES_DELIVER_SESSION_FILE` | `.nwave/des/deliver-session.json` | A DELIVER session is active |
+| `DES_TASK_ACTIVE_FILE` | `.nwave/des/des-task-active` | A DES-monitored subagent is running |
+
+#### SessionGuardPolicy (Write/Edit Blocking Logic)
+
+```python
+PROTECTED_PATTERNS = ["src/", "tests/"]
+ALLOWED_PATTERNS  = ["docs/feature/", ".nwave/", ".develop-progress"]
+
+if not session_active:              → allow (no session, no restriction)
+if path in ALLOWED_PATTERNS:        → allow (orchestration artifacts)
+if path NOT in PROTECTED_PATTERNS:  → allow (unprotected file)
+if des_task_active:                 → allow (subagent is doing it correctly)
+else:                               → BLOCK — "Source/test files must be written
+                                      by a DES-monitored software-crafter subagent,
+                                      not directly by the orchestrator."
 ```
 
-The PreToolUse hook reads this step file, checks the current phase, and:
-- **Blocks** source writes if phase is `RED_ACCEPTANCE` or `RED_UNIT` (only test files allowed)
-- **Blocks** test writes if phase is `GREEN` (only source files allowed)
-- **Blocks** all writes if no DES task is active (prevents rogue edits)
-- **Approves** with audit logging if write matches expected phase
+**In plain English**: During DELIVER, the orchestrator cannot write to `src/` or `tests/` — only DES-monitored subagents can. This enforces the orchestrator/worker boundary at the hook level, not just via prompt instructions.
+
+#### SubagentStop Validation (The Killer Pattern)
+
+This is the most powerful enforcement: **prevents the subagent from exiting** unless all TDD phases are complete.
+
+On subagent exit, `SubagentStopService` checks:
+1. `execution-log.json` exists and project_id matches
+2. All 5 phases (PREPARE, RED_ACCEPTANCE, RED_UNIT, GREEN, COMMIT) are EXECUTED or SKIPPED
+3. A git commit with `Step-ID: {step_id}` trailer exists
+4. Log integrity (timestamps are plausible, not fabricated)
+5. If incomplete: **blocks exit** with instructions to fix → second-attempt escape hatch via `stop_hook_active` flag to avoid infinite loops
+
+#### Fail-Open vs Fail-Closed Asymmetry
+
+| Hook | On Exception | Rationale |
+|------|-------------|-----------|
+| Pre-Task (Agent dispatch) | **Fail-closed** (block) | Prevent unchecked work |
+| Pre-Write/Edit | **Fail-open** (allow) | Don't break the agent mid-task |
+| SubagentStop | **Fail-closed** (block) | Don't let incomplete work escape |
+
+#### StaleExecutionDetector
+
+Scans step files for phases stuck in `IN_PROGRESS`:
+- **Timeout**: 30 minutes → phase is stale
+- **Stall**: 20 minutes with zero turn-count advancement → agent likely crashed
+- Reports `StaleExecution` objects for the orchestrator to handle
 
 ### What We Can Borrow for CoBuilder Workers
 
@@ -485,15 +524,54 @@ DISCIPLINE_MODES = {
 
 **Phase tracking**: The worker writes phase markers to a state file (`.claude/state/worker-phase.json`). The hook validates writes against the current phase.
 
+#### The SubagentStop Pattern — Adapting for CoBuilder
+
+nWave's SubagentStop hook is their most effective enforcement mechanism. We can adapt this for our `Stop` hook (which we already have as `unified-stop-gate.sh`).
+
+**Design: TDD Completion Gate in Stop Hook**
+
+When `WORKER_DISCIPLINE_MODE=tdd` is set, the stop gate additionally checks:
+
+```python
+# In unified_stop_gate, add a TDD completion checker
+def check_tdd_completion():
+    """Block stop if worker hasn't completed required TDD phases."""
+    if os.environ.get("WORKER_DISCIPLINE_MODE") != "tdd":
+        return None  # Not enforced
+
+    phase_file = Path(".claude/state/worker-phase.json")
+    if not phase_file.exists():
+        return "BLOCK: No TDD phase tracking found. Complete your phases."
+
+    state = json.loads(phase_file.read_text())
+    required = {"prepare", "red", "green", "commit"}
+    completed = set(state.get("phases_completed", []))
+    missing = required - completed
+
+    if missing:
+        # Second attempt escape (like nWave's stop_hook_active)
+        if state.get("stop_attempts", 0) >= 2:
+            return None  # Allow exit to prevent infinite loop
+        state["stop_attempts"] = state.get("stop_attempts", 0) + 1
+        phase_file.write_text(json.dumps(state))
+        return f"BLOCK: TDD phases incomplete. Missing: {', '.join(missing)}"
+
+    return None
+```
+
+This is a lower-complexity version of nWave's SubagentStop — using our existing stop gate infrastructure.
+
 #### How This Differs from nWave's Approach
 
 | Aspect | nWave DES | CoBuilder Worker Discipline |
 |--------|-----------|----------------------------|
 | **Scope** | Always active during DELIVER | Opt-in per worker dispatch |
-| **Phase tracking** | Mandatory 5-phase with audit | Optional, worker self-reports |
-| **Blocking** | Hard block (returns error) | Configurable: block or warn |
+| **Phase tracking** | Mandatory 5-phase with audit log | Optional, worker self-reports |
+| **Blocking** | Hard block via SubagentStop | Stop gate block (existing infra) |
+| **Sentinel files** | 2 files (`deliver-session.json`, `des-task-active`) | 1 file (`worker-phase.json`) |
+| **Fail behavior** | Fail-closed for tasks, fail-open for writes | Configurable per hook |
+| **Escape hatch** | `stop_hook_active` flag (2nd attempt) | `stop_attempts` counter (same idea) |
 | **Integration** | Plugin hooks | Harness hooks (same mechanism) |
-| **State file** | DES step file (complex) | Simple phase JSON |
 
 #### Practical Concern: Hook Overhead
 
@@ -501,10 +579,12 @@ Every `Edit`/`Write` call would invoke the hook script. At ~10ms per invocation,
 
 **Recommendation**: Start with **prompt-based TDD enforcement** in the `tdd-test-engineer` agent definition. Only add hook-based enforcement if workers consistently ignore TDD discipline despite prompt instructions. The prompt approach is zero-overhead and leverages the LLM's compliance tendency.
 
-#### What's Worth Implementing Now
+#### What's Worth Implementing Now (Revised Priority)
 
-1. **Scope enforcement** (`WORKER_FILE_SCOPE`) — prevents workers from modifying files outside their assigned scope. This is the highest-value guard.
-2. **Orchestrator write protection** — we already enforce this via output-style instructions, but a `PreToolUse` hook would make it foolproof.
+1. **Scope enforcement** (`WORKER_FILE_SCOPE`) — prevents workers from modifying files outside their assigned scope. Highest-value guard.
+2. **Orchestrator write protection** — we enforce this via output-style instructions, but nWave shows a `PreToolUse` hook makes it foolproof. Their two-sentinel-file approach is elegant and simple.
+3. **Stop gate TDD checker** — adapted from nWave's SubagentStop. Low complexity since it plugs into our existing `unified-stop-gate.sh`.
+4. **Fail-open/fail-closed asymmetry** — adopt nWave's pattern: fail-closed for task dispatch validation, fail-open for write hooks. Currently our hooks don't distinguish.
 
 ---
 
