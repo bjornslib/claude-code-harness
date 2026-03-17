@@ -24,6 +24,25 @@ parameters:
     type: boolean
     default: true
     description: "Whether to append an E2E test node after the join gate"
+  rigor:
+    type: string
+    required: false
+    default: "standard"
+    description: >
+      TDD rigor level controlling worker stop gate enforcement depth.
+      lean: No anti-pattern enforcement (speed over rigor).
+      standard: Critical anti-patterns block (AP-001, AP-004), others warn.
+      thorough: Most anti-patterns enforced, all TDD phases required.
+      exhaustive: All anti-patterns blocking, strict phase ordering.
+    enum: [lean, standard, thorough, exhaustive]
+  stop_gate_profile:
+    type: string
+    required: false
+    default: "worker-stop-gate"
+    description: >
+      LLM provider profile (from providers.yaml) used by the worker stop gate
+      to judge worker behavior at exit time. Use 'worker-stop-gate-cheap' for
+      near-zero cost, 'worker-stop-gate' for Haiku, or any custom profile.
 
 constraints:
   codergen_transitions:

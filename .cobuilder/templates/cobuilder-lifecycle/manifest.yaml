@@ -51,6 +51,19 @@ parameters:
     required: false
     default: "opus"
     description: "Model for planning node"
+  rigor:
+    type: string
+    required: false
+    default: "thorough"
+    description: >
+      TDD rigor level for child pipeline workers. Lifecycle pipelines default
+      to 'thorough' since they represent full initiative execution.
+    enum: [lean, standard, thorough, exhaustive]
+  stop_gate_profile:
+    type: string
+    required: false
+    default: "worker-stop-gate"
+    description: "LLM provider profile for the worker stop gate judge"
 
 defaults:
   llm_profile: "anthropic-fast"

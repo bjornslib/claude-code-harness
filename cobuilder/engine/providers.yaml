@@ -53,6 +53,23 @@ profiles:
     api_key: $DASHSCOPE_API_KEY
     base_url: https://coding-intl.dashscope.aliyuncs.com/apps/anthropic
 
+  # Worker stop gate — LLM judge for worker exit validation.
+  # Used by the worker-stop-gate.py hook to validate worker behavior
+  # before allowing session exit. Referenced via stop_gate_profile in
+  # pipeline graph attributes or template manifests.
+  worker-stop-gate:
+    model: claude-haiku-4-5-20251001
+    api_key: $ANTHROPIC_API_KEY
+    base_url: https://api.anthropic.com
+    max_tokens: 2048
+
+  # Worker stop gate (cheap) — near-zero cost alternative for lean rigor
+  worker-stop-gate-cheap:
+    model: glm-5
+    api_key: $DASHSCOPE_API_KEY
+    base_url: https://coding-intl.dashscope.aliyuncs.com/apps/anthropic
+    max_tokens: 2048
+
   # OpenRouter example — any provider speaking Anthropic API protocol works
   # Uncomment and configure your OPENROUTER_API_KEY to use
   #

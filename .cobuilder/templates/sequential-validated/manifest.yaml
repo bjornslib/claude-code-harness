@@ -23,6 +23,20 @@ parameters:
     type: boolean
     default: false
     description: "Whether to prepend a research node before implementation"
+  rigor:
+    type: string
+    required: false
+    default: "standard"
+    description: >
+      TDD rigor level controlling worker stop gate enforcement depth.
+      lean: No anti-pattern enforcement. standard: Critical anti-patterns block.
+      thorough: Most enforced. exhaustive: All blocking.
+    enum: [lean, standard, thorough, exhaustive]
+  stop_gate_profile:
+    type: string
+    required: false
+    default: "worker-stop-gate"
+    description: "LLM provider profile for the worker stop gate judge"
 
 constraints:
   codergen_transitions:

@@ -14,6 +14,8 @@ digraph "cobuilder-{{ initiative_id }}" {
         _template_version="1.0"
         target_dir="{{ target_dir }}"
         default_max_retry="{{ max_cycles * 7 + 10 }}"
+        rigor="{{ rigor | default('thorough') }}"
+        stop_gate_profile="{{ stop_gate_profile | default('worker-stop-gate') }}"
     ];
 
     node [fontname="Helvetica" fontsize=11];

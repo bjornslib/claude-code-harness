@@ -63,6 +63,15 @@
             "timeout": 120
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $CLAUDE_PROJECT_DIR/.claude/hooks/worker-stop-gate.py",
+            "timeout": 60
+          }
+        ]
       }
     ],
     "PreCompact": [
@@ -76,6 +85,16 @@
       }
     ],
     "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $CLAUDE_PROJECT_DIR/.claude/hooks/worker-activity-logger.py",
+            "async": true
+          }
+        ]
+      },
       {
         "matcher": "Read|Grep",
         "hooks": [

@@ -11,6 +11,8 @@ digraph "{{ prd_ref }}" {
         promise_id="{{ promise_id }}"
         _template="hub-spoke"
         _template_version="1.0"
+        rigor="{{ rigor | default('standard') }}"
+        stop_gate_profile="{{ stop_gate_profile | default('worker-stop-gate') }}"
     ];
 
     node [fontname="Helvetica" fontsize=11];
