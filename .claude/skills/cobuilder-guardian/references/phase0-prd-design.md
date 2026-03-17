@@ -482,3 +482,33 @@ cs-promise --meet <id> --ac-id AC-0 \
     --evidence "PRD written, pipeline created with N nodes, design challenge verdict: PROCEED" \
     --type manual
 ```
+
+---
+
+### Phase 0 → Phase 1 Transition (GATE G1 — MANDATORY)
+
+**Phase 0 is now complete. Before proceeding to Phase 2 (orchestrator dispatch), Phase 1 (acceptance tests) MUST run.**
+
+This is the most commonly skipped gate. Cognitive momentum from "write a PRD and SD" causes jumping directly to implementation. The user values correctness over speed.
+
+**Mandatory actions before ANY SD writing or orchestrator dispatch:**
+
+1. **Verify gate**: `python3 .claude/skills/cobuilder-guardian/scripts/verify-phase-gate.py --prd PRD-{ID} --gate G1`
+2. **If gate fails**: Run `Skill("acceptance-test-writer")` with the PRD
+3. **If gate passes**: Proceed to Phase 2
+
+**Inject phase checklist into TodoWrite** (if not already done):
+
+```
+TodoWrite([
+  {"content": "Phase 0: PRD + pipeline + design challenge", "status": "completed"},
+  {"content": "GATE G1: Acceptance tests exist", "status": "in_progress"},
+  {"content": "Phase 1: Blind Gherkin acceptance tests", "status": "pending"},
+  {"content": "Phase 2: Orchestrator/pipeline dispatch", "status": "pending"},
+  ...
+])
+```
+
+This makes the skip visible. If Phase 1 is deleted from the todo list, it's a conscious override — not a silent omission.
+
+**If the user explicitly asks to skip Phase 1**: Log the override to Hindsight with the rationale, mark the gate as "SKIPPED (user override)" in the todo list, and proceed. But never skip silently.
