@@ -1454,12 +1454,17 @@ class PipelineRunner:
 
                 if result_text:
                     log.warning("[sdk] Stream error after result: %s", err_msg)
-                elif is_cancel_scope and len(messages) > 30:
-                    # Cancel scope errors after many messages = worker completed but
-                    # anyio teardown failed crossing thread boundaries. Treat as success.
-                    log.warning("[sdk] Cancel scope error after %d msgs — treating as success (teardown issue): %s",
+                elif is_cancel_scope and len(messages) > 300:
+                    # Cancel scope errors after very many messages AND worker wrote signal = likely
+                    # anyio teardown artifact after genuine completion.
+                    _sig_path = os.path.join(self.signal_dir, f"{node_id}.json")
+                    if os.path.exists(_sig_path):
+                        log.warning("[sdk] Cancel scope error after %d msgs with signal file — treating as success (teardown issue): %s",
+                                    len(messages), err_msg)
+                        return {"status": "success", "message": f"SDK worker completed with teardown error ({len(messages)} events)"}
+                    log.warning("[sdk] Cancel scope error after %d msgs but NO signal file — treating as failed: %s",
                                 len(messages), err_msg)
-                    return {"status": "success", "message": f"SDK worker completed with teardown error ({len(messages)} events)"}
+                    return {"status": "failed", "message": f"SDK worker interrupted (CancelScope after {len(messages)} events, no signal): {err_msg[:200]}"}
                 elif messages:
                     log.warning("[sdk] Stream error after %d msgs (no result): %s", len(messages), err_msg)
                     return {"status": "failed", "message": f"SDK stream error before completion ({len(messages)} events): {err_msg[:200]}"}
@@ -1477,7 +1482,17 @@ class PipelineRunner:
                         f"Last worker text: {last_worker_text[:200]}"
                     ),
                 }
-            return {"status": "success", "message": f"SDK worker completed ({len(messages)} events)"}
+            # Check if worker wrote its own signal file
+            _sig_path = os.path.join(self.signal_dir, f"{node_id}.json")
+            if os.path.exists(_sig_path):
+                return {"status": "success", "message": f"Worker signal file exists ({len(messages)} events)"}
+            return {
+                "status": "failed",
+                "message": (
+                    f"SDK stream ended without completion signal or result ({len(messages)} events). "
+                    f"Worker may have exhausted max_turns or stopped without signaling."
+                ),
+            }
 
         if _LOGFIRE_AVAILABLE:
             logfire.info("worker_dispatch_start {node_id}",
@@ -1534,7 +1549,18 @@ class PipelineRunner:
             # Do NOT pop active_workers here — the validation agent may already
             # own this slot (inserted by _dispatch_validation_agent at line 1276).
         else:
-            self._write_node_signal(node_id, result)
+            # Only write runner signals for failures. Success signals come from the worker
+            # (via its own Write to signal_dir). This eliminates the dual-writer race where
+            # both worker and runner write success signals and the main loop processes
+            # whichever arrives first, potentially before the worker finishes.
+            if result.get("status") != "success":
+                self._write_node_signal(node_id, result)
+            else:
+                log.info(
+                    "[sdk] Worker %s reported success via SDK but runner defers signal to worker-written file. "
+                    "If worker forgot to write signal, liveness check will catch it.",
+                    node_id,
+                )
             self.active_workers.pop(node_id, None)
         self._wake_event.set()
 
