@@ -121,6 +121,7 @@ def build_system_prompt(
     signal_timeout: float,
     max_retries: int,
     target_dir: str = "",
+    max_cycles: int = 3,
 ) -> str:
     """Return the system prompt that instructs the Claude Guardian how to run the pipeline.
 
@@ -131,6 +132,7 @@ def build_system_prompt(
         signal_timeout: Seconds to wait per signal wait cycle.
         max_retries: Maximum retries allowed per node before escalation.
         target_dir: Target implementation repo directory.
+        max_cycles: Maximum full research→validate cycles before forced exit (default: 3).
 
     Returns:
         Formatted system prompt string.
@@ -426,6 +428,47 @@ python3 {scripts_dir}/merge_queue.py write_signal MERGE_FAILED --node <node_id> 
 ## Identity Scanning
 Before dispatching workers, scan for identity conflicts in the DOT graph.
 Ensure all nodes have unique identifiers and no duplicate handler assignments.
+
+## Failure Context for Retry Loops
+When a validation fails and you need to loop back to research:
+1. Write a failure summary BEFORE transitioning back:
+   ```bash
+   cat >> state/${{INITIATIVE_ID}}-failures.md << 'EOF'
+   ## Cycle N Failure Summary
+   - Node: <node_id>
+   - Reason: <why it failed>
+   - Attempted: <what was tried>
+   - Root cause: <analysis>
+   EOF
+   ```
+2. Use APPEND (`>>`) not overwrite (`>`) — each cycle adds context
+3. The RESEARCH node will read this file on its next run to focus investigation
+
+## Cycle Tracking and Bounds Enforcement
+Track the number of full research→validate cycles in a state file:
+
+Before each loop-back to RESEARCH:
+1. Read current cycle count:
+   ```bash
+   CYCLES=$(cat state/{pipeline_id}-cycle-count.txt 2>/dev/null || echo 0)
+   ```
+2. Increment:
+   ```bash
+   echo $((CYCLES + 1)) > state/{pipeline_id}-cycle-count.txt
+   ```
+3. Check against max_cycles ({max_cycles}):
+   ```bash
+   if [ $((CYCLES + 1)) -ge {max_cycles} ]; then
+       # Max cycles reached — transition to CLOSE with exhaustion reason
+       python3 {scripts_dir}/cli.py transition {dot_path} close active
+       python3 {scripts_dir}/cli.py transition {dot_path} close validated
+       echo "Max cycles ({max_cycles}) exhausted. Closing pipeline."
+       exit 0
+   fi
+   ```
+4. Only loop back if cycles remain
+
+The max_cycles value is {max_cycles} (from pipeline manifest or default).
 
 ## Important Rules
 - NEVER use Edit or Write tools — you are a coordinator, not an implementer

@@ -182,7 +182,7 @@ check_result [label="Check Result"
 **Required**: `label`, `handler`
 **Rules**: Must have exactly 2 outgoing edges with `condition="pass"` and `condition="fail"`.
 
-### `wait.cobuilder` — System 3 Validation Gate (`hexagon`)
+### `wait.cobuilder` — Guardian Validation Gate (`hexagon`)
 
 ```dot
 e2e_gate [label="E2E Validation Gate"
@@ -360,7 +360,7 @@ Every `codergen` node must have a downstream validation chain:
 codergen → wait.cobuilder → wait.human(mode="e2e-review")
 ```
 
-This ensures every implementation node goes through System 3 validation and then human review.
+This ensures every implementation node goes through Guardian validation and then human review.
 
 ### Correct Topology
 

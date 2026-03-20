@@ -8,11 +8,11 @@ grade: authoritative
 
 # Gap Closure Protocol
 
-When Phase 4 validation identifies gaps in the implementation, System 3 must autonomously decide whether to close each gap or escalate it to the wait.human stage. This protocol formalizes that decision-making process and ensures gaps are addressed systematically.
+When Phase 4 validation identifies gaps in the implementation, the Guardian must autonomously decide whether to close each gap or escalate it to the wait.human stage. This protocol formalizes that decision-making process and ensures gaps are addressed systematically.
 
 ## Core Principle
 
-**Never report to wait.human with known closable gaps.** If a gap is in-scope, fixable, and doesn't require architectural or UX decisions, System 3 creates a codergen fix-it node and closes it autonomously. Only when all fixable gaps are closed does System 3 proceed to wait.human.
+**Never report to wait.human with known closable gaps.** If a gap is in-scope, fixable, and doesn't require architectural or UX decisions, the Guardian creates a codergen fix-it node and closes it autonomously. Only when all fixable gaps are closed does the Guardian proceed to wait.human.
 
 ## Gap Analysis Decision Tree
 
@@ -90,7 +90,7 @@ Regressions **always** get autonomous fix-it nodes — no escalation. This preve
 
 ## Autonomous Fix-It Node Creation
 
-When System 3 decides to close a gap autonomously, execute this pattern:
+When the Guardian decides to close a gap autonomously, execute this pattern:
 
 ### Step 1: Create the Fix-It Node in DOT
 
@@ -514,4 +514,4 @@ Wait.Human Gate (Only after all fixable gaps closed)
     └─ User reviews final solution
 ```
 
-Only when all autonomous gaps are closed does System 3 transition the pipeline to wait.human, ensuring the user sees a complete, validated solution.
+Only when all autonomous gaps are closed does the Guardian transition the pipeline to wait.human, ensuring the user sees a complete, validated solution.

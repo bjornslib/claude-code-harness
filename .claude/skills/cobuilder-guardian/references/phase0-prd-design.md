@@ -133,7 +133,7 @@ Task(
 
 ### Step 0.2: Create DOT Pipeline (MANDATORY — Do Not Skip)
 
-> **Anti-pattern**: Skipping this step due to "cognitive momentum" from pre-CoBuilder sessions. The pipeline is REQUIRED for initiative tracking, orchestrator dispatch, and checkpoint/validation workflows. Without it, System 3 loses graph-driven execution and falls back to ad-hoc spawning.
+> **Anti-pattern**: Skipping this step due to "cognitive momentum" from pre-CoBuilder sessions. The pipeline is REQUIRED for initiative tracking, orchestrator dispatch, and checkpoint/validation workflows. Without it, the Guardian loses graph-driven execution and falls back to ad-hoc spawning.
 
 Create the task tracking and pipeline infrastructure:
 

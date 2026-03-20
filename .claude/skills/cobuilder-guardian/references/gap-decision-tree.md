@@ -185,7 +185,7 @@ Verify: Visual matches mockup (blue, white text)
 **Decision**: **CREATE FIX-IT IMMEDIATELY**
 
 **Pattern**:
-Regressions **always** get autonomous fix-it nodes. System 3 should not escalate a feature that previously worked.
+Regressions **always** get autonomous fix-it nodes. The Guardian should not escalate a feature that previously worked.
 
 **TS**:
 ```markdown
@@ -279,7 +279,7 @@ Auto-fixing could contradict user's actual design intent.
 final design direction? If yes, approve fix-it creation.
 ```
 
-**User decision**: Design team confirms, System 3 creates fix-it OR design changes, escalation closes
+**User decision**: Design team confirms, Guardian creates fix-it OR design changes, escalation closes
 
 ---
 
@@ -341,10 +341,10 @@ Defer to separate code quality initiative if needed.
 Is >8 chars enough? Need uppercase? Numbers? Symbols?
 
 **Recommended action**: Product/requirements team should define
-"strong password" criteria, then System 3 creates fix-it.
+"strong password" criteria, then the Guardian creates fix-it.
 ```
 
-**User decision**: Clarify requirement, then System 3 creates fix-it for implementation
+**User decision**: Clarify requirement, then the Guardian creates fix-it for implementation
 
 ---
 
@@ -432,7 +432,7 @@ setup, then approve approach for remaining gaps.
 
 ## Decision Flowchart for Each Gap
 
-For every gap identified in Phase 4, System 3 should follow this logic:
+For every gap identified in Phase 4, the Guardian should follow this logic:
 
 ```python
 def decide_gap_action(gap):

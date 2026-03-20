@@ -328,7 +328,7 @@ For longer monitoring intervals (120s+), consider using a blocking Task agent in
 
 ### Haiku Monitor Pattern (Pipeline Progress Monitoring)
 
-System 3 can spawn a lightweight Haiku 4.5 sub-agent to continuously monitor pipeline progress. This monitor completes (waking System 3) only when attention is needed.
+The Guardian can spawn a lightweight Haiku 4.5 sub-agent to continuously monitor pipeline progress. This monitor completes (waking the Guardian) only when attention is needed.
 
 **Spawning Template**:
 ```python
@@ -385,7 +385,7 @@ Task(
 
 **Cyclic Re-Launch Pattern**:
 ```
-System 3                    Monitor (Haiku 4.5)
+Guardian                    Monitor (Haiku 4.5)
    |                            |
    |  Launch monitor ---------->|
    |                            |<-- Poll signals + DOT (30s cycle)
@@ -401,7 +401,7 @@ System 3                    Monitor (Haiku 4.5)
    |  Run final validation      |
 ```
 
-This pattern allows System 3 to focus on other work while the lightweight monitor watches the pipeline and only interrupts when attention is needed.
+This pattern allows the Guardian to focus on other work while the lightweight monitor watches the pipeline and only interrupts when attention is needed.
 
 ---
 
@@ -653,7 +653,7 @@ tmux send-keys -t "orch-{epic}" Enter
 
 ## 8. Gate Monitor Pattern
 
-When the pipeline runner reaches a `wait.cobuilder` or `wait.human` node, it writes a `.gate-wait` marker file to the signal directory and enters its poll loop. System 3 uses a Haiku monitor sub-agent to detect these gates and act on them.
+When the pipeline runner reaches a `wait.cobuilder` or `wait.human` node, it writes a `.gate-wait` marker file to the signal directory and enters its poll loop. The Guardian uses a Haiku monitor sub-agent to detect these gates and act on them.
 
 ### Gate-Aware Monitor Prompt
 
@@ -702,9 +702,9 @@ Both `wait.cobuilder` and `wait.human` nodes write `.gate-wait` markers with thi
 
 For `wait.human` nodes, the marker also includes `"mode": "technical"`.
 
-### System 3 Response Handlers
+### Guardian Response Handlers
 
-When the monitor completes with `MONITOR_GATE_WAITING`, System 3 reads `gate_type` and acts:
+When the monitor completes with `MONITOR_GATE_WAITING`, the Guardian reads `gate_type` and acts:
 
 **wait.cobuilder — Run Blind Gherkin E2E:**
 

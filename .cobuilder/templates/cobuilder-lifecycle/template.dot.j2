@@ -40,7 +40,7 @@ digraph "cobuilder-{{ initiative_id }}" {
         handler="research"
         worker_type="researcher"
         llm="{{ model_research }}"
-        prompt="Research the problem domain for {{ initiative_id }}. Read {{ business_spec_path }}. Identify unknowns, framework constraints, and prior art. If $previous_failures is set, focus on investigating root causes of prior failures rather than domain research. Write findings to state/{{ initiative_id }}-research.json."
+        prompt="Research the problem domain for {{ initiative_id }}. Read {{ business_spec_path }}. Identify unknowns, framework constraints, and prior art. Check if state/{{ initiative_id }}-failures.md exists — if so, read it and focus on investigating root causes of prior failures rather than general domain research. Write findings to state/{{ initiative_id }}-research.json."
         initiative_id="{{ initiative_id }}"
         status="pending"
         style=filled

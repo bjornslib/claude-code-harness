@@ -267,14 +267,14 @@ Each level adds independent verification. The key constraint: each guardian stor
 | 2. Orchestrator Spawn | DOT dispatch, SDK / tmux patterns, wisdom inject | [guardian-workflow.md](references/guardian-workflow.md) |
 | 3. Monitoring | DOT polling (SDK), signal-file monitoring, progress monitoring | [monitoring-patterns.md](references/monitoring-patterns.md) |
 | 3.5 Pipeline Progress | Haiku sub-agent monitoring with stall/failure detection | [monitoring-patterns.md](references/monitoring-patterns.md) |
-| 3.6 Gate Monitoring | Detect wait.cobuilder/wait.human gates via .gate-wait markers, System 3 response handlers | [monitoring-patterns.md](references/monitoring-patterns.md) § Section 8 |
+| 3.6 Gate Monitoring | Detect wait.cobuilder/wait.human gates via .gate-wait markers, Guardian response handlers | [monitoring-patterns.md](references/monitoring-patterns.md) § Section 8 |
 | 4. Validation | Score scenarios, run executable tests, weighted total. **ACCEPT ≥ 0.70** (solid quality; auto-create fix-it beads for minor gaps); **INVESTIGATE 0.50-0.69**; **REJECT < 0.50** | [validation-scoring.md](references/validation-scoring.md) |
 | 4.5 Regression | ZeroRepo diff before journey tests | [references/validation-scoring.md](references/validation-scoring.md) |
 | 4.6 Bead Closure | 6-step workflow: create fix-it bead → link to gap → assign → dispatch codergen node → validate → close | [guardian-workflow.md § 6.5](references/guardian-workflow.md) |
 
 ### Pipeline Progress Monitor Pattern
 
-System 3 spawns a lightweight Haiku 4.5 sub-agent to monitor pipeline progress after launching a pipeline. This **blocking** monitor sub-agent completes (waking System 3) only when attention is needed or after 10 minutes maximum. The monitor runs with `run_in_background=False` to ensure System 3 waits for the results before continuing.
+The Guardian spawns a lightweight Haiku 4.5 sub-agent to monitor pipeline progress after launching a pipeline. This **blocking** monitor sub-agent completes (waking the Guardian) only when attention is needed or after 10 minutes maximum. The monitor runs with `run_in_background=False` to ensure the Guardian waits for the results before continuing.
 
 **Spawning Template**:
 ```python
@@ -305,21 +305,21 @@ Task(
 ```
 
 **Cyclic Monitoring Pattern**:
-After each monitor completes, System 3 analyzes the result and relaunches a new **blocking** monitor in a continuous cycle:
-1. System 3 launches **blocking** monitor (`run_in_background=False`) - System 3 waits for results
+After each monitor completes, the Guardian analyzes the result and relaunches a new **blocking** monitor in a continuous cycle:
+1. Guardian launches **blocking** monitor (`run_in_background=False`) - Guardian waits for results
 2. Monitor runs for up to 10 minutes max or until event occurs (whichever comes first)
-3. Monitor returns status report to System 3 and **completes**
-4. System 3 evaluates the report and decides next action
-5. System 3 relaunches a new **blocking** monitor to continue watching
+3. Monitor returns status report to the Guardian and **completes**
+4. Guardian evaluates the report and decides next action
+5. Guardian relaunches a new **blocking** monitor to continue watching
 
-This creates a continuous monitoring cycle with predictable wake-up intervals and prevents monitors from running indefinitely. Each cycle has a maximum duration of 10 minutes, ensuring System 3 remains responsive.
+This creates a continuous monitoring cycle with predictable wake-up intervals and prevents monitors from running indefinitely. Each cycle has a maximum duration of 10 minutes, ensuring the Guardian remains responsive.
 
 **Monitor Output Statuses**:
 - `MONITOR_COMPLETE`: All nodes validated → Run final E2E, close initiative
 - `MONITOR_ERROR`: Node failed → Investigate root cause, requeue or escalate
 - `MONITOR_STALL`: No progress for >threshold → Check if worker hung, restart if needed
 - `MONITOR_ANOMALY`: Unexpected state → Investigate, may need manual DOT edit
-- `MONITOR_GATE_WAITING`: A `wait.cobuilder` or `wait.human` gate is active (`.gate-wait` marker detected) → System 3 handles gate response
+- `MONITOR_GATE_WAITING`: A `wait.cobuilder` or `wait.human` gate is active (`.gate-wait` marker detected) → Guardian handles gate response
 
 **Monitoring Mechanism**:
 - **Signal directory polling**: Monitor `.pipelines/signals/` for new/modified `.json` files with status changes
