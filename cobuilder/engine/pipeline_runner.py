@@ -490,43 +490,77 @@ class PipelineRunner:
                         log.debug("[env] Set %s from attractor .env", key)
 
     def _get_cobuilder_root(self) -> str:
-        """Return cobuilder_root from graph attrs. This is the project root for SD/PRD resolution."""
+        """Return cobuilder_root from graph attrs. This is the project root for SD/PRD resolution.
+
+        cobuilder_root is a mandatory graph attribute. If not present or invalid, raises an error.
+        """
         root = self._graph_attrs.get("cobuilder_root", "")
         if root and os.path.isdir(root):
             return root
-        # Fallback: try to find git root walking up from dot_dir
-        d = os.path.abspath(self.dot_dir)
-        for _ in range(10):  # max 10 levels up
-            if os.path.isdir(os.path.join(d, ".git")):
-                return d
-            parent = os.path.dirname(d)
-            if parent == d:
-                break
-            d = parent
-        # Last resort: return dot_dir
-        return self.dot_dir
+        if not root:
+            raise ValueError(
+                "cobuilder_root is a mandatory graph attribute and is not set. "
+                "Add 'cobuilder_root=\"/path/to/project\"' to the graph attributes in the DOT file."
+            )
+        # root is set but directory doesn't exist
+        raise ValueError(
+            f"cobuilder_root graph attribute points to non-existent directory: {root}"
+        )
 
     def _get_target_dir(self) -> str:
-        """Return target directory for worker execution. Uses graph attr only — no fallback."""
+        """Return target directory for worker execution. Uses graph attr only — no fallback.
+
+        target_dir is a mandatory graph attribute. If not present or invalid, raises an error.
+        This ensures codergen and other nodes operate in the correct project directory.
+        """
         target = self._graph_attrs.get("target_dir", "")
         if target and os.path.isdir(target):
             return target
-        # No fallback — target_dir is mandatory for proper worker execution
-        log.warning("target_dir not found in graph attrs; using dot_dir as emergency fallback")
-        return self.dot_dir
+        if not target:
+            raise ValueError(
+                "target_dir is a mandatory graph attribute and is not set. "
+                "Add 'target_dir=\"/path/to/project\"' to the graph attributes in the DOT file."
+            )
+        # target is set but directory doesn't exist
+        raise ValueError(
+            f"target_dir graph attribute points to non-existent directory: {target}"
+        )
 
     def _resolve_target_dir(self, node_attrs: dict | None = None) -> str:
-        """Resolve target directory: node attr > graph attr. Never falls back silently."""
+        """Resolve target directory from node attr (if provided) or graph attr.
+
+        target_dir is a mandatory attribute. Returns the target directory without fallback.
+        Priority: node attr > graph attr (both must be valid directories if set).
+
+        Raises:
+            ValueError: If target_dir is not found or points to non-existent directory.
+        """
+        # First, check node attributes if provided
         if node_attrs:
             node_td = node_attrs.get("target_dir", "")
-            if node_td and os.path.isdir(node_td):
-                return node_td
+            if node_td:
+                if os.path.isdir(node_td):
+                    return node_td
+                # Node attr is set but invalid
+                raise ValueError(
+                    f"Node-level target_dir is set but points to non-existent directory: {node_td}"
+                )
+
+        # Fall back to graph attributes
         graph_td = self._graph_attrs.get("target_dir", "")
-        if graph_td and os.path.isdir(graph_td):
-            return graph_td
-        # Warn if falling back — this should be avoided
-        log.warning("target_dir not fully resolved; falling back to dot_dir (should not happen in production)")
-        return self.dot_dir
+        if graph_td:
+            if os.path.isdir(graph_td):
+                return graph_td
+            # Graph attr is set but invalid
+            raise ValueError(
+                f"Graph-level target_dir is set but points to non-existent directory: {graph_td}"
+            )
+
+        # Neither node nor graph attr is set
+        raise ValueError(
+            "target_dir is a mandatory attribute and could not be resolved. "
+            "Either set target_dir in the node attributes or in the graph attributes (graph [target_dir=\"...\"])."
+        )
 
     def _get_repo_root(self) -> str:
         """Find the git repo root by walking up from dot_dir. Falls back to target_dir."""
