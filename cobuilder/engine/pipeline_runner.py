@@ -394,6 +394,55 @@ def _create_path_guard(target_dir: str):  # type: ignore[no-untyped-def]
 
 
 # ---------------------------------------------------------------------------
+# Signal Stop Hook Factory
+# ---------------------------------------------------------------------------
+
+
+def _create_signal_stop_hook(signal_dir: str, node_id: str) -> dict:
+    """Create a Stop hook that blocks worker exit if signal file not written.
+
+    Workers MUST write their signal file before exiting. This hook checks for
+    the signal file at Stop time and blocks exit with a corrective message if
+    the file is missing. This prevents the silent-exit pattern where workers
+    complete without writing signals, leaving gates stuck.
+
+    Args:
+        signal_dir: Directory where signal files are written.
+        node_id: The node ID whose signal file to check.
+
+    Returns:
+        Dict suitable for ClaudeCodeOptions.hooks parameter:
+        {"Stop": [HookMatcher(hooks=[callback])]}
+    """
+    signal_path = os.path.join(signal_dir, f"{node_id}.json")
+
+    async def _check_signal(hook_input: dict, event_name: str | None, context: Any) -> Any:  # HookJSONOutput
+        """Stop hook: block exit if signal file missing."""
+        if os.path.exists(signal_path):
+            return {}  # Signal exists, allow exit
+        return {
+            "decision": "block",
+            "systemMessage": (
+                f"BLOCKED: You have not written your signal file. "
+                f"Write it NOW before exiting.\n\n"
+                f"Use: Write(file_path=\"{signal_path}\", "
+                f"content='{{\"status\": \"success\", \"files_changed\": [\"list/of/files.py\"], "
+                f"\"message\": \"brief description\"}}')\n\n"
+                f"If you encountered an error, write an error signal instead:\n"
+                f"Write(file_path=\"{signal_path}\", "
+                f"content='{{\"status\": \"error\", \"message\": \"what went wrong\", \"files_changed\": []}}')"
+            ),
+        }
+
+    try:
+        from claude_code_sdk.types import HookMatcher
+        return {"Stop": [HookMatcher(hooks=[_check_signal])]}
+    except ImportError:
+        log.warning("[hooks] claude_code_sdk.types not available — signal stop hook disabled")
+        return {}
+
+
+# ---------------------------------------------------------------------------
 # PipelineRunner
 # ---------------------------------------------------------------------------
 
@@ -1483,7 +1532,8 @@ class PipelineRunner:
                 max_turns=_max_turns,
                 cwd=effective_dir,
                 env=clean_env,
-                # can_use_tool=path_guard,  # DISABLED: requires AsyncIterable prompt — see Issue #6
+                # can_use_tool=path_guard,  # DISABLED: requires ClaudeSDKClient (bidirectional), not query()
+                hooks=_create_signal_stop_hook(self.signal_dir, node_id),
             )
             messages = []
             result_text = ""
@@ -1940,7 +1990,8 @@ class PipelineRunner:
                 cwd=effective_dir,
                 max_turns=100,
                 env=clean_env,
-                # can_use_tool=validation_path_guard,  # DISABLED: requires AsyncIterable prompt — see Issue #6
+                # can_use_tool=validation_path_guard,  # DISABLED: requires ClaudeSDKClient (bidirectional), not query()
+                hooks=_create_signal_stop_hook(self.signal_dir, node_id),
             )
             messages = []
             _first_msg_logged = False
