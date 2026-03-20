@@ -1480,95 +1480,45 @@ class PipelineRunner:
             messages = []
             result_text = ""
             _first_msg_logged = False
-            _stale_triggered = False  # Track if we broke due to stale timeout
 
-            # Stale-detection state
-            last_activity = time.time()
-            last_worker_text = ""
-
+            # Use ClaudeSDKClient (bidirectional) instead of query() (unidirectional).
+            # ClaudeSDKClient keeps the control protocol open, enabling Stop hooks
+            # to fire and block worker exit if signal file not written.
             try:
-                aiter = claude_code_sdk.query(  # type: ignore[attr-defined]
-                    prompt=prompt,
-                    options=options,
-                ).__aiter__()
-                while True:
-                    try:
-                        msg = await asyncio.wait_for(
-                            aiter.__anext__(),
-                            timeout=float(_PER_MSG_POLL_INTERVAL),
-                        )
-                    except asyncio.TimeoutError:
-                        # No message in the last polling interval — check stale condition.
-                        idle_seconds = time.time() - last_activity
-                        if (
-                            idle_seconds >= _STALE_WORKER_TIMEOUT
-                            and "signal" in last_worker_text.lower()
-                        ):
-                            # Before declaring stale, check if worker already wrote its signal
-                            _sig_path = os.path.join(self.signal_dir, f"{node_id}.json")
-                            if os.path.exists(_sig_path):
-                                log.info(
-                                    "[sdk] Stale timeout reached for %s but signal file exists — "
-                                    "letting normal signal processing handle it",
-                                    node_id,
-                                )
-                                break  # Signal file exists; exit loop normally (not stale)
-                            log.warning(
-                                "[sdk] Stale worker detected for %s: no activity for %.0fs, "
-                                "last text mentioned 'signal' — forcing incomplete",
-                                node_id, idle_seconds,
-                            )
-                            if _LOGFIRE_AVAILABLE:
-                                logfire.warning(
-                                    "stale_worker_timeout {node_id} after {idle_s}s",
-                                    node_id=node_id, idle_s=round(idle_seconds),
-                                )
-                            _stale_triggered = True
-                            break  # Exit loop — stale timeout, NOT success
-                        continue  # Not stale yet; keep waiting
-                    except StopAsyncIteration:
-                        break  # Stream ended normally
-
-                    # Message received — reset inactivity clock
-                    last_activity = time.time()
-                    messages.append(msg)
-                    msg_type = type(msg).__name__
-                    if not _first_msg_logged and _LOGFIRE_AVAILABLE:
-                        logfire.info("worker_first_message {node_id}",
-                                     node_id=node_id, worker_type=worker_type,
-                                     msg_type=msg_type)
-                        _first_msg_logged = True
-                    # Log tool use and assistant text for real-time visibility;
-                    # also capture last_worker_text for stale-detection (regardless of Logfire).
-                    if hasattr(msg, "content") and msg_type == "AssistantMessage":
-                        for block in (msg.content if isinstance(msg.content, list) else []):
-                            block_type = type(block).__name__
-                            if block_type == "ToolUseBlock":
-                                if _LOGFIRE_AVAILABLE:
-                                    logfire.info("worker_tool {node_id} {tool}",
-                                                 node_id=node_id, tool=getattr(block, "name", ""),
-                                                 input_preview=str(getattr(block, "input", ""))[:300])
-                            elif block_type == "TextBlock":
-                                text = getattr(block, "text", "")
-                                if text and len(text.strip()) > 5:
-                                    last_worker_text = text  # Track for stale detection
+                async with claude_code_sdk.ClaudeSDKClient(options=options) as client:  # type: ignore[attr-defined]
+                    await client.connect(prompt=prompt)
+                    async for msg in client.receive_messages():
+                        messages.append(msg)
+                        msg_type = type(msg).__name__
+                        if not _first_msg_logged and _LOGFIRE_AVAILABLE:
+                            logfire.info("worker_first_message {node_id}",
+                                         node_id=node_id, worker_type=worker_type,
+                                         msg_type=msg_type)
+                            _first_msg_logged = True
+                        # Log tool use and assistant text for real-time visibility
+                        if hasattr(msg, "content") and msg_type == "AssistantMessage":
+                            for block in (msg.content if isinstance(msg.content, list) else []):
+                                block_type = type(block).__name__
+                                if block_type == "ToolUseBlock":
                                     if _LOGFIRE_AVAILABLE:
+                                        logfire.info("worker_tool {node_id} {tool}",
+                                                     node_id=node_id, tool=getattr(block, "name", ""),
+                                                     input_preview=str(getattr(block, "input", ""))[:300])
+                                elif block_type == "TextBlock":
+                                    text = getattr(block, "text", "")
+                                    if text and len(text.strip()) > 5 and _LOGFIRE_AVAILABLE:
                                         logfire.info("worker_text {node_id}",
                                                      node_id=node_id, text=text[:300])
-                    # Capture result from ResultMessage
-                    if hasattr(msg, "result") and msg.result:  # type: ignore[union-attr]
-                        result_text = str(msg.result)[:500]
+                        # Capture result from ResultMessage
+                        if hasattr(msg, "result") and msg.result:  # type: ignore[union-attr]
+                            result_text = str(msg.result)[:500]
             except Exception as stream_exc:  # noqa: BLE001
-                # SDK may raise on unknown message types (e.g. rate_limit_event)
-                # or anyio CancelScope teardown errors when worker completes.
                 err_msg = str(stream_exc)
                 is_cancel_scope = "cancel" in err_msg.lower() or "CancelScope" in err_msg
 
                 if result_text:
                     log.warning("[sdk] Stream error after result: %s", err_msg)
                 elif is_cancel_scope and len(messages) > 30:
-                    # Cancel scope errors after many messages = worker completed but
-                    # anyio teardown failed crossing thread boundaries. Treat as success.
                     log.warning("[sdk] Cancel scope error after %d msgs — treating as success (teardown issue): %s",
                                 len(messages), err_msg)
                     return {"status": "success", "message": f"SDK worker completed with teardown error ({len(messages)} events)"}
