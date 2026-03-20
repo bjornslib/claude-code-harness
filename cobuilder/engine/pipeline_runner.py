@@ -1484,10 +1484,14 @@ class PipelineRunner:
             # Use ClaudeSDKClient (bidirectional) instead of query() (unidirectional).
             # ClaudeSDKClient keeps the control protocol open, enabling Stop hooks
             # to fire and block worker exit if signal file not written.
+            # Use ClaudeSDKClient with connect() then query() pattern.
+            # connect() with no prompt starts streaming mode, then query() sends
+            # the prompt. receive_response() gets results. This enables Stop hooks.
             try:
                 async with claude_code_sdk.ClaudeSDKClient(options=options) as client:  # type: ignore[attr-defined]
-                    await client.connect(prompt=prompt)
-                    async for msg in client.receive_messages():
+                    await client.connect()
+                    await client.query(prompt)
+                    async for msg in client.receive_response():
                         messages.append(msg)
                         msg_type = type(msg).__name__
                         if not _first_msg_logged and _LOGFIRE_AVAILABLE:
