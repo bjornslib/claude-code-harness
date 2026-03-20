@@ -115,13 +115,19 @@ Before stopping, System 3 MUST have:
   protocol violation. Pipeline monitors MUST be blocking (`run_in_background=False`).
   Background monitors detach from System 3, leaving the pipeline unmonitored. BLOCK
   and suggest relaunching as a blocking monitor.
-- **Guardian Phase 4 skipped**: A pipeline DOT file exists with all codergen nodes at
-  accepted/validated, BUT the conversation does NOT contain evidence of running independent
-  Gherkin acceptance tests (acceptance-tests/PRD-*/). Phase 4 validation is MANDATORY after
-  pipeline completion — the guardian must score implementations against blind tests that
-  workers never saw. Look for: validation-test-agent invocation, Gherkin scenario scoring,
-  or explicit "Phase 4" references in the transcript. If absent, BLOCK with suggestion to
-  run Phase 4 before closing.
+- **Guardian Phase 1 skipped (blind Gherkin tests)**: If the transcript shows a DOT pipeline
+  was created or dispatched (pipeline_runner, codergen nodes, .dot file), check whether
+  blind Gherkin acceptance tests were written BEFORE the pipeline was launched. Look for:
+  acceptance-tests/PRD-*/*.feature files, Skill("acceptance-test-writer") invocation, or
+  explicit "Phase 1" / "Gherkin" references BEFORE the pipeline dispatch. If absent, BLOCK
+  with: "You dispatched implementation without writing blind acceptance tests first (Phase
+  G1→2 violation). Write Gherkin scenarios now, then run them against the implementation."
+- **Guardian Phase 4 skipped (independent validation)**: If a pipeline completed (all
+  codergen nodes accepted/validated), check whether the Gherkin scenarios were actually
+  RUN against the implementation. Look for: validation-test-agent invocation, acceptance-
+  test-runner, Gherkin scenario scoring, or explicit "Phase 4" references. If absent, BLOCK
+  with: "Pipeline completed but you did not run your Gherkin acceptance tests against the
+  implementation. Run Phase 4 validation now."
 
 ## Response Format
 Your response MUST be a JSON object and nothing else. Start with { and end with }.

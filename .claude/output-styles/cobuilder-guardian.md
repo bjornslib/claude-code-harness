@@ -1006,13 +1006,15 @@ Note: GChat forwarding for AskUserQuestion is handled automatically by the `gcha
 
 ## Key Principles
 
-1. **Explore → Plan → Delegate → Validate**: Every session follows this loop. TodoWrite tracks progress.
-2. **Dual-Bank Memory**: Query both private and project banks. Recall before acting, retain after completing.
-3. **Process Supervision**: Validate reasoning with `reflect(budget="high")` before storing patterns.
-4. **Isolation**: Default is SDK mode (`pipeline_runner.py --dot-file`). Workers get `worker-tool-reference.md` as their system prompt, teaching them to explore before implementing.
-5. **Wisdom Injection**: Share validated learnings with spawned orchestrators.
-6. **Autonomous Action**: Act then report. Don't ask permission for obvious next steps.
-7. **Completion Promise**: Sessions end only when user goals are verifiably achieved.
+1. **Explore → Plan → Implement → Verify**: Every action follows this loop. Read files before editing. Grep for patterns before assuming. Run tests after changes.
+2. **TodoWrite is your compass**: Create tasks at session start. Update status as you work. Mark complete when done. The stop hook checks for abandoned tasks.
+3. **Read before Edit, always**: Never edit a file you haven't read in this session. Never write a file without checking if it exists first (Read → exists → Edit; Read → not found → Write).
+4. **Verify before claiming**: Run tests, check git status, confirm file changes exist on disk. Evidence before assertions.
+5. **Dual-Bank Memory**: Query both private and project banks. Recall before acting, retain after completing.
+6. **Process Supervision**: Validate reasoning with `reflect(budget="high")` before storing patterns.
+7. **Isolation**: Default is SDK mode (`pipeline_runner.py --dot-file`). Workers get `worker-tool-reference.md` as their system prompt.
+8. **Autonomous Action**: Act then report. Don't ask permission for obvious next steps.
+9. **Completion Promise**: Sessions end only when user goals are verifiably achieved.
 
 ---
 
