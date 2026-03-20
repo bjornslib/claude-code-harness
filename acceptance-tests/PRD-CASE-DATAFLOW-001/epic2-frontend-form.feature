@@ -1,102 +1,98 @@
 Feature: E2 — Frontend Form shadcn Component Upgrade
   As a verification operator
-  I want a form with proper date pickers, country selection, and complete employment options
+  I want a form with proper components and complete field coverage
   So that my data is always valid and complete
 
   Background:
     Given the New Verification form at "/checks-dashboard/new"
-    And shadcn components Calendar, Popover, and Command are installed
 
-  # === M8: DatePicker component ===
+  # === DatePicker ===
 
   Scenario: Start date uses shadcn DatePicker
     When I inspect the startDate form field
-    Then it should render a DatePicker component (Popover + Calendar)
-    And NOT a raw HTML <input type="date">
-
-  Scenario: End date uses shadcn DatePicker
-    When I inspect the endDate form field
-    Then it should render a DatePicker component (Popover + Calendar)
-    And NOT a raw HTML <input type="date">
+    Then it should render a DatePicker (Calendar + Popover)
+    And NOT a raw HTML input type="date"
 
   Scenario: DatePicker produces YYYY-MM-DD format
-    When I select March 19, 2026 in the start date DatePicker
+    When I select March 19, 2026 in the DatePicker
     Then the form value should be "2026-03-19"
-
-  # === M7: Date format validation ===
-
-  Scenario: Zod schema rejects invalid date format
-    When I programmatically set startDate to "invalid"
-    And I submit the form
-    Then a validation error should appear for startDate
-    And the error message should mention date format
 
   # === Country Combobox ===
 
-  Scenario: Country field uses shadcn Combobox
-    When I inspect the employerCountry form field
-    Then it should render a Combobox component (Command + Popover)
-    And NOT a raw HTML <input>
+  Scenario: Country uses shadcn Combobox with ISO alpha-2
+    When I inspect the country field
+    Then it should render a Combobox with searchable country list
+    And selecting "Australia" should store "AU"
 
-  Scenario: Country Combobox includes key markets
-    When I open the country Combobox
-    Then the options should include "Australia", "Singapore", "United States", "United Kingdom"
+  Scenario: Country list derived from generated types
+    When I inspect the Combobox options
+    Then they should come from COUNTRY_CODES in work-history.generated.ts
 
-  # === M2: Employment Type enum alignment ===
+  # === middle_name ===
 
-  Scenario: Employment Type Select has all backend enum values
-    When I open the Employment Type Select dropdown
-    Then the options should be exactly:
-      | Value       | Label      |
-      | full_time   | Full-time  |
-      | part_time   | Part-time  |
-      | contractor  | Contractor |
-      | casual      | Casual     |
-    And NOT contain "contract" (the old incorrect value)
+  Scenario: Middle name field is present
+    When I inspect the Candidate Details section
+    Then there should be a "Middle Name" input between First Name and Last Name
 
-  # === Employment Arrangement (new field) ===
+  # === Employment Type ===
+
+  Scenario: Employment Type has all backend enum values
+    When I open the Employment Type Select
+    Then options should be: full_time, part_time, contractor, casual
+    And NOT contain "contract"
+
+  # === Employment Arrangement ===
 
   Scenario: Employment Arrangement Select is present
     When I inspect the form
-    Then there should be an "Employment Arrangement" Select field
-    With options: "Direct Employment", "Via Agency", "Subcontractor"
+    Then there should be an "Employment Arrangement" Select
+    With options: direct, agency, subcontractor
 
-  Scenario: Agency Name appears when arrangement is agency
-    Given Employment Arrangement is set to "agency"
-    Then an "Agency Name" input field should be visible
+  Scenario: Agency Name appears for agency arrangement
+    Given Employment Arrangement is "agency"
+    Then "Agency Name" input should be visible and required
 
-  Scenario: Agency Name appears when arrangement is subcontractor
-    Given Employment Arrangement is set to "subcontractor"
-    Then an "Agency Name" input field should be visible
+  Scenario: Agency Name hidden for direct arrangement
+    Given Employment Arrangement is "direct"
+    Then "Agency Name" input should NOT be visible
 
-  Scenario: Agency Name is hidden when arrangement is direct
-    Given Employment Arrangement is set to "direct"
-    Then an "Agency Name" input field should NOT be visible
+  # === Salary amount + currency ===
 
-  Scenario: Agency Name is required when arrangement is agency
-    Given Employment Arrangement is set to "agency"
-    And Agency Name is empty
+  Scenario: Salary checkbox reveals amount and currency fields
+    When I enable the "Salary" verification checkbox
+    Then two fields should appear: "Salary Amount" and "Salary Currency"
+
+  Scenario: Salary currency auto-populated from country
+    Given country is set to "AU"
+    When I enable the "Salary" verification checkbox
+    Then "Salary Currency" should default to "AUD"
+    And the user should be able to change it
+
+  # === Multiple contacts ===
+
+  Scenario: Contact person list supports multiple entries
+    When I inspect the Employer Details section
+    Then there should be a primary contact form (name, department, position, email, phone)
+    And an "Add Contact" button to add additional contacts
+
+  Scenario: Primary contact is contacts[0]
+    Given I fill primary contact name="Jane" and add another contact name="Bob"
     When I submit the form
-    Then a validation error should appear for agencyName
+    Then the payload contacts[0].contact_name should be "Jane"
+    And contacts[1].contact_name should be "Bob"
 
-  # === Verify Fields alignment ===
+  # === VerifyFields checkboxes ===
 
-  Scenario: Verify Fields checkboxes include all backend options
+  Scenario: Verify Fields includes employment_arrangement
     When I inspect the Additional Verification Points section
-    Then the checkboxes should include:
-      | Key                  | Label                |
-      | salary               | Salary               |
-      | supervisor           | Supervisor           |
-      | employment_type      | Employment Type      |
-      | rehire_eligibility   | Rehire Eligibility   |
-      | reason_for_leaving   | Reason for Leaving   |
+    Then checkboxes should include "Employment Arrangement"
 
-  # === Form submission produces correct payload ===
+  # === Zod schema ===
 
-  Scenario: Form payload includes employmentArrangement and agencyName
-    Given I fill out the form completely with arrangement="agency" and agencyName="Hays"
-    When I submit the form
-    Then the POST payload to /api/verify should include:
-      | Field                  | Value    |
-      | employmentArrangement  | agency   |
-      | agencyName             | Hays     |
+  Scenario: Zod rejects invalid date format
+    When startDate is set to "invalid"
+    Then validation error should mention YYYY-MM-DD format
+
+  Scenario: Form uses generated TypeScript types
+    When I inspect the imports in page.tsx
+    Then it should import from "lib/types/work-history.generated"

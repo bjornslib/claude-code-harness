@@ -1,78 +1,73 @@
 Feature: E3 — API Proxy Contract Alignment
   As a platform engineer
-  I want the frontend proxy to map all fields to canonical backend names
-  So that no data is silently lost between frontend and backend
+  I want the frontend proxy to pass canonical types without field renaming
+  So that no data is silently lost or misnamed
 
   Background:
     Given the API proxy at "app/api/verify/route.ts"
-    And the backend endpoint at "/api/v1/verify"
 
-  # === M1: rehire_eligibility → eligibility_for_rehire ===
+  # === Zero field renaming ===
 
-  Scenario: Proxy maps rehire_eligibility to eligibility_for_rehire
-    Given frontend verifyFields has rehire_eligibility=true
-    When the proxy builds backendVerifyFields
-    Then the field name should be "eligibility_for_rehire" (not "rehire_eligibility")
-    And the value should be true
+  Scenario: No field renaming exists in proxy
+    When I inspect route.ts
+    Then there should be NO mapping from "supervisor" to "supervisor_name"
+    And NO mapping from "contact_name" to "hr_contact_name"
+    And NO mapping from "contact_email" to "hr_email"
+    And NO mapping from "rehire_eligibility" to "eligibility_for_rehire"
 
-  Scenario: Backend receives eligibility_for_rehire
-    Given a form submission with rehire_eligibility checked
-    When the proxy forwards to /api/v1/verify
-    Then the backend should receive verify_fields.eligibility_for_rehire=true
+  Scenario: Proxy uses canonical field names throughout
+    Given frontend sends eligibility_for_rehire=true
+    When the proxy builds verify_fields
+    Then the key should be "eligibility_for_rehire" (same name, no mapping)
 
-  # === M3 + M9: Employer field name fixes ===
+  # === Contacts list ===
 
-  Scenario: Proxy maps contactPersonName to hr_contact_name
-    Given frontend payload has contactPersonName="Jane Doe"
+  Scenario: Proxy passes contacts list not single contact
+    Given frontend sends contacts=[{contact_name: "Jane", is_primary: true}]
     When the proxy builds the employer object
-    Then the field should be "hr_contact_name" (not "contact_name")
+    Then employer.contacts should be the array as-is
 
-  Scenario: Proxy maps contactEmail to hr_email
-    Given frontend payload has contactEmail="hr@company.com"
+  # === country_code ===
+
+  Scenario: Proxy passes country_code not country name
+    Given frontend sends country_code="AU"
     When the proxy builds the employer object
-    Then the field should be "hr_email" (not "contact_email")
+    Then employer.country_code should be "AU"
+    And there should be NO "country" field with a full name
 
-  Scenario: Backend receives hr_contact_name
-    Given a form submission with contact person "Jane Doe"
-    When the proxy forwards to /api/v1/verify
-    Then the backend EmployerInfo should have hr_contact_name="Jane Doe"
+  # === Salary split ===
 
-  # === Employment arrangement pass-through ===
-
-  Scenario: Proxy passes employment_arrangement to backend
-    Given frontend payload has employmentArrangement="agency"
+  Scenario: Proxy passes salary_amount and salary_currency separately
+    Given frontend sends salary_amount="85000" and salary_currency="AUD"
     When the proxy builds the employment object
-    Then employment.employment_arrangement should be "agency"
+    Then employment.salary_amount should be "85000"
+    And employment.salary_currency should be "AUD"
 
-  Scenario: Proxy passes agency_name to backend
-    Given frontend payload has agencyName="Robert Half"
-    When the proxy builds the employment object
-    Then employment.agency_name should be "Robert Half"
+  # === phone_numbers in employer ===
 
-  # === Date validation ===
-
-  Scenario: Proxy validates date format before sending
-    Given frontend payload has startDate="invalid-date"
-    When the proxy processes the request
-    Then it should return HTTP 400
-    And the error should mention date format
-
-  Scenario: Proxy accepts valid YYYY-MM-DD date
-    Given frontend payload has startDate="2026-03-19"
-    When the proxy processes the request
-    Then the date should be forwarded without error
+  Scenario: phone_numbers passed inside employer object
+    Given frontend sends phone_numbers=["+61 2 9123 4567"]
+    When the proxy builds the payload
+    Then employer.phone_numbers should contain "+61 2 9123 4567"
+    And there should be NO top-level phone_numbers field
 
   # === Type imports ===
 
-  Scenario: Proxy uses canonical TypeScript types
+  Scenario: Proxy imports canonical TypeScript types
     When I inspect the imports in route.ts
-    Then it should import types from "lib/types/work-history.generated"
+    Then it should import from "lib/types/work-history.generated"
     And NOT define inline FrontendVerifyFields interface
 
-  # === Regression: standard flow still works ===
+  # === Date validation ===
 
-  Scenario: Standard work history submission succeeds
-    Given a valid form submission with all required fields
+  Scenario: Proxy rejects invalid date format
+    Given frontend sends startDate="not-a-date"
+    When the proxy processes the request
+    Then it should return HTTP 400
+
+  # === Regression ===
+
+  Scenario: Standard submission succeeds end-to-end
+    Given a valid complete form submission
     When the proxy forwards to /api/v1/verify
-    Then the response should be HTTP 201
-    And the response should contain a task_id
+    Then the response should be HTTP 201 with a task_id
