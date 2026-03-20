@@ -11,11 +11,7 @@ Tests verify that:
 
 from __future__ import annotations
 
-import os
-import tempfile
 from pathlib import Path
-
-import pytest
 
 from cobuilder.engine.validation import validate_graph, Severity
 from tests.engine.validation.conftest import make_node, make_edge, make_graph
@@ -66,7 +62,7 @@ class TestMandatoryGraphAttrs:
             for v in errors
         ), f"Expected 'missing target_dir' error, got: {[v.message for v in errors]}"
 
-    def test_both_missing_is_error(self, tmp_path: Path) -> None:
+    def test_both_missing_is_error(self) -> None:
         """Missing both attributes raises ERROR violations for both."""
         nodes = [
             make_node("start", shape="Mdiamond"),
