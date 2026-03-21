@@ -400,7 +400,13 @@ Processed signals are moved to `signals/processed/` after consumption.
 
 ### guardian.py
 
-Layers 0/1 bridge. Launches guardian agent processes via AgentSDK, monitors for terminal-targeted signals, handles escalations and pipeline completion events. Supports single-guardian and parallel multi-guardian launch via `--multi <configs.json>`.
+Layers 0/1 bridge. Launches guardian agent processes via `ClaudeSDKClient` (bidirectional SDK — not `query()`), monitors for terminal-targeted signals, handles escalations and pipeline completion events. Supports single-guardian and parallel multi-guardian launch via `--multi <configs.json>`.
+
+Key implementation details:
+- **`_run_agent()`**: Uses `ClaudeSDKClient.connect()` + `client.query()` + `client.receive_response()` for full stop-hook support
+- **`_create_guardian_stop_hook()`**: Custom Stop hook that blocks agent exit when the pipeline has non-terminal nodes (`pending`, `active`, `impl_complete`); safety valve after 3 blocks prevents infinite loops
+- **`_GUARDIAN_TOOLS`**: Expanded tool list — `Bash`, `Read`, `Glob`, `Grep`, `ToolSearch`, `Skill`, `LSP`, Serena code-navigation tools, and Hindsight learning tools (`mcp__hindsight__retain/recall/reflect`)
+- **`build_options()`**: Sets `permission_mode="bypassPermissions"` and passes the custom stop hook; strips `CLAUDECODE`, `CLAUDE_SESSION_ID`, `CLAUDE_OUTPUT_STYLE` from the environment to prevent nested-session conflicts; sets `PIPELINE_SIGNAL_DIR` and `PROJECT_TARGET_DIR`
 
 ### session_runner.py (runner.py)
 
@@ -420,7 +426,7 @@ Jinja2 DOT templates in `.cobuilder/templates/`. Instantiated via `cobuilder/tem
 
 - `sequential-validated` — Linear pipeline with validation gates after each codergen node
 - `hub-spoke` — Fan-out parallel dispatch to multiple workers
-- `cobuilder-lifecycle` — Full lifecycle pipeline (research → design → implement → validate)
+- `cobuilder-lifecycle` — Full lifecycle pipeline v2.0: research → refine → plan → execute, each stage followed by a paired `wait.cobuilder` + `wait.human` gate (linear topology, no cyclic loop-back)
 
 ### Logfire Observability
 
@@ -442,9 +448,9 @@ python3 cobuilder/engine/cli.py generate --prd <PRD-REF>    # Generate DOT from 
 python3 cobuilder/engine/cli.py dashboard <file.dot>        # Unified lifecycle dashboard
 ```
 
-### Haiku Sub-Agent Monitoring Pattern
+### Haiku Sub-Agent Monitoring Pattern (Default)
 
-After launching `pipeline_runner.py`, System 3 spawns a **blocking** (foreground) Haiku sub-agent monitor to watch for state transitions without sleep-polling:
+This is the **default monitoring pattern** for System 3. After launching `pipeline_runner.py`, System 3 spawns a **blocking** (foreground, `run_in_background=False`) Haiku sub-agent monitor to watch for state transitions without sleep-polling. The monitor MUST be blocking — background monitors cannot wake System 3:
 
 ```python
 Task(

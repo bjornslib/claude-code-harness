@@ -110,12 +110,12 @@ The guardian system prompt should not reference promise verification or System 3
 
 | Epic | Status | Date | Commit |
 |------|--------|------|--------|
-| E1: ClaudeSDKClient migration | Remaining | - | - |
-| E2: Custom stop hook | Remaining | - | - |
-| E3: Expand allowed_tools | Remaining | - | - |
-| E4: Clean environment | Remaining | - | - |
-| E5: Fix run_research.py | Remaining | - | - |
-| E6: Remove promise assumptions | Remaining | - | - |
+| E1: ClaudeSDKClient migration | Done | 2026-03-21 | - |
+| E2: Custom stop hook | Done | 2026-03-21 | - |
+| E3: Expand allowed_tools | Done | 2026-03-21 | - |
+| E4: Clean environment | Done | 2026-03-21 | - |
+| E5: Fix run_research.py | Done | 2026-03-21 | - |
+| E6: Remove promise assumptions | Done | 2026-03-21 | - |
 
 ## Key Files
 
