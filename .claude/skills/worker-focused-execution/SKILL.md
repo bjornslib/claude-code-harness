@@ -66,17 +66,12 @@ mcp__serena__switch_modes(["editing", "interactive"])
 
 ## Quick Reference
 
-### Required Superpowers Skills
+### Required Powers
 ```
 Skill("worker-superpowers")                          # ALL powers: TDD, debugging, verification, brainstorming
-Skill("superpowers:verification-before-completion")  # MANDATORY before done
-Skill("superpowers:test-driven-development")         # RED-GREEN-REFACTOR
-Skill("superpowers:brainstorming")                   # Before unclear decisions
-Skill("superpowers:systematic-debugging")            # For troubleshooting
-Skill("superpowers:root-cause-tracing")              # For complex bugs
 ```
 
-**Recommended**: Load `Skill("worker-superpowers")` at session start — it bundles all four powers (TDD, systematic-debugging, verification, brainstorming) with CoBuilder-specific patterns.
+Load `Skill("worker-superpowers")` at task start — it bundles all four powers (TDD, systematic-debugging, verification-before-completion, brainstorming) in a single skill. The superpowers plugin skills (`superpowers:test-driven-development`, etc.) are also available as the upstream source.
 
 ### Model Hierarchy
 - **You (Worker)**: Opus 4.5

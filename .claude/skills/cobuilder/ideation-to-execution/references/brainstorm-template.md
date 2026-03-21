@@ -52,7 +52,6 @@ What problem does this solve? Who experiences it? How often?
 | Question | Resolution |
 |----------|-----------|
 | {Q1} | {Answer agreed upon} |
-| {Q2} | {Answer agreed upon} |
 
 ---
 
@@ -70,7 +69,6 @@ These will become formal acceptance criteria in the PRD:
 
 - {Technical constraint}
 - {Business constraint}
-- {Timeline constraint}
 
 ---
 
