@@ -23,9 +23,9 @@ Architecture:
 
 CLAUDECODE environment note:
     The Guardian may be launched from inside a Claude Code session. To avoid
-    nested-session conflicts we pass env={"CLAUDECODE": ""} as a workaround
-    to suppress the variable. The definitive fix (subprocess.Popen with a
-    cleaned env) lives in runner.py (spawn mode).
+    nested-session conflicts, the environment is cleaned by stripping
+    CLAUDECODE, CLAUDE_SESSION_ID, and CLAUDE_OUTPUT_STYLE, and setting
+    PIPELINE_SIGNAL_DIR and PROJECT_TARGET_DIR for worker context.
 
 Usage:
     # Single guardian
@@ -617,6 +617,8 @@ def build_options(
     model: str,
     max_turns: int,
     hooks: dict | None = None,
+    signals_dir: str | None = None,
+    target_dir: str | None = None,
 ) -> Any:
     """Construct a ClaudeCodeOptions instance for the Guardian agent.
 
@@ -630,12 +632,25 @@ def build_options(
         model: Claude model identifier.
         max_turns: Maximum turns before the SDK stops the conversation.
         hooks: Optional hooks dict for Stop hook configuration.
+        signals_dir: Path to signals directory (set as PIPELINE_SIGNAL_DIR).
+        target_dir: Target implementation repo directory (set as PROJECT_TARGET_DIR).
 
     Returns:
         Configured ClaudeCodeOptions instance.
     """
     with logfire.span("guardian.build_options", model=model):
         from claude_code_sdk import ClaudeCodeOptions
+
+        # Build clean environment: strip session identifiers and set pipeline context.
+        # This matches the pattern in pipeline_runner.py:1513-1516.
+        clean_env = {
+            k: v for k, v in os.environ.items()
+            if k not in ("CLAUDECODE", "CLAUDE_SESSION_ID", "CLAUDE_OUTPUT_STYLE")
+        }
+        if signals_dir:
+            clean_env["PIPELINE_SIGNAL_DIR"] = str(signals_dir)
+        if target_dir:
+            clean_env["PROJECT_TARGET_DIR"] = str(target_dir)
 
         options_kwargs = {
             "allowed_tools": _GUARDIAN_TOOLS,
@@ -644,9 +659,7 @@ def build_options(
             "cwd": cwd,
             "model": model,
             "max_turns": max_turns,
-            # Suppress CLAUDECODE env var to avoid nested-session conflicts.
-            # Definitive fix (subprocess.Popen with cleaned env) is in runner.py spawn mode.
-            "env": {"CLAUDECODE": ""},
+            "env": clean_env,
         }
         if hooks:
             options_kwargs["hooks"] = hooks
@@ -667,17 +680,35 @@ def resolve_scripts_dir() -> str:
     return _THIS_DIR
 
 
-def build_env_config() -> dict[str, str]:
-    """Return environment overrides that suppress the CLAUDECODE variable.
+def build_env_config(
+    signals_dir: str | None = None,
+    target_dir: str | None = None,
+) -> dict[str, str]:
+    """Return environment overrides for the Guardian agent.
 
-    We cannot *delete* env keys via ClaudeCodeOptions.env (it only adds/overrides),
-    so we override CLAUDECODE to an empty string. The authoritative fix is in
-    runner.py (spawn mode) which uses subprocess.Popen with a fully cleaned environment.
+    Strips session identifiers (CLAUDECODE, CLAUDE_SESSION_ID, CLAUDE_OUTPUT_STYLE)
+    and sets pipeline context variables (PIPELINE_SIGNAL_DIR, PROJECT_TARGET_DIR).
+
+    Note: ClaudeCodeOptions.env only adds/overrides keys, it cannot delete.
+    This function provides the clean environment dict that should be passed
+    directly to the options.
+
+    Args:
+        signals_dir: Path to signals directory (set as PIPELINE_SIGNAL_DIR).
+        target_dir: Target implementation repo directory (set as PROJECT_TARGET_DIR).
 
     Returns:
-        Dict of env var overrides to pass to ClaudeCodeOptions.
+        Dict of cleaned env vars with pipeline context set.
     """
-    return {"CLAUDECODE": ""}
+    clean_env = {
+        k: v for k, v in os.environ.items()
+        if k not in ("CLAUDECODE", "CLAUDE_SESSION_ID", "CLAUDE_OUTPUT_STYLE")
+    }
+    if signals_dir:
+        clean_env["PIPELINE_SIGNAL_DIR"] = str(signals_dir)
+    if target_dir:
+        clean_env["PROJECT_TARGET_DIR"] = str(target_dir)
+    return clean_env
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -941,6 +972,8 @@ async def _launch_guardian_async(
             model=model,
             max_turns=max_turns,
             hooks=hooks,
+            signals_dir=signals_dir,
+            target_dir=target_dir,
         )
 
     try:
