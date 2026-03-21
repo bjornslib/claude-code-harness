@@ -35,7 +35,7 @@ from cobuilder.engine.pipeline_runner import (
 
 MINIMAL_DOT = """\
 digraph test_pipeline {
-    graph [prd_ref="TEST-001"];
+    graph [prd_ref="TEST-001" cobuilder_root="/tmp" target_dir="/tmp"];
     start [shape=Mdiamond handler="noop" status="validated"];
     node1 [shape=box handler="codergen" status="pending" worker_type="backend-solutions-engineer"];
     exit [shape=Msquare handler="exit" status="pending"];
@@ -46,7 +46,7 @@ digraph test_pipeline {
 
 IMPL_COMPLETE_DOT = """\
 digraph test_pipeline {
-    graph [prd_ref="TEST-001"];
+    graph [prd_ref="TEST-001" cobuilder_root="/tmp" target_dir="/tmp"];
     start [shape=Mdiamond handler="noop" status="validated"];
     node1 [shape=box handler="codergen" status="impl_complete" worker_type="backend-solutions-engineer"];
     exit [shape=Msquare handler="exit" status="pending"];
@@ -57,7 +57,7 @@ digraph test_pipeline {
 
 ACCEPTED_DOT = """\
 digraph test_pipeline {
-    graph [prd_ref="TEST-001"];
+    graph [prd_ref="TEST-001" cobuilder_root="/tmp" target_dir="/tmp"];
     start [shape=Mdiamond handler="noop" status="validated"];
     node1 [shape=box handler="codergen" status="accepted" worker_type="backend-solutions-engineer"];
     exit [shape=Msquare handler="exit" status="pending"];
@@ -68,7 +68,7 @@ digraph test_pipeline {
 
 ACTIVE_DOT = """\
 digraph test_pipeline {
-    graph [prd_ref="TEST-001"];
+    graph [prd_ref="TEST-001" cobuilder_root="/tmp" target_dir="/tmp"];
     start [shape=Mdiamond handler="noop" status="validated"];
     node1 [shape=box handler="codergen" status="active" worker_type="backend-solutions-engineer"];
     exit [shape=Msquare handler="exit" status="pending"];
@@ -79,7 +79,7 @@ digraph test_pipeline {
 
 TOOL_VERIFY_DOT = """\
 digraph test_pipeline {
-    graph [prd_ref="TEST-001"];
+    graph [prd_ref="TEST-001" cobuilder_root="/tmp" target_dir="/tmp"];
     start [shape=Mdiamond handler="noop" status="validated"];
     impl_node [shape=box handler="codergen" status="accepted" worker_type="backend-solutions-engineer"];
     verify_node [shape=box handler="tool" status="active" worker_type="backend-solutions-engineer"];
@@ -1070,12 +1070,23 @@ class TestEpicK:
         runner = _make_runner(tmp_path, ACTIVE_DOT)
         os.makedirs(runner.signal_dir, exist_ok=True)
 
+        # Create a dummy file so the worker's files_changed list resolves
+        dummy_file = tmp_path / "changed_file.py"
+        dummy_file.write_text("# original")
+
+        # Use tmp_path as target_dir so the file resolves correctly
+        runner._graph_attrs["target_dir"] = str(tmp_path)
+
         # Worker wrote a success signal before stale timeout would fire
         worker_signal = {
             "status": "success",
             "message": "Implemented all requested changes",
-            "files_changed": ["cobuilder/engine/pipeline_runner.py"],
+            "files_changed": ["changed_file.py"],
         }
+        # Simulate the worker actually modifying the file (after dispatch baseline)
+        import time
+        time.sleep(0.01)
+        dummy_file.write_text("# modified by worker")
         signal_path = os.path.join(runner.signal_dir, "node1.json")
         with open(signal_path, "w") as fh:
             json.dump(worker_signal, fh)
