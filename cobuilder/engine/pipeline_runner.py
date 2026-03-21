@@ -518,6 +518,11 @@ class PipelineRunner:
         # Injected into worker prompt on re-dispatch so the worker knows what to fix
         self.requeue_guidance: dict[str, str] = {}
 
+        # Dispatch-time file mtimes: node_id -> {filepath: mtime_ns}
+        # Recorded at dispatch time so _verify_worker_output can detect whether
+        # files were actually modified (not just exist on disk).
+        self._dispatch_mtimes: dict[str, dict[str, int]] = {}
+
         # Orphan resume counts: node_id -> int (for exponential backoff)
         self.orphan_resume_counts: dict[str, int] = {}
 
@@ -1169,6 +1174,12 @@ class PipelineRunner:
 
         # Resolve per-node target_dir for worker cwd
         resolved_target_dir = self._resolve_target_dir(attrs)
+
+        # Record file mtimes at dispatch time for verification baseline.
+        # We snapshot the SD file and any files listed in the acceptance criteria
+        # so _verify_worker_output can detect whether files were actually modified.
+        sd_path = attrs.get("sd_path", "") or attrs.get("solution_design", "")
+        self._record_dispatch_mtimes(nid, sd_path, resolved_target_dir)
 
         # Submit the task and track the future for liveness monitoring
         future = self._executor.submit(self._dispatch_agent_sdk, nid, worker_type, prompt, handler, resolved_target_dir, attrs)
@@ -2337,11 +2348,37 @@ class PipelineRunner:
     # Worker output verification
     # ------------------------------------------------------------------
 
-    def _verify_worker_output(self, node_id: str, target_dir: str, signal: dict) -> tuple[bool, Optional[str]]:
-        """Verify worker output by checking file existence.
+    def _record_dispatch_mtimes(self, node_id: str, sd_path: str, target_dir: str) -> None:
+        """Record file modification times at worker dispatch time.
 
-        Primary check: File existence (os.path.exists) is the primary verification.
-        Secondary check: Git status is informational only and does not cause failure.
+        This provides a baseline for _verify_worker_output to detect whether
+        the worker actually modified files (mtime changed) vs merely claiming
+        success while files remain untouched.
+
+        Args:
+            node_id: Node being dispatched.
+            sd_path: Solution design file path (may be absolute or relative).
+            target_dir: Worker's target directory.
+        """
+        mtimes: dict[str, int] = {}
+        # Snapshot the SD file mtime if it exists
+        if sd_path:
+            abs_sd = sd_path if os.path.isabs(sd_path) else os.path.join(target_dir, sd_path)
+            if os.path.exists(abs_sd):
+                mtimes[abs_sd] = os.path.getmtime_ns(abs_sd) if hasattr(os.path, "getmtime_ns") else int(os.path.getmtime(abs_sd) * 1e9)
+        self._dispatch_mtimes[node_id] = mtimes
+        if mtimes:
+            log.debug("[verify] %s: Recorded %d file mtimes at dispatch time", node_id, len(mtimes))
+
+    def _verify_worker_output(self, node_id: str, target_dir: str, signal: dict) -> tuple[bool, Optional[str]]:
+        """Verify worker output by checking files exist AND were modified.
+
+        Three-tier verification:
+        1. File existence: all files in files_changed must exist on disk
+        2. Modification check: at least one file in files_changed must have a
+           different mtime than at dispatch time (prevents false-positive success
+           from workers that claim files_changed without modifying anything)
+        3. Git diff: informational audit log (does not cause failure)
 
         Args:
             node_id: The node ID for logging.
@@ -2350,22 +2387,24 @@ class PipelineRunner:
 
         Returns:
             Tuple of (pass, reason) where:
-            - (True, None) if all files in files_changed exist on disk
-            - (False, reason_str) if any files are missing
+            - (True, None) if files exist and at least one was modified
+            - (False, reason_str) if files missing or none were modified
         """
         files_changed = signal.get("files_changed", [])
         if not files_changed:
             log.warning("[verify] %s: No files_changed in signal — skipping file verification", node_id)
             return (True, None)
 
-        # PRIMARY CHECK: Verify that each file in files_changed exists in target_dir
+        # CHECK 1: Verify that each file in files_changed exists in target_dir
         missing_files = []
+        resolved_paths: list[str] = []
         for file_path in files_changed:
             # Handle both relative and absolute paths
             if os.path.isabs(file_path):
                 full_path = file_path
             else:
                 full_path = os.path.join(target_dir, file_path)
+            resolved_paths.append(full_path)
 
             if not os.path.exists(full_path):
                 missing_files.append(file_path)
@@ -2376,9 +2415,37 @@ class PipelineRunner:
             log.error("[verify] %s: %s", node_id, reason)
             return (False, reason)
 
-        # SECONDARY CHECK (informational only): Log git diff HEAD~1 for auditing
-        # Note: We do NOT fail if git diff is clean. The files exist, which is what matters.
-        # Use git diff HEAD~1 instead of git status to check for actual changes vs previous commit.
+        # CHECK 2: Verify at least one file was actually modified (mtime changed)
+        dispatch_mtimes = self._dispatch_mtimes.get(node_id, {})
+        if dispatch_mtimes:
+            any_modified = False
+            for full_path in resolved_paths:
+                if os.path.exists(full_path):
+                    current_mtime = os.path.getmtime_ns(full_path) if hasattr(os.path, "getmtime_ns") else int(os.path.getmtime(full_path) * 1e9)
+                    baseline_mtime = dispatch_mtimes.get(full_path, 0)
+                    if baseline_mtime and current_mtime != baseline_mtime:
+                        any_modified = True
+                        log.debug("[verify] %s: File modified: %s (mtime %d -> %d)", node_id, full_path, baseline_mtime, current_mtime)
+                        break
+                    elif not baseline_mtime:
+                        # New file (not in baseline) — counts as modified
+                        any_modified = True
+                        break
+
+            if not any_modified:
+                reason = (
+                    f"Worker claimed success with files_changed={files_changed} "
+                    f"but none of the {len(resolved_paths)} listed files have different "
+                    f"mtimes compared to dispatch baseline. The worker likely did not "
+                    f"modify any files."
+                )
+                log.error("[verify] %s: %s", node_id, reason)
+                return (False, reason)
+            log.info("[verify] %s: Modification check passed — at least one file changed since dispatch", node_id)
+        else:
+            log.debug("[verify] %s: No dispatch baseline available — skipping mtime check", node_id)
+
+        # CHECK 3 (informational only): Log git diff HEAD~1 for auditing
         try:
             result = subprocess.run(
                 ["git", "diff", "HEAD~1"],
@@ -2390,7 +2457,7 @@ class PipelineRunner:
             if result.returncode == 0:
                 git_diff_output = result.stdout.strip()
                 if git_diff_output:
-                    log.info("[verify] %s: Files verified. Git diff from HEAD~1:\n%s", node_id, git_diff_output[:500])  # Truncate long diffs
+                    log.info("[verify] %s: Files verified. Git diff from HEAD~1:\n%s", node_id, git_diff_output[:500])
                 else:
                     log.info("[verify] %s: All files exist on disk. No changes since HEAD~1 (already committed).", node_id)
             else:
