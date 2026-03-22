@@ -257,16 +257,19 @@ Progressive disclosure wrappers for 9+ MCP servers — Context7 (framework docs)
 
 CoBuilder is a Claude Code plugin. Install it once and all your Claude Code sessions in that project get the skills, hooks, output styles, and pipeline engine automatically.
 
+### Option A: Plugin Marketplace (Recommended)
+
 ```bash
-# 1. Clone the harness (once, anywhere on your machine)
-git clone https://github.com/bjornslib/claude-code-harness.git ~/cobuilder-harness
+# 1. Add the CoBuilder marketplace (one-time)
+claude plugin marketplace add bjornslib/cobuilder-harness
 
-# 2. Install the CoBuilder Python package (editable, so updates pull through)
-pip install -e ~/cobuilder-harness
-
-# 3. Register the plugin in your target project
+# 2. Install the plugin in your project (choose scope)
 cd /path/to/your-project
-claude plugin install --scope project --plugin-dir ~/cobuilder-harness/.claude
+claude plugin install cobuilder-harness@bjornslib-cobuilder --scope project   # shared with team
+# Or: --scope user (personal, all projects) | --scope local (project-only, gitignored)
+
+# 3. Install the CoBuilder Python package
+pip install cobuilder-harness
 
 # 4. Copy the MCP config template and fill in your API keys
 cp ~/cobuilder-harness/.mcp.json.example .mcp.json
@@ -280,11 +283,37 @@ cp ~/cobuilder-harness/cobuilder/engine/.env.example ~/cobuilder-harness/cobuild
 mkdir -p .pipelines/pipelines/signals .pipelines/pipelines/evidence
 ```
 
-Update the harness with `git pull` — all projects pick up the changes automatically.
+### Option B: Local Development Install
+
+For contributors or when working on the harness itself:
+
+```bash
+# 1. Clone the harness
+git clone https://github.com/bjornslib/claude-code-harness.git ~/cobuilder-harness
+
+# 2. Install the Python package in editable mode
+pip install -e ~/cobuilder-harness
+
+# 3. Run Claude Code with the plugin loaded directly
+claude --plugin-dir ~/cobuilder-harness
+```
+
+### Verify Installation
+
+```
+/plugin           # Lists active plugins
+/reload-plugins   # Reload after changes
+```
+
+Update the harness with `git pull` — all projects using the marketplace install pick up changes automatically.
 
 ## Directory Structure
 
 ```
+.claude-plugin/                   # Plugin manifest
+├── plugin.json                   # Skills, agents, hooks, output styles paths
+└── marketplace.json              # Marketplace listing metadata
+
 cobuilder/                        # Pipeline execution engine
 ├── engine/                       # Core: runner, handlers, dispatch, signals
 │   ├── pipeline_runner.py        # Main state machine ($0 graph traversal)
