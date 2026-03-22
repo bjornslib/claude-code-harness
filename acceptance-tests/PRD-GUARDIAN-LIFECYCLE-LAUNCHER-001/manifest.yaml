@@ -1,0 +1,16 @@
+prd_id: PRD-GUARDIAN-LIFECYCLE-LAUNCHER-001
+title: Guardian Lifecycle Launcher
+features:
+  - id: E1
+    name: Lifecycle Launcher Function
+    weight: 0.60
+    file: e1-launcher.feature
+    validation_method: code-analysis
+  - id: E2
+    name: System Prompt Child Pipeline
+    weight: 0.40
+    file: e2-child-pipeline-prompt.feature
+    validation_method: code-analysis
+thresholds:
+  accept: 0.70
+  investigate: 0.50

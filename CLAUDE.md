@@ -80,7 +80,7 @@ This setup implements a sophisticated multi-agent system with three distinct lev
 cobuilder/                        # Pipeline execution engine (Python package)
 ├── engine/                       # Core runner, handlers, dispatch, signal protocol
 │   ├── pipeline_runner.py        # Main DOT pipeline state machine (zero LLM)
-│   ├── guardian.py               # Guardian agent launcher (Layers 0/1)
+│   ├── guardian.py               # Pilot agent launcher (Layers 0/1)
 │   ├── session_runner.py         # Session monitoring runner (Layer 2)
 │   ├── handlers/                 # Node handler implementations
 │   │   ├── codergen.py           # box — LLM/orchestrator nodes
@@ -400,7 +400,13 @@ Processed signals are moved to `signals/processed/` after consumption.
 
 ### guardian.py
 
-Layers 0/1 bridge. Launches guardian agent processes via AgentSDK, monitors for terminal-targeted signals, handles escalations and pipeline completion events. Supports single-guardian and parallel multi-guardian launch via `--multi <configs.json>`.
+Layers 0/1 bridge. Launches Pilot agent processes via `ClaudeSDKClient` (bidirectional SDK — not `query()`), monitors for terminal-targeted signals, handles escalations and pipeline completion events. Supports single-Pilot and parallel multi-Pilot launch via `--multi <configs.json>`.
+
+Key implementation details:
+- **`_run_agent()`**: Uses `ClaudeSDKClient.connect()` + `client.query()` + `client.receive_response()` for full stop-hook support
+- **`_create_guardian_stop_hook()`**: Custom Stop hook that blocks Pilot exit when the pipeline has non-terminal nodes (`pending`, `active`, `impl_complete`); safety valve after 3 blocks prevents infinite loops
+- **`_GUARDIAN_TOOLS`**: Expanded tool list — `Bash`, `Read`, `Glob`, `Grep`, `ToolSearch`, `Skill`, `LSP`, Serena code-navigation tools, and Hindsight learning tools (`mcp__hindsight__retain/recall/reflect`)
+- **`build_options()`**: Sets `permission_mode="bypassPermissions"` and passes the custom stop hook; strips `CLAUDECODE`, `CLAUDE_SESSION_ID`, `CLAUDE_OUTPUT_STYLE` from the environment to prevent nested-session conflicts; sets `PIPELINE_SIGNAL_DIR` and `PROJECT_TARGET_DIR`
 
 ### session_runner.py (runner.py)
 
@@ -420,13 +426,13 @@ Jinja2 DOT templates in `.cobuilder/templates/`. Instantiated via `cobuilder/tem
 
 - `sequential-validated` — Linear pipeline with validation gates after each codergen node
 - `hub-spoke` — Fan-out parallel dispatch to multiple workers
-- `cobuilder-lifecycle` — Full lifecycle pipeline (research → design → implement → validate)
+- `cobuilder-lifecycle` — Full lifecycle pipeline v2.0: research → refine → plan → execute, each stage followed by a paired `wait.cobuilder` + `wait.human` gate (linear topology, no cyclic loop-back)
 
 ### Logfire Observability
 
 Service names for filtering traces:
 - `cobuilder-pipeline-runner` — Pipeline runner spans
-- `cobuilder-guardian` — Guardian agent spans
+- `cobuilder-guardian` — Pilot agent spans
 - `cobuilder-session-runner` — Session runner spans
 
 ### CLI (cli.py)
@@ -442,9 +448,9 @@ python3 cobuilder/engine/cli.py generate --prd <PRD-REF>    # Generate DOT from 
 python3 cobuilder/engine/cli.py dashboard <file.dot>        # Unified lifecycle dashboard
 ```
 
-### Haiku Sub-Agent Monitoring Pattern
+### Haiku Sub-Agent Monitoring Pattern (Default)
 
-After launching `pipeline_runner.py`, System 3 spawns a **blocking** (foreground) Haiku sub-agent monitor to watch for state transitions without sleep-polling:
+This is the **default monitoring pattern** for System 3. After launching `pipeline_runner.py`, System 3 spawns a **blocking** (foreground, `run_in_background=False`) Haiku sub-agent monitor to watch for state transitions without sleep-polling. The monitor MUST be blocking — background monitors cannot wake System 3:
 
 ```python
 Task(
@@ -559,7 +565,6 @@ All markdown files in `.claude/` and `docs/` must follow documentation standards
 | `evidence/` | Validation evidence artifacts |
 | `progress/` | Session progress logs |
 | `worker-assignments/` | Worker task assignments |
-| `user-input-queue/` | Queued user input |
 
 Also skipped: `documentation/gardening-report.md` (auto-generated).
 
@@ -635,7 +640,7 @@ Any `.md` file outside `docs/` whose filename or content indicates PRD/SD/Epic/S
 3. Headings: H1/H2 containing `PRD-` or `SD-` identifiers
 
 **Excluded paths** (allowed to contain such content):
-- `.claude/skills/`, `.claude/output-styles/`, `.claude/commands/`, `.claude/evidence/`, `.claude/narrative/`
+- `.claude/skills/`, `.claude/output-styles/`, `.claude/commands/`, `.claude/evidence/`
 - `acceptance-tests/`, `node_modules/`, `.git/`, `.pipelines/`, `.cobuilder/`
 
 ### Naming Conventions
