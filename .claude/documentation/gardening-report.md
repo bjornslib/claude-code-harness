@@ -1,7 +1,7 @@
 # Harness Documentation Gardening Report
 
-**Generated**: 2026-03-25T15:22:47
-**Target**: `/Users/theb/Documents/Windsurf/cobuilder-harness/.claude`
+**Generated**: 2026-03-25T09:34:19
+**Target**: `/home/user/cobuilder-harness/.claude`
 **Mode**: EXECUTE (fixes applied)
 
 ## Summary
