@@ -210,7 +210,7 @@ Claude: Running deploy-harness.sh --target ~/Documents/Windsurf/new-project
 Harness deployed successfully. 550 files synced. Next steps:
 1. Review .claude/CLAUDE.md
 2. Commit .claude/ to git
-3. Launch: ccsystem3 | ccorch | launchcc
+3. Launch: cccb | ccorch | launchcc
 ```
 
 ```

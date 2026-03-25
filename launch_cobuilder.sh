@@ -1,5 +1,5 @@
 #!/bin/bash
-# launch_cobuilder.sh — Equivalent to the ccsystem3 zsh function
+# launch_cobuilder.sh — Equivalent to the cccb zsh function (formerly ccsystem3)
 # Launches Claude Code as a CoBuilder meta-orchestrator with all required env vars.
 #
 # Usage:
@@ -45,8 +45,8 @@ export CLAUDE_PROJECT_BANK="$(_derive_project_bank)"
 export PATH="${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/completion-state:$PATH"
 
 if [[ "$MODE" == "cobuilder-guardian" ]]; then
-    # CoBuilder meta-orchestrator mode (equivalent to ccsystem3)
-    export CLAUDE_SESSION_ID="system3-$(date -u +%Y%m%dT%H%M%SZ)-$(openssl rand -hex 4)"
+    # CoBuilder meta-orchestrator mode (equivalent to cccb, formerly ccsystem3)
+    export CLAUDE_SESSION_ID="cccb-$(date -u +%Y%m%dT%H%M%SZ)-$(openssl rand -hex 4)"
     export CLAUDE_ENFORCE_PROMISE=true
     export CLAUDE_ENFORCE_BO=true
     export CLAUDE_OUTPUT_STYLE=system3

@@ -440,7 +440,7 @@ The `cobuilder` parent skill provides orchestration-level sub-skills that comple
 ---
 
 **Version**: 1.2.0
-**Dependencies**: cs-promise CLI (requires PATH setup — see Prerequisites section), pipeline_runner.py + claude_code_sdk (primary dispatch), tmux (tmux mode — interactive, lower API cost), Hindsight MCP, ccsystem3 shell function, Task Master MCP, ZeroRepo
+**Dependencies**: cs-promise CLI (requires PATH setup — see Prerequisites section), pipeline_runner.py + claude_code_sdk (primary dispatch), tmux (tmux mode — interactive, lower API cost), Hindsight MCP, cccb shell function (formerly ccsystem3), Task Master MCP, ZeroRepo
 **Integration**: cobuilder-guardian skill, completion-promise skill, acceptance-test-writer skill, parallel-solutioning skill, research-first skill
 **Theory**: Independent verification eliminates self-reporting bias in agentic systems
 

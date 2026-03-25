@@ -110,6 +110,9 @@ def _is_system3_session() -> bool:
     sid_lower = session_id.lower()
     if "system3" in sid_lower:
         return True
+    # Accept cccb- prefix (new cccb alias replacing ccsystem3)
+    if session_id.startswith("cccb-"):
+        return True
     # Match s3- prefix or -s3- infix but not arbitrary substrings like "test-non-s3"
     import re
     if re.search(r"(?:^|[-_])s3(?:[-_]|$)", sid_lower):

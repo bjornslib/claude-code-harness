@@ -43,7 +43,10 @@ class EnvironmentConfig:
         This prevents false positives when an orchestrator session inherits a stale
         system3-* CLAUDE_SESSION_ID from a parent shell environment.
         """
-        session_ok = bool(self.session_id and self.session_id.startswith("system3-"))
+        session_ok = bool(self.session_id and (
+            self.session_id.startswith("system3-") or
+            self.session_id.startswith("cccb-")
+        ))
         # If CLAUDE_OUTPUT_STYLE is explicitly 'orchestrator', this is definitively NOT system3
         output_style = os.environ.get("CLAUDE_OUTPUT_STYLE", "")
         not_orchestrator = output_style != "orchestrator"

@@ -144,7 +144,7 @@ def is_system3_session(session_id: str) -> bool:
         return True
 
     # Common S3 session ID prefixes (e.g. "system3-20260222T...", "s3-...")
-    if session_id.startswith(("system3-", "s3-")):
+    if session_id.startswith(("system3-", "s3-", "cccb-")):
         return True
 
     return False

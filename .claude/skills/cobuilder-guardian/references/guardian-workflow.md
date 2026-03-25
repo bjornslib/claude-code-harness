@@ -35,7 +35,7 @@ export PATH="${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/completion-state:$PATH"
 cs-status 2>/dev/null || echo "ERROR: completion-state scripts not found"
 
 # Verify ccsystem3 function is available
-which ccsystem3 2>/dev/null || type ccsystem3 2>/dev/null
+which cccb 2>/dev/null || type cccb 2>/dev/null
 ```
 
 ### 1.2 Business Spec (BS) Verification
