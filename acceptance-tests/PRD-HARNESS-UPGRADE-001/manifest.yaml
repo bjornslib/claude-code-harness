@@ -1,5 +1,5 @@
 prd_id: PRD-HARNESS-UPGRADE-001
-prd_title: "System 3 Self-Management Upgrade"
+prd_title: "CoBuilder Self-Management Upgrade"
 prd_source: docs/prds/harness-upgrade/PRD-HARNESS-UPGRADE-001.md
 generated: 2026-03-07T10:00:00Z
 mode: guardian
@@ -214,7 +214,7 @@ epics:
         weight: 0.03
         validation_method: code-analysis
         scenarios: ["S7.2.4"]
-      - name: "F7.2.5: System3 Gate Handler with Guardian Reflection"
+      - name: "F7.2.5: CoBuilder Gate Handler with Guardian Reflection"
         weight: 0.04
         validation_method: code-analysis
         scenarios: ["S7.2.5"]

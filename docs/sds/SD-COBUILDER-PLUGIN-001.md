@@ -473,7 +473,7 @@ Deep research (2026-03-22) identified files/directories with **zero code referen
 | `learnings/` | 3 md files (decomposition, coordination, failures) | Zero grep hits across entire codebase |
 | `pinchtab/` | Empty directory | Only referenced in 2 old design docs |
 | `src/` | `api.py`, `api_endpoint.py` | Test fixture stubs only imported by `tests/test_api_endpoint.py` |
-| `state/` | `add_numbers.py`, `test_add_numbers.py`, `ADD-TWO-NUMBERS-bs.md` | Demo artifacts from System 3 showcase |
+| `state/` | `add_numbers.py`, `test_add_numbers.py`, `ADD-TWO-NUMBERS-bs.md` | Demo artifacts from CoBuilder showcase |
 | `E0-IMPL-PIPELINE-PROGRESS-MONITOR-SUMMARY.md` | Historical summary | Zero incoming references |
 | `IMPLEMENTATION_VERIFICATION_E3.md` | Historical verification | References `.claude/progress/` which doesn't exist |
 | `API_README.md` | API readme for dead `src/api.py` | Zero references |

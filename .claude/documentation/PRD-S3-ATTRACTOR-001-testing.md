@@ -132,7 +132,7 @@ git push origin <branch> --no-verify
 
 ### 3.3 S3 Preflight Pipeline Status
 
-Verifies that System 3 reads pipeline status during its preflight checks:
+Verifies that CoBuilder reads pipeline status during its preflight checks:
 
 ```bash
 # Step 1: Ensure a valid pipeline DOT exists
@@ -180,3 +180,9 @@ Running `validate` on `simple-pipeline.dot` produces **2 validation warnings**. 
 - Full lifecycle state annotations
 
 The warnings confirm that the validator correctly identifies incomplete pipelines without treating them as errors.
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

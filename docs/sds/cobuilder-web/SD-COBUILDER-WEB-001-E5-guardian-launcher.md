@@ -12,7 +12,7 @@ epic: E5
 
 ## 1. Problem Statement
 
-The CoBuilder web server (PRD-COBUILDER-WEB-001) owns the initiative lifecycle, but the Guardian -- the independent validation and acceptance-test agent -- must run in a tmux session so that humans can observe, interact with, and steer it. Today, Guardians are launched manually via `ccsystem3` or by System 3 itself. The web server needs a programmatic launcher that:
+The CoBuilder web server (PRD-COBUILDER-WEB-001) owns the initiative lifecycle, but the Guardian -- the independent validation and acceptance-test agent -- must run in a tmux session so that humans can observe, interact with, and steer it. Today, Guardians are launched manually via `ccsystem3` or by CoBuilder itself. The web server needs a programmatic launcher that:
 
 1. **Creates a tmux session with the exact environment and output style** the Guardian requires, without requiring human CLI knowledge.
 2. **Injects a scoped prompt** that constrains the Guardian to its defined role: writing blind acceptance tests, monitoring pipeline progress, and independently validating implementations. The Guardian must NOT create PRDs, SDs, pipelines, or launch the runner -- those are owned by the web server and `pipeline_runner.py` respectively.
@@ -720,7 +720,7 @@ E2 (Web Server) ┘                                       |
 |----|-----------|-------------|
 | AC-E5.1 | `launch()` creates a tmux session named `guardian-{prd-id-lowercase}` in the target repo directory | `tmux has-session -t guardian-prd-test-001` returns 0 |
 | AC-E5.2 | Guardian receives `CLAUDE_SESSION_ID`, `PRD_ID`, and `PIPELINE_DOT_PATH` environment variables | `tmux capture-pane` shows env vars in Claude startup |
-| AC-E5.3 | Guardian's output style is `cobuilder-guardian` | `tmux capture-pane` shows System 3 Meta-Orchestrator behavior |
+| AC-E5.3 | Guardian's output style is `cobuilder-guardian` | `tmux capture-pane` shows CoBuilder Meta-Orchestrator behavior |
 | AC-E5.4 | Scoped prompt includes PRD path, SD paths, DOT path, worktree path, and explicit CAN/CANNOT constraints | Inspect prompt text via `tmux capture-pane` after launch |
 | AC-E5.5 | `launch()` with an already-running session returns `status="already_running"` without creating a duplicate | Call `launch()` twice with same PRD ID; second returns "already_running" |
 | AC-E5.6 | `attach()` returns the session name for an active Guardian, `None` for inactive | Call `attach()` before and after `launch()` |
@@ -769,7 +769,7 @@ E2 (Web Server) ┘                                       |
 
 ### R5: Output Style Not Applied
 
-**Risk**: If `/output-style cobuilder-guardian` fails silently (e.g., output style file missing), the Guardian runs without the System 3 behavior, potentially violating scope constraints.
+**Risk**: If `/output-style cobuilder-guardian` fails silently (e.g., output style file missing), the Guardian runs without the CoBuilder behavior, potentially violating scope constraints.
 
 **Likelihood**: Low. The output style file is part of this repository and is always present.
 

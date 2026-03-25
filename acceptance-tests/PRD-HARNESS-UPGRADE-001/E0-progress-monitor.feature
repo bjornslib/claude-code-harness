@@ -2,7 +2,7 @@
 Feature: Pipeline Progress Monitor
 
   # Epic 0 adds a Haiku 4.5 sub-agent that monitors pipeline progress
-  # via signal files and DOT graph mtime, reporting back to System 3.
+  # via signal files and DOT graph mtime, reporting back to CoBuilder.
   # SD: docs/sds/harness-upgrade/SD-HARNESS-UPGRADE-001-E0-progress-monitor.md
 
   @feature-F0.1 @weight-0.03
@@ -23,7 +23,7 @@ Feature: Pipeline Progress Monitor
 
     # Red flags:
     # - Monitor uses Sonnet/Opus (too expensive for polling)
-    # - Monitor loops forever instead of completing to wake System 3
+    # - Monitor loops forever instead of completing to wake CoBuilder
     # - No signal directory polling described
 
   @feature-F0.2 @weight-0.03
@@ -47,7 +47,7 @@ Feature: Pipeline Progress Monitor
     When I search for the re-launch or wake-up mechanism
     Then the documentation explains:
       - Monitor completes with a status output (not an infinite loop)
-      - System 3 receives the completion and re-launches the monitor
+      - CoBuilder receives the completion and re-launches the monitor
       - This creates a cyclic wake-up pattern (launch → poll → complete → handle → re-launch)
     And the rationale references the "only completing subagents wake main thread" constraint
 
@@ -66,9 +66,9 @@ Feature: Pipeline Progress Monitor
       | MONITOR_ERROR | Worker signal contains error status |
       | MONITOR_STALL | No signal file changes within stall threshold |
       | MONITOR_ANOMALY | Unexpected state (e.g., signal without pending node) |
-    And each status includes guidance for what System 3 should do in response
+    And each status includes guidance for what CoBuilder should do in response
 
     # Confidence scoring guide:
-    # 1.0 — All 4 statuses defined with System 3 response guidance
+    # 1.0 — All 4 statuses defined with CoBuilder response guidance
     # 0.5 — Some statuses defined but missing guidance
     # 0.0 — No status enum defined

@@ -146,12 +146,12 @@ except Exception as e:
 
 Need to investigate exact line in `run_research.py` where the generator is created.
 
-## Epic 6: Remove Promise/System3 Assumptions
+## Epic 6: Remove Promise/CoBuilder Assumptions
 
 ### Search and remove from `build_system_prompt()`
 - Any reference to `cs-verify`, `cs-promise`
 - Any instruction to call `mcp__hindsight__retain` at session end
-- Any "System 3" references that should say "Guardian" or "Layer 0"
+- Any "CoBuilder" references that should say "Guardian" or "Layer 0"
 
 The system prompt should focus exclusively on: parse DOT → validate → dispatch nodes → monitor → handle gates → checkpoint → complete.
 
@@ -161,3 +161,9 @@ The system prompt should focus exclusively on: parse DOT → validate → dispat
 2. Unit test: `_create_guardian_stop_hook()` blocks on non-terminal nodes, allows on all-terminal
 3. Integration test: dry-run produces correct system prompt (no promise references)
 4. E2E test: re-run `add-two-numbers-lifecycle` — guardian completes in <50 turns
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

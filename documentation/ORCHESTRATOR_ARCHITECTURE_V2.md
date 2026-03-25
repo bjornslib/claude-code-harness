@@ -4,14 +4,14 @@
 
 This document outlines architectural changes to improve orchestrator reliability through:
 1. **Task-based delegation** instead of tmux sessions
-2. **System3 involvement** in PRD writing with acceptance tests
+2. **CoBuilder involvement** in PRD writing with acceptance tests
 3. **Continuous validation monitoring** via validation-test-agent
 4. **Decision-time guidance integration** for stuck detection
 
 ## Current State (V1)
 
 ```
-System3
+CoBuilder
     └── Spawns Orchestrator (in tmux or worktree)
             └── Spawns Workers (via tmux sessions)
                     └── Workers implement features
@@ -22,13 +22,13 @@ System3
 - tmux sessions are fragile (can disconnect, lose context)
 - No structured reporting from workers to orchestrators
 - No continuous validation - only at task closure
-- System3 not involved in PRD quality assurance
+- CoBuilder not involved in PRD quality assurance
 - Acceptance tests written after implementation (too late)
 
 ## Proposed State (V2)
 
 ```
-System3
+CoBuilder
     ├── Writes PRD with acceptance tests upfront
     │       └── acceptance-tests-writing skill generates tests from PRD
     │
@@ -40,7 +40,7 @@ System3
     │       │       └── Gets progress reports every N tool calls
     │       │
     │       └── Decision-time guidance detects stuck patterns
-    │               └── Triggers System3 consultation when needed
+    │               └── Triggers CoBuilder consultation when needed
     │
     └── Monitors via validation-test-agent --mode=monitor
             └── Can intervene if orchestrator is stuck
@@ -106,16 +106,16 @@ print(f"Worker completed: {result}")
 
 ---
 
-## Change 2: System3 PRD Writing with Acceptance Tests
+## Change 2: CoBuilder PRD Writing with Acceptance Tests
 
 ### Current Flow
 ```
-User Request → System3 → (optional PRD) → Orchestrator → Implementation → Tests
+User Request → CoBuilder → (optional PRD) → Orchestrator → Implementation → Tests
 ```
 
 ### New Flow
 ```
-User Request → System3 PRD Workshop → PRD + Acceptance Tests → Orchestrator → Implementation
+User Request → CoBuilder PRD Workshop → PRD + Acceptance Tests → Orchestrator → Implementation
                     │
                     ├── Structured PRD template
                     ├── Acceptance criteria for each feature
@@ -125,7 +125,7 @@ User Request → System3 PRD Workshop → PRD + Acceptance Tests → Orchestrato
 ### PRD Workshop Process
 
 ```python
-# System3 initiates PRD workshop
+# CoBuilder initiates PRD workshop
 def create_prd_with_tests(user_request: str):
     # Step 1: Draft PRD structure
     prd_draft = Task(
@@ -158,7 +158,7 @@ def create_prd_with_tests(user_request: str):
         description="Generate acceptance test stubs"
     )
 
-    # Step 3: System3 reviews and approves
+    # Step 3: CoBuilder reviews and approves
     return review_prd_and_tests(prd_draft)
 ```
 
@@ -178,7 +178,7 @@ acceptance-tests/
 ### Implementation Steps
 1. Create `system3-prd-workshop` skill
 2. Integrate `acceptance-tests-writing` skill into PRD workflow
-3. Update System3 output-style to include PRD validation
+3. Update CoBuilder output-style to include PRD validation
 4. Add PRD quality gates before orchestrator spawn
 
 ---
@@ -237,7 +237,7 @@ class ValidationMonitor:
 
     def _generate_recommendations(self, is_stuck, pct, incomplete) -> list[str]:
         if is_stuck and pct < 30:
-            return ["Orchestrator appears stuck early. Consider System3 consultation."]
+            return ["Orchestrator appears stuck early. Consider CoBuilder consultation."]
         if is_stuck and pct >= 50:
             return ["Making progress but hitting errors. Review recent failures."]
         if pct < 100 and not is_stuck:
@@ -271,19 +271,19 @@ class ValidationMonitor:
 1. Add `--mode=monitor` to validation-test-agent
 2. Create `MonitorReport` dataclass
 3. Add interval-based polling option
-4. Create System3 → validation-test-agent integration
+4. Create CoBuilder → validation-test-agent integration
 
 ---
 
-## Change 4: System3 Active Monitoring
+## Change 4: CoBuilder Active Monitoring
 
-### System3 Monitoring Loop
+### CoBuilder Monitoring Loop
 
 ```python
 # In system3-meta-orchestrator output-style
 
 async def monitor_orchestrator(orch_session_id: str, task_list_id: str):
-    """System3 monitors orchestrator progress actively."""
+    """CoBuilder monitors orchestrator progress actively."""
 
     while True:
         # Check progress via validation-test-agent
@@ -316,7 +316,7 @@ async def monitor_orchestrator(orch_session_id: str, task_list_id: str):
 ```python
 INTERVENTION_MESSAGES = {
     "stuck_early": """
-## System3 Guidance: You Appear Stuck
+## CoBuilder Guidance: You Appear Stuck
 
 I've detected multiple errors with limited progress ({pct}% complete).
 
@@ -328,7 +328,7 @@ I've detected multiple errors with limited progress ({pct}% complete).
 **Original goal**: {original_prompt}
 """,
     "worker_failures": """
-## System3 Guidance: Worker Failures Detected
+## CoBuilder Guidance: Worker Failures Detected
 
 {failure_count} worker(s) have failed on task {task_id}.
 
@@ -343,7 +343,7 @@ Send me a status update with: mb-send system3 '{"type": "status_update", ...}'
 ```
 
 ### Implementation Steps
-1. Add monitoring loop to System3 output-style
+1. Add monitoring loop to CoBuilder output-style
 2. Create intervention message templates
 3. Add `--background` option for validation-test-agent monitor mode
 4. Integrate with message bus for bidirectional communication
@@ -444,7 +444,7 @@ validation-test-agent --mode=e2e --prd=PRD-AUTH-001
 ### Phase 2: Validation Monitoring
 5. ⬜ Add `--mode=monitor` to validation-test-agent
 6. ⬜ Create MonitorReport format
-7. ⬜ Add System3 monitoring loop
+7. ⬜ Add CoBuilder monitoring loop
 
 ### Phase 3: PRD Workshop
 8. ⬜ Create system3-prd-workshop skill
@@ -452,7 +452,7 @@ validation-test-agent --mode=e2e --prd=PRD-AUTH-001
 10. ⬜ Add PRD quality gates
 
 ### Phase 4: Full Integration
-11. ⬜ Update System3 output-style with new workflow
+11. ⬜ Update CoBuilder output-style with new workflow
 12. ⬜ Remove tmux dependencies from orchestrator
 13. ⬜ End-to-end testing of new architecture
 
@@ -463,9 +463,9 @@ validation-test-agent --mode=e2e --prd=PRD-AUTH-001
 | Variable | Purpose | Set By |
 |----------|---------|--------|
 | `CLAUDE_SESSION_ID` | Session identifier, `orch-*` = orchestrator | Launch scripts |
-| `CLAUDE_CODE_TASK_LIST_ID` | Points to task list in `.claude/tasks/` | System3 |
+| `CLAUDE_CODE_TASK_LIST_ID` | Points to task list in `.claude/tasks/` | CoBuilder |
 | `CLAUDE_SESSION_DIR` | Session isolation directory | Launch scripts |
-| `CLAUDE_ENFORCE_PROMISE` | Enable promise checking | System3 |
+| `CLAUDE_ENFORCE_PROMISE` | Enable promise checking | CoBuilder |
 | `CLAUDE_MAX_ITERATIONS` | Circuit breaker limit | Config |
 
 ---
@@ -477,7 +477,7 @@ validation-test-agent --mode=e2e --prd=PRD-AUTH-001
 2. New `use_task_delegation: true` flag in orchestrator skill
 3. Gradual migration over multiple sessions
 
-### For System3
+### For CoBuilder
 1. PRD workshop is optional initially
 2. Can adopt incrementally per project
 3. Monitoring mode opt-in via `CLAUDE_ENABLE_MONITORING`

@@ -272,12 +272,12 @@ while not all_tasks_complete:
         time.sleep(30)
 ```
 
-### With System 3
+### With CoBuilder
 
-System 3 uses monitor for real-time visibility:
+CoBuilder uses monitor for real-time visibility:
 
 ```python
-# System 3 monitors orchestrator health
+# CoBuilder monitors orchestrator health
 report = Task(
     subagent_type="validation-test-agent",
     prompt="--mode=monitor --session-id orch-homepage-123 --task-list-id orch-tasks"
@@ -432,7 +432,7 @@ pytest ~/.claude/tests/demo/test_monitor_demo.py -v
 - `task-list-monitor.py` - Underlying polling utility
 - `validation-test-agent` modes overview - All operating modes
 - Orchestrator integration patterns - How to use in orchestrators
-- System 3 documentation - Meta-orchestrator integration
+- CoBuilder documentation - Meta-orchestrator integration
 
 ## Related Documentation
 

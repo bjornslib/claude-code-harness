@@ -26,7 +26,7 @@ generated: 2026-03-06T10:00:00Z
 frozen_at_commit: abc123
 ---
 
-# PRD Contract: System 3 Self-Management Upgrade
+# PRD Contract: CoBuilder Self-Management Upgrade
 
 ## Domain Invariants (3-5 truths that MUST hold)
 

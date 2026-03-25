@@ -22,7 +22,7 @@ When AGENT_TEAMS is unavailable, fall back to Task(subagent_type=...) subagents.
 ## 3-Tier Hierarchy
 
 ```
-TIER 1: System 3      ──Task──>  TIER 2: Orchestrator/Team Lead (YOU)  ──Team──>  TIER 3: Worker (teammate)
+TIER 1: CoBuilder      ──Task──>  TIER 2: Orchestrator/Team Lead (YOU)  ──Team──>  TIER 3: Worker (teammate)
 (Meta-orchestrator)               (Coordinator)                                    (Direct implementer)
 ```
 

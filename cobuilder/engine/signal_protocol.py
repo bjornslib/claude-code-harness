@@ -1,6 +1,6 @@
 """Signal Protocol Library — Guardian Architecture Inter-Layer Communication.
 
-Provides atomic signal file I/O for communication between Guardian (System 3),
+Provides atomic signal file I/O for communication between Guardian (CoBuilder),
 Runner (Orchestrator), and Terminal (User) layers.
 
 Signal files are JSON documents written atomically using a write-then-rename

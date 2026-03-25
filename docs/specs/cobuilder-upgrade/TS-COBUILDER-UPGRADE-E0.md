@@ -24,7 +24,7 @@ Epic 0 establishes the foundation by merging 5,061 lines from the `abstract-work
 
 | Sub-Epic | Goal | Owner |
 |----------|------|-------|
-| E0.1 | Code merge — bring 27 files, 5,061 LOC into `prd-cobuilder-upgrade` | System 3 (direct) |
+| E0.1 | Code merge — bring 27 files, 5,061 LOC into `prd-cobuilder-upgrade` | CoBuilder (direct) |
 | E0.2 | Logfire observability — audit spans, convert defensive imports, add test assertions | Sub-agent |
 | E0.3 | Test coverage baseline — configure pytest-cov, measure, create gap backlog | Sub-agent |
 

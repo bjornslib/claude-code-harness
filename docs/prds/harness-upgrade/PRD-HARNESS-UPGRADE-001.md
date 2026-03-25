@@ -1,22 +1,22 @@
 ---
 prd_id: PRD-HARNESS-UPGRADE-001
-title: System 3 Self-Management Upgrade
+title: CoBuilder Self-Management Upgrade
 status: active
 created: 2026-03-06T00:00:00.000Z
-last_verified: 2026-03-07T00:00:00.000Z
+last_verified: 2026-03-07
 grade: authoritative
 ---
-# PRD-HARNESS-UPGRADE-001: System 3 Self-Management Upgrade
+# PRD-HARNESS-UPGRADE-001: CoBuilder Self-Management Upgrade
 
 ## 1. Executive Summary
 
-The System 3 meta-orchestrator and its supporting harness have proven the core architecture: DOT pipelines, headless worker dispatch, signal-file coordination, and multi-level agent hierarchy all work end-to-end (validated in `ATTRACTOR-E2E-ANALYSIS.md`, 2026-03-06). However, four structural gaps and one architectural insight emerged from production use:
+The CoBuilder meta-orchestrator and its supporting harness have proven the core architecture: DOT pipelines, headless worker dispatch, signal-file coordination, and multi-level agent hierarchy all work end-to-end (validated in `ATTRACTOR-E2E-ANALYSIS.md`, 2026-03-06). However, four structural gaps and one architectural insight emerged from production use:
 
 1. **Scope drift**: PRDs evolve during implementation without a frozen contract. Workers operate against moving targets, producing artifacts that no longer match the original intent.
 2. **SD version pollution**: Solution Designs are edited in-place during research/refine cycles. By the time a codergen worker reads the SD, it may contain inline annotations (`// Validated via...`) or outdated patterns from earlier iterations.
 3. **Missing E2E validation gates**: Epic-level completion is declared based on unit-level checks (`validation-test-agent --mode=unit`). Gherkin E2E scenarios exist but are not structurally enforced in the pipeline topology.
 4. **Skills and sub-agent dispatch unused**: Agent definitions exist but have no dispatch mechanism in the DOT pipeline schema. More critically, the rich `.claude/skills/` library (research-first, acceptance-test-writer, react-best-practices, etc.) is not injected into worker prompts — workers operate without the domain skills that would guide their work.
-5. **Graph traversal LLM overhead** (architectural insight): The E2E analysis proved that the guardian layer spends ~$4.91 (33 LLM turns) on purely deterministic work: DOT parsing, graph traversal, state transitions, PID polling. The guardian concept dissolves; a pure Python state machine does this in milliseconds for $0, while System 3 remains as top-level strategic authority.
+5. **Graph traversal LLM overhead** (architectural insight): The E2E analysis proved that the guardian layer spends ~$4.91 (33 LLM turns) on purely deterministic work: DOT parsing, graph traversal, state transitions, PID polling. The guardian concept dissolves; a pure Python state machine does this in milliseconds for $0, while CoBuilder remains as top-level strategic authority.
 
 This PRD addresses all five gaps across three phases: Protocol Layer (documentation), Schema & Tooling (code), and Architecture Vision (future).
 
@@ -37,7 +37,7 @@ This PRD addresses all five gaps across three phases: Protocol Layer (documentat
 ## 3. User Stories
 
 ### US-1: Guardian Freezing a PRD
-As System 3, when I finalize a PRD and its Solution Designs, I want a `prd-contract.md` automatically generated containing 3-5 domain-invariant truths, scope boundaries, and compliance flags — so that downstream `wait.cobuilder` gates can verify that implementation hasn't drifted from the original intent.
+As CoBuilder, when I finalize a PRD and its Solution Designs, I want a `prd-contract.md` automatically generated containing 3-5 domain-invariant truths, scope boundaries, and compliance flags — so that downstream `wait.cobuilder` gates can verify that implementation hasn't drifted from the original intent.
 
 ### US-2: Worker Reading a Frozen SD
 As a worker dispatched by the pipeline runner, I want my task prompt to reference a specific git-tagged version of the Solution Design — so that even if the SD is refined after my dispatch, I work against the version that was validated by the research/refine chain.
@@ -56,21 +56,21 @@ As the pipeline runner, during a `wait.cobuilder` gate, I want to read a `concer
 
 ## 4. Phase 1: Protocol Layer (E0-E3)
 
-Phase 1 consists of documentation changes that System 3 can make directly. No guardian/runner dispatch needed — these are updates to schema docs, workflow references, skills, and output styles.
+Phase 1 consists of documentation changes that CoBuilder can make directly. No guardian/runner dispatch needed — these are updates to schema docs, workflow references, skills, and output styles.
 
 ### Epic 0 — Pipeline Progress Monitor (cobuilder-guardian Enhancement)
 
-**Goal**: Enhance the cobuilder-guardian skill so that System 3 can launch a Haiku 4.5 sub-agent to monitor pipeline runner progress, reporting back when intervention is needed.
+**Goal**: Enhance the cobuilder-guardian skill so that CoBuilder can launch a Haiku 4.5 sub-agent to monitor pipeline runner progress, reporting back when intervention is needed.
 
 **Scope**:
 - New sub-agent pattern in cobuilder-guardian SKILL.md: "Progress Monitor" mode
-- System 3 spawns Haiku 4.5 sub-agent via `Task(subagent_type="monitor", model="haiku")`
+- CoBuilder spawns Haiku 4.5 sub-agent via `Task(subagent_type="monitor", model="haiku")`
 - Monitor polls signal directory for state changes (new/modified signal files)
 - Monitor reads DOT graph file for node status transitions
-- Stall detection: no state change in >N minutes triggers report to System 3
+- Stall detection: no state change in >N minutes triggers report to CoBuilder
 - Error detection: failed node or unexpected state triggers immediate report
 - Completion detection: all nodes terminal triggers completion report
-- Monitor completes (waking System 3) only when attention is needed — cyclic re-launch pattern
+- Monitor completes (waking CoBuilder) only when attention is needed — cyclic re-launch pattern
 
 **Files changed**: cobuilder-guardian `SKILL.md`, cobuilder-guardian `references/monitoring-patterns.md`
 
@@ -86,7 +86,7 @@ Phase 1 consists of documentation changes that System 3 can make directly. No gu
 **Scope**:
 - Schema docs: `wait.cobuilder` defined as a two-stage automated gate:
   - Stage 1 (at `impl_complete`): Runner dispatches `validation-test-agent` via AgentSDK for technical checks (tests pass, code compiles, contract invariants hold). On success → `validated`.
-  - Stage 2 (at `validated`): System 3's Haiku monitor wakes System 3 to run blind Gherkin E2E acceptance tests (with access to Chrome MCP tools for browser testing), checks PRD Contract. On success → `accepted`. On failure → rejection signal, runner can requeue predecessor.
+  - Stage 2 (at `validated`): CoBuilder's Haiku monitor wakes CoBuilder to run blind Gherkin E2E acceptance tests (with access to Chrome MCP tools for browser testing), checks PRD Contract. On success → `accepted`. On failure → rejection signal, runner can requeue predecessor.
   No human prompt at either stage.
 - Schema docs: `wait.human` defined as review gate (always follows `wait.cobuilder` or `research`; always triggers `AskUserQuestion` with `summary_ref`)
 - Mandatory topology — full codergen cluster:
@@ -135,7 +135,7 @@ Phase 1 consists of documentation changes that System 3 can make directly. No gu
 - **Skill-first dispatch table**: lookup table in `guardian-workflow.md` mapping node intent to skill invocation + skill injection into worker prompts
 - **Validation reflection at wait.cobuilder**: before running E2E tests, the validation agent reads signal files from workers, reflects via Hindsight, and decides whether to proceed or requeue the codergen node (by transitioning it back to `pending` in the DOT graph)
 - **Session handoff**: `.claude/progress/{session-id}-handoff.md` written at end of turn, read first on startup
-- **Living narrative**: System 3 appends to `.claude/narrative/{initiative}.md` after each epic completion
+- **Living narrative**: CoBuilder appends to `.claude/narrative/{initiative}.md` after each epic completion
 - **Concern queue**: workers write to `concerns.jsonl`; `wait.cobuilder` reads and processes concerns
 - **Signal dir mitigation**: `ATTRACTOR_SIGNAL_DIR` env var documented as preflight check
 
@@ -150,7 +150,7 @@ Phase 1 consists of documentation changes that System 3 can make directly. No gu
 
 ## 5. Phase 2: Schema & Tooling (E4-E7)
 
-Phase 2 involves code changes. Each epic MUST be implemented via the pipeline runner dispatching AgentSDK workers — not System 3 direct.
+Phase 2 involves code changes. Each epic MUST be implemented via the pipeline runner dispatching AgentSDK workers — not CoBuilder direct.
 
 ### Epic 4 — Sub-Agent Registry + Skill Injection
 
@@ -253,7 +253,7 @@ Phase 2 involves code changes. Each epic MUST be implemented via the pipeline ru
 
 ### Epic 7.2 — Pure Python DOT Runner
 
-**Goal**: Implement the 3-layer architecture (System 3 -> Runner -> Workers) as a pure Python state machine for graph traversal, eliminating ~$4.91 per pipeline run. The guardian concept dissolves; System 3 remains as top-level authority.
+**Goal**: Implement the 3-layer architecture (CoBuilder -> Runner -> Workers) as a pure Python state machine for graph traversal, eliminating ~$4.91 per pipeline run. The guardian concept dissolves; CoBuilder remains as top-level authority.
 
 **Prerequisite**: Epic 7.1 (worker prompt restructuring). The Python runner dispatches workers directly — it must dispatch workers that receive well-structured, concise prompts rather than the current 21K system prompt.
 
@@ -267,14 +267,14 @@ Phase 2 involves code changes. Each epic MUST be implemented via the pipeline ru
 - Parallel dispatch via asyncio for independent ready nodes
 - `_handle_system3()`: two-stage gate processing:
   - Stage 1 (at `impl_complete`): dispatches `validation-test-agent` via AgentSDK for technical checks (tests pass, code compiles, contract invariants hold). On success, transitions node to `validated`.
-  - Stage 2 (at `validated`): System 3's Haiku monitor detects the `validated` status and wakes System 3 to run blind Gherkin E2E acceptance tests. System 3 writes acceptance signal → runner transitions to `accepted`.
+  - Stage 2 (at `validated`): CoBuilder's Haiku monitor detects the `validated` status and wakes CoBuilder to run blind Gherkin E2E acceptance tests. CoBuilder writes acceptance signal → runner transitions to `accepted`.
 - Retry: on validation failure, can transition predecessor codergen back to `pending`
 - `--mode=python` flag on `spawn_orchestrator.py`
 - All worker dispatch via `claude_code_sdk` (AgentSDK). No headless CLI or tmux dispatch.
 
 **3-Layer Architecture**:
 ```
-System 3 (LLM — blind Gherkin E2E at gate boundaries, ACCEPT/REJECT)
+CoBuilder (LLM — blind Gherkin E2E at gate boundaries, ACCEPT/REJECT)
   │
   pipeline_runner.py (Python, $0 — persistent, watchdog monitoring, graph traversal, dispatch)
   │
@@ -288,14 +288,14 @@ System 3 (LLM — blind Gherkin E2E at gate boundaries, ACCEPT/REJECT)
 | `research` | `_handle_research()` — dispatch AgentSDK research worker | No (dispatch only) |
 | `refine` | `_handle_refine()` — dispatch AgentSDK refine worker | No (dispatch only) |
 | `tool` | `_handle_tool()` — `subprocess.run(command)` | No |
-| `wait.cobuilder` | `_handle_system3()` — dispatch validation agent (AgentSDK), signal System 3 | Yes (validation agent) |
+| `wait.cobuilder` | `_handle_system3()` — dispatch validation agent (AgentSDK), signal CoBuilder | Yes (validation agent) |
 | `wait.human` | `_handle_human()` — emit GChat, poll for response signal | No |
 | `conditional` | `_handle_conditional()` — evaluate condition expr | No |
 | `parallel` | `_handle_parallel()` — asyncio fan-out/fan-in | No |
 | `start` | `_handle_noop()` | No |
 | `exit` | `_handle_exit()` | No |
 
-The `wait.cobuilder` handler is the only handler that involves LLM cost, and that cost is borne by the validation agent (AgentSDK worker) and System 3 (blind Gherkin E2E) — not by the runner itself. The runner's role is purely dispatch and status tracking. The `accepted` status is written by System 3 after successful Gherkin E2E; on failure, System 3 writes a rejection signal and the runner can requeue the predecessor.
+The `wait.cobuilder` handler is the only handler that involves LLM cost, and that cost is borne by the validation agent (AgentSDK worker) and CoBuilder (blind Gherkin E2E) — not by the runner itself. The runner's role is purely dispatch and status tracking. The `accepted` status is written by CoBuilder after successful Gherkin E2E; on failure, CoBuilder writes a rejection signal and the runner can requeue the predecessor.
 
 **Signal-file wait mechanism**: Workers write `{signal_dir}/{node_id}.json` on completion. Runner uses watchdog-based file monitoring on the signal directory — when a new or modified file is detected, the runner processes the corresponding node state transition. This replaces mtime-based polling with event-driven monitoring.
 
@@ -324,7 +324,7 @@ Phase 3 epics are future work (~6-12 months). Documented here for strategic alig
 ### Epic 8 — Initiative Graph
 Shared state object at `.claude/state/initiative.json` tracking all active initiatives, their pipelines, and cross-initiative dependencies.
 
-### Epic 9 — Persistent System 3 Controller
+### Epic 9 — Persistent CoBuilder Controller
 Long-running process replacing episodic sessions. Maintains state across initiatives without session handoff overhead.
 
 ### Epic 10 — Epic-Scoped Runners + Parallel Execution
@@ -344,18 +344,18 @@ The pipeline is a directed acyclic graph (DAG) encoded in DOT format. Each node 
 
 - `impl_complete`: Worker self-reports completion
 - `validated`: Validation agent (runner-dispatched via AgentSDK) confirms technical correctness (tests pass, code compiles, contract invariants hold)
-- `accepted`: System 3 independently confirms business requirements via blind Gherkin E2E scenarios
+- `accepted`: CoBuilder independently confirms business requirements via blind Gherkin E2E scenarios
 
 **3-Layer Architecture**:
 ```
-System 3 (LLM — strategic authority, blind Gherkin E2E, final ACCEPT/REJECT)
+CoBuilder (LLM — strategic authority, blind Gherkin E2E, final ACCEPT/REJECT)
   │
   pipeline_runner.py (Python — persistent, watchdog file monitoring, graph traversal, dispatch, $0)
   │
   Workers (AgentSDK — codergen, research, refine, validation)
 ```
 
-The guardian concept dissolves: System 3 remains as the top-level strategic authority responsible for blind Gherkin E2E acceptance and final ACCEPT/REJECT decisions. The Python runner replaces the guardian's graph traversal role with zero LLM intelligence. System 3 E2E cost is separate and only incurred at gate boundaries (not per-node).
+The guardian concept dissolves: CoBuilder remains as the top-level strategic authority responsible for blind Gherkin E2E acceptance and final ACCEPT/REJECT decisions. The Python runner replaces the guardian's graph traversal role with zero LLM intelligence. CoBuilder E2E cost is separate and only incurred at gate boundaries (not per-node).
 
 ### Cost Model (from E2E analysis)
 
@@ -363,7 +363,7 @@ The guardian concept dissolves: System 3 remains as the top-level strategic auth
 | --- | --- | --- |
 | Guardian/Runner | $4.91 (LLM, 33 turns) | ~$0 (Python) |
 | Worker (per node) | $5.86 (LLM, 37 turns) | $5.86 (unchanged) |
-| System 3 E2E (per gate) | N/A (manual) | ~$0.50 (Haiku monitor + blind Gherkin) |
+| CoBuilder E2E (per gate) | N/A (manual) | ~$0.50 (Haiku monitor + blind Gherkin) |
 | **Total per node** | **\~$10.77** | **\~$5.86 + gate cost at epic boundaries** |
 | **Savings** |  | **\~46%** |
 
@@ -434,7 +434,7 @@ Post-E7.2 hardening addressing latent bugs discovered via stress testing and res
 
 **E2E Test Suite**: 33 tests in `tests/e2e/test_pipeline_hardening.py`, all passing (`cda90ed`).
 
-> **Note (2026-03-10)**: Remaining hardening epics D, E.3, and F have been absorbed into [PRD-COBUILDER-CONSOLIDATION-001.md](./../../PRD-COBUILDER-CONSOLIDATION-001.md) to avoid migrating known-buggy code. See Section 13 of that PRD.
+> **Note (2026-03-10)**: Remaining hardening epics D, E.3, and F have been absorbed into [PRD-COBUILDER-CONSOLIDATION-001.md](./../PRD-COBUILDER-CONSOLIDATION-001.md) to avoid migrating known-buggy code. See Section 13 of that PRD.
 
 ### Phase 3: Architecture Vision (E8-E12) — Future Work
 
@@ -486,3 +486,9 @@ Not started. Strategic alignment documented; no immediate implementation planned
 | E10 — Epic-Scoped Runners | 3 | Future | ~6-12 months |
 | E11 — Async Review | 3 | Future | ~6-12 months |
 | E12 — Graduated Autonomy | 3 | Future | ~6-12 months |
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

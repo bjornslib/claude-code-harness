@@ -152,3 +152,9 @@ contact_first_name = primary.first_name if primary else "there"
 - Existing JSONB with `contact_name` continues to work via validator
 - `university_contacts.name` column preserved alongside new split columns
 - Voice agent falls back to `contact_name` if `first_name` not available
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

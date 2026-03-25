@@ -20,15 +20,15 @@ implementation_status: complete
 
 ### Problem Statement
 
-Pipeline execution currently produces observability only through tmux `capture-pane` output — raw text that System 3 must parse manually or poll indirectly. There is no structured record of what happened inside a pipeline run, when each node started and finished, how many tokens were consumed, or why an edge was taken. When a pipeline stalls or crashes, diagnosis requires reading tmux scrollback and correlating it with signal files.
+Pipeline execution currently produces observability only through tmux `capture-pane` output — raw text that CoBuilder must parse manually or poll indirectly. There is no structured record of what happened inside a pipeline run, when each node started and finished, how many tokens were consumed, or why an edge was taken. When a pipeline stalls or crashes, diagnosis requires reading tmux scrollback and correlating it with signal files.
 
-This epic bridges that gap. It delivers a structured event bus that emits typed events at every lifecycle point in pipeline execution, feeds those events into Logfire parent/child spans, writes a local JSONL audit trail, and bridges critical events back to the existing signal protocol that System 3 and the Guardian already monitor. Observability becomes first-class rather than an afterthought.
+This epic bridges that gap. It delivers a structured event bus that emits typed events at every lifecycle point in pipeline execution, feeds those events into Logfire parent/child spans, writes a local JSONL audit trail, and bridges critical events back to the existing signal protocol that CoBuilder and the Guardian already monitor. Observability becomes first-class rather than an afterthought.
 
 ### Strategic Value
 
 | Stakeholder | Benefit |
 | --- | --- |
-| System 3 (meta-orchestrator) | Monitors pipeline health via Logfire dashboard instead of tmux capture |
+| CoBuilder (meta-orchestrator) | Monitors pipeline health via Logfire dashboard instead of tmux capture |
 | Guardian agent | Receives `pipeline.completed` and `node.failed` via signal bridge without polling |
 | Developers debugging failed runs | JSONL event log provides complete replay of what happened |
 | Cost-tracking | Per-node and per-pipeline token totals available in pipeline context as `$total_tokens` |
@@ -785,7 +785,7 @@ The features within Epic 4 must be built in dependency order:
 | JSONL append mode | Preserves events on resume | When pipeline is resumed from checkpoint, prior run events are not overwritten — the file grows continuously |
 | `SignalBridge` extends signal protocol | Wraps `write_signal()` | Reuses battle-tested atomic write pattern; Signal protocol ownership stays in `signal_protocol.py` |
 | Token counting via `Outcome.raw_messages` | Optional field on Outcome | Avoids coupling `CodergenHandler` to the token counting middleware; handler just stores messages, middleware extracts counts |
-| Separate `validation.started` / `validation.completed` events | Two events for validation | Enables measuring validation duration in Logfire; allows System 3 to detect stuck validation |
+| Separate `validation.started` / `validation.completed` events | Two events for validation | Enables measuring validation duration in Logfire; allows CoBuilder to detect stuck validation |
 
 ---
 

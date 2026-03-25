@@ -29,8 +29,8 @@ Feature: F1.1 — PreToolUse Hook: Block & Forward AskUserQuestion
     #   - .claude/hooks/gchat-ask-user-forward.py (exists, non-trivial)
     #   - .claude/settings.json → PreToolUse → matcher: "AskUserQuestion"
 
-  Scenario: Hook denies AskUserQuestion in System 3 sessions
-    Given a System 3 session (CLAUDE_SESSION_ID with timestamp pattern)
+  Scenario: Hook denies AskUserQuestion in CoBuilder sessions
+    Given a CoBuilder session (CLAUDE_SESSION_ID with timestamp pattern)
     When AskUserQuestion is called
     Then the hook returns permissionDecision: "deny"
     And the denial reason mentions "forwarded to Google Chat"
@@ -66,7 +66,7 @@ Feature: F1.1 — PreToolUse Hook: Block & Forward AskUserQuestion
     #   - Session detection via file existence instead of env var
 
   Scenario: Hook formats question via Haiku API and sends to GChat
-    Given a System 3 AskUserQuestion with questions[]
+    Given a CoBuilder AskUserQuestion with questions[]
     When the hook processes the tool call
     Then the hook calls the Anthropic API with claude-haiku model
     And the formatted message is POST'd to GOOGLE_CHAT_WEBHOOK_URL
@@ -108,8 +108,8 @@ Feature: F1.1 — PreToolUse Hook: Block & Forward AskUserQuestion
 Feature: F1.2 — One-Shot Background Haiku Task: GChat Response Poller
   Weight: 0.15
 
-  Scenario: System 3 output style spawns poller after denial
-    Given the System 3 output style (system3-meta-orchestrator.md)
+  Scenario: CoBuilder output style spawns poller after denial
+    Given the CoBuilder output style (system3-meta-orchestrator.md)
     When AskUserQuestion is denied with "forwarded to Google Chat" reason
     Then the output style instructs spawning a background Haiku Task
     And the Task prompt includes the thread key for polling
@@ -173,7 +173,7 @@ Feature: F1.3 — Multi-Session Response Correlation
     #   0.0 — No threadKey generation
 
   Scenario: Concurrent sessions don't cross-contaminate
-    Given two concurrent System 3 sessions (A and B)
+    Given two concurrent CoBuilder sessions (A and B)
     When both forward AskUserQuestion to GChat
     Then each session's poller only monitors its own threadKey
     And responses to Session A don't appear in Session B's poller
@@ -316,12 +316,12 @@ Feature: F2.3 — Stop Hook GChat Integration
     #   0.0 — No GChat notification on session end
 
 
-Feature: F2.4 — Direct gchat-send Usage in System 3
+Feature: F2.4 — Direct gchat-send Usage in CoBuilder
   Weight: 0.05
 
   Scenario: Output style uses gchat-send instead of SendMessage to communicator
     Given the system3-meta-orchestrator.md output style
-    When System 3 wants to send a GChat message
+    When CoBuilder wants to send a GChat message
     Then Bash("gchat-send ...") is used instead of SendMessage to s3-communicator
 
     # Scoring Guide:
@@ -335,7 +335,7 @@ Feature: F2.4 — Direct gchat-send Usage in System 3
 # EPIC 4: s3-communicator Removal + Migration
 # =============================================================================
 
-Feature: F4.1 — Update System 3 Output Style
+Feature: F4.1 — Update CoBuilder Output Style
   Weight: 0.08
 
   Scenario: No references to s3-communicator in output style

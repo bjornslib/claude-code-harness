@@ -23,7 +23,7 @@
 # handler_defaults or manifest defaults override it. Layer 5 fallback.
 default_profile: alibaba-glm5
 
-# Judge profile — used by the System 3 continuation judge (stop hook).
+# Judge profile — used by the CoBuilder continuation judge (stop hook).
 # Defaults to alibaba-glm5 for near-zero cost evaluation.
 judge_profile: alibaba-glm5
 

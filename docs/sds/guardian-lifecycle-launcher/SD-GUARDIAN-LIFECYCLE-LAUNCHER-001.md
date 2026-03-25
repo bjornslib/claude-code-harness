@@ -190,3 +190,9 @@ When a PLAN node needs to generate a child implementation pipeline:
 | AC-2.2 | System prompt contains pattern for reading refined BS |
 | AC-2.3 | System prompt contains `state/{id}-plan.json` format |
 | AC-2.4 | Dry-run output includes template instructions |
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

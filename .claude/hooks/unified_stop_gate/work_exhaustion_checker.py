@@ -1,14 +1,14 @@
 """Work Exhaustion Checker - Gathers work state and enforces task completion.
 
-For System 3 sessions (system3-*):
+For CoBuilder sessions (system3-*):
   Pending/in_progress tasks BLOCK the session from stopping. The stop hook
   fires because Claude Code WANTS to stop — a pending task at that point is
   a contradiction. Either execute the task or delete it honestly.
 
-  The only valid exit for System 3 is to have exhausted all productive work
+  The only valid exit for CoBuilder is to have exhausted all productive work
   and presented option questions to the user via AskUserQuestion.
 
-For non-System 3 sessions (orchestrators, workers):
+For non-CoBuilder sessions (orchestrators, workers):
   Always PASS — these sessions can stop freely. Task state is informational
   context for the judge but never blocks. This prevents orchestrators that
   completed all their work from getting stuck in stop-hook loops.
@@ -16,7 +16,7 @@ For non-System 3 sessions (orchestrators, workers):
 Architecture:
 - Step 4 (this checker): Mechanical data gathering + task enforcement
 - Step 5 (Haiku judge): LLM-based judgment using transcript + ALL task states
-- Output style: Behavioral guidance for System 3's self-assessment
+- Output style: Behavioral guidance for CoBuilder's self-assessment
 """
 
 from dataclasses import dataclass, field
@@ -133,7 +133,7 @@ class WorkState:
         return lines
 
     def format_for_judge(self) -> str:
-        """Structured summary for the System 3 Haiku Judge (Step 5).
+        """Structured summary for the CoBuilder Haiku Judge (Step 5).
 
         Includes ALL task states so the judge can evaluate session completeness.
         """
@@ -172,8 +172,8 @@ class WorkExhaustionChecker:
 
     Mechanical responsibilities:
     1. Gather work state from three sources (promises, beads, task primitives)
-    2. For System 3 sessions: BLOCK if unfinished tasks exist (must execute or delete)
-    3. For non-System 3: Always PASS (task state is informational, never blocking)
+    2. For CoBuilder sessions: BLOCK if unfinished tasks exist (must execute or delete)
+    3. For non-CoBuilder: Always PASS (task state is informational, never blocking)
     4. Produce a work_state_summary for Step 5 (Haiku judge) with ALL task states
 
     What this checker does NOT do:
@@ -189,11 +189,11 @@ class WorkExhaustionChecker:
     def check(self) -> CheckResult:
         """Check task state and gather work-state context.
 
-        For System 3 sessions (system3-*):
+        For CoBuilder sessions (system3-*):
             pending/in_progress tasks → BLOCK (the stop hook fires because
             Claude Code wants to stop — pending tasks are a contradiction)
 
-        For non-System 3 sessions (orchestrators, workers):
+        For non-CoBuilder sessions (orchestrators, workers):
             Always PASS — task state is context for judge, never blocking
 
         Returns:
@@ -221,7 +221,7 @@ class WorkExhaustionChecker:
 
         has_unfinished_tasks = work_state.pending_task_count > 0
 
-        # System 3 sessions: pending tasks BLOCK (must execute or delete)
+        # CoBuilder sessions: pending tasks BLOCK (must execute or delete)
         if self.config.is_system3:
             if has_unfinished_tasks:
                 return CheckResult(
@@ -255,7 +255,7 @@ class WorkExhaustionChecker:
                     blocking=True,
                 )
 
-        # Non-System 3 sessions (orchestrators, workers):
+        # Non-CoBuilder sessions (orchestrators, workers):
         # Original behavior: pending/in_progress tasks are a continuation signal.
         # If tasks exist → PASS (session has work to continue)
         # If no tasks → BLOCK (no continuation intent, but work may be available)
@@ -276,7 +276,7 @@ class WorkExhaustionChecker:
 
     @property
     def work_state_summary(self) -> str:
-        """Structured work-state summary for Step 5 (System 3 Judge).
+        """Structured work-state summary for Step 5 (CoBuilder Judge).
 
         Includes ALL task states (pending, completed) for judge evaluation.
         Returns empty string if check() hasn't been called yet.
@@ -505,7 +505,7 @@ class WorkExhaustionChecker:
         return f"Work exhaustion check: all tasks completed or none pending\n{summary}"
 
     def _format_system3_unfinished_block(self, state: WorkState) -> str:
-        """Block message for System 3 sessions with unfinished tasks.
+        """Block message for CoBuilder sessions with unfinished tasks.
 
         The stop hook fires because Claude Code WANTS to stop. Pending tasks
         at that point are a contradiction — either execute them or delete them.
@@ -542,13 +542,13 @@ Do NOT create placeholder tasks to satisfy this check.
 Tasks represent real commitments — execute them or be honest about deleting them."""
 
     def _format_system3_validation_pending(self, state: WorkState) -> str:
-        """Block message for System 3 with impl_complete tasks awaiting validation."""
+        """Block message for CoBuilder with impl_complete tasks awaiting validation."""
         lines = state.format_summary_lines()
         work_summary = "\n".join(f"  {line}" for line in lines)
 
         return f"""VALIDATION PENDING - SESSION CANNOT STOP
 
-You have tasks awaiting System 3 validation:
+You have tasks awaiting CoBuilder validation:
   - {state.impl_complete_count} tasks marked impl_complete (need validation cycle)
   - {state.s3_validating_count} tasks currently being validated (s3_validating)
 
@@ -563,7 +563,7 @@ REQUIRED ACTIONS:
 Do NOT stop while tasks await independent validation."""
 
     def _format_system3_evidence_missing(self, state: WorkState) -> str:
-        """Block message for System 3 with tasks closed without validation evidence.
+        """Block message for CoBuilder with tasks closed without validation evidence.
 
         This catches the case where S3 launders impl_complete → s3_validating → closed
         without actually spawning the oversight team or running E2E validation.
@@ -587,7 +587,7 @@ team was never spawned — validation was skipped entirely.
 Current work state:
 {work_summary}
 
-CRITICAL RULE #3 VIOLATION: System 3 must NEVER close tasks without independent validation.
+CRITICAL RULE #3 VIOLATION: CoBuilder must NEVER close tasks without independent validation.
 
 REQUIRED ACTIONS:
 1. Reopen the tasks: bd reopen <id>
@@ -599,7 +599,7 @@ REQUIRED ACTIONS:
 See references/oversight-team.md for spawn commands."""
 
     def _format_non_system3_block(self, state: WorkState) -> str:
-        """Block message for non-System 3 sessions with no tasks.
+        """Block message for non-CoBuilder sessions with no tasks.
 
         Original behavior: no pending task means no continuation intent.
         """

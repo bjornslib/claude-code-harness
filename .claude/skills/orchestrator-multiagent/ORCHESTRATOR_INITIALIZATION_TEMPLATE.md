@@ -11,7 +11,7 @@ grade: authoritative
 **Part of**: [Multi-Agent Orchestrator Skill](SKILL.md)
 
 **When to use this template:**
-System 3 uses this template when spawning a new orchestrator in a worktree. It ensures orchestrators:
+CoBuilder uses this template when spawning a new orchestrator in a worktree. It ensures orchestrators:
 1. Invoke the correct skill immediately
 2. Follow proper initialization sequence
 
@@ -26,9 +26,9 @@ You are an orchestrator for initiative: [INITIATIVE_NAME]
 
 ## FIRST ACTIONS (In Order - Do Not Skip)
 
-### Step 0: Output Style (Already Set by System 3)
-> **Your output style was already set to "orchestrator" by System 3 during spawn.**
-> System 3 selected it via `/output-style orchestrator` in tmux before sending this prompt.
+### Step 0: Output Style (Already Set by CoBuilder)
+> **Your output style was already set to "orchestrator" by CoBuilder during spawn.**
+> CoBuilder selected it via `/output-style orchestrator` in tmux before sending this prompt.
 > You do NOT need to run `/output-style` — it is already active.
 
 ### Step 1: Invoke the Orchestrator Skill (MANDATORY)
@@ -53,7 +53,7 @@ Now run the standard preflight from the skill.
 
 ---
 
-## System 3 Wisdom Injection
+## CoBuilder Wisdom Injection
 
 ### Validated Orchestration Patterns
 [PATTERNS_FROM_SYSTEM3_BANK]
@@ -105,7 +105,7 @@ Use this format:
 
 ---
 
-## Communication with System 3
+## Communication with CoBuilder
 
 ### When to Report Back
 - **Epic completed**: Send completion message
@@ -114,7 +114,7 @@ Use this format:
 
 ### How to Report
 ```bash
-# Mark tasks as impl_complete for System 3 to pick up
+# Mark tasks as impl_complete for CoBuilder to pick up
 bd update <bd-id> --status=impl_complete
 ```
 
@@ -133,7 +133,7 @@ Before ending your session:
    ```python
    Teammate(operation="cleanup")
    ```
-3. [ ] Send completion/status message to System 3
+3. [ ] Send completion/status message to CoBuilder
 4. [ ] Update progress log
 5. [ ] `bd sync` - sync beads state
 6. [ ] `git commit` and `git push`
@@ -144,7 +144,7 @@ Before ending your session:
 
 ## CRITICAL Reminders
 
-1. **Output Style**: Already set by System 3 during spawn (you do NOT need to run `/output-style`)
+1. **Output Style**: Already set by CoBuilder during spawn (you do NOT need to run `/output-style`)
 2. **Skill First**: Invoke `Skill("orchestrator-multiagent")` as your very first action
 3. **Create Team**: Set up worker team with `Teammate(operation="spawnTeam", ...)` before delegating
 4. **Workers via Teams**: Use `Task(subagent_type=..., team_name=..., name=...)` for worker delegation. Workers communicate via SendMessage.
@@ -155,9 +155,9 @@ Before ending your session:
 
 ---
 
-## Pre-Spawn Checklist (For System 3)
+## Pre-Spawn Checklist (For CoBuilder)
 
-Before sending the initialization prompt, System 3 must:
+Before sending the initialization prompt, CoBuilder must:
 
 - [ ] Created worktree with `/create_worktree`
 - [ ] Symlinked .claude directory: `ln -s $(pwd)/.claude ../[worktree]/.claude`
@@ -192,10 +192,10 @@ tmux send-keys -t "orch-[name]" Enter
 
 ---
 
-## Wisdom Gathering Script (For System 3)
+## Wisdom Gathering Script (For CoBuilder)
 
 ```python
-# Query System 3 private bank for orchestration patterns
+# Query CoBuilder private bank for orchestration patterns
 meta_patterns = mcp__hindsight__reflect(
     f"""I'm spawning an orchestrator for initiative: {initiative_name}
 

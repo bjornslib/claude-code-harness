@@ -173,7 +173,7 @@ class RunnerHooks:
                         f"RETRY LIMIT: Node '{node_id}' has failed "
                         f"{retry_count}/{MAX_RETRIES} times. "
                         f"The runner must signal STUCK instead of retrying. "
-                        f"System 3 intervention is required."
+                        f"CoBuilder intervention is required."
                     )
 
             # Guard 3: Evidence staleness check for validation transitions

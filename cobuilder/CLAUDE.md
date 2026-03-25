@@ -8,7 +8,7 @@ CoBuilder is the **pipeline execution engine** for multi-agent orchestration. It
 
 **3-layer hierarchy:**
 ```
-System 3 (Opus LLM)           — strategic planning, Gherkin E2E validation
+CoBuilder (Opus LLM)           — strategic planning, Gherkin E2E validation
     |
     pipeline_runner.py         — Python state machine, $0, <1s graph ops
         |
@@ -113,7 +113,7 @@ pending -> active -> impl_complete -> validated -> accepted
 
 - `impl_complete`: worker AgentSDK call returned
 - `validated`: validation agent confirmed technical correctness
-- `accepted`: System 3 blind Gherkin E2E passed
+- `accepted`: CoBuilder blind Gherkin E2E passed
 
 ### 3. LLM Profile Resolution (5-layer, first non-null wins)
 
@@ -152,7 +152,7 @@ python3 cobuilder/engine/pipeline_runner.py --dot-file <path.dot> --resume
 
 `wait.cobuilder` and `wait.human` nodes pause pipeline execution until a parent signal is received.
 
-- `wait.cobuilder`: child writes `GATE_WAIT_COBUILDER` signal; parent (System 3 or `manager_loop`) runs validation agent and writes `GATE_RESPONSE`
+- `wait.cobuilder`: child writes `GATE_WAIT_COBUILDER` signal; parent (CoBuilder or `manager_loop`) runs validation agent and writes `GATE_RESPONSE`
 - `wait.human`: child writes `GATE_WAIT_HUMAN` signal; parent calls `AskUserQuestion` and writes `GATE_RESPONSE`
 
 Gate signals use `source="child"`, `target="parent"` naming convention.

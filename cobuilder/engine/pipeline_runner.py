@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Pure Python DOT pipeline runner. Zero LLM tokens for graph traversal.
 
-3-layer hierarchy: System 3 (LLM) -> pipeline_runner.py (Python) -> Workers (AgentSDK)
+3-layer hierarchy: CoBuilder (LLM) -> pipeline_runner.py (Python) -> Workers (AgentSDK)
 
 The runner has ZERO LLM intelligence. It can only:
 - Parse DOT files, track node states, find dispatchable nodes
@@ -11,7 +11,7 @@ The runner has ZERO LLM intelligence. It can only:
 - Read signal files and apply results without interpretation
 
 Architecture:
-    System 3 (Opus)         — strategic planning, blind Gherkin E2E
+    CoBuilder (Opus)         — strategic planning, blind Gherkin E2E
       |
       pipeline_runner.py    — Python state machine, $0, <1s graph ops
         |
@@ -1242,18 +1242,18 @@ class PipelineRunner:
     def _handle_gate(self, node: dict, data: dict) -> None:  # noqa: ARG002
         """Gate/wait.cobuilder nodes: emit a gate-wait signal and mark as waiting.
 
-        System 3 must write a pass signal to {signal_dir}/{node_id}.json to
+        CoBuilder must write a pass signal to {signal_dir}/{node_id}.json to
         unblock the gate.
         """
         nid = node["id"]
-        log.info("[gate] %s — waiting for System 3 approval", nid)
+        log.info("[gate] %s — waiting for CoBuilder approval", nid)
         # Mark as active so the runner knows it's waiting
         self.active_workers[nid] = {
             "node_id": nid,
             "waiting_for": "system3",
             "started_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         }
-        # Write a gate-wait marker file so System 3 knows to look at this node
+        # Write a gate-wait marker file so CoBuilder knows to look at this node
         gate_marker = os.path.join(self.signal_dir, f"{nid}.gate-wait")
         with open(gate_marker, "w") as fh:
             json.dump({
@@ -1274,7 +1274,7 @@ class PipelineRunner:
             "waiting_for": "human",
             "started_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         }
-        # Write a gate-wait marker file so System 3 / monitor can detect this gate
+        # Write a gate-wait marker file so CoBuilder / monitor can detect this gate
         gate_marker = os.path.join(self.signal_dir, f"{nid}.gate-wait")
         with open(gate_marker, "w") as fh:
             json.dump({
@@ -1878,7 +1878,7 @@ class PipelineRunner:
     def _run_validation_subprocess(self, node_id: str, target_node_id: str, target_dir: str = "") -> None:
         """Run validation-test-agent via AgentSDK. Falls back to auto-pass if unavailable.
 
-        Validation is a System 3 concern — the runner auto-advances nodes when
+        Validation is a CoBuilder concern — the runner auto-advances nodes when
         validation dispatch is not possible (e.g., nested sessions, no SDK).
 
         Includes timeout handling and error reporting for validation crashes.

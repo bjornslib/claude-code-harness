@@ -14,7 +14,7 @@ author: "cobuilder-guardian"
 **Epic:** LiveKit Voice Agent Bug Fixes
 **Source PRD:** PRD-AURA-LIVEKIT-FIXES-001
 **Date:** 2026-03-09
-**Author:** System 3 (root cause analysis from live session log)
+**Author:** CoBuilder (root cause analysis from live session log)
 **Status:** Draft
 
 ---

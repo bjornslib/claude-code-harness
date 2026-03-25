@@ -4,7 +4,7 @@ Adapts Replit's decision-time guidance approach:
 - Selective injection of guidance at decision points
 - Lightweight signal tracking (error patterns, doom loops)
 - Ephemeral reminders that don't persist in context
-- Goal-aware validation against System3 instructions
+- Goal-aware validation against CoBuilder instructions
 """
 
 from .state_manager import ErrorTracker, EditHistory

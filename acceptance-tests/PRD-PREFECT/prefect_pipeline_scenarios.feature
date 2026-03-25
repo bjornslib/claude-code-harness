@@ -1,12 +1,12 @@
 # Prefect Pipeline Productionisation — Acceptance Scenarios
 # =========================================================
 #
-# PURPOSE: Descriptive acceptance rubric for System 3 (guardian angel) to
+# PURPOSE: Descriptive acceptance rubric for CoBuilder (guardian angel) to
 # independently validate claims made by orchestrators and workers about
 # Prefect productionisation work. These scenarios live OUTSIDE the
 # implementation repo so implementers cannot see or game them.
 #
-# HOW TO USE: When an orchestrator claims work is "done", System 3 reads
+# HOW TO USE: When an orchestrator claims work is "done", CoBuilder reads
 # the actual codebase and evaluates each scenario against the evidence.
 # Confidence is scored 0.0–1.0, not binary pass/fail. A claim of "done"
 # with confidence < 0.6 across critical scenarios triggers rejection.

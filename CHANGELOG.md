@@ -33,7 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release of Claude Code Harness Setup
 - Core configuration framework for multi-agent AI orchestration
-- Output styles for System 3 and Orchestrator modes
+- Output styles for CoBuilder and Orchestrator modes
 - Skills library with 20+ specialized skills
 - MCP server integration (11 servers configured)
 - Hooks for session lifecycle automation

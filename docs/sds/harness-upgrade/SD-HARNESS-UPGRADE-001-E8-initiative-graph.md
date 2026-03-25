@@ -1,7 +1,7 @@
 ---
 title: "SD-HARNESS-UPGRADE-001 Epic 8: Initiative Graph"
 status: draft
-type: solution-design
+type: sd
 last_verified: 2026-03-06T00:00:00.000Z
 grade: draft
 ---
@@ -11,7 +11,7 @@ grade: draft
 
 ## 1. Problem Statement
 
-System 3 currently tracks initiatives implicitly through Hindsight memory and beads. There is no single structured object that represents "all active initiatives, their pipelines, their dependencies, and their progress." This forces System 3 to reconstruct initiative state from multiple sources at every session start.
+CoBuilder currently tracks initiatives implicitly through Hindsight memory and beads. There is no single structured object that represents "all active initiatives, their pipelines, their dependencies, and their progress." This forces CoBuilder to reconstruct initiative state from multiple sources at every session start.
 
 ## 2. Design Vision
 
@@ -22,7 +22,7 @@ A shared state object at `.claude/state/initiative.json`:
   "initiatives": [
     {
       "id": "PRD-HARNESS-UPGRADE-001",
-      "title": "System 3 Self-Management Upgrade",
+      "title": "CoBuilder Self-Management Upgrade",
       "status": "in_progress",
       "pipeline": ".pipelines/pipelines/PRD-HARNESS-UPGRADE-001.dot",
       "phases": [
@@ -55,5 +55,5 @@ Benefits:
 ## 4. Acceptance Criteria (Draft)
 
 - AC-8.1: `initiative.json` schema defined with validation
-- AC-8.2: System 3 startup reads initiative state from file
+- AC-8.2: CoBuilder startup reads initiative state from file
 - AC-8.3: Pipeline transitions update initiative state

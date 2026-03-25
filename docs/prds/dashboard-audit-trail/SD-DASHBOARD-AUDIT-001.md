@@ -3,7 +3,7 @@ title: "SD-DASHBOARD-AUDIT-001: Checks Dashboard — Stable References, Audit Tr
 status: active
 type: architecture
 grade: authoritative
-last_verified: 2026-03-09T00:00:00.000Z
+last_verified: 2026-03-09
 ---
 # SD-DASHBOARD-AUDIT-001: Checks Dashboard Reverse Engineering Design
 
@@ -499,3 +499,9 @@ Reflected against `claude-code-my-project` bank (2026-03-09).
 
 **New finding from this analysis:**
 - The frontend `work-history.ts` line 368 maps `case_id: v.task_id`. This is the single root cause of the identity confusion. All downstream components that read `case_id` are actually reading the `task_id` UUID. This must be corrected at the API client layer — not in each component individually.
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

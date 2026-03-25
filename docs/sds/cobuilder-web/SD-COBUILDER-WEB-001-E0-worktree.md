@@ -16,7 +16,7 @@ Pipeline workers dispatched by `pipeline_runner.py` currently execute in a singl
 
 1. **Merge conflicts between concurrent workers.** Two codergen nodes editing the same file in parallel will race. The second worker to `git add && git commit` silently overwrites the first worker's changes, or fails with a dirty-tree error.
 
-2. **No isolation between pipeline runs.** When System 3 launches a second pipeline against the same target repository, workers from pipeline A and pipeline B share a working directory. Partial commits from one pipeline pollute the other.
+2. **No isolation between pipeline runs.** When CoBuilder launches a second pipeline against the same target repository, workers from pipeline A and pipeline B share a working directory. Partial commits from one pipeline pollute the other.
 
 3. **Stale worktree accumulation.** The existing `spawn_orchestrator.py` creates worktrees at `.claude/worktrees/<node_id>/` via `claude --worktree`, but nothing cleans them up after the pipeline completes. Over time, abandoned worktrees consume disk and confuse `git branch --list`.
 
@@ -505,9 +505,9 @@ for attempt in range(3):
 **Mitigation:** Two-layer defense:
 
 1. **`git worktree prune`** is called at the start of `get_or_create()` to remove stale entries where the directory has been deleted but the git metadata remains.
-2. **Periodic garbage collection.** A future System 3 health check (not in this epic) can call `list_active()` across all target repos and compare against running pipelines. Orphans older than 24 hours get cleaned up.
+2. **Periodic garbage collection.** A future CoBuilder health check (not in this epic) can call `list_active()` across all target repos and compare against running pipelines. Orphans older than 24 hours get cleaned up.
 
-For this epic, the `cleanup()` method is the primary defense. The PRD notes that System 3 should call cleanup after validating pipeline results.
+For this epic, the `cleanup()` method is the primary defense. The PRD notes that CoBuilder should call cleanup after validating pipeline results.
 
 ### 7.3 Branch Conflicts
 

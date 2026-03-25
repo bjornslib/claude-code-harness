@@ -568,11 +568,11 @@ class OrchestratorGuidanceChecker:
     """P2.5: Check if orchestrator has unescalated blockers.
 
     Only active for orchestrator sessions (session ID starts with 'orch-').
-    Encourages orchestrators to consult System3 before stopping when blocked.
+    Encourages orchestrators to consult CoBuilder before stopping when blocked.
 
     This implements decision-time guidance for orchestrators:
     - Detects unescalated blockers from error patterns or worker failures
-    - Suggests consulting System3 for guidance
+    - Suggests consulting CoBuilder for guidance
     - Can be bypassed after 2 blocked attempts (like momentum check)
     """
 
@@ -611,7 +611,7 @@ class OrchestratorGuidanceChecker:
             json.dump(state, f, indent=2)
 
     def _detect_unescalated_blockers(self) -> list[dict]:
-        """Detect blockers that should be escalated to System3.
+        """Detect blockers that should be escalated to CoBuilder.
 
         Checks:
         1. Recent error patterns from decision-guidance state
@@ -730,18 +730,18 @@ class OrchestratorGuidanceChecker:
             passed=False,
             message=f"""## Orchestrator Guidance: Unescalated Blockers
 
-You have {len(blockers)} blocker(s) that should be escalated to System3:
+You have {len(blockers)} blocker(s) that should be escalated to CoBuilder:
 
 {self._format_blocker_list(blockers)}
 
-**Recommended Action - Escalate to System3 via beads:**
+**Recommended Action - Escalate to CoBuilder via beads:**
 ```bash
 bd update <id> --status=impl_complete
 ```
 
 **Why escalate?**
 - A fresh perspective often recognizes solutions the stuck agent cannot
-- System3 can provide strategic guidance without failed attempts polluting context
+- CoBuilder can provide strategic guidance without failed attempts polluting context
 
 **Alternative**: If blockers are external dependencies, document them and proceed.
 {bypass_hint}""",

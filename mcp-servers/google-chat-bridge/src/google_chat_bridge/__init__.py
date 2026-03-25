@@ -1,6 +1,6 @@
 """Google Chat Bridge MCP Server.
 
-Provides Google Chat integration tools for Claude Code System 3,
+Provides Google Chat integration tools for Claude Code CoBuilder,
 enabling asynchronous communication via Google Chat spaces.
 """
 

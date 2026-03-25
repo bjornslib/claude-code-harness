@@ -41,3 +41,9 @@ prompt="Research the problem domain for {{ initiative_id }}. Read {{ business_sp
 2. Template research node prompt references the failures file path explicitly
 3. Failure context is appended (not overwritten) per cycle
 4. `cli.py validate` still passes on rendered templates
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

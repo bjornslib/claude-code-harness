@@ -107,7 +107,7 @@ class PriorityEvaluator:
                 else:
                     warnings.append(p1_result)
 
-        # P1.5: Communicator Active (System 3 only)
+        # P1.5: Communicator Active (CoBuilder only)
         p1_5_result = CommunicatorActiveChecker(self.config).check()
         results.append(p1_5_result)
         if not p1_5_result.passed:

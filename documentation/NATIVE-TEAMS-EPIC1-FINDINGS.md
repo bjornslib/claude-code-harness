@@ -90,7 +90,7 @@
 | File | Check | Impact |
 |------|-------|--------|
 | `unified_stop_gate/config.py:33` | `session_id.startswith("orch-")` | **NEEDS UPDATE**: Native teammate IDs use `name@team` format, not `orch-*` |
-| `unified_stop_gate/config.py:38` | `session_id.startswith("system3-")` | **OK**: System 3 stays outside teams, keeps its prefix |
+| `unified_stop_gate/config.py:38` | `session_id.startswith("system3-")` | **OK**: CoBuilder stays outside teams, keeps its prefix |
 | `unified_stop_gate/checkers.py:164` | `owner.startswith('orch-')` | **NEEDS UPDATE**: Promise owners may use new format |
 | `unified_stop_gate/checkers.py:296` | `first_orch.replace('orch-', 'PRD-')` | **NEEDS UPDATE**: Hardcoded prefix transformation |
 | `unified_stop_gate/checkers.py:570` | Orchestrator session check | **NEEDS UPDATE** |
@@ -112,14 +112,14 @@
 **Key insight**: Teammates are ephemeral workers managed by the native team system. They don't need our custom hooks (stop gate, message bus, orchestrator detection). The lead (orchestrator) manages their lifecycle via native shutdown protocol.
 
 **Why this works**:
-1. **System 3** → Spawned via `ccsystem3`, has `CLAUDE_SESSION_ID=system3-*`. All hooks work.
-2. **Orchestrator/Team Lead** → Spawned via tmux by System 3, has `CLAUDE_SESSION_ID=orch-*`. All hooks work.
+1. **CoBuilder** → Spawned via `ccsystem3`, has `CLAUDE_SESSION_ID=system3-*`. All hooks work.
+2. **Orchestrator/Team Lead** → Spawned via tmux by CoBuilder, has `CLAUDE_SESSION_ID=orch-*`. All hooks work.
 3. **Workers/Teammates** → Spawned natively by team lead. **No custom hooks needed**. Native team system handles lifecycle.
 
 **For in-process teammates**: They share the lead's process, so hooks fire for the lead (correct behavior).
 **For split-pane teammates**: They're separate processes but don't need our hooks — add early-exit guard if needed.
 
-**No hook files need to be updated for native team adoption.** The identity chain is preserved because System 3 controls tmux environment for the orchestrator/lead.
+**No hook files need to be updated for native team adoption.** The identity chain is preserved because CoBuilder controls tmux environment for the orchestrator/lead.
 
 ### Possible Future Enhancement
 
@@ -161,7 +161,7 @@ This would allow hooks to exit early for teammates without modifying existing lo
 # Epic 3 Findings: Cross-Layer Worker Coordination PoC
 
 **Date**: 2026-02-06
-**Team**: `epic3-poc` (System 3 as team lead, 2 Haiku workers)
+**Team**: `epic3-poc` (CoBuilder as team lead, 2 Haiku workers)
 
 ---
 
@@ -214,7 +214,7 @@ The system automatically sends idle notifications to the team lead:
 
 | Agent | Type | Model | Task |
 |-------|------|-------|------|
-| team-lead (System 3) | team-lead | Opus | Coordinate, monitor |
+| team-lead (CoBuilder) | team-lead | Opus | Coordinate, monitor |
 | styles-researcher | general-purpose | Haiku | Research output styles (#10) |
 | skills-researcher | general-purpose | Haiku | Research skills architecture (#11) |
 | — | — | — | Synthesis (#12, blocked by #10 + #11) |
@@ -260,14 +260,14 @@ Both Haiku workers produced high-quality research summaries:
 
 | Communication Path | Current | With Native Teams | Recommendation |
 |-------------------|---------|-------------------|----------------|
-| System 3 ↔ Orchestrator | SQLite message bus | **Keep** (System 3 is outside teams) | No change |
+| CoBuilder ↔ Orchestrator | SQLite message bus | **Keep** (CoBuilder is outside teams) | No change |
 | Orchestrator ↔ Workers | Task subagent return values | **Replace** with native inbox messaging | Use native |
 | Worker ↔ Worker | IMPOSSIBLE (Task subagents isolated) | **WORKS** via peer messaging | New capability |
 | Lead notifications | Only on completion | Automatic idle + completion | Native wins |
 
 **Key insight**: Native team messaging provides worker-to-worker coordination **for free** — something that was impossible with Task subagents. The inbox system is simpler than our SQLite message bus and has built-in read tracking.
 
-**Message bus still needed**: For System 3 ↔ Orchestrator communication, since System 3 operates OUTSIDE native teams (autonomous steering with completion promises, Hindsight, stop gate).
+**Message bus still needed**: For CoBuilder ↔ Orchestrator communication, since CoBuilder operates OUTSIDE native teams (autonomous steering with completion promises, Hindsight, stop gate).
 
 ---
 
@@ -296,4 +296,4 @@ Both Haiku workers produced high-quality research summaries:
 1. **Epic 4**: Test delegate mode tool restrictions (verify Task tool available, Edit/Write removed)
 2. **Epic 5**: Test plan approval workflow (planModeRequired=true)
 3. **Epic 6**: Integrate validation-test-agent with native team pattern
-4. **Epic 7**: Full integration test — System 3 (outside) → Orchestrator as team lead → Workers as teammates
+4. **Epic 7**: Full integration test — CoBuilder (outside) → Orchestrator as team lead → Workers as teammates

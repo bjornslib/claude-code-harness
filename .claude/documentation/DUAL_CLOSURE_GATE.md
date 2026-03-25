@@ -6,11 +6,11 @@ last_verified: 2026-02-19
 grade: reference
 ---
 
-# ADR: Dual Closure Gate — System 3 Independent Validation
+# ADR: Dual Closure Gate — CoBuilder Independent Validation
 
 **Date**: 2026-02-10
 **Status**: Accepted
-**Authors**: System 3 Meta-Orchestrator
+**Authors**: CoBuilder Meta-Orchestrator
 
 ## Problem Statement
 
@@ -26,7 +26,7 @@ Orchestrator-run validation consistently fails to catch real issues:
 ```
 Previous Architecture:
 
-System 3 (no team — tmux + Task subagents)
+CoBuilder (no team — tmux + Task subagents)
     └── Orchestrator (team lead of {initiative}-workers)
             ├── worker-frontend
             ├── worker-backend
@@ -34,16 +34,16 @@ System 3 (no team — tmux + Task subagents)
             └── validator ← SAME TEAM as implementers (conflict of interest)
 ```
 
-System 3 had no independent verification capability. It trusted whatever the orchestrator reported.
+CoBuilder had no independent verification capability. It trusted whatever the orchestrator reported.
 
 ## Decision
 
-**Split validation authority**: Orchestrators handle Level 1 (unit tests), System 3 handles Level 2+3 (API + E2E) independently.
+**Split validation authority**: Orchestrators handle Level 1 (unit tests), CoBuilder handles Level 2+3 (API + E2E) independently.
 
 ### New Architecture
 
 ```
-System 3 (TEAM LEAD of s3-live)
+CoBuilder (TEAM LEAD of s3-live)
     ├── s3-investigator     (Explore — read-only codebase verification)
     ├── s3-prd-auditor      (solution-design-architect — PRD coverage analysis)
     ├── s3-validator        (validation-test-agent — REAL E2E, no mocks)
@@ -72,17 +72,17 @@ open → in_progress → impl_complete → s3_validating → closed
 | `open` | Planning | Task exists, not started |
 | `in_progress` | Orchestrator | Worker actively implementing |
 | `impl_complete` | Orchestrator | Implementation done — requesting S3 review |
-| `s3_validating` | System 3 | Oversight team actively checking |
-| `s3_rejected` | System 3 | Failed validation — returned to orchestrator with feedback |
-| `closed` | System 3 (s3-validator only) | Validated with evidence |
+| `s3_validating` | CoBuilder | Oversight team actively checking |
+| `s3_rejected` | CoBuilder | Failed validation — returned to orchestrator with feedback |
+| `closed` | CoBuilder (s3-validator only) | Validated with evidence |
 
 ## Enforcement Approach
 
 **Instruction-based, not programmatic.** We cannot hard-block `bd close` at the CLI level (beads doesn't support ACLs). Instead:
 
 1. **Orchestrator SKILL.md** instructs orchestrators to use `bd update --status=impl_complete` instead of `bd close`
-2. **System 3 output style** instructs System 3 to manage the validation cycle
-3. **Stop gate** recognizes `impl_complete` as "work remaining" for System 3 sessions
+2. **CoBuilder output style** instructs CoBuilder to manage the validation cycle
+3. **Stop gate** recognizes `impl_complete` as "work remaining" for CoBuilder sessions
 4. **Stop gate** does NOT hard-block `bd close` — enforcement is behavioral
 
 ### Why Not Programmatic Enforcement?
@@ -94,7 +94,7 @@ open → in_progress → impl_complete → s3_validating → closed
 
 ## Validation Cycle
 
-When System 3 detects `impl_complete`:
+When CoBuilder detects `impl_complete`:
 
 1. Set status: `bd update <id> --status=s3_validating`
 2. Dispatch 3 parallel checks:
@@ -126,8 +126,8 @@ Validation artifacts are stored in `.claude/evidence/{task-id}/`:
 
 | Session Type | `impl_complete` Tasks | Behavior |
 |-------------|----------------------|----------|
-| System 3 | Present | BLOCKED — must run validation cycle |
-| System 3 | None | PASS (normal exit) |
+| CoBuilder | Present | BLOCKED — must run validation cycle |
+| CoBuilder | None | PASS (normal exit) |
 | Orchestrator | Present | PASS — impl_complete means "handed off to S3" |
 | Worker | N/A | PASS (workers don't see bead statuses) |
 
@@ -141,7 +141,7 @@ Validation artifacts are stored in `.claude/evidence/{task-id}/`:
 
 ### Negative
 - Validation cycle adds latency (3 parallel workers + collation)
-- System 3 requires more context for oversight team management
+- CoBuilder requires more context for oversight team management
 - Custom statuses require all documentation to be updated
 - First implementation is instruction-based (not enforceable by tooling)
 

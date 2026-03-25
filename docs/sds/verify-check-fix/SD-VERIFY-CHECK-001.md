@@ -259,3 +259,9 @@ curl -X GET "http://localhost:8001/api/live-form-filler/init/{task_id}"
 | `agencheck-support-agent/models/cases.py` | Case status enum definition |
 | `database/schema/01_foundation_schema_v1.4.1.sql` | Database schema definitions |
 | `database/migrations/029_add_pending_to_task_status.sql` | Migration adding 'pending' to task status |
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

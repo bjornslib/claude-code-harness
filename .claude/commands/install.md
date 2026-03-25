@@ -3,7 +3,7 @@ title: "Install CoBuilder Harness Plugin"
 status: active
 type: command
 last_verified: 2026-03-22
-grade: authoritative
+grade: reference
 ---
 
 # Install CoBuilder Harness Plugin

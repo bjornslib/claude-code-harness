@@ -2,7 +2,7 @@
 title: "SD-SEQ-RETRY-LOOP-001: Continuous Retry Loop Until Final Status"
 status: active
 type: reference
-last_verified: 2026-03-10T00:00:00.000Z
+last_verified: 2026-03-10
 ---
 # SD-SEQ-RETRY-LOOP-001: Continuous Retry Loop Until Final Status
 
@@ -435,3 +435,9 @@ The template selection should be based on the attempt number from the retry task
 | `catch_up_poller.py` | **Fix** | All action_types, scheduled_time guard, case status check |
 | `sequence_advancement.py` | **Fix** | Correct deployment name, return delay_hours, remove direct scheduling |
 | `channel_dispatch.py` | **Enhancement** | Attempt-based template selection, context_data carryover |
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

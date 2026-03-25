@@ -25,7 +25,9 @@ set -e
 REAL_SCRIPT="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || readlink "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(cd "$(dirname "$REAL_SCRIPT")" && pwd)"
 CLAUDE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-GARDENER="$CLAUDE_DIR/scripts/doc-gardener/gardener.py"
+LINTER="$CLAUDE_DIR/scripts/doc-gardener/lint.py"
+DOCS_CONFIG="$CLAUDE_DIR/scripts/doc-gardener/docs-gardener.config.json"
+PROJECT_ROOT="$(cd "$CLAUDE_DIR/.." && pwd)"
 
 # --- Bypass checks ---
 
@@ -46,26 +48,48 @@ if [ ! -t 0 ]; then
     cat > /dev/null 2>&1 || true
 fi
 
-if [ ! -f "$GARDENER" ]; then
-    echo "[doc-gardener] gardener.py not found at $GARDENER, skipping"
+if [ ! -f "$LINTER" ]; then
+    echo "[doc-gardener] lint.py not found at $LINTER, skipping"
     exit 0
 fi
 
 echo "[doc-gardener] Running documentation lint..."
+echo ""
 
-EXIT_CODE=0
-python3 "$GARDENER" --execute || EXIT_CODE=$?
-if [ $EXIT_CODE -ne 0 ]; then
-    echo ""
+# Change to project root so relative paths in lint output are meaningful
+cd "$PROJECT_ROOT"
+
+# Lint .claude/ (default target)
+echo "[doc-gardener] Checking .claude/ documentation..."
+CLAUDE_EXIT=0
+python3 "$LINTER" || CLAUDE_EXIT=$?
+
+echo ""
+
+# Lint docs/ (with config)
+echo "[doc-gardener] Checking docs/ documentation..."
+DOCS_EXIT=0
+python3 "$LINTER" --target docs/ --config "$DOCS_CONFIG" || DOCS_EXIT=$?
+
+echo ""
+
+# Check both results
+if [ $CLAUDE_EXIT -ne 0 ] || [ $DOCS_EXIT -ne 0 ]; then
     echo "[doc-gardener] Documentation violations found. Fix before pushing."
-    echo "[doc-gardener] Run: python3 .claude/scripts/doc-gardener/gardener.py --report"
     echo ""
-    echo "Bypass options:"
+    echo "Run one of the following to fix violations:"
+    echo "  python3 .claude/scripts/doc-gardener/gardener.py --execute"
+    echo ""
+    echo "Or review violations and fix manually:"
+    echo "  python3 .claude/scripts/doc-gardener/lint.py"
+    echo "  python3 .claude/scripts/doc-gardener/lint.py --target docs/ --config .claude/scripts/doc-gardener/docs-gardener.config.json"
+    echo ""
+    echo "Bypass options (emergency only):"
     echo "  DOC_GARDENER_SKIP=1 git push"
     echo "  git push --no-verify"
     echo "  touch .claude/.doc-gardener-skip"
     exit 1
 fi
 
-echo "[doc-gardener] Documentation lint passed."
+echo "[doc-gardener] All documentation checks passed."
 exit 0

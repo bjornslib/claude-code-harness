@@ -405,7 +405,7 @@ agents_app = typer.Typer(help="Inspect and manage agent identity records")
 app.add_typer(agents_app, name="agents")
 # Wire all commands from agents_cmd.py into agents_app
 
-guardian_app = typer.Typer(help="System 3 read-only pipeline monitor")
+guardian_app = typer.Typer(help="CoBuilder read-only pipeline monitor")
 app.add_typer(guardian_app, name="guardian")
 # Wire all commands from runner_guardian.py into guardian_app
 ```

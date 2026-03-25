@@ -4,7 +4,7 @@ Handles the flow of inbound messages from Google Chat:
 1. Fetch new messages from Google Chat API (via ChatClient)
 2. Normalize into standard NormalizedMessage format
 3. Apply rate limiting per sender
-4. Queue for consumption by System 3 or heartbeat
+4. Queue for consumption by CoBuilder or heartbeat
 
 Rate Limiting:
     - Per-sender sliding window (default: 10 messages per 60 seconds)

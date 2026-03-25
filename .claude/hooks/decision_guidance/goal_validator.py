@@ -1,6 +1,6 @@
 """Goal-aware validation for decision-time guidance.
 
-Compares the orchestrator's reported progress against System3's original
+Compares the orchestrator's reported progress against CoBuilder's original
 instructions to determine:
 1. Is the orchestrator on track?
 2. Should it ask for guidance?
@@ -79,7 +79,7 @@ class EpicProgress:
 class CompletionState:
     """Complete state extracted from completion-state files."""
     session_id: str
-    raw_prompt: str  # Original System3 instructions
+    raw_prompt: str  # Original CoBuilder instructions
     summary: str
     goals: list[GoalProgress]
     epics: list[EpicProgress]
@@ -157,7 +157,7 @@ class TaskMasterTask:
 
 
 class GoalValidator:
-    """Validates orchestrator progress against System3 instructions."""
+    """Validates orchestrator progress against CoBuilder instructions."""
 
     # Thresholds for decision making
     GUIDANCE_THRESHOLD_PCT = 30  # Ask guidance if < 30% complete and stuck
@@ -488,7 +488,7 @@ class GoalValidator:
 
         # Not complete - determine next action
         if is_stuck:
-            recommendations.append("Multiple errors detected with low progress - consider asking System3 for guidance")
+            recommendations.append("Multiple errors detected with low progress - consider asking CoBuilder for guidance")
             recommendations.append(f"bd update <id> --status=impl_complete  # stuck: completion={completion_pct:.0f}%, errors={error_count}")
             return ValidationResult(
                 is_on_track=False,
@@ -501,7 +501,7 @@ class GoalValidator:
             )
 
         if completion_pct < self.GUIDANCE_THRESHOLD_PCT and stop_attempt:
-            recommendations.append("Very early in progress - consider continuing or asking System3 for guidance")
+            recommendations.append("Very early in progress - consider continuing or asking CoBuilder for guidance")
             return ValidationResult(
                 is_on_track=True,  # Not necessarily off track, just early
                 completion_pct=completion_pct,
@@ -516,7 +516,7 @@ class GoalValidator:
             # Trying to stop with incomplete work
             recommendations.append("Complete remaining work before stopping")
             recommendations.append("Use cs-status to see detailed progress")
-            recommendations.append("If blocked, ask System3 for guidance")
+            recommendations.append("If blocked, ask CoBuilder for guidance")
             return ValidationResult(
                 is_on_track=True,
                 completion_pct=completion_pct,
@@ -604,7 +604,7 @@ class GoalValidator:
     def format_preserved_context(self, preserved: dict) -> str:
         """Format preserved context for post-compaction injection."""
         lines = [
-            "## Preserved System3 Context (Post-Compaction)",
+            "## Preserved CoBuilder Context (Post-Compaction)",
             "",
             f"**Original Goal**: {preserved.get('summary', 'Unknown')}",
             f"**Progress**: {preserved.get('completion_pct', 0):.0f}% complete",

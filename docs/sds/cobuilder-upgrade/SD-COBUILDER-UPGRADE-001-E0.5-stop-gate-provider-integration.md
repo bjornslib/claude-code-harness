@@ -75,10 +75,10 @@ The unified stop gate system uses a **two-layer architecture** for environment v
 | `CLAUDE_MAX_ITERATIONS` | `25` | Circuit breaker threshold | MaxIterationsChecker (P0) |
 | `CLAUDE_ENFORCE_PROMISE` | `false` | Enable completion promise checks | CompletionPromiseChecker (P1) |
 | `CLAUDE_ENFORCE_BO` | `false` | Enable business outcome checks | BusinessOutcomeChecker (P5), fast-path bypass |
-| `CLAUDE_OUTPUT_STYLE` | `""` | Active output style mode | System3 detection (must != "orchestrator") |
+| `CLAUDE_OUTPUT_STYLE` | `""` | Active output style mode | CoBuilder detection (must != "orchestrator") |
 | `CLAUDE_CODE_TASK_LIST_ID` | `None` | Task list for team coordination | WorkExhaustionChecker (P3) |
-| `ANTHROPIC_API_KEY` | - | API key for Haiku judge | System3ContinuationJudgeChecker (P3.5) |
-| `WORK_STATE_SUMMARY` | `""` | Pre-computed work state | System3ContinuationJudgeChecker |
+| `ANTHROPIC_API_KEY` | - | API key for Haiku judge | CoBuilderContinuationJudgeChecker (P3.5) |
+| `WORK_STATE_SUMMARY` | `""` | Pre-computed work state | CoBuilderContinuationJudgeChecker |
 
 ### 2.3 DashScope Provider Integration
 
@@ -134,7 +134,7 @@ class EnvironmentConfig:
 
     @property
     def is_system3(self) -> bool:
-        """Detect System3 session type."""
+        """Detect CoBuilder session type."""
         session_ok = bool(self.session_id and self.session_id.startswith("system3-"))
         output_style = os.environ.get("CLAUDE_OUTPUT_STYLE", "")
         not_orchestrator = output_style != "orchestrator"
@@ -239,7 +239,7 @@ Environment variable sourcing and session type detection.
 - **Description**: Determine session type from session ID and output style
 - **Inputs**: `EnvironmentConfig.session_id`, `CLAUDE_OUTPUT_STYLE`
 - **Outputs**: `is_system3`, `is_cobuilder`, `is_orchestrator` boolean properties
-- **Behavior**: Prefix matching + output style exclusion for System3
+- **Behavior**: Prefix matching + output style exclusion for CoBuilder
 - **Depends on**: Environment Variable Sourcing
 
 #### Feature: Fast-Path Bypass
