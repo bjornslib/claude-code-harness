@@ -510,14 +510,17 @@ def _validate_frontmatter_fields(
             target_dir=ctx.target_dir,
         ))
 
-    if "type" in fm and fm["type"] not in VALID_TYPES:
+    valid_types = VALID_TYPES
+    if ctx.docs_types:
+        valid_types = valid_types | ctx.docs_types
+    if "type" in fm and fm["type"] not in valid_types:
         violations.append(Violation(
             file=rel,
             category="frontmatter",
             severity=SEVERITY_ERROR,
             message=(
                 f"Invalid type '{fm['type']}'. "
-                f"Must be one of: {', '.join(sorted(VALID_TYPES))}"
+                f"Must be one of: {', '.join(sorted(valid_types))}"
             ),
             target_dir=ctx.target_dir,
         ))
@@ -537,7 +540,10 @@ def _validate_frontmatter_fields(
     # Check last_verified date format
     if "last_verified" in fm:
         try:
-            datetime.strptime(fm["last_verified"], "%Y-%m-%d")
+            date_str = str(fm["last_verified"])
+            if "T" in date_str:
+                date_str = date_str.split("T")[0]
+            datetime.strptime(date_str, "%Y-%m-%d")
         except ValueError:
             violations.append(Violation(
                 file=rel,
@@ -1102,6 +1108,24 @@ def apply_fixes(
 
             content = filepath.read_text(encoding="utf-8")
             modified = False
+
+            # Normalize ISO timestamps to YYYY-MM-DD in frontmatter date fields
+            def normalize_iso_date(m: re.Match) -> str:
+                field, value = m.group(1), m.group(2)
+                if "T" in value:
+                    value = value.split("T")[0]
+                    return f"{field}{value}"
+                return m.group(0)
+
+            new_content = re.sub(
+                r"^((?:last_verified|last-updated):\s*)(\S+)$",
+                normalize_iso_date,
+                content,
+                flags=re.MULTILINE,
+            )
+            if new_content != content:
+                content = new_content
+                modified = True
 
             for v in file_violations:
                 if (
