@@ -183,7 +183,7 @@ Feature: Definition Pipeline — PRD to .dot in One Command
 # ============================================================================
 
 @feature-E3 @weight-0.15
-Feature: System 3 DOT Navigation for Orchestrator Dispatch
+Feature: CoBuilder DOT Navigation for Orchestrator Dispatch
 
   @scenario-deps_met_filter
   Scenario: Status filter identifies dispatchable nodes
@@ -213,8 +213,8 @@ Feature: System 3 DOT Navigation for Orchestrator Dispatch
 
   @scenario-orchestrator_spawn_metadata
   Scenario: Orchestrator spawn includes node metadata
-    Given System 3 reads a pending .dot node with acceptance, worker_type, file_path, prd_ref
-    When System 3 spawns an orchestrator for that node
+    Given CoBuilder reads a pending .dot node with acceptance, worker_type, file_path, prd_ref
+    When CoBuilder spawns an orchestrator for that node
     Then the orchestrator's wisdom injection includes the node's acceptance criteria
     And the recommended worker type matches the node's worker_type attribute
     And the scope boundaries include the node's file paths

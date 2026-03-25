@@ -10,10 +10,10 @@ grade: authoritative
 
 ## 1. Problem Statement
 
-When `pipeline_runner.py` reaches a `wait.cobuilder` or `wait.human` node, it writes a `.gate-wait` marker file and enters its poll loop waiting for a signal file response. But System 3 has no mechanism to detect these gate events and act on them:
+When `pipeline_runner.py` reaches a `wait.cobuilder` or `wait.human` node, it writes a `.gate-wait` marker file and enters its poll loop waiting for a signal file response. But CoBuilder has no mechanism to detect these gate events and act on them:
 
-- **wait.cobuilder**: System 3 must run blind Gherkin E2E validation (stage 2) after the runner's validation agent (stage 1) passes. Currently System 3 has no way to know when stage 1 completes and the gate is waiting.
-- **wait.human**: System 3 must present the gate summary to the user via `AskUserQuestion` and write the user's response as a signal file. Currently `_handle_human` attempts a GChat notification but there is no round-trip mechanism for the user to respond and unblock the pipeline.
+- **wait.cobuilder**: CoBuilder must run blind Gherkin E2E validation (stage 2) after the runner's validation agent (stage 1) passes. Currently CoBuilder has no way to know when stage 1 completes and the gate is waiting.
+- **wait.human**: CoBuilder must present the gate summary to the user via `AskUserQuestion` and write the user's response as a signal file. Currently `_handle_human` attempts a GChat notification but there is no round-trip mechanism for the user to respond and unblock the pipeline.
 
 **Evidence**: The pipeline runner already writes `.gate-wait` marker files (`_handle_gate` at line 707) for `wait.cobuilder` nodes, but `_handle_human` (line 713) does NOT write a `.gate-wait` marker — it only attempts a GChat notification with no response path.
 
@@ -79,9 +79,9 @@ Task(
 )
 ```
 
-### 2.3 System 3 Gate Response Handlers
+### 2.3 CoBuilder Gate Response Handlers
 
-When the monitor completes with `MONITOR_GATE_WAITING`, System 3 reads the gate type and acts:
+When the monitor completes with `MONITOR_GATE_WAITING`, CoBuilder reads the gate type and acts:
 
 **wait.cobuilder response:**
 ```python
@@ -140,7 +140,7 @@ Write(f"{signal_dir}/{node_id}.json", json.dumps({
 
 ### 2.4 Gate-Wait File Cleanup
 
-After System 3 writes the response signal (`{node_id}.json`), the `.gate-wait` marker is no longer needed. The runner should delete it after picking up the signal to prevent the monitor from re-triggering on stale markers.
+After CoBuilder writes the response signal (`{node_id}.json`), the `.gate-wait` marker is no longer needed. The runner should delete it after picking up the signal to prevent the monitor from re-triggering on stale markers.
 
 ```python
 # In pipeline_runner.py _apply_signal():
@@ -154,7 +154,7 @@ if os.path.exists(gate_marker):
 | File | Change |
 |------|--------|
 | `.claude/scripts/attractor/pipeline_runner.py` | `_handle_human`: add `.gate-wait` marker write with `gate_type`, `summary_ref`, `mode`. `_handle_gate`: add `summary_ref` and `epic_id` to existing marker. `_apply_signal`: clean up `.gate-wait` after processing. |
-| `.claude/skills/cobuilder-guardian/references/monitoring-patterns.md` | New Section 8: "Gate Monitor Pattern" with gate-aware Haiku prompt, System 3 response handlers for both gate types, AskUserQuestion template for wait.human |
+| `.claude/skills/cobuilder-guardian/references/monitoring-patterns.md` | New Section 8: "Gate Monitor Pattern" with gate-aware Haiku prompt, CoBuilder response handlers for both gate types, AskUserQuestion template for wait.human |
 | `.claude/skills/cobuilder-guardian/SKILL.md` | Update Phase 3 row in Quick Reference to mention gate monitoring. Add brief gate monitor summary to Pipeline Progress Monitor Pattern section. |
 
 ## 4. Testing
@@ -172,7 +172,7 @@ if os.path.exists(gate_marker):
 - AC-7.3.2: `_handle_gate` marker includes `summary_ref` and `epic_id` fields (enriched from current minimal marker)
 - AC-7.3.3: `_apply_signal` cleans up `.gate-wait` marker after processing the corresponding signal
 - AC-7.3.4: `monitoring-patterns.md` Section 8 documents gate-aware Haiku monitor prompt with `MONITOR_GATE_WAITING` status
-- AC-7.3.5: `monitoring-patterns.md` Section 8 documents System 3 response handlers for both `wait.cobuilder` (Gherkin E2E) and `wait.human` (AskUserQuestion) gates
+- AC-7.3.5: `monitoring-patterns.md` Section 8 documents CoBuilder response handlers for both `wait.cobuilder` (Gherkin E2E) and `wait.human` (AskUserQuestion) gates
 - AC-7.3.6: cobuilder-guardian SKILL.md Quick Reference updated with gate monitoring guidance
 - AC-7.3.7: All existing pipeline tests pass (no regressions from marker enrichment or cleanup)
 

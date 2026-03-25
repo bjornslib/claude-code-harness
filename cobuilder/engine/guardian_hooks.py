@@ -1,6 +1,6 @@
-"""Pipeline Runner Guardian — System 3 State Reader.
+"""Pipeline Runner Guardian — CoBuilder State Reader.
 
-The Guardian is System 3's lightweight monitor for active pipeline runners.
+The Guardian is CoBuilder's lightweight monitor for active pipeline runners.
 It reads runner state (persisted by the pipeline runner after every cycle)
 without spawning a new runner instance.
 
@@ -9,7 +9,7 @@ Responsibilities:
     - Read the latest RunnerPlan from state (last_plan field)
     - Verify audit chain integrity for a pipeline
     - Enumerate all active/recent pipeline runner states
-    - Provide structured JSON output for System 3 consumption
+    - Provide structured JSON output for CoBuilder consumption
 
 This module is used by:
     1. ``cli.py guardian`` subcommand — for S3 to check runner status
@@ -435,7 +435,7 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(
         prog="attractor guardian",
-        description="System 3 state monitor for Pipeline Runner instances.",
+        description="CoBuilder state monitor for Pipeline Runner instances.",
     )
     sub = parser.add_subparsers(dest="action", required=True)
 

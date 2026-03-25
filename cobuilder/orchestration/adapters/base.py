@@ -2,7 +2,7 @@
 """Channel Adapter Abstract Base Class.
 
 Defines the interface for all communication channels the Pipeline Runner
-can use to signal System 3 and receive instructions.
+can use to signal CoBuilder and receive instructions.
 
 The runner is agnostic about HOW it communicates — the adapter handles the
 channel-specific details. This enables the runner to work in different
@@ -56,7 +56,7 @@ class ChannelAdapter(abc.ABC):
         *,
         priority: str = "normal",
     ) -> None:
-        """Send a signal to the upstream controller (System 3).
+        """Send a signal to the upstream controller (CoBuilder).
 
         Args:
             signal_type: Semantic signal name. Convention: UPPER_SNAKE_CASE.
@@ -144,7 +144,7 @@ class ChannelAdapter(abc.ABC):
         acceptance_criteria: str,
         evidence_summary: str,
     ) -> None:
-        """Signal that a business gate requires System 3 approval.
+        """Signal that a business gate requires CoBuilder approval.
 
         Wraps send_signal with the structured payload expected for approval requests.
 

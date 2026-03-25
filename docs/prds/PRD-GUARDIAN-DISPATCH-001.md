@@ -97,9 +97,9 @@ Fix the `async_generator_athrow` error that crashes research node execution.
 - AC-5.2: Research node passes in the lifecycle pipeline test
 - AC-5.3: Existing research tests still pass
 
-### Epic 6: Remove Promise/System3 Assumptions from Guardian Prompt
+### Epic 6: Remove Promise/CoBuilder Assumptions from Guardian Prompt
 
-The guardian system prompt should not reference promise verification or System 3 patterns. These are Guardian-level (my) concerns.
+The guardian system prompt should not reference promise verification or CoBuilder patterns. These are Guardian-level (my) concerns.
 
 **Acceptance Criteria:**
 - AC-6.1: System prompt does not contain `cs-verify`, `cs-promise`, or promise-related instructions

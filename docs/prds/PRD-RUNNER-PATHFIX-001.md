@@ -18,7 +18,7 @@ The CoBuilder pipeline runner had multiple silent failure modes:
 2. SD/PRD file paths unresolvable across harness/target repo split
 3. Workers exiting without writing signal files, leaving gates stuck indefinitely
 4. Stale signal files causing false successes on retry
-5. The unified stop gate judge treating SDK workers as System 3 sessions
+5. The unified stop gate judge treating SDK workers as CoBuilder sessions
 
 ## Solution Summary
 
@@ -56,7 +56,7 @@ The CoBuilder pipeline runner had multiple silent failure modes:
 
 ### Issue 7: Worker Environment Isolation
 - Strips `CLAUDE_SESSION_ID` and `CLAUDE_OUTPUT_STYLE` from worker env
-- Workers no longer detected as System 3 by unified stop gate judge
+- Workers no longer detected as CoBuilder by unified stop gate judge
 - SDK Stop hook remains active (in-process, independent of settings.json)
 
 ## Implementation Status
@@ -78,7 +78,7 @@ The CoBuilder pipeline runner had multiple silent failure modes:
 
 1. **SDK `query()` is unidirectional** — hooks don't fire because control protocol closes before Stop events
 2. **`ClaudeSDKClient` pattern**: `connect()` then `query(prompt)` then `receive_response()` — the only way hooks work
-3. **Workers inherit parent env** — `CLAUDE_SESSION_ID=system3-*` makes the S3 judge treat workers as System 3
+3. **Workers inherit parent env** — `CLAUDE_SESSION_ID=system3-*` makes the S3 judge treat workers as CoBuilder
 4. **`_verify_worker_output` self-referential bug** — git status is clean when files already committed by prior gates
 5. **Stop hook race condition** — runner moves signal to `processed/` before worker exits; hook must check both dirs
 

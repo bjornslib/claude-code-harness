@@ -376,7 +376,7 @@ Feature: LLM-Collaborative Attractor Pipeline — Phase 1
 
   @feature-epic-d @weight-0.10
   Scenario: s3_output_style_docs — S3 output style has iterative refinement loop
-    Given the System 3 output style file (system3-meta-orchestrator.md)
+    Given the CoBuilder output style file (system3-meta-orchestrator.md)
     When checked for DOT Graph Navigation documentation
     Then an "Iterative Refinement Loop" subsection exists
     And it documents: scaffold -> parse -> node add/remove -> edge add/remove -> validate -> checkpoint

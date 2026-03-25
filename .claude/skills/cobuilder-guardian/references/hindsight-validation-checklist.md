@@ -109,4 +109,4 @@ cs-promise --meet <promise-id> --ac-id AC-5 \
 | Using wrong `bank_id` value | Private = `"cobuilder-guardian"`, Project = environment `$CLAUDE_PROJECT_BANK` |
 | Forgetting `context=` parameter | Must include: `context="cobuilder-validations"` for private, `context="project-validations"` for project |
 | Storing BEFORE validation completes | Store ONLY after Phase 4 verdict determined |
-| Storing results but not meeting promise AC | Meeting the AC is how System 3 knows validation is complete |
+| Storing results but not meeting promise AC | Meeting the AC is how CoBuilder knows validation is complete |

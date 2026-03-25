@@ -17,7 +17,7 @@ The `guardian.py` AgentSDK agent should be distinguished from the interactive Co
 
 | Entity | Current Name | New Name | Role |
 |--------|-------------|----------|------|
-| Opus interactive session | CoBuilder Guardian / System 3 | **CoBuilder** | Strategic oversight, PRD design, validation |
+| Opus interactive session | CoBuilder Guardian / CoBuilder | **CoBuilder** | Strategic oversight, PRD design, validation |
 | guardian.py AgentSDK agent | "guardian agent" / "Guardian agent" | **Pilot** | Drives DOT graph execution, dispatches runner, handles gates |
 | pipeline_runner.py | Runner | **Runner** (unchanged) | Zero-LLM state machine |
 | AgentSDK codergen/research/refine | Workers | **Workers** (unchanged) | Implementation agents |
@@ -57,3 +57,9 @@ They are NOT the same entity despite currently sharing the "guardian" name.
 - **DO NOT rename CLI flags** (--dot, --multi stay the same)
 - **ONLY change**: prose in docstrings, comments, print statements, and markdown docs
 - Preserve the distinction: "CoBuilder" = interactive session, "Pilot" = headless AgentSDK agent
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

@@ -24,7 +24,7 @@ The harness contains two complementary DOT pipeline systems:
 
 | System | Location | Purpose | Parser |
 |--------|----------|---------|--------|
-| **Attractor** | `.claude/scripts/attractor/` | System 3 initiative orchestration | Regex-based, zero dependencies |
+| **Attractor** | `.claude/scripts/attractor/` | CoBuilder initiative orchestration | Regex-based, zero dependencies |
 | **CoBuilder Engine** | `cobuilder/engine/` | Production workflow engine | Recursive-descent lexer/parser |
 
 Both parse and execute **DOT directed graphs** but serve different complexity tiers.
@@ -100,7 +100,7 @@ pending → active → impl_complete → validated → accepted
 ### Pipeline Runner (Zero LLM Token Execution)
 
 ```
-System 3 (Opus) → pipeline_runner.py (pure Python) → Workers (AgentSDK)
+CoBuilder (Opus) → pipeline_runner.py (pure Python) → Workers (AgentSDK)
 ```
 
 The runner is a **pure Python state machine** with zero LLM intelligence for graph traversal:
@@ -196,7 +196,7 @@ MASFactory's standout feature — **pre-built topologies** as reusable classes:
 | `BrainstormingGraph` | Multi-agent ideation + synthesis | Parallel `tab` (research) nodes + fan-in |
 | `HubGraph` | Central coordinator → spokes | `house` (manager_loop) → `box` (codergen) nodes |
 | `PingPongGraph` | Iterative back-and-forth | `diamond` conditional with retry edges |
-| `InstructorAssistantGraph` | Guide + execute | System3→Orchestrator relationship (implicit in hierarchy) |
+| `InstructorAssistantGraph` | Guide + execute | CoBuilder→Orchestrator relationship (implicit in hierarchy) |
 | `VerticalDecisionGraph` | Sequential + conditional | `diamond` nodes with pass/fail edges |
 | `Loop` | Iterative refinement | Fail edges creating cycles (already in our schema) |
 

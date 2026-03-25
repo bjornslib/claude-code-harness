@@ -1,6 +1,6 @@
 ---
 name: cobuilder:tdd-pipeline
-description: This skill should be used when System 3 or Guardian needs to "generate a TDD pipeline", "create a worker pipeline", "instantiate the tdd-validated template", "set up TDD execution pipeline", or when creating DOT pipeline files for test-driven worker execution. Documents the tdd-validated template and worker powers configuration.
+description: This skill should be used when CoBuilder or Guardian needs to "generate a TDD pipeline", "create a worker pipeline", "instantiate the tdd-validated template", "set up TDD execution pipeline", or when creating DOT pipeline files for test-driven worker execution. Documents the tdd-validated template and worker powers configuration.
 version: 1.0.0
 title: "TDD Pipeline Template"
 status: active

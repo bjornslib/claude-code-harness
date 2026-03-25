@@ -19,7 +19,7 @@ Business Goal
     │
     ▼
 ┌─────────────────────────────────────┐
-│  1. PRD (Product Requirements Doc)  │  ← System 3 or Guardian writes
+│  1. PRD (Product Requirements Doc)  │  ← CoBuilder or Guardian writes
 │     docs/prds/PRD-{ID}.md           │  ← Business goals, user stories, epics
 │     .taskmaster/docs/PRD-{ID}.md    │  ← Same content, Task Master location
 └─────────────┬───────────────────────┘
@@ -86,7 +86,7 @@ Business Goal
 
 ### Step 1: PRD Authoring
 
-**Who**: System 3 (meta-orchestrator) or Guardian
+**Who**: CoBuilder (meta-orchestrator) or Guardian
 **Input**: Business goal, user stories, domain context
 **Output**: `docs/prds/PRD-{CATEGORY}-{DESCRIPTOR}.md`
 
@@ -120,7 +120,7 @@ This step creates a BEFORE snapshot. After implementation, a new baseline is gen
 
 ### Step 3: Solution Design (SD) per Epic
 
-**Who**: `solution-design-architect` agent (delegated by System 3)
+**Who**: `solution-design-architect` agent (delegated by CoBuilder)
 **Input**: PRD epic section + ZeroRepo baseline (when available)
 **Output**: `.taskmaster/docs/SD-{CATEGORY}-{NUMBER}-{epic-slug}.md`
 
@@ -140,7 +140,7 @@ SD structure:
 
 ### Step 4: Task Master Parsing
 
-**Who**: System 3 via MCP
+**Who**: CoBuilder via MCP
 **Input**: PRD (and optionally SD)
 **Output**: `.taskmaster/tasks/tasks.json`
 
@@ -175,7 +175,7 @@ Creates beads issues with:
 
 ### Step 6: DOT Pipeline Generation
 
-**Who**: Guardian or System 3
+**Who**: Guardian or CoBuilder
 **Input**: Beads + PRD reference
 **Output**: `.pipelines/pipelines/<INITIATIVE>.dot`
 
@@ -203,7 +203,7 @@ Stored in config repo (claude-harness-setup), NOT impl repo — blind to impleme
 
 ### Step 8: Orchestrator Dispatch
 
-**Who**: Guardian or System 3
+**Who**: Guardian or CoBuilder
 **Tool**: `spawn_orchestrator.py`
 
 Each orchestrator receives:

@@ -12,7 +12,7 @@ grade: reference
 **Document Version**: 2.1.0
 **PRD Reference**: PRD-GCHAT-HOOKS-001 v2.0
 **Status**: Fully Validated (all 6 criteria pass — outbound, inbound, threading, human detection, concurrent, auth)
-**Author**: System 3 Guardian
+**Author**: CoBuilder Guardian
 **Created**: 2026-02-21
 **Supersedes**: SOLUTION-DESIGN-GCHAT-HOOKS-001.md v1.0 (tmux injection architecture)
 
@@ -30,7 +30,7 @@ The original v1.0 solution design used **tmux send-keys injection** for deliveri
 | Inbound mechanism | launchd daemon + tmux send-keys | One-shot background Haiku Task |
 | Response delivery | tmux keystroke injection | Task completion → wakes parent thread |
 | Infrastructure | External daemon process (launchd plist) | Native Claude Code subagent |
-| Session detection | All sessions affected | Only System 3 sessions (orchestrators pass through) |
+| Session detection | All sessions affected | Only CoBuilder sessions (orchestrators pass through) |
 | tmux dependency | Required for response injection | Not used for response delivery |
 | Stop gate impact | None (AskUserQuestion approved) | Marker file integration required |
 
@@ -165,7 +165,7 @@ Claude Code calls AskUserQuestion
 PreToolUse hook fires (gchat-ask-user-forward.py)
     │
     ├── 1. Check session type
-    │   ├── System 3? → Continue to step 2
+    │   ├── CoBuilder? → Continue to step 2
     │   └── Orchestrator/Worker? → return {"decision": "approve"}
     │
     ├── 2. Parse questions[] from tool_input
@@ -198,7 +198,7 @@ PreToolUse hook fires (gchat-ask-user-forward.py)
 Claude receives AskUserQuestion denial with "forwarded to GChat" reason
     │
     ▼
-System 3 output style pattern: spawn one-shot poller Task
+CoBuilder output style pattern: spawn one-shot poller Task
     │
     ├── Task(subagent_type="general-purpose", model="haiku",
     │        run_in_background=True, ...)
@@ -219,7 +219,7 @@ Haiku Poller Task runs:
 Poller Task COMPLETES
     │
     ▼
-Parent System 3 session receives <task-notification>
+Parent CoBuilder session receives <task-notification>
     │
     ├── Parse "GCHAT_RESPONSE: {text}" → user's answer
     ├── Incorporate answer into decision-making
@@ -229,7 +229,7 @@ Parent System 3 session receives <task-notification>
 ### Stop Gate Integration
 
 ```
-System 3 wants to stop
+CoBuilder wants to stop
     │
     ▼
 Stop gate fires (unified-stop-gate.sh)

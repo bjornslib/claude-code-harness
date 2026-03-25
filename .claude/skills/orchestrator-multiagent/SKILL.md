@@ -70,8 +70,8 @@ Task(
 
 **When orchestrator's workers finish implementation:**
 
-Orchestrators mark tasks `impl_complete` to signal System 3 for independent validation.
-Orchestrators do NOT close tasks — System 3's oversight team handles validation and closure.
+Orchestrators mark tasks `impl_complete` to signal CoBuilder for independent validation.
+Orchestrators do NOT close tasks — CoBuilder's oversight team handles validation and closure.
 
 **Handoff Protocol:**
 1. Workers confirm: code committed, unit tests pass, implementation complete
@@ -91,13 +91,13 @@ open → in_progress → impl_complete → [S3 validates] → closed
 | `open` | Planning | Task exists, not started |
 | `in_progress` | Orchestrator | Worker actively implementing |
 | `impl_complete` | Orchestrator | Done — requesting S3 review |
-| `s3_validating` | System 3 | Oversight team actively checking |
-| `s3_rejected` | System 3 | Failed validation — back to orchestrator |
-| `closed` | System 3 (s3-validator) | Validated with evidence |
+| `s3_validating` | CoBuilder | Oversight team actively checking |
+| `s3_rejected` | CoBuilder | Failed validation — back to orchestrator |
+| `closed` | CoBuilder (s3-validator) | Validated with evidence |
 
 **What orchestrators SHOULD NOT do:**
-- Do NOT run `bd close` — System 3 handles this after independent validation
-- Do NOT spawn a validator teammate — validation is System 3's responsibility
+- Do NOT run `bd close` — CoBuilder handles this after independent validation
+- Do NOT spawn a validator teammate — validation is CoBuilder's responsibility
 - Do NOT wait for validation before starting next task
 
 ---
@@ -465,9 +465,9 @@ The autonomous mode protocol provides:
 
 **Legacy feature_list.json**: See [LEGACY_FEATURE_LIST.md](archive/LEGACY_FEATURE_LIST.md) for legacy workflow.
 
-### Phase 3: Validation (System 3 Independent Oversight)
+### Phase 3: Validation (CoBuilder Independent Oversight)
 
-**System 3 handles validation independently** using its oversight team:
+**CoBuilder handles validation independently** using its oversight team:
 - s3-investigator verifies code changes
 - s3-prd-auditor checks PRD coverage
 - s3-validator runs real E2E tests
@@ -478,7 +478,7 @@ The autonomous mode protocol provides:
 2. Monitor for `s3_rejected` tasks (fix and re-submit)
 3. When all tasks are `closed` by S3 → initiative complete
 
-**Closure Order** (managed by System 3):
+**Closure Order** (managed by CoBuilder):
 ```
 impl_complete → s3_validating → closed
                 (or s3_rejected → in_progress → impl_complete)
@@ -640,7 +640,7 @@ Orchestrators ensure basic quality before marking `impl_complete`:
 - Code compiles/builds without errors
 - Basic smoke tests pass
 
-**Level 2+3 validation (E2E, PRD compliance) is performed independently by System 3's oversight team.**
+**Level 2+3 validation (E2E, PRD compliance) is performed independently by CoBuilder's oversight team.**
 The orchestrator does NOT need to set up E2E infrastructure or run acceptance tests.
 
 ### Validation Types
@@ -825,7 +825,7 @@ cobuilder pipeline checkpoint-save pipeline.dot
 - **Always checkpoint** after transitions — enables rollback if downstream work fails
 - **Validate after transitions**: `cobuilder pipeline validate pipeline.dot`
 - **Check status before dispatch**: Ensure upstream dependencies are `validated` before transitioning a node to `active`
-- **Report transitions to System 3** after `impl_complete` (via `bd update <bd-id> --status=impl_complete`)
+- **Report transitions to CoBuilder** after `impl_complete` (via `bd update <bd-id> --status=impl_complete`)
 
 ### Pipeline Dashboard & Progress
 
@@ -905,7 +905,7 @@ Status is persisted in the DOT file itself. After context compaction or session 
 - v5.2: **Bead Enrichment from RPG Graph** - Added Phase 1.5 workflow to inject 04-rpg.json context into beads after Task Master sync. New "Enriching Beads with RPG Graph Context" section in ZEROREPO.md documents the enrichment pattern with real examples. Updated model from claude-sonnet-4-20250514 to claude-sonnet-4-5-20250929. Step 2.5 now split into 2.5a (generate delta) and 2.5b (enrich beads). Workers receive implementation-ready specs with file paths, interfaces, and technology stacks extracted from RPG graph.
 - v5.1: **ZeroRepo Integration** - Added codebase-aware orchestration via ZeroRepo delta analysis. New Step 2.5 in Phase 1 planning runs `zerorepo init` + `zerorepo generate` to classify PRD components as EXISTING/MODIFIED/NEW. Delta context enriches worker task assignments with precise file paths and change summaries. New ZEROREPO.md reference guide. Three wrapper scripts (`zerorepo-init.sh`, `zerorepo-generate.sh`, `zerorepo-update.sh`). Codebase-Aware Task Creation workflow added to WORKFLOWS.md.
 - v5.0: **Native Agent Teams** - Replaced Task subagent worker delegation with native Agent Teams (Teammate + TaskCreate + SendMessage). Workers are now persistent teammates that claim tasks from a shared TaskList, communicate peer-to-peer, and maintain session state across multiple assignments. Validator is a team role (not a separate Task subagent). Worker communication uses native team inboxes. Fallback to Task subagent mode when AGENT_TEAMS is not enabled.
-- v4.0: **Task-Based Worker Delegation** - Replaced tmux worker delegation with Task subagents. Workers now receive assignments via `Task(subagent_type="...")` and return results directly. No session management, monitoring loops, or cleanup required. Parallel workers use `run_in_background=True` with `TaskOutput()` collection. System 3 -> Orchestrator still uses tmux for session isolation; Orchestrator -> Worker now uses Task subagents.
+- v4.0: **Task-Based Worker Delegation** - Replaced tmux worker delegation with Task subagents. Workers now receive assignments via `Task(subagent_type="...")` and return results directly. No session management, monitoring loops, or cleanup required. Parallel workers use `run_in_background=True` with `TaskOutput()` collection. CoBuilder -> Orchestrator still uses tmux for session isolation; Orchestrator -> Worker now uses Task subagents.
 - v3.13: 🆕 **Sync Script Finalization** - Sync script now auto-closes Task Master tasks after sync (status=done). Removed mapping file (redundant with beads hierarchy). **IMPORTANT**: Must run from `my-org/` root to use correct `.beads` database. Updated all docs with correct paths and `--tasks-path` usage.
 - v3.12: **ID Range Filtering** - `--from-id=<id>` and `--to-id=<id>` to filter which Task Master tasks to sync. Essential for multi-PRD projects.
 - v3.11: **Enhanced Sync Script** - `--uber-epic=<id>` for parent-child linking. Auto-maps description, details→design, testStrategy→acceptance.

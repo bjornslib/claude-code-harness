@@ -19,7 +19,7 @@ The E2E analysis (2026-03-06) proved that the guardian LLM layer is entirely sup
 **Cost**: $4.91 per pipeline run (33 LLM turns) for work a Python loop does in milliseconds.
 **Savings**: 46% reduction in total pipeline cost ($10.77 -> $5.86 per node).
 
-The guardian concept dissolves entirely. `pipeline_runner.py` replaces the runner layer, and System 3 remains as the top-level LLM authority for business validation.
+The guardian concept dissolves entirely. `pipeline_runner.py` replaces the runner layer, and CoBuilder remains as the top-level LLM authority for business validation.
 
 ## 2. Design
 
@@ -36,14 +36,14 @@ guardian.py (LLM, $4.91, 33 turns)
 
 **Proposed 3-layer (Python runner replaces guardian + runner)**:
 ```
-System 3 (LLM, Opus)
+CoBuilder (LLM, Opus)
   -> Strategic planning, OKR tracking, blind Gherkin E2E acceptance
   -> Launches pipeline_runner.py (Python, $0, <1s graph ops)
     -> pipeline_runner.py dispatches ALL workers via AgentSDK
       -> Workers (codergen, research, refine, validation) implement tasks
 ```
 
-The guardian process is eliminated. System 3 is the only LLM that reasons about business outcomes. The runner is a purely mechanical state machine with zero LLM intelligence.
+The guardian process is eliminated. CoBuilder is the only LLM that reasons about business outcomes. The runner is a purely mechanical state machine with zero LLM intelligence.
 
 ### 2.2 What Already Exists (Keep As-Is)
 
@@ -70,7 +70,7 @@ pending -> active -> impl_complete -> validated -> accepted
 | `active` | Worker dispatched, in progress | Runner (on dispatch) |
 | `impl_complete` | Worker says "I'm done" | Runner (reads worker signal) |
 | `validated` | Validation agent confirms technical correctness | Runner (reads validation agent signal) |
-| `accepted` | System 3 confirms business requirements via blind Gherkin + E2E | Runner (reads System 3 acceptance signal) |
+| `accepted` | CoBuilder confirms business requirements via blind Gherkin + E2E | Runner (reads CoBuilder acceptance signal) |
 | `failed` | Worker or validation failed, no retries left | Runner (reads failure signal) |
 
 ### 2.4 New File: `pipeline_runner.py`
@@ -78,7 +78,7 @@ pending -> active -> impl_complete -> validated -> accepted
 ```python
 """Pure Python DOT pipeline runner. Zero LLM tokens for graph traversal.
 
-3-layer hierarchy: System 3 (LLM) -> pipeline_runner.py (Python) -> Workers (AgentSDK)
+3-layer hierarchy: CoBuilder (LLM) -> pipeline_runner.py (Python) -> Workers (AgentSDK)
 
 The runner has ZERO LLM intelligence. It can only:
 - Parse DOT files, track node states, find dispatchable nodes
@@ -131,7 +131,7 @@ class SignalFileHandler(FileSystemEventHandler):
 
 
 class DotFileHandler(FileSystemEventHandler):
-    """Watchdog handler for external DOT file changes (e.g., System 3 gate approvals)."""
+    """Watchdog handler for external DOT file changes (e.g., CoBuilder gate approvals)."""
 
     def __init__(self, dot_path: str, wake_event: Event):
         self.dot_path = str(dot_path)
@@ -298,7 +298,7 @@ class PipelineRunner:
                 else:
                     self._transition(node_id, "failed")
 
-            # System 3 acceptance signals -> accepted
+            # CoBuilder acceptance signals -> accepted
             elif node.status == "validated":
                 if signal.get("result") == "accepted":
                     self._transition(node_id, "accepted")
@@ -357,8 +357,8 @@ class PipelineRunner:
             result: "pass" | "fail" | "requeue".
 
         Stage 2 (validated): Runner writes a "ready-for-review" signal.
-            System 3's Haiku 4.5 monitor detects this and wakes System 3.
-            System 3 runs blind Gherkin E2E scenarios independently, then writes
+            CoBuilder's Haiku 4.5 monitor detects this and wakes CoBuilder.
+            CoBuilder runs blind Gherkin E2E scenarios independently, then writes
             an acceptance signal. Runner transitions to "accepted".
 
         The runner itself performs NO validation, NO test execution, NO LLM reasoning.
@@ -480,12 +480,12 @@ class PipelineRunner:
         self.active_workers[node.id] = config["subagent_type"]
 
     def _write_ready_for_review(self, node):
-        """Write a ready-for-review signal so System 3's monitor can detect it."""
+        """Write a ready-for-review signal so CoBuilder's monitor can detect it."""
         ready_signal = self.signal_dir / f"{node.id}.ready-for-review.json"
         write_signal(ready_signal, {
             "node": node.id,
             "status": "validated",
-            "message": "Technical validation passed. Awaiting System 3 acceptance.",
+            "message": "Technical validation passed. Awaiting CoBuilder acceptance.",
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
         })
 
@@ -568,7 +568,7 @@ if __name__ == "__main__":
 The runner uses Python's `watchdog` library instead of mtime polling:
 
 1. **`SignalFileHandler`** watches `.claude/signals/*.json` for worker completion signals (primary wake source)
-2. **`DotFileHandler`** watches the pipeline DOT file for external state changes (System 3 manual gate approvals)
+2. **`DotFileHandler`** watches the pipeline DOT file for external state changes (CoBuilder manual gate approvals)
 3. Both handlers set a shared `threading.Event` that wakes the main loop
 4. The main loop blocks on `_wake_event.wait(timeout=30.0)` -- the 30s timeout is a safety net, not the primary mechanism
 
@@ -607,10 +607,10 @@ No interpretation, no reasoning. Pass advances, fail stops, requeue sends the pr
 | Stage | Trigger | Actor | Action |
 |-------|---------|-------|--------|
 | **Stage 1** | Node reaches `impl_complete` | Runner dispatches validation-test-agent (AgentSDK) | Technical validation: unit tests, lint, type checks |
-| **Stage 2** | Node reaches `validated` | Runner writes `ready-for-review` signal; System 3's Haiku 4.5 monitor wakes System 3 | Business validation: blind Gherkin E2E scenarios |
+| **Stage 2** | Node reaches `validated` | Runner writes `ready-for-review` signal; CoBuilder's Haiku 4.5 monitor wakes CoBuilder | Business validation: blind Gherkin E2E scenarios |
 
 - **Stage 1 result**: Validation agent writes signal (`pass`/`fail`/`requeue`). Runner applies mechanically.
-- **Stage 2 result**: System 3 writes acceptance signal. Runner transitions to `accepted`.
+- **Stage 2 result**: CoBuilder writes acceptance signal. Runner transitions to `accepted`.
 
 The runner never runs tests, never evaluates quality, never makes judgment calls. It dispatches agents and reads their verdicts.
 
@@ -620,10 +620,10 @@ The runner is the **sole writer of the DOT file**. This eliminates concurrency i
 
 - Workers communicate via signal files (one file per node)
 - Validation agents communicate via signal files
-- System 3 communicates via signal files
+- CoBuilder communicates via signal files
 - Only the runner reads signals and applies state transitions to the DOT graph
 
-Multiple readers (System 3 monitor, dashboards) can safely read the DOT file at any time.
+Multiple readers (CoBuilder monitor, dashboards) can safely read the DOT file at any time.
 
 ### 2.9 Migration Path
 
@@ -640,7 +640,7 @@ Multiple readers (System 3 monitor, dashboards) can safely read the DOT file at 
 - **Does not write code** -- workers write code via Edit/Write tools
 - **Does not make architectural decisions** -- those are in the Solution Design
 - **Does not run tests** -- validation-test-agent runs tests via AgentSDK
-- **Does not evaluate business requirements** -- System 3 runs blind Gherkin E2E independently
+- **Does not evaluate business requirements** -- CoBuilder runs blind Gherkin E2E independently
 - **Does not contain any LLM calls** -- all LLM work is delegated via AgentSDK dispatch
 - **Does not write to the DOT file from multiple processes** -- single writer, multiple readers
 

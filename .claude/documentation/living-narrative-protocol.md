@@ -3,7 +3,7 @@ title: "Living Narrative Protocol"
 status: active
 type: reference
 last_verified: 2026-03-07
-grade: authoritative
+grade: reference
 ---
 
 # Living Narrative Protocol
@@ -22,7 +22,7 @@ For example:
 - `.claude/narrative/auth-system.md` - for AUTH-SYSTEM initiative
 
 ## Update Protocol
-After each epic completion, System 3 appends a new entry to the initiative's narrative file.
+After each epic completion, CoBuilder appends a new entry to the initiative's narrative file.
 
 ## Entry Format
 Each epic completion entry follows this format:

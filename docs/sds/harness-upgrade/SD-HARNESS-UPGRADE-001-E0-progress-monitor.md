@@ -10,13 +10,13 @@ grade: authoritative
 
 ## 1. Problem Statement
 
-System 3 currently has no automated way to know when a pipeline run needs attention. After launching a guardian/runner, System 3 must manually check signal files, read DOT graph state, or poll tmux sessions. This is error-prone and creates gaps where failures go undetected for extended periods.
+CoBuilder currently has no automated way to know when a pipeline run needs attention. After launching a guardian/runner, CoBuilder must manually check signal files, read DOT graph state, or poll tmux sessions. This is error-prone and creates gaps where failures go undetected for extended periods.
 
 ## 2. Design
 
 ### 2.1 Haiku 4.5 Monitor Sub-Agent
 
-System 3 spawns a lightweight Haiku 4.5 sub-agent after launching a pipeline:
+CoBuilder spawns a lightweight Haiku 4.5 sub-agent after launching a pipeline:
 
 ```python
 Task(
@@ -65,10 +65,10 @@ Task(
 
 ### 2.3 Cyclic Re-Launch Pattern
 
-The monitor completes (waking System 3) only when attention is needed:
+The monitor completes (waking CoBuilder) only when attention is needed:
 
 ```
-System 3                    Monitor (Haiku 4.5)
+CoBuilder                    Monitor (Haiku 4.5)
    |                            |
    |  Launch monitor ---------->|
    |                            |<-- Poll signals + DOT (30s cycle)
@@ -86,7 +86,7 @@ System 3                    Monitor (Haiku 4.5)
 
 ### 2.4 Monitor Output Statuses
 
-| Status | Meaning | System 3 Action |
+| Status | Meaning | CoBuilder Action |
 |--------|---------|----------------|
 | `MONITOR_COMPLETE` | All nodes validated | Run final E2E, close initiative |
 | `MONITOR_ERROR` | Node failed | Investigate root cause, requeue or escalate |

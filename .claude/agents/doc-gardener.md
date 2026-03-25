@@ -14,7 +14,7 @@ On-demand documentation maintenance agent for the `.claude/` harness. Scans all 
 
 ## When to Spawn
 
-System 3 (meta-orchestrator) should spawn this agent:
+CoBuilder (meta-orchestrator) should spawn this agent:
 
 1. **After major harness changes**: When skills, agents, output-styles, or hooks are added, renamed, or removed.
 2. **Periodic maintenance**: As part of weekly or sprint-end hygiene cycles.
@@ -72,7 +72,7 @@ python .claude/scripts/doc-gardener/lint.py --fix
 
 The agent should return one of:
 
-| Exit Code | Meaning | System 3 Action |
+| Exit Code | Meaning | CoBuilder Action |
 |-----------|---------|-----------------|
 | `0` | All clean, no doc-debt | Log success, no follow-up needed |
 | `1` | Manual-fix items remain | Create tasks for doc-debt remediation |

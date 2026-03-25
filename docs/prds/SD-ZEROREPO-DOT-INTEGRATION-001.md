@@ -324,7 +324,7 @@ The existing beads-only mode MUST continue to work unchanged. The `--rpg-source`
 
 #### F3.1: RPG Context Format for SDs
 
-When System 3 delegates SD creation to `solution-design-architect`, include RPG context:
+When CoBuilder delegates SD creation to `solution-design-architect`, include RPG context:
 
 ```markdown
 ## Codebase Context (from ZeroRepo)
@@ -689,7 +689,7 @@ mcp__hindsight__retain(
 ---
 
 **Version**: 0.1.0 (Draft)
-**Author**: System 3 Meta-Orchestrator
+**Author**: CoBuilder Meta-Orchestrator
 **Date**: 2026-02-27
 **Dependencies**: ZeroRepo (src/zerorepo/), Attractor CLI (.claude/scripts/attractor/), Beads
 

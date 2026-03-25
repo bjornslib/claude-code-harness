@@ -13,7 +13,7 @@ grade: authoritative
 Multiple workflow gaps have been identified through production use:
 - SDs are edited in-place during research/refine, creating version pollution for downstream workers
 - No confidence trend tracking across sessions
-- No structured mechanism for workers to raise concerns back to System 3
+- No structured mechanism for workers to raise concerns back to CoBuilder
 - No guardian reflection at validation gates — validation runs blind without reviewing worker signals
 - Session boundaries lose context (no handoff document)
 - No narrative record of initiative progress across epics
@@ -101,7 +101,7 @@ This keeps the retry logic inside the pipeline state machine — no external pro
 
 ### 2.5 Session Handoff Document
 
-Written at end of every System 3 turn to `.claude/progress/{session-id}-handoff.md`:
+Written at end of every CoBuilder turn to `.claude/progress/{session-id}-handoff.md`:
 
 ```markdown
 # Session Handoff: {session-id}
@@ -126,7 +126,7 @@ Read first on session startup (before Hindsight queries).
 
 ### 2.6 Living Narrative
 
-After each epic completion, System 3 appends to `.claude/narrative/{initiative}.md`:
+After each epic completion, CoBuilder appends to `.claude/narrative/{initiative}.md`:
 
 ```markdown
 ## Epic {N}: {title} — {date}

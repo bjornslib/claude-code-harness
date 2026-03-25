@@ -50,3 +50,9 @@ Also add max_cycles as a parameter to `build_system_prompt()` so it can be injec
 3. Pipeline transitions to CLOSE when max_cycles exhausted
 4. Default max_cycles is 3 if not specified
 5. `guardian.py --dry-run` still works
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

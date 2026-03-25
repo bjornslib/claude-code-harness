@@ -3,7 +3,7 @@ title: "Concern Queue Schema"
 status: active
 type: reference
 last_verified: 2026-03-07
-grade: authoritative
+grade: reference
 ---
 
 # Concern Queue JSONL Schema

@@ -112,7 +112,7 @@ The `wait.cobuilder` gate can verify the hash matches the expected frozen SD ver
 
 ### 2.7 AgentSDK Dispatch (All Modes)
 
-All dispatch paths use `claude_code_sdk` (`_run_agent()`) with proper sub-agent types, skills, and instructions. No headless CLI (`claude -p`) or tmux dispatch. This aligns with the E7 architecture: `System 3 → pipeline_runner.py → Workers (AgentSDK)`.
+All dispatch paths use `claude_code_sdk` (`_run_agent()`) with proper sub-agent types, skills, and instructions. No headless CLI (`claude -p`) or tmux dispatch. This aligns with the E7 architecture: `CoBuilder → pipeline_runner.py → Workers (AgentSDK)`.
 
 The `wait.cobuilder` gate dispatches a `validation-test-agent` (with `--mode=pipeline-gate` and `acceptance-test-runner` skill) as an AgentSDK worker. The validation agent writes a signal file with `result: pass|fail|requeue` — the runner applies the transition mechanically.
 

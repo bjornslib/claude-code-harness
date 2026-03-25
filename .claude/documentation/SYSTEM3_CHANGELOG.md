@@ -1,14 +1,14 @@
 ---
-title: "System3_Changelog"
+title: "CoBuilder_Changelog"
 status: active
 type: architecture
 last_verified: 2026-02-19
 grade: reference
 ---
 
-# System 3 Meta-Orchestrator Changelog
+# CoBuilder Meta-Orchestrator Changelog
 
-This document tracks the version history of the System 3 Meta-Orchestrator output style.
+This document tracks the version history of the CoBuilder Meta-Orchestrator output style.
 
 ---
 
@@ -61,7 +61,7 @@ This document tracks the version history of the System 3 Meta-Orchestrator outpu
 - ORCHESTRATOR_INITIALIZATION_TEMPLATE.md - Complete structured template for spawning orchestrators
 - Explicit CLAUDE_SESSION_ID setup in spawn sequence (must be set BEFORE launchcc)
 - Clear orchestrator first-actions checklist (skill → register → monitor → check messages)
-- Reference to template from both output style and System 3 orchestrator skill
+- Reference to template from both output style and CoBuilder orchestrator skill
 - Completion Promise Protocol with file-based state tracking
 - Session state JSON schema (goals, epics, features, verification proof)
 - CLI scripts: cs-init, cs-extract, cs-add-epic, cs-add-feature, cs-update, cs-verify, cs-status, cs-check

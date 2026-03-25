@@ -1,12 +1,12 @@
 ---
-title: "PRD Contract: System 3 Self-Management Upgrade"
+title: "PRD Contract: CoBuilder Self-Management Upgrade"
 status: active
 type: reference
 last_verified: 2026-03-07
 grade: authoritative
 ---
 
-# PRD Contract: System 3 Self-Management Upgrade
+# PRD Contract: CoBuilder Self-Management Upgrade
 
 ## Domain Invariants (3-5 truths that MUST hold)
 

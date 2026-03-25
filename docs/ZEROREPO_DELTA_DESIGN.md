@@ -437,7 +437,7 @@ Orchestrator Phase 1 Workflow (After This Design)
 
 ---
 
-*Finalized by System 3 Meta-Orchestrator*
+*Finalized by CoBuilder Meta-Orchestrator*
 *Promise: promise-2fe51a3b (in_progress)*
 *Skill-development best practices applied: progressive disclosure, imperative form, lean SKILL.md*
 

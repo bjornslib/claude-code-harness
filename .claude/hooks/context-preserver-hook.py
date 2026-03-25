@@ -2,7 +2,7 @@
 """
 PreCompact hook for context preservation.
 
-Captures System3's original instructions and current progress state
+Captures CoBuilder's original instructions and current progress state
 before context compression, enabling selective re-injection afterward.
 
 This implements idea #1 from Replit's decision-time guidance:

@@ -30,8 +30,8 @@ The core insight: **a map of the codebase is essential for every stage of the de
 ### US-1: Guardian Designing an Initiative
 As a guardian, I want to run `cobuilder repomap init` on the target repo and have the codebase context automatically injected into the SD creation prompt, so that the solution-design-architect produces technically accurate specifications grounded in the actual codebase.
 
-### US-2: System 3 Generating a Pipeline
-As System 3, I want to run `cobuilder pipeline create --sd SD-AUTH-001.md --repo my-project` and get a fully enriched DOT pipeline where each node carries precise file scope, LLM-crafted acceptance criteria, and delta classification, so that orchestrators receive implementation-ready work packages.
+### US-2: CoBuilder Generating a Pipeline
+As CoBuilder, I want to run `cobuilder pipeline create --sd SD-AUTH-001.md --repo my-project` and get a fully enriched DOT pipeline where each node carries precise file scope, LLM-crafted acceptance criteria, and delta classification, so that orchestrators receive implementation-ready work packages.
 
 ### US-3: Orchestrator Completing a Node
 As an orchestrator, when my workers complete a node and it transitions to `validated`, I want the RepoMap baseline to automatically refresh for the affected files, so that subsequent nodes and future initiatives see the current codebase state.
@@ -200,7 +200,7 @@ claude-harness-setup/
 - Cross-repo unified graph aggregation (dropped per design review)
 - Serena MCP integration for baseline refresh (file-based walking for now)
 - Runtime code generation (RepoMap maps structure, doesn't generate code)
-- Changes to the 3-level agent hierarchy (System 3 → Orchestrator → Worker unchanged)
+- Changes to the 3-level agent hierarchy (CoBuilder → Orchestrator → Worker unchanged)
 
 ## 10. Risks
 
@@ -214,7 +214,7 @@ claude-harness-setup/
 ---
 
 **Version**: 2.0.0
-**Author**: System 3 Meta-Orchestrator + User
+**Author**: CoBuilder Meta-Orchestrator + User
 **Date**: 2026-02-27
 **Supersedes**: SD-ZEROREPO-DOT-INTEGRATION-001.md (v1 draft, reclassified as PRD)
 

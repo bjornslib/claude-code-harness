@@ -10,7 +10,7 @@ grade: reference
 
 ## Overview
 
-The Attractor Pipeline is a CLI-based execution engine that manages initiative lifecycles as directed graphs in DOT format. Each node represents a task (implementation, validation, tooling) and edges encode dependencies and conditional routing. The pipeline is the backbone of System 3's orchestration — it determines what work is ready, what's blocked, and what's been validated.
+The Attractor Pipeline is a CLI-based execution engine that manages initiative lifecycles as directed graphs in DOT format. Each node represents a task (implementation, validation, tooling) and edges encode dependencies and conditional routing. The pipeline is the backbone of CoBuilder's orchestration — it determines what work is ready, what's blocked, and what's been validated.
 
 **CLI location**: `cobuilder/engine/cli.py`
 **Pipeline storage**: `.pipelines/pipelines/<INITIATIVE>.dot`

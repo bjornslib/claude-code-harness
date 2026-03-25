@@ -71,3 +71,9 @@ IMPORTANT: After ANY graph modification, always:
 3. Common patterns for failure injection, research branching included
 4. Validate + checkpoint reminder after modifications
 5. `guardian.py --dry-run` still works
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

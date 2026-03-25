@@ -1,6 +1,6 @@
 ---
 name: cobuilder:ideation-to-execution
-description: This skill should be used when the user asks to "brainstorm a feature", "create a PRD", "write a solution design", "plan a new initiative", "start a new project", "ideate on a feature", "brainstorm and build", "go from idea to implementation", or when System 3 needs to drive the complete ideation → PRD → SD → worktree → autonomous TDD pipeline.
+description: This skill should be used when the user asks to "brainstorm a feature", "create a PRD", "write a solution design", "plan a new initiative", "start a new project", "ideate on a feature", "brainstorm and build", "go from idea to implementation", or when CoBuilder needs to drive the complete ideation → PRD → SD → worktree → autonomous TDD pipeline.
 version: 1.0.0
 title: "Ideation to Execution"
 status: active

@@ -16,7 +16,7 @@ Accepted
 
 ## Context
 
-The project uses a 3-level agent hierarchy (System 3 → Orchestrator → Worker) with two mechanisms for providing context:
+The project uses a 3-level agent hierarchy (CoBuilder → Orchestrator → Worker) with two mechanisms for providing context:
 
 1. **Output Styles** (`.claude/output-styles/`) - Loaded automatically at session start
 2. **Skills** (`.claude/skills/`) - Must be explicitly invoked via Skill tool
@@ -86,7 +86,7 @@ Output styles contain critical content with references to skills for optional de
 ## Related Documents
 
 - `.claude/CLAUDE.md` - Agent hierarchy diagram
-- `.claude/output-styles/system3-meta-orchestrator.md` - System 3 critical content
+- `.claude/output-styles/system3-meta-orchestrator.md` - CoBuilder critical content
 - `.claude/output-styles/orchestrator.md` - Orchestrator critical content
-- `.claude/skills/system3-orchestrator/` - System 3 optional reference
+- `.claude/skills/system3-orchestrator/` - CoBuilder optional reference
 - `.claude/skills/orchestrator-multiagent/` - Orchestrator implementation guides

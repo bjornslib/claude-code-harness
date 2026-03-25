@@ -1,6 +1,6 @@
 # Solution Design: Acceptance Testing Framework
 
-**Author**: System 3 + User Collaboration
+**Author**: CoBuilder + User Collaboration
 **Date**: 2026-01-24
 **Status**: APPROVED
 **PRD Reference**: N/A (Infrastructure improvement)

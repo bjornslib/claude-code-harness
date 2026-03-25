@@ -38,7 +38,7 @@ Testing infrastructure and troubleshooting for orchestrator sessions.
 **Orchestrator Validation Scope: Level 1 Only**
 
 Orchestrators run Level 1 validation (unit tests, basic smoke tests) before marking tasks `impl_complete`.
-Level 2 (API tests) and Level 3 (E2E browser tests) are performed independently by System 3's oversight team.
+Level 2 (API tests) and Level 3 (E2E browser tests) are performed independently by CoBuilder's oversight team.
 
 The orchestrator does NOT invoke validation-test-agent, acceptance-test-runner, or acceptance-test-writer.
 

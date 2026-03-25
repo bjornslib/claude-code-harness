@@ -82,7 +82,7 @@ Feature: Pure Python DOT Runner
     # 0.0 — Handler doesn't execute command or uses LLM
 
   @feature-F7.2.5 @weight-0.04
-  Scenario: S7.2.5 — System3 gate handler with guardian reflection
+  Scenario: S7.2.5 — CoBuilder gate handler with guardian reflection
     Given a wait.system3 node with gate_type="e2e" and summary_ref path
     And predecessor codergen nodes have completed with signal files
     When _handle_system3(node) is called

@@ -1,7 +1,7 @@
 """Command parsing and management for Google Chat messages.
 
 Parses inbound messages as structured commands with keyword and fuzzy matching.
-Commands are stored in a local queue for consumption by System 3.
+Commands are stored in a local queue for consumption by CoBuilder.
 
 Command file location: ~/.claude/state/gchat-pending-commands.json
 

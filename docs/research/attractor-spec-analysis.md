@@ -251,7 +251,7 @@ Our harness implements a substantial subset of Attractor concepts:
 
 **Spec requires**: An engine that traverses the graph automatically — checking limits, executing handlers, recording outcomes, selecting edges, and checkpointing after each node.
 
-**We have**: The DOT files are declarative descriptions that System 3 and orchestrators read and interpret manually. State transitions happen through convention (bd update, attractor transition) rather than through an automated engine.
+**We have**: The DOT files are declarative descriptions that CoBuilder and orchestrators read and interpret manually. State transitions happen through convention (bd update, attractor transition) rather than through an automated engine.
 
 **Impact**: HIGH — This is the core differentiator. Without an engine, pipeline execution requires constant human/S3 coordination rather than autonomous traversal.
 
@@ -315,7 +315,7 @@ Our harness implements a substantial subset of Attractor concepts:
 
 | Our Feature | Attractor Spec Equivalent | Assessment |
 |-------------|---------------------------|------------|
-| 3-level agent hierarchy (System 3 / Orchestrator / Worker) | Not specified — Attractor is a single-level engine | Our hierarchy adds strategic oversight that Attractor lacks |
+| 3-level agent hierarchy (CoBuilder / Orchestrator / Worker) | Not specified — Attractor is a single-level engine | Our hierarchy adds strategic oversight that Attractor lacks |
 | Completion promises with triple gate | Not specified — goal gates are simpler pass/fail | Our promises are more rigorous (Gate 1: ACs, Gate 2: validation responses, Gate 3: independent verification) |
 | Beads issue tracking integration | Not specified | Adds traceability absent from the spec |
 | Output styles for role enforcement | Not specified | Structural role separation through prompt injection |
@@ -352,7 +352,7 @@ Adopt StrongDM's satisfaction testing pattern:
 Add loop detection to the pipeline engine:
 - Track the last N node executions (configurable, default: 10)
 - Detect repeating patterns (same node failing repeatedly, circular retry paths)
-- Escalate to System 3 when a loop is detected rather than continuing to retry
+- Escalate to CoBuilder when a loop is detected rather than continuing to retry
 - Set hard limits: `max_retries` per node, `default_max_retry` per pipeline
 
 ### 4.4 Priority 4: Condition Expression Evaluation (Closes Gap 2)

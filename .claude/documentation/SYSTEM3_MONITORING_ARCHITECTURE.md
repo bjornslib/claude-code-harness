@@ -1,12 +1,12 @@
 ---
-title: "System3_Monitoring_Architecture"
+title: "CoBuilder_Monitoring_Architecture"
 status: active
 type: architecture
 last_verified: 2026-02-19
 grade: reference
 ---
 
-# System3 Monitoring Architecture
+# CoBuilder Monitoring Architecture
 
 ## Key Finding
 
@@ -58,7 +58,7 @@ This shapes the entire monitoring design: **monitors must be subagents that comp
 
 ### 1. Validation Monitor (Background)
 
-**Purpose**: Watch task list for completed tasks, run validation, wake System3 on issues.
+**Purpose**: Watch task list for completed tasks, run validation, wake CoBuilder on issues.
 
 ```python
 # Pseudo-code for validation monitor behavior
@@ -69,7 +69,7 @@ while iterations < MAX_ITERATIONS:
         result = run_validation(task)
 
         if result.failed:
-            # COMPLETE immediately to wake System3
+            # COMPLETE immediately to wake CoBuilder
             return WakeUp(
                 reason="validation_failed",
                 task_id=task.id,
@@ -78,7 +78,7 @@ while iterations < MAX_ITERATIONS:
             )
 
     if no_changes_for(5_minutes):
-        # Heartbeat - complete to let System3 know we're alive
+        # Heartbeat - complete to let CoBuilder know we're alive
         return Heartbeat(status="no_issues", tasks_validated=count)
 
     sleep(10)
@@ -163,15 +163,15 @@ Task(
 
 | Scenario | Mode | Rationale |
 |----------|------|-----------|
-| System3 working on single PRD | **Blocking** | Full attention, immediate response |
-| System3 managing multiple PRDs | **Background** | Can't block on one orchestrator |
+| CoBuilder working on single PRD | **Blocking** | Full attention, immediate response |
+| CoBuilder managing multiple PRDs | **Background** | Can't block on one orchestrator |
 | Validation of completed task | **Background** | Fire and forget, wake on issues |
 | Critical production issue | **Blocking** | Needs immediate attention |
 
 ### Implementation Pattern
 
 ```python
-# In System3 orchestrator skill
+# In CoBuilder orchestrator skill
 
 def launch_orchestrator_with_monitor(prd_id: str, epic_name: str):
     """Launch orchestrator and its monitor."""
@@ -185,7 +185,7 @@ def launch_orchestrator_with_monitor(prd_id: str, epic_name: str):
 
     if active_prds == 1:
         # Single PRD - can use blocking monitor
-        # System3 will wait for monitor to complete
+        # CoBuilder will wait for monitor to complete
         monitor_mode = "blocking"
     else:
         # Multiple PRDs - use background
@@ -209,7 +209,7 @@ def launch_orchestrator_with_monitor(prd_id: str, epic_name: str):
 
 ## Wake-Up Response Protocol
 
-When System3 receives a wake-up from a monitor:
+When CoBuilder receives a wake-up from a monitor:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -266,7 +266,7 @@ Examples:
 
 - [ ] Create `orchestrator-monitor` agent template in `.claude/agents/`
 - [ ] Create `validation-monitor` agent template
-- [ ] Update System3 skill to launch monitors with orchestrators
+- [ ] Update CoBuilder skill to launch monitors with orchestrators
 - [ ] Add monitor re-launch logic to wake-up handler
 - [ ] Implement tmux output analysis patterns (error loop, blocking question, idle)
 - [x] Use Sonnet for monitors (Haiku lacks exit discipline - see test 2026-01-25)
@@ -280,7 +280,7 @@ Examples:
 |--------------|-------|----------------|---------------|
 | Validation | Sonnet | ~$0.15 | Exit discipline required - Haiku gets distracted |
 | Orchestrator | Sonnet | ~$0.15 | Pattern matching + reliable completion |
-| System3 | Opus | ~$0.50 | Complex reasoning when woken |
+| CoBuilder | Opus | ~$0.50 | Complex reasoning when woken |
 
 **Why Sonnet over Haiku for monitors?**
 
@@ -292,4 +292,4 @@ Testing (2026-01-25) showed Haiku validated correctly but failed to RETURN:
 
 Sonnet's higher cost is justified by reliable exit behavior.
 
-**Key insight**: Monitors use cheap Haiku, System3 only uses Opus when actually needed.
+**Key insight**: Monitors use cheap Haiku, CoBuilder only uses Opus when actually needed.

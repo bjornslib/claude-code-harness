@@ -2,7 +2,7 @@
 
 Provides structured message templates, Google Chat Card v2 builders,
 markdown conversion, and enhanced chunking with continuation markers
-for System 3 notifications.
+for CoBuilder notifications.
 
 Message Types:
     - Progress updates (orchestrator status)

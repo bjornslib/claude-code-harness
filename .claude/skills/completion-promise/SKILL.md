@@ -1,6 +1,6 @@
 ---
 name: completion-promise
-description: Ralph Wiggum-style completion promise tracking for System 3 sessions. Use when starting a new session with user goals, when verifying feature completion, or when the stop hook needs to evaluate if the session can end. Triggers on session start, completion promise, goal tracking, feature verification, stop gate.
+description: Ralph Wiggum-style completion promise tracking for CoBuilder sessions. Use when starting a new session with user goals, when verifying feature completion, or when the stop hook needs to evaluate if the session can end. Triggers on session start, completion promise, goal tracking, feature verification, stop gate.
 title: "Completion Promise"
 status: active
 ---
@@ -86,7 +86,7 @@ mkdir -p .claude/completion-state/$CLAUDE_SESSION_DIR
 
 The session state is stored in `.claude/completion-state/${CLAUDE_SESSION_DIR:-default}/session-state.json`:
 
-> **Note**: The `CLAUDE_SESSION_DIR` environment variable enables session isolation. When set (e.g., `export CLAUDE_SESSION_DIR=epic4-20260107`), each orchestrator maintains its own completion state. If not set, defaults to `default/` directory. System 3 sets this automatically when spawning orchestrators.
+> **Note**: The `CLAUDE_SESSION_DIR` environment variable enables session isolation. When set (e.g., `export CLAUDE_SESSION_DIR=epic4-20260107`), each orchestrator maintains its own completion state. If not set, defaults to `default/` directory. CoBuilder sets this automatically when spawning orchestrators.
 
 ```json
 {
@@ -184,7 +184,7 @@ The session state is stored in `.claude/completion-state/${CLAUDE_SESSION_DIR:-d
 
 ## Initialization
 
-### For System 3: At Session Start
+### For CoBuilder: At Session Start
 
 ```bash
 # 1. Initialize session state
@@ -212,7 +212,7 @@ The session state is stored in `.claude/completion-state/${CLAUDE_SESSION_DIR:-d
 
 > **Breaking Change (v2.0)**: `cs-promise --create` now **requires** at least one `--ac` flag. Promises without structured acceptance criteria are no longer accepted.
 
-### Extraction Prompt for System 3
+### Extraction Prompt for CoBuilder
 
 When a user provides their first prompt, extract:
 
@@ -350,7 +350,7 @@ fi
 
 ---
 
-## For System 3: Session Flow
+## For CoBuilder: Session Flow
 
 ### 1. Session Start (First Prompt)
 
@@ -455,7 +455,7 @@ These patterns persist across iterations, building institutional knowledge.
 
 ## Testing Sub-Agent
 
-System 3 can spawn a verification sub-agent to validate completion:
+CoBuilder can spawn a verification sub-agent to validate completion:
 
 ```python
 Task(
@@ -521,7 +521,7 @@ The completion promise tracks session goals, while Beads tracks work items:
 
 | System | Tracks | Granularity | Who Uses |
 |--------|--------|-------------|----------|
-| Completion Promise | Session goals | Session | System 3, Stop Hook |
+| Completion Promise | Session goals | Session | CoBuilder, Stop Hook |
 | Beads | Work items | Epic/Task | Orchestrators, Workers |
 
 They complement each other:

@@ -78,7 +78,7 @@ Add to system3-meta-orchestrator.md:
 >
 > ANY task/epic closure MUST go through validation-test-agent as the single entry point.
 > - Orchestrator tasks: `--mode=unit` or `--mode=e2e --prd=X`
-> - System 3 epics/KRs: `--mode=e2e --prd=X`
+> - CoBuilder epics/KRs: `--mode=e2e --prd=X`
 
 ## Validation Chain
 

@@ -152,9 +152,9 @@ Phase 4: Smoke Tests (10 min)
 
 ---
 
-## 6. What System 3 Will Do vs Operator Manual Steps
+## 6. What CoBuilder Will Do vs Operator Manual Steps
 
-### System 3 (Automated via Orchestrator)
+### CoBuilder (Automated via Orchestrator)
 - Apply database migrations via Railway GraphQL + psql
 - Set environment variables via Railway GraphQL API
 - Trigger service redeployments via Railway GraphQL API
@@ -162,9 +162,9 @@ Phase 4: Smoke Tests (10 min)
 - Report results
 
 ### Operator (Manual — Before Deployment)
-- Generate RSA key pair and provide to System 3
+- Generate RSA key pair and provide to CoBuilder
 - Set up SendGrid account (single-sender auth, template, API key)
-- Provide SendGrid credentials to System 3
+- Provide SendGrid credentials to CoBuilder
 - Review and approve this deployment plan
 - Send Railway support message for dual-stack migration
 

@@ -948,7 +948,7 @@ The orchestrator spawned by `spawn_orchestrator.py` is responsible for writing t
 
 ### Signal Protocol on Failure
 
-When the engine exits with a fatal error from a handler (not a programming error), it writes a signal file so System 3 / the guardian is notified:
+When the engine exits with a fatal error from a handler (not a programming error), it writes a signal file so CoBuilder / the guardian is notified:
 
 ```python
 # In EngineRunner.run() except block:

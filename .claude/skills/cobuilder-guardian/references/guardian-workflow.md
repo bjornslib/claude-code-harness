@@ -429,7 +429,7 @@ See [validation-scoring.md](validation-scoring.md) Section 10 for the complete k
 
 **Trigger**: Gaps have been identified in Sections 5.3-5.3b, but BEFORE making the final decision in 5.4.
 
-**Purpose**: System 3 autonomously creates codergen fix-it nodes for gaps that can be fixed without architectural or UX decisions, modifies the DOT pipeline in-place, and re-validates affected scenarios. This ensures only gaps requiring user input (architectural/design decisions) are escalated to `wait.human`.
+**Purpose**: CoBuilder autonomously creates codergen fix-it nodes for gaps that can be fixed without architectural or UX decisions, modifies the DOT pipeline in-place, and re-validates affected scenarios. This ensures only gaps requiring user input (architectural/design decisions) are escalated to `wait.human`.
 
 #### Decision Tree for Each Gap
 
@@ -1132,7 +1132,7 @@ Pipelines that contain **only research and refine nodes** (no codergen) are a va
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│  Layer 0: System 3 (you)                                         │
+│  Layer 0: CoBuilder (you)                                         │
 │    Calls: launch_guardian.py --dot-file <pipeline.dot>           │
 │                                                                  │
 │  Layer 1: guardian_agent.py (Sonnet, pipeline coordinator)       │

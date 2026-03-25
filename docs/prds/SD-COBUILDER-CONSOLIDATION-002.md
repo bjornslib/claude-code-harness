@@ -632,7 +632,7 @@ cobuilder/
 │   ├── __init__.py
 │   ├── __main__.py      # python -m cobuilder.attractor
 │   ├── pipeline_runner.py     # Pure-Python AgentSDK state machine
-│   ├── guardian.py            # System 3 SDK agent (boundary: guardian dissolves per E7; retained for tmux orchestration)
+│   ├── guardian.py            # CoBuilder SDK agent (boundary: guardian dissolves per E7; retained for tmux orchestration)
 │   ├── session_runner.py      # RENAMED from runner.py — SDK monitoring agent
 │   ├── spawn_orchestrator.py  # Worktree + tmux session bootstrap
 │   ├── run_research.py

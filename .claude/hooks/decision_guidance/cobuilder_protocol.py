@@ -1,6 +1,6 @@
-"""System3 guidance protocol for orchestrator consultation.
+"""CoBuilder guidance protocol for orchestrator consultation.
 
-When orchestrators are blocked or stuck, they can request guidance from System3.
+When orchestrators are blocked or stuck, they can request guidance from CoBuilder.
 This module provides:
 1. Guidance request formatting
 2. State tracking for pending requests
@@ -8,7 +8,7 @@ This module provides:
 
 The protocol uses beads for communication:
 - Orchestrator signals: bd update <id> --status=impl_complete
-- System3 picks up impl_complete beads and provides guidance
+- CoBuilder picks up impl_complete beads and provides guidance
 """
 
 import json
@@ -21,7 +21,7 @@ from typing import Optional
 
 @dataclass
 class GuidanceRequest:
-    """A request for guidance from System3."""
+    """A request for guidance from CoBuilder."""
 
     request_id: str
     session_id: str
@@ -51,7 +51,7 @@ class GuidanceRequest:
 
 @dataclass
 class GuidanceResponse:
-    """A response from System3 with guidance."""
+    """A response from CoBuilder with guidance."""
 
     request_id: str
     guidance: str
@@ -68,7 +68,7 @@ class GuidanceResponse:
 
 
 class GuidanceProtocol:
-    """Manage guidance requests and responses between orchestrators and System3."""
+    """Manage guidance requests and responses between orchestrators and CoBuilder."""
 
     def __init__(self, state_dir: Optional[Path] = None):
         if state_dir is None:
@@ -156,7 +156,7 @@ class GuidanceProtocol:
         self._save_requests(requests)
 
     def record_response(self, response: GuidanceResponse) -> None:
-        """Record a response from System3."""
+        """Record a response from CoBuilder."""
         responses = self._load_responses()
         responses.append(response)
         self._save_responses(responses)
@@ -205,7 +205,7 @@ class GuidanceProtocol:
         }.get(response.priority, "💡")
 
         return f"""
-## {priority_emoji} Guidance from System3
+## {priority_emoji} Guidance from CoBuilder
 
 {response.guidance}
 

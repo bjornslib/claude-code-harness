@@ -1,19 +1,19 @@
 ---
-title: "Solution Design: Template System and System 3 Meta-Pipeline"
+title: "Solution Design: Template System and CoBuilder Meta-Pipeline"
 status: draft
 type: architecture
 last_verified: 2026-03-12
-grade: authoritative
+grade: reference
 ---
 
-# SD: Attractor Template System & System 3 Meta-Pipeline
+# SD: Attractor Template System & CoBuilder Meta-Pipeline
 
 **Author**: Solution Architect
 **Date**: 2026-03-12
 **Status**: Draft — awaiting review
 **Scope**: Two interconnected capabilities:
 1. Parameterized DOT templates with state transition constraints
-2. Self-orchestrating System 3 lifecycle pipeline that spawns sub-pipelines
+2. Self-orchestrating CoBuilder lifecycle pipeline that spawns sub-pipelines
 
 ---
 
@@ -576,7 +576,7 @@ workers:
 | `hub-spoke` | parallel | Multi-task PRDs: fan-out workers, fan-in validation, optional E2E |
 | `brainstorm-synthesize` | cyclic | Research tasks: N parallel researchers, synthesizer, quality gate, loop or exit |
 | `retry-escalate` | linear+retry | Single task with escalation: try worker A, if fail escalate to worker B |
-| `s3-lifecycle` | cyclic | **Part 2**: System 3 meta-pipeline (see below) |
+| `s3-lifecycle` | cyclic | **Part 2**: CoBuilder meta-pipeline (see below) |
 
 ### 1.7 Migration Path for `generate.py`
 
@@ -613,11 +613,11 @@ def generate_pipeline_dot(prd_ref, beads, label, promise_id, target_dir):
 
 ---
 
-## Part 2: System 3 Meta-Pipeline
+## Part 2: CoBuilder Meta-Pipeline
 
 ### 2.1 Vision
 
-A user defines business outcomes in a PRD. System 3 becomes a **self-driving pipeline** that:
+A user defines business outcomes in a PRD. CoBuilder becomes a **self-driving pipeline** that:
 
 1. **Researches** the problem space
 2. **Refines** the PRD with discovered constraints
@@ -627,7 +627,7 @@ A user defines business outcomes in a PRD. System 3 becomes a **self-driving pip
 6. **Deploys** if validated
 7. **Evaluates** business goals and loops back if not met
 
-The key insight: **System 3 itself runs as a DOT pipeline** — specifically, the `s3-lifecycle` template — and one of its nodes (`execute`) spawns child pipeline runners. This is pipelines-all-the-way-down.
+The key insight: **CoBuilder itself runs as a DOT pipeline** — specifically, the `s3-lifecycle` template — and one of its nodes (`execute`) spawns child pipeline runners. This is pipelines-all-the-way-down.
 
 ### 2.2 Architecture
 
@@ -704,7 +704,7 @@ template:
   name: s3-lifecycle
   version: "1.0"
   description: >
-    Self-driving System 3 lifecycle: research, refine, plan,
+    Self-driving CoBuilder lifecycle: research, refine, plan,
     execute, validate, deploy, evaluate, loop
   topology: cyclic
 
@@ -855,7 +855,7 @@ async def _execute_child_pipeline(self, request):
 
 ### 2.6 Stream Summarizer Sidecar
 
-A lightweight process that watches Claude Code streaming JSON output and signal files, producing rolling summaries for System 3 to consume.
+A lightweight process that watches Claude Code streaming JSON output and signal files, producing rolling summaries for CoBuilder to consume.
 
 **Module**: `cobuilder/sidecar/stream_summarizer.py`
 
@@ -997,7 +997,7 @@ The `$previous_failures` key is the feedback loop — it tells the RESEARCH node
 # 1. User writes PRD
 vim docs/PRD-AUTH-001.md
 
-# 2. User launches System 3 lifecycle
+# 2. User launches CoBuilder lifecycle
 attractor launch-s3 \
     --prd PRD-AUTH-001 \
     --prd-path docs/PRD-AUTH-001.md \

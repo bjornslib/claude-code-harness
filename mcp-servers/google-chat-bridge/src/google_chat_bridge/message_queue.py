@@ -1,7 +1,7 @@
 """Inbound message queue for Google Chat messages.
 
 Provides a local JSON-backed queue for buffering inbound messages
-from Google Chat. Messages are stored until consumed by System 3
+from Google Chat. Messages are stored until consumed by CoBuilder
 or the heartbeat Communicator.
 
 Queue file location: ~/.claude/state/gchat-message-queue.json
@@ -34,7 +34,7 @@ class NormalizedMessage(BaseModel):
     """Normalized inbound message from Google Chat.
 
     Standard format for all inbound messages regardless of source,
-    enabling consistent processing by System 3.
+    enabling consistent processing by CoBuilder.
     """
 
     message_id: str = Field(description="Unique ID (Google Chat message resource name)")

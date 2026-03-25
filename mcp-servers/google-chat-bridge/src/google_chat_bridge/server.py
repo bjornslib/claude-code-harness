@@ -1,6 +1,6 @@
 """Google Chat Bridge MCP Server with dual authentication support.
 
-FastMCP server providing Google Chat integration tools for System 3.
+FastMCP server providing Google Chat integration tools for CoBuilder.
 Runs as stdio transport for use as an MCP server in Claude Code.
 
 Authentication Modes:
@@ -903,7 +903,7 @@ def send_heartbeat_finding(
 ) -> dict[str, Any]:
     """Send a heartbeat finding notification to Google Chat.
 
-    Used by the System 3 Communicator to relay actionable findings
+    Used by the CoBuilder Communicator to relay actionable findings
     from heartbeat checks to the user via Google Chat.
 
     Args:
@@ -991,7 +991,7 @@ def get_queued_messages(
     """Get unconsumed messages from the local queue.
 
     Returns messages that have been fetched and queued but not yet
-    consumed (processed) by System 3. Messages are returned in FIFO order.
+    consumed (processed) by CoBuilder. Messages are returned in FIFO order.
 
     Args:
         limit: Maximum number of messages to return (1-100, default 25).
@@ -1051,7 +1051,7 @@ def consume_messages(
 ) -> dict[str, Any]:
     """Mark queued messages as consumed (processed).
 
-    After System 3 or the Communicator has processed messages from the queue,
+    After CoBuilder or the Communicator has processed messages from the queue,
     call this to mark them as consumed so they won't appear in future
     get_queued_messages calls.
 
@@ -1187,7 +1187,7 @@ def process_commands(
 
     Fetches new messages from the inbound queue via the router, parses each
     message as a command using keyword/fuzzy matching, and adds parsed commands
-    to the command queue for consumption by System 3.
+    to the command queue for consumption by CoBuilder.
 
     Recognized command types:
     - status: "status", "what's the status?", "any updates?"
@@ -1258,7 +1258,7 @@ def get_pending_commands(
     """Get unconsumed commands from the command queue.
 
     Returns parsed commands that have been queued but not yet consumed
-    by System 3. Commands are returned in FIFO order.
+    by CoBuilder. Commands are returned in FIFO order.
 
     Args:
         command_type: Optional filter by command type. Empty string = all types.
@@ -1311,7 +1311,7 @@ def dispatch_notification(
     (default: 22:00-07:00 local time).
 
     Supported event types:
-    - heartbeat_finding: System 3 heartbeat findings
+    - heartbeat_finding: CoBuilder heartbeat findings
     - task_completion: Task status updates
     - blocked_alert: Blocked work requiring user input
     - morning_briefing: Morning daily briefing

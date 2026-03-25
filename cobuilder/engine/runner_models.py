@@ -148,7 +148,7 @@ class RunnerState(BaseModel):
         last_plan: The most recently produced RunnerPlan (for diagnostics).
         created_at: ISO-8601 timestamp of initial state creation.
         updated_at: ISO-8601 timestamp of most recent state update.
-        paused: If True, the runner has been paused by System 3 or a PAUSE intent.
+        paused: If True, the runner has been paused by CoBuilder or a PAUSE intent.
         completed_checkpoint_path: Path to the checkpoint file written when
             pipeline_complete was signaled.
     """

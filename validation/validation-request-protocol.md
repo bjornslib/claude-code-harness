@@ -8,12 +8,12 @@
 
 ## Overview
 
-This protocol defines the standard message format for validation requests between System 3 (or orchestrators) and `s3-validator` teammates. It enables structured, correlatable validation workflows where requests and responses are matched by `task_id`.
+This protocol defines the standard message format for validation requests between CoBuilder (or orchestrators) and `s3-validator` teammates. It enables structured, correlatable validation workflows where requests and responses are matched by `task_id`.
 
 ## Message Flow
 
 ```
-System 3                          s3-validator
+CoBuilder                          s3-validator
    │                                   │
    │  SendMessage(content=request_json) │
    │ ─────────────────────────────────►│
@@ -32,7 +32,7 @@ System 3                          s3-validator
 Validation requests and responses are carried as **JSON strings within the `content` field of `SendMessage`**. The validator parses the JSON from its initial prompt (for the request) and sends the response JSON via `SendMessage` to `team-lead`.
 
 ```python
-# System 3 sends request via Task initial prompt
+# CoBuilder sends request via Task initial prompt
 Task(
     subagent_type="validation-test-agent",
     team_name="s3-epic4-oversight",
@@ -93,7 +93,7 @@ SendMessage(
   "acceptance_criteria": [
     {
       "id": "F4.1-1",
-      "description": "System 3 can spawn s3-validator on-demand via TeamCreate + Task",
+      "description": "CoBuilder can spawn s3-validator on-demand via TeamCreate + Task",
       "validation_hint": "Check skills/system3-orchestrator/references/validation-workflow.md"
     },
     {
@@ -140,7 +140,7 @@ SendMessage(
 
 ### Verdict Semantics
 
-| Verdict | Meaning | System 3 Action |
+| Verdict | Meaning | CoBuilder Action |
 |---------|---------|-----------------|
 | `PASS` | All criteria verified | Proceed to Gate 3 (cs-verify), then close task |
 | `FAIL` | One or more criteria not met | Send failures to orchestrator, do NOT close |
@@ -186,10 +186,10 @@ SendMessage(
 
 ## Correlation Pattern
 
-System 3 correlates requests and responses by `task_id`:
+CoBuilder correlates requests and responses by `task_id`:
 
 ```python
-# System 3 dispatches validation request
+# CoBuilder dispatches validation request
 pending_validations = {}
 pending_validations[task_id] = {
     "request": validation_request,
@@ -235,7 +235,7 @@ Gate 3: cs-verify programmatic judge (F4.2 — Anthropic SDK)
 
 ## Storage and Enforcement (Gate 2 Trigger)
 
-After receiving a validation response from an s3-validator teammate, System 3 must store the response and then proceed through the triple-gate chain:
+After receiving a validation response from an s3-validator teammate, CoBuilder must store the response and then proceed through the triple-gate chain:
 
 ### Step 1: Store Validation Response
 
@@ -273,7 +273,7 @@ cs-verify --promise <promise-id> --llm-verify
 | Any AC missing a validation response | **BLOCKS** with actionable error |
 | Any AC has FAIL validation response | **BLOCKS** with remediation details |
 | Any AC has BLOCKED validation response | **BLOCKS** with reasoning |
-| PARTIAL verdict | Treated as PASS (System 3 decides acceptability) |
+| PARTIAL verdict | Treated as PASS (CoBuilder decides acceptability) |
 | Legacy promise (no ACs) | Gate 2 skipped entirely |
 | `--skip-validation-check` flag | Gate 2 bypassed with WARNING |
 
@@ -292,7 +292,7 @@ A warning is logged to stderr when this flag is used.
 
 ```python
 # 1. Orchestrator signals impl_complete
-# 2. System 3 dispatches s3-validator
+# 2. CoBuilder dispatches s3-validator
 validator_response = await_validator_result()
 
 # 3. Store the response

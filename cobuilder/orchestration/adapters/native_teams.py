@@ -3,9 +3,9 @@
 
 Implements ChannelAdapter using the Claude Code Native Agent Teams protocol.
 This adapter is used when the Pipeline Runner is spawned as a background
-teammate in System 3's live team (e.g., s3-live-workers).
+teammate in CoBuilder's live team (e.g., s3-live-workers).
 
-The runner uses SendMessage (via message queue files) to signal System 3
+The runner uses SendMessage (via message queue files) to signal CoBuilder
 and polls the inbox file for incoming messages.
 
 Message format (JSON):
