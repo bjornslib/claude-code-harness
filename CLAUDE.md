@@ -5,7 +5,7 @@ Claude Code harness for multi-agent AI orchestration. Contains configuration, sk
 ## Agent Hierarchy
 
 ```
-CoBuilder (ccsystem3)           → Strategic planning, business validation
+CoBuilder (cccb)               → Strategic planning, business validation
   Orchestrator (launchorchestrator) → Feature coordination, worker delegation
     Workers (Agent Teams)         → Implementation, testing, focused execution
 ```
@@ -13,7 +13,7 @@ CoBuilder (ccsystem3)           → Strategic planning, business validation
 **Key Principle**: Higher levels coordinate; lower levels implement.
 
 Launch commands:
-- CoBuilder: `ccsystem3`
+- CoBuilder: `cccb`
 - Orchestrator: `launchorchestrator [epic-name]`
 - Worker: `Task(subagent_type="...", team_name="...", name="...")`
 - Pipeline: `python3 cobuilder/engine/pipeline_runner.py --dot-file <path.dot>`
