@@ -518,6 +518,11 @@ class PipelineRunner:
         # Injected into worker prompt on re-dispatch so the worker knows what to fix
         self.requeue_guidance: dict[str, str] = {}
 
+        # Score history: node_id -> list of overall_score from each attempt
+        # Used for plateau detection: if scores don't improve across retries,
+        # escalate to pilot (GATE_WAIT_COBUILDER) instead of burning another retry
+        self.score_history: dict[str, list[float]] = {}
+
         # Dispatch-time file mtimes: node_id -> {filepath: mtime_ns}
         # Recorded at dispatch time so _verify_worker_output can detect whether
         # files were actually modified (not just exist on disk).
@@ -1089,6 +1094,38 @@ class PipelineRunner:
         except OSError as exc:
             log.error("[load-guidance] Failed to read guidance for %s: %s", node_id, exc)
             return None
+
+    def _detect_score_plateau(self, node_id: str, min_improvement: float = 1.0) -> bool:
+        """Detect if evaluator scores have plateaued across retry attempts.
+
+        Returns True if scores are not improving — indicating the approach is
+        fundamentally wrong and more retries won't help. The pilot (CoBuilder)
+        should be escalated to change strategy.
+
+        A plateau is detected when:
+        - At least 2 scores are recorded
+        - The improvement between the last two scores is < min_improvement
+
+        Args:
+            node_id: The node to check score history for.
+            min_improvement: Minimum score delta to consider "improving" (default 1.0).
+
+        Returns:
+            True if plateau detected, False otherwise.
+        """
+        scores = self.score_history.get(node_id, [])
+        if len(scores) < 2:
+            return False
+
+        # Compare last two scores
+        delta = scores[-1] - scores[-2]
+        if delta < min_improvement:
+            log.info(
+                "[plateau-check] %s: score delta=%.1f (%.1f -> %.1f), threshold=%.1f -> PLATEAU",
+                node_id, delta, scores[-2], scores[-1], min_improvement,
+            )
+            return True
+        return False
 
     def _build_progress_context(self, current_node_id: str, data: dict) -> str:
         """Build a summary of completed pipeline nodes so the worker knows what happened before it.
@@ -1904,12 +1941,16 @@ class PipelineRunner:
             f"You are an EVALUATOR, not a rubber stamp. Score the implementation on these dimensions (0-10):\n\n"
             f"| Dimension | Weight | What to Assess |\n"
             f"|-----------|--------|----------------|\n"
-            f"| **Correctness** | 40% | Does the code do what the AC specifies? Do tests pass? |\n"
-            f"| **Completeness** | 30% | Are ALL acceptance criteria addressed? Any gaps? |\n"
-            f"| **Code Quality** | 20% | Clean code, no TODOs, proper error handling, follows project patterns |\n"
-            f"| **SD Adherence** | 10% | Does the implementation follow the Solution Design architecture? |\n\n"
+            f"| **Correctness** | 35% | Does the code do what the AC specifies? Do tests pass? |\n"
+            f"| **Completeness** | 25% | Are ALL acceptance criteria addressed? Any gaps? |\n"
+            f"| **Code Quality** | 15% | Clean code, no TODOs, proper error handling, follows project patterns |\n"
+            f"| **SD Adherence** | 10% | Does the implementation follow the Solution Design architecture? |\n"
+            f"| **Process Discipline** | 15% | Did the worker use beads (`bd start/done`) and Task Master (`tm:list/add-task`) to track work? Check git log for beads refs and .taskmaster/ for task updates. |\n\n"
             f"**Scoring guide**: 0-3 = fundamentally broken, 4-5 = major issues, 6-7 = works but needs fixes, 8-9 = good with minor issues, 10 = perfect.\n"
             f"**Pass threshold**: Overall weighted score >= 7.0\n\n"
+            f"**Process Discipline check**: Run `bd list --json` and check for task status updates. "
+            f"Check `git log --oneline -5` for beads task references in commit messages. "
+            f"If the worker skipped beads/taskmaster entirely, score process_discipline at 0.\n\n"
             f"Calibration: Claude naturally over-praises its own work. Be skeptical. "
             f"If something looks correct but you haven't verified it (ran tests, checked actual output), score it lower.\n"
         )
@@ -1920,7 +1961,7 @@ class PipelineRunner:
             f"You MUST include `scores`, `overall_score`, and `criteria_results` in every signal.\n\n"
             f"PASS example (overall >= 7.0):\n"
             f'```\nWrite(file_path="{signal_file_path}", content=\'{{"result": "pass", "reason": "All criteria met", '
-            f'"scores": {{"correctness": 9, "completeness": 8, "code_quality": 8, "sd_adherence": 9}}, '
+            f'"scores": {{"correctness": 9, "completeness": 8, "code_quality": 8, "sd_adherence": 9, "process_discipline": 8}}, '
             f'"overall_score": 8.5, '
             f'"criteria_results": [{{"criterion_id": "AC-1", "status": "pass", "evidence": "test X passes"}}, '
             f'{{"criterion_id": "AC-2", "status": "pass", "evidence": "verified via browser"}}]}}\')\n```\n\n'
@@ -1928,7 +1969,7 @@ class PipelineRunner:
             f'```\nWrite(file_path="{signal_file_path}", content=\'{{"result": "requeue", '
             f'"requeue_target": "{target_node_id}", '
             f'"reason": "AC-2 fails: login form missing validation", '
-            f'"scores": {{"correctness": 5, "completeness": 4, "code_quality": 7, "sd_adherence": 8}}, '
+            f'"scores": {{"correctness": 5, "completeness": 4, "code_quality": 7, "sd_adherence": 8, "process_discipline": 6}}, '
             f'"overall_score": 5.4, '
             f'"criteria_results": [{{"criterion_id": "AC-1", "status": "pass", "evidence": "renders correctly"}}, '
             f'{{"criterion_id": "AC-2", "status": "fail", "reason": "Form submits without email validation"}}], '
@@ -1936,7 +1977,7 @@ class PipelineRunner:
             f"FAIL example (fundamental design flaw, not fixable by retry):\n"
             f'```\nWrite(file_path="{signal_file_path}", content=\'{{"result": "fail", '
             f'"reason": "Architecture incompatible with AC requirements", '
-            f'"scores": {{"correctness": 2, "completeness": 1, "code_quality": 3, "sd_adherence": 1}}, '
+            f'"scores": {{"correctness": 2, "completeness": 1, "code_quality": 3, "sd_adherence": 1, "process_discipline": 0}}, '
             f'"overall_score": 1.8, '
             f'"criteria_results": [{{"criterion_id": "AC-1", "status": "fail", "reason": "Wrong framework used"}}]}}\')\n```\n\n'
             f"**IMPORTANT**: Be SPECIFIC in `criteria_results`. Each failed AC is a bug report the worker must fix. "
@@ -2311,11 +2352,29 @@ class PipelineRunner:
             elif result == "fail":
                 retries = self.retry_counts.get(node_id, 0) + 1
                 self.retry_counts[node_id] = retries
-                if retries >= MAX_RETRIES:
+
+                # Track score history for plateau detection
+                overall_score = signal.get("overall_score")
+                if overall_score is not None:
+                    self.score_history.setdefault(node_id, []).append(float(overall_score))
+
+                # Plateau detection: if scores aren't improving after 2+ attempts,
+                # the approach is wrong — escalate to pilot instead of burning retries
+                plateau_detected = self._detect_score_plateau(node_id)
+
+                if retries >= MAX_RETRIES or plateau_detected:
+                    if plateau_detected and retries < MAX_RETRIES:
+                        log.warning(
+                            "[plateau] %s: scores not improving %s — escalating to pilot "
+                            "instead of retry %d/%d",
+                            node_id, self.score_history.get(node_id, []),
+                            retries, MAX_RETRIES,
+                        )
                     self._do_transition(node_id, "failed")
                     self.active_workers.pop(node_id, None)
-                    log.error("[signal] %s: validation FAIL (retry %d/%d) -> failed permanently",
-                              node_id, retries, MAX_RETRIES)
+                    log.error("[signal] %s: validation FAIL (retry %d/%d) -> failed permanently%s",
+                              node_id, retries, MAX_RETRIES,
+                              " (plateau)" if plateau_detected else "")
                 else:
                     # Store failure reason so re-dispatched worker gets context
                     failure_reason = signal.get("reason", "validation failed (no reason provided)")
@@ -2362,7 +2421,21 @@ class PipelineRunner:
                 requeue_reason = signal.get("reason", "validation requested requeue")
                 retries = self.retry_counts.get(requeue_target, 0) + 1
                 self.retry_counts[requeue_target] = retries
-                if retries < MAX_RETRIES:
+
+                # Track score history for plateau detection
+                overall_score = signal.get("overall_score")
+                if overall_score is not None:
+                    self.score_history.setdefault(requeue_target, []).append(float(overall_score))
+
+                # Check for plateau before allowing retry
+                plateau_detected = self._detect_score_plateau(requeue_target)
+                if plateau_detected and retries < MAX_RETRIES:
+                    log.warning(
+                        "[plateau] %s: scores not improving %s — treating as permanent failure",
+                        requeue_target, self.score_history.get(requeue_target, []),
+                    )
+
+                if retries < MAX_RETRIES and not plateau_detected:
                     # Build structured feedback with AC-specific results and scores
                     feedback_parts = [
                         f"Your previous implementation was rejected by validation (attempt {retries}/{MAX_RETRIES}).",
