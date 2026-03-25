@@ -34,7 +34,7 @@ export PATH="${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/completion-state:$PATH"
 # Verify cs-promise CLI is available
 cs-status 2>/dev/null || echo "ERROR: completion-state scripts not found"
 
-# Verify ccsystem3 function is available
+# Verify cccb function is available
 which cccb 2>/dev/null || type cccb 2>/dev/null
 ```
 

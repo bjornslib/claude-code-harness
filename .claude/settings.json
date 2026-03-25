@@ -11,7 +11,11 @@
       "Bash(npm:*)",
       "Bash(python:*)",
       "Bash(pytest:*)",
-      "Bash(task-master:*)"
+      "Bash(task-master:*)",
+      "Edit(/Users/theb/Documents/Windsurf/cobuilder-harness/.claude/skills/cobuilder-guardian/*)",
+      "Edit(/Users/theb/Documents/Windsurf/cobuilder-harness/launch_cobuilder.sh)",
+      "Edit(/Users/theb/Documents/Windsurf/cobuilder-harness/.claude/documentation/*)",
+      "Write(/Users/theb/Documents/Windsurf/cobuilder-harness/.pipelines/pipelines/signals/cccb-migration/impl_docs.json)"
     ]
   },
   "hooks": {

@@ -1351,7 +1351,7 @@ This is the most architecturally significant edge case in the design. The two Cl
 
 | Session Type | Launch Command | tmux | AskUserQuestion Forwarding | GChat Injection |
 |-------------|---------------|------|--------------------------|-----------------|
-| CoBuilder | `cccb` (formerly `ccsystem3`) | Depends on `ccsystem3` implementation | Yes (outbound) | Only if tmux |
+| CoBuilder | `cccb` (formerly `ccsystem3`) | Depends on `cccb` implementation | Yes (outbound) | Only if tmux |
 | Orchestrator | `launchorchestrator [name]` | Always (tmux new-session) | Yes (outbound) | Yes |
 | Worker | Spawned as native teammate | Shares lead's tmux | Yes (outbound) | Through lead session |
 | Development / one-off | `claude` directly | No | Yes (outbound only) | No |
