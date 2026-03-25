@@ -444,14 +444,14 @@ import os
 sys.path.insert(0, os.path.join(os.environ.get('CLAUDE_PROJECT_DIR', os.getcwd()), '.claude', 'hooks'))
 
 try:
-    from unified_stop_gate.cobuilder_continuation_judge import System3ContinuationJudgeChecker
+    from unified_stop_gate.cobuilder_continuation_judge import CoBuilderContinuationJudgeChecker
     from unified_stop_gate.config import EnvironmentConfig
     from unified_stop_gate.checkers import SessionInfo
 
     hook_input = json.loads(os.environ.get('CLAUDE_HOOK_INPUT', '{}'))
     config = EnvironmentConfig.from_env()
     session = SessionInfo.from_hook_input(hook_input)
-    checker = System3ContinuationJudgeChecker(config, session)
+    checker = CoBuilderContinuationJudgeChecker(config, session)
     result = checker.check()
 
     print(json.dumps({"passed": result.passed, "message": result.message}))
