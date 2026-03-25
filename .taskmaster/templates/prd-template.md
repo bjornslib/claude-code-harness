@@ -35,12 +35,23 @@ author: "{Author/Team}"
 
 ---
 
-## 1. Problem Statement
+## 1. Intent
+
+[Capture the original intent in 2-4 sentences. What is the user trying to achieve
+and why? This is the "north star" that the evaluator uses to judge whether the
+implementation serves the original purpose — even when all ACs technically pass.
+Workers and evaluators read this to understand the spirit behind the requirements.]
+
+> **Example**: "We want users to feel confident their data is safe. The login flow
+> should feel fast and modern — not like a bank form from 2005. If a user forgets
+> their password, recovery should take under 30 seconds."
+
+## 2. Problem Statement
 
 [Describe the core problem. Be concrete about user pain points. Why does this
 need to exist? What happens if we don't build it?]
 
-## 2. Goals & Success Metrics
+## 3. Goals & Success Metrics
 
 [What does success look like? Quantifiable outcomes where possible.]
 
@@ -49,7 +60,7 @@ need to exist? What happens if we don't build it?]
 | {Goal 1} | {How we measure it} | {Target value} |
 | {Goal 2} | {How we measure it} | {Target value} |
 
-## 3. Target Users
+## 4. Target Users
 
 [Define personas, their workflows, and what they're trying to achieve.]
 
@@ -57,7 +68,7 @@ need to exist? What happens if we don't build it?]
 |---------|------|----------|
 | {Persona 1} | {Role description} | {What they need from this feature} |
 
-## 4. User Stories
+## 5. User Stories
 
 [Describe the user experience. What can users do after this ships?]
 
@@ -69,7 +80,7 @@ need to exist? What happens if we don't build it?]
 **As a** {persona}, **I want** {capability}, **so that** {value/benefit}.
 **Priority**: P0/P1/P2
 
-## 5. Functional Requirements
+## 6. Functional Requirements
 
 [WHAT the system must do. No implementation details — just capabilities.]
 
@@ -78,14 +89,14 @@ need to exist? What happens if we don't build it?]
 | FR-001 | {The system shall...} | P0 | US-1 |
 | FR-002 | {The system shall...} | P1 | US-2 |
 
-## 6. Non-Functional Requirements
+## 7. Non-Functional Requirements
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
 | NFR-001 | {Performance: ...} | P1 |
 | NFR-002 | {Security: ...} | P0 |
 
-## 7. Architectural Decisions (High-Level Only)
+## 8. Architectural Decisions (High-Level Only)
 
 > **Boundary rule**: This section records WHICH options were chosen — not HOW
 > they are implemented. No schemas, no API specs, no sequence diagrams.
@@ -98,7 +109,7 @@ need to exist? What happens if we don't build it?]
 | Hosting | {e.g., Railway} | {Why this choice} |
 | Auth approach | {e.g., JWT with refresh tokens} | {Why this choice} |
 
-## 8. Epics (High-Level Breakdown)
+## 9. Epics (High-Level Breakdown)
 
 [Break the work into business-meaningful chunks. Each epic will get its own
 Solution Design document with full technical detail.]
@@ -112,20 +123,20 @@ Solution Design document with full technical detail.]
 ### Epic 3: {Epic Name}
 {One-paragraph description of what this epic delivers to the user.}
 
-## 9. Risks & Mitigations
+## 10. Risks & Mitigations
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|
 | {Risk description} | High/Med/Low | High/Med/Low | {How to address} |
 
-## 10. Non-Goals
+## 11. Non-Goals
 
 [Explicitly state what this PRD does NOT cover. Prevents scope creep.]
 
 - {Non-goal 1}
 - {Non-goal 2}
 
-## 11. Dependencies
+## 12. Dependencies
 
 | Dependency | Status | Impact |
 |------------|--------|--------|

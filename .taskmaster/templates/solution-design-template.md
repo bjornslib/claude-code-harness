@@ -38,7 +38,32 @@ author: "{Agent or Team}"
 
 ---
 
-## 1. Business Context (Summary from PRD)
+## 1. PRD Epic Context
+
+> **Why this section exists**: Workers and evaluators need to understand the
+> original intent behind this epic — not just *what* to build but *why*.
+> Copy the relevant epic description from the PRD verbatim, plus the PRD's
+> Intent section. This is the "north star" that the evaluator uses to judge
+> whether the implementation serves the original purpose.
+
+**PRD Intent** (from PRD § 1):
+
+> {Paste the 2-4 sentence Intent section from the source PRD here verbatim.
+> This captures the user's original motivation and desired outcome.}
+
+**Epic Description** (from PRD § 9):
+
+> {Paste the relevant epic paragraph from the PRD here verbatim.
+> This scopes what this SD covers within the broader PRD.}
+
+**Relevant Acceptance Criteria** (from PRD):
+
+| AC ID | Criterion | Verification Method |
+|-------|-----------|-------------------|
+| AC-1 | {What must be true} | {unit-test / browser-check / api-call / code-review} |
+| AC-2 | {What must be true} | {unit-test / browser-check / api-call / code-review} |
+
+## 2. Business Context (Summary from PRD)
 
 > **Why this section exists**: Task Master needs business context to generate
 > tasks with meaningful descriptions. This is a brief summary (3-5 sentences)
@@ -49,19 +74,19 @@ author: "{Agent or Team}"
 
 **User Impact**: {Who benefits and how — one sentence}
 
-**Success Metrics**: {How we know it worked — from PRD Section 2}
+**Success Metrics**: {How we know it worked — from PRD § 3}
 - {Metric 1}
 - {Metric 2}
 
-**Constraints**: {Non-functional requirements that affect design — from PRD Section 6}
+**Constraints**: {Non-functional requirements that affect design — from PRD § 7}
 - {Constraint 1}
 - {Constraint 2}
 
 ---
 
-## 2. Technical Architecture
+## 3. Technical Architecture
 
-### 2.1 System Components
+### 3.1 System Components
 
 [Major architectural pieces and their responsibilities for this epic.]
 
@@ -72,7 +97,7 @@ author: "{Agent or Team}"
 └─────────────┘     └──────────────┘     └─────────────┘
 ```
 
-### 2.2 Data Models
+### 3.2 Data Models
 
 [Core data structures, schemas, database design for this epic.]
 
@@ -86,7 +111,7 @@ CREATE TABLE {table_name} (
 );
 ```
 
-### 2.3 API Contracts
+### 3.3 API Contracts
 
 [Endpoints, request/response shapes, error handling.]
 
@@ -95,7 +120,7 @@ CREATE TABLE {table_name} (
 | POST | `/api/v1/{resource}` | `{schema}` | `{schema}` | JWT |
 | GET | `/api/v1/{resource}/{id}` | — | `{schema}` | JWT |
 
-### 2.4 Component Design (Frontend)
+### 3.4 Component Design (Frontend)
 
 [If applicable: component hierarchy, state management, key interactions.]
 
@@ -110,9 +135,9 @@ PageComponent
 
 ---
 
-## 3. Implementation Approach
+## 4. Implementation Approach
 
-### 3.1 Technology Choices
+### 4.1 Technology Choices
 
 [Specific libraries, patterns, and approaches — the HOW.]
 
@@ -122,7 +147,7 @@ PageComponent
 | State management | {e.g., React Query} | {Why} |
 | Testing | {e.g., pytest + Playwright} | {Why} |
 
-### 3.2 Key Design Decisions
+### 4.2 Key Design Decisions
 
 [Technical decisions specific to this epic. Use ADR-lite format.]
 
@@ -133,7 +158,7 @@ PageComponent
 - **Rationale**: {Why this option}
 - **Trade-offs**: {What we're giving up}
 
-### 3.3 Integration Points
+### 4.3 Integration Points
 
 [How this epic's work connects to existing systems.]
 
@@ -144,7 +169,7 @@ PageComponent
 
 ---
 
-## 4. Functional Decomposition
+## 5. Functional Decomposition
 
 > **Why this section exists**: Task Master uses this section to generate
 > dependency-aware tasks. Structure capabilities → features → tasks with
@@ -177,7 +202,7 @@ PageComponent
 
 ---
 
-## 5. Dependency Graph
+## 6. Dependency Graph
 
 > **Why this section exists**: Task Master parses this to create topological
 > task ordering. Be explicit about what depends on what.
@@ -197,7 +222,7 @@ No dependencies — these are built first.
 
 ---
 
-## 6. Acceptance Criteria (Per Feature)
+## 7. Acceptance Criteria (Per Feature)
 
 > **Why this section exists**: These criteria are used by:
 > 1. Task Master — to populate task acceptance criteria
@@ -220,7 +245,7 @@ No dependencies — these are built first.
 
 ---
 
-## 7. Test Strategy
+## 8. Test Strategy
 
 ### Test Pyramid
 
@@ -240,7 +265,7 @@ No dependencies — these are built first.
 
 ---
 
-## 8. File Scope
+## 9. File Scope
 
 > **Why this section exists**: Orchestrators use this to scope worker
 > assignments. Workers ONLY touch files listed in their scope.
@@ -266,7 +291,7 @@ No dependencies — these are built first.
 
 ---
 
-## 9. Risks & Technical Concerns
+## 10. Risks & Technical Concerns
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|

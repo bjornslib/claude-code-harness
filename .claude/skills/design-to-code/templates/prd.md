@@ -48,14 +48,25 @@ author: "{Author/Team}"
 
 ---
 
-## 1. Executive Summary
+## 1. Intent
+
+{Capture the original intent in 2-4 sentences. What is the user trying to achieve
+and why? This is the "north star" that the evaluator uses to judge whether the
+implementation serves the original purpose — even when all ACs technically pass.
+Workers and evaluators read this to understand the spirit behind the requirements.}
+
+> **Example**: "We want users to feel confident their data is safe. The login flow
+> should feel fast and modern — not like a bank form from 2005. If a user forgets
+> their password, recovery should take under 30 seconds."
+
+## 2. Executive Summary
 
 {2-3 paragraphs covering:}
 - What feature/product this document describes
 - The core problem it solves
 - High-level approach to the solution
 
-### 1.1 Problem Statement
+### 2.1 Problem Statement
 
 {Specific problem description including:}
 - Who is affected
@@ -63,7 +74,7 @@ author: "{Author/Team}"
 - Why existing solutions fall short
 - What users need
 
-### 1.2 Solution Overview
+### 2.2 Solution Overview
 
 {High-level description of the solution:}
 - Key capabilities
@@ -72,9 +83,9 @@ author: "{Author/Team}"
 
 ---
 
-## 2. Goals and Success Metrics
+## 3. Goals and Success Metrics
 
-### 2.1 Business Goals
+### 3.1 Business Goals
 
 | Goal | Description | Target |
 |------|-------------|--------|
@@ -82,7 +93,7 @@ author: "{Author/Team}"
 | {Goal 2} | {Description} | {Measurable target} |
 | {Goal 3} | {Description} | {Measurable target} |
 
-### 2.2 User Goals
+### 3.2 User Goals
 
 | User Type | Primary Goal | Secondary Goal |
 |-----------|--------------|----------------|
@@ -90,7 +101,7 @@ author: "{Author/Team}"
 | {User 2} | {Goal} | {Goal} |
 | {User 3} | {Goal} | {Goal} |
 
-### 2.3 Success Metrics
+### 3.3 Success Metrics
 
 | Metric | Current Baseline | Target | Measurement Method |
 |--------|------------------|--------|-------------------|
@@ -100,9 +111,9 @@ author: "{Author/Team}"
 
 ---
 
-## 3. User Stories
+## 4. User Stories
 
-### 3.1 Must Have (P0)
+### 4.1 Must Have (P0)
 
 | ID | User Story | Acceptance Criteria |
 |----|------------|---------------------|
@@ -110,14 +121,14 @@ author: "{Author/Team}"
 | US-002 | As a {user type}, I want to {action} so that {benefit} | - {Criterion 1}<br>- {Criterion 2} |
 | US-003 | As a {user type}, I want to {action} so that {benefit} | - {Criterion 1}<br>- {Criterion 2} |
 
-### 3.2 Should Have (P1)
+### 4.2 Should Have (P1)
 
 | ID | User Story | Acceptance Criteria |
 |----|------------|---------------------|
 | US-010 | As a {user type}, I want to {action} so that {benefit} | - {Criterion 1}<br>- {Criterion 2} |
 | US-011 | As a {user type}, I want to {action} so that {benefit} | - {Criterion 1}<br>- {Criterion 2} |
 
-### 3.3 Could Have (P2)
+### 4.3 Could Have (P2)
 
 | ID | User Story | Acceptance Criteria |
 |----|------------|---------------------|
@@ -126,9 +137,9 @@ author: "{Author/Team}"
 
 ---
 
-## 4. Functional Requirements
+## 5. Functional Requirements
 
-### 4.1 {Feature Area 1}
+### 5.1 {Feature Area 1}
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
@@ -136,7 +147,7 @@ author: "{Author/Team}"
 | FR-002 | System shall {requirement} | P0 |
 | FR-003 | System shall {requirement} | P1 |
 
-### 4.2 {Feature Area 2}
+### 5.2 {Feature Area 2}
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
@@ -144,7 +155,7 @@ author: "{Author/Team}"
 | FR-011 | System shall {requirement} | P0 |
 | FR-012 | System shall {requirement} | P1 |
 
-### 4.3 {Feature Area 3}
+### 5.3 {Feature Area 3}
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
@@ -156,9 +167,9 @@ author: "{Author/Team}"
 
 ---
 
-## 5. Non-Functional Requirements
+## 6. Non-Functional Requirements
 
-### 5.1 Performance
+### 6.1 Performance
 
 | ID | Requirement | Target |
 |----|-------------|--------|
@@ -166,7 +177,7 @@ author: "{Author/Team}"
 | NFR-002 | {Action} shall complete within {time} | < {X}ms |
 | NFR-003 | {Operation} shall support {volume} | {X} per second |
 
-### 5.2 Reliability
+### 6.2 Reliability
 
 | ID | Requirement | Target |
 |----|-------------|--------|
@@ -174,14 +185,14 @@ author: "{Author/Team}"
 | NFR-011 | Data shall be backed up | Every {X} hours |
 | NFR-012 | Recovery shall complete within | < {X} minutes |
 
-### 5.3 Scalability
+### 6.3 Scalability
 
 | ID | Requirement | Target |
 |----|-------------|--------|
 | NFR-020 | System shall support {volume} | {X} users/items |
 | NFR-021 | System shall handle {growth} | {X}% monthly growth |
 
-### 5.4 Security
+### 6.4 Security
 
 | ID | Requirement | Notes |
 |----|-------------|-------|
@@ -190,7 +201,7 @@ author: "{Author/Team}"
 | NFR-032 | Access shall require {authentication} | {Method} |
 | NFR-033 | Actions shall be logged for audit | {Scope} |
 
-### 5.5 Accessibility
+### 6.5 Accessibility
 
 | ID | Requirement | Standard |
 |----|-------------|----------|
@@ -201,9 +212,9 @@ author: "{Author/Team}"
 
 ---
 
-## 6. Technical Architecture
+## 7. Technical Architecture
 
-### 6.1 Data Model
+### 7.1 Data Model
 
 ```
 {EntityName}
@@ -221,7 +232,7 @@ author: "{Author/Team}"
 └── {field}: {type}
 ```
 
-### 6.2 API Endpoints
+### 7.2 API Endpoints
 
 ```
 GET    /api/v1/{resource}           # List all
@@ -234,7 +245,7 @@ POST   /api/v1/{resource}/:id/{action}  # Special action
 GET    /api/v1/{resource}/:id/{sub}     # Sub-resource
 ```
 
-### 6.3 Technology Stack
+### 7.3 Technology Stack
 
 | Component | Technology | Notes |
 |-----------|------------|-------|
@@ -247,16 +258,16 @@ GET    /api/v1/{resource}/:id/{sub}     # Sub-resource
 
 ---
 
-## 7. Dependencies
+## 8. Dependencies
 
-### 7.1 Internal Dependencies
+### 8.1 Internal Dependencies
 
 | Dependency | Description | Owner | Risk |
 |------------|-------------|-------|------|
 | {Dependency 1} | {What it provides} | {Team/Person} | {Low/Medium/High} |
 | {Dependency 2} | {What it provides} | {Team/Person} | {Low/Medium/High} |
 
-### 7.2 External Dependencies
+### 8.2 External Dependencies
 
 | Dependency | Description | Fallback |
 |------------|-------------|----------|
@@ -265,7 +276,7 @@ GET    /api/v1/{resource}/:id/{sub}     # Sub-resource
 
 ---
 
-## 8. Risks and Mitigations
+## 9. Risks and Mitigations
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
@@ -275,7 +286,7 @@ GET    /api/v1/{resource}/:id/{sub}     # Sub-resource
 
 ---
 
-## 9. Open Questions
+## 10. Open Questions
 
 | ID | Question | Owner | Due Date | Resolution |
 |----|----------|-------|----------|------------|
@@ -285,7 +296,7 @@ GET    /api/v1/{resource}/:id/{sub}     # Sub-resource
 
 ---
 
-## 10. Implementation Phases
+## 11. Implementation Phases
 
 ### Phase 1: {Phase Name} (MVP)
 

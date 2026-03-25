@@ -518,6 +518,13 @@ class PipelineRunner:
         # Injected into worker prompt on re-dispatch so the worker knows what to fix
         self.requeue_guidance: dict[str, str] = {}
 
+        # Score history: node_id -> list of overall_score from each attempt
+        # Used for plateau detection: if scores don't improve across retries,
+        # escalate to pilot (GATE_WAIT_COBUILDER) instead of burning another retry
+        self.score_history: dict[str, list[float]] = {}
+        self._score_history_path = os.path.join(self.signal_dir, "_score_history.json")
+        self._load_score_history()
+
         # Dispatch-time file mtimes: node_id -> {filepath: mtime_ns}
         # Recorded at dispatch time so _verify_worker_output can detect whether
         # files were actually modified (not just exist on disk).
@@ -1089,6 +1096,121 @@ class PipelineRunner:
         except OSError as exc:
             log.error("[load-guidance] Failed to read guidance for %s: %s", node_id, exc)
             return None
+
+    def _detect_score_plateau(self, node_id: str, min_improvement: float = 1.0) -> bool:
+        """Detect if evaluator scores have plateaued across retry attempts.
+
+        Returns True if scores are not improving — indicating the approach is
+        fundamentally wrong and more retries won't help. The pilot (CoBuilder)
+        should be escalated to change strategy.
+
+        A plateau is detected when:
+        - At least 2 scores are recorded
+        - The improvement between the last two scores is < min_improvement
+
+        Args:
+            node_id: The node to check score history for.
+            min_improvement: Minimum score delta to consider "improving" (default 1.0).
+
+        Returns:
+            True if plateau detected, False otherwise.
+        """
+        scores = self.score_history.get(node_id, [])
+        if len(scores) < 2:
+            return False
+
+        # Compare last two scores
+        delta = scores[-1] - scores[-2]
+        if delta < min_improvement:
+            log.info(
+                "[plateau-check] %s: score delta=%.1f (%.1f -> %.1f), threshold=%.1f -> PLATEAU",
+                node_id, delta, scores[-2], scores[-1], min_improvement,
+            )
+            return True
+        return False
+
+    def _build_epic_context(self, current_node_id: str, data: dict) -> str:
+        """Build a summary of sibling worker nodes so the worker understands the bigger picture.
+
+        Shows what other tasks exist in the pipeline (their labels and acceptance criteria
+        summaries), so the worker can understand how their piece fits into the whole.
+        This prevents workers from making decisions that conflict with sibling tasks.
+        """
+        nodes = data.get("nodes", [])
+        sibling_lines = []
+        for n in nodes:
+            nid = n["id"]
+            if nid == current_node_id:
+                continue
+            handler = n["attrs"].get("handler", "")
+            if handler not in ("codergen", "research", "refine"):
+                continue  # Only show worker nodes, not gates/start/finish
+            label = n["attrs"].get("label", nid).replace("\\n", " ")
+            status = n["attrs"].get("status", "pending")
+            acceptance = n["attrs"].get("acceptance", "")
+            # Truncate acceptance to first 100 chars for context without bloat
+            ac_preview = (acceptance[:100] + "...") if len(acceptance) > 100 else acceptance
+            ac_display = f" — AC: {ac_preview}" if ac_preview else ""
+            sibling_lines.append(f"- **{label}** [{status}]{ac_display}")
+
+        if not sibling_lines:
+            return ""
+        return (
+            "Your task is one piece of a larger pipeline. "
+            "Understanding sibling tasks helps you avoid conflicts:\n"
+            + "\n".join(sibling_lines)
+        )
+
+    def _build_progress_context(self, current_node_id: str, data: dict) -> str:
+        """Build a summary of completed pipeline nodes so the worker knows what happened before it.
+
+        Reads processed signal files to get completion messages from predecessor nodes,
+        giving the worker context about what was already accomplished in this pipeline run.
+        """
+        nodes = data.get("nodes", [])
+        completed_nodes = []
+        for n in nodes:
+            status = n["attrs"].get("status", "pending")
+            nid = n["id"]
+            if nid == current_node_id:
+                continue
+            if status in ("validated", "accepted", "impl_complete"):
+                handler = n["attrs"].get("handler", "")
+                label = n["attrs"].get("label", nid).replace("\\n", " ")
+                # Try to read the processed signal for this node's completion message
+                message = ""
+                processed_dir = os.path.join(self.signal_dir, "processed")
+                if os.path.isdir(processed_dir):
+                    for fname in sorted(os.listdir(processed_dir), reverse=True):
+                        if nid in fname and fname.endswith(".json"):
+                            try:
+                                with open(os.path.join(processed_dir, fname)) as fh:
+                                    sig = json.load(fh)
+                                    message = sig.get("message", "")
+                                    files = sig.get("files_changed", [])
+                                    if files:
+                                        message += f" (files: {', '.join(files[:5])})"
+                                    break
+                            except (OSError, json.JSONDecodeError):
+                                continue
+                completed_nodes.append(
+                    f"- **{label}** [{handler}] — {status}"
+                    + (f": {message}" if message else "")
+                )
+
+        # Also note any failed nodes with retry counts
+        for nid, retries in self.retry_counts.items():
+            if nid == current_node_id:
+                continue
+            if retries > 0:
+                node = next((n for n in nodes if n["id"] == nid), None)
+                if node:
+                    label = node["attrs"].get("label", nid).replace("\\n", " ")
+                    completed_nodes.append(f"- **{label}** — failed {retries}x (requeued)")
+
+        if not completed_nodes:
+            return ""
+        return "\n".join(completed_nodes)
 
     # ------------------------------------------------------------------
     # Node dispatch
@@ -1715,7 +1837,7 @@ class PipelineRunner:
         return "pending"
 
     def _build_validation_prompt(self, target_node_id: str) -> str:
-        """Build a rich validation prompt with acceptance criteria, files changed, and SD."""
+        """Build a rich validation prompt with evaluator scoring rubric, AC criteria, and SD."""
         data = parse_dot(self.dot_content)
         node = next((n for n in data["nodes"] if n["id"] == target_node_id), None)
         if node is None:
@@ -1727,15 +1849,50 @@ class PipelineRunner:
         label = attrs.get("label", target_node_id).replace("\\n", " ")
 
         resolved_dir = self._resolve_target_dir(attrs)
+
+        # Include retry context if this node has been attempted before
+        retries = self.retry_counts.get(target_node_id, 0)
+        retry_context = f" (attempt {retries + 1}/{MAX_RETRIES})" if retries > 0 else ""
+
         lines = [
-            f"# Validate: {label}",
+            f"# Evaluate: {label}{retry_context}",
             f"Node ID: {target_node_id}",
             f"Pipeline: {self.pipeline_id}",
             f"Project Directory: `{resolved_dir}`",
+            "",
+            "## Your Role: Evaluator",
+            "You are a skeptical evaluator scoring this implementation against its acceptance criteria.",
+            "Separating evaluation from generation prevents agents from confidently praising mediocre work.",
+            "You MUST score each AC individually and provide an overall weighted score.",
+            "Be specific — each failed AC is a bug report the worker must fix on retry.",
         ]
 
         if acceptance:
-            lines.append(f"\n## Acceptance Criteria\n{acceptance}")
+            lines.append(
+                f"\n## Acceptance Criteria\n{acceptance}\n\n"
+                f"## Step 1: Write Gherkin Tests\n"
+                f"Before scoring, write a `.feature` file for this node's acceptance criteria.\n"
+                f"Save it to: `acceptance-tests/{self.pipeline_id}/{target_node_id}.feature`\n\n"
+                f"Tag each scenario with its verification method:\n"
+                f"- `@unit-test` — Run relevant test suite (`pytest`, `jest`)\n"
+                f"- `@browser-check` — Navigate UI via chrome-devtools/playwright MCP\n"
+                f"- `@api-call` — Make HTTP requests to verify endpoints\n"
+                f"- `@code-review` — Read the code (lowest confidence — cap score at 7)\n\n"
+                f"Example:\n```gherkin\nFeature: {label}\n\n"
+                f"  @api-call\n  Scenario: AC-1 User can authenticate\n"
+                f"    Given the API server is running\n"
+                f"    When I POST /api/auth/login with valid credentials\n"
+                f"    Then the response status is 200\n"
+                f"    And the response contains a JWT token\n\n"
+                f"  @unit-test\n  Scenario: AC-2 Token expiry\n"
+                f"    Given a JWT token is generated\n"
+                f"    Then it expires after 1 hour\n```\n\n"
+                f"## Step 2: Execute Each Scenario\n"
+                f"Run each Gherkin scenario using its tagged method. Record pass/fail per scenario.\n"
+                f"Do NOT skip execution — a scenario scored without running it caps at 7.\n\n"
+                f"## Step 3: Score Based on Results\n"
+                f"Score based on actual execution results from Step 2."
+            )
         else:
             lines.append("\n## Acceptance Criteria\n(none specified — check for reasonable implementation)")
 
@@ -1838,12 +1995,52 @@ class PipelineRunner:
         # Signal file path for result
         signal_file_path = os.path.join(self.signal_dir, f"{target_node_id}.json")
         lines.append(
+            f"\n## Evaluator Scoring Rubric\n"
+            f"You are an EVALUATOR, not a rubber stamp. Score the implementation on these dimensions (0-10):\n\n"
+            f"| Dimension | Weight | What to Assess |\n"
+            f"|-----------|--------|----------------|\n"
+            f"| **Correctness** | 35% | Does the code do what the AC specifies? Do tests pass? |\n"
+            f"| **Completeness** | 25% | Are ALL acceptance criteria addressed? Any gaps? |\n"
+            f"| **Code Quality** | 15% | Clean code, no TODOs, proper error handling, follows project patterns |\n"
+            f"| **SD Adherence** | 10% | Does the implementation follow the Solution Design architecture? |\n"
+            f"| **Process Discipline** | 15% | Did the worker use beads (`bd start/done`) to track work? Check git log for beads refs in commit messages. |\n\n"
+            f"**Scoring guide**: 0-3 = fundamentally broken, 4-5 = major issues, 6-7 = works but needs fixes, 8-9 = good with minor issues, 10 = perfect.\n"
+            f"**Pass threshold**: Overall weighted score >= 7.0\n\n"
+            f"**Process Discipline check**: Run `bd list --json` and check the task was started/completed. "
+            f"Check `git log --oneline -5` for beads task references in commit messages. "
+            f"If the worker skipped beads entirely, score process_discipline at 0.\n\n"
+            f"Calibration: Claude naturally over-praises its own work. Be skeptical. "
+            f"If something looks correct but you haven't verified it (ran tests, checked actual output), score it lower.\n"
+        )
+
+        lines.append(
             f"\n## Write Your Result\n"
             f"Write your validation result to: {signal_file_path}\n\n"
-            f"PASS example:\n"
-            f'```\nWrite(file_path="{signal_file_path}", content=\'{{"result": "pass", "reason": "All criteria met"}}\')\n```\n\n'
-            f"FAIL example:\n"
-            f'```\nWrite(file_path="{signal_file_path}", content=\'{{"result": "fail", "reason": "Criterion X not met because..."}}\')\n```'
+            f"You MUST include `scores`, `overall_score`, and `criteria_results` in every signal.\n\n"
+            f"PASS example (overall >= 7.0):\n"
+            f'```\nWrite(file_path="{signal_file_path}", content=\'{{"result": "pass", "reason": "All criteria met", '
+            f'"scores": {{"correctness": 9, "completeness": 8, "code_quality": 8, "sd_adherence": 9, "process_discipline": 8}}, '
+            f'"overall_score": 8.5, '
+            f'"criteria_results": [{{"criterion_id": "AC-1", "status": "pass", "evidence": "test X passes"}}, '
+            f'{{"criterion_id": "AC-2", "status": "pass", "evidence": "verified via browser"}}]}}\')\n```\n\n'
+            f"REQUEUE example (fixable issues, overall < 7.0):\n"
+            f'```\nWrite(file_path="{signal_file_path}", content=\'{{"result": "requeue", '
+            f'"requeue_target": "{target_node_id}", '
+            f'"reason": "AC-2 fails: login form missing validation", '
+            f'"scores": {{"correctness": 5, "completeness": 4, "code_quality": 7, "sd_adherence": 8, "process_discipline": 6}}, '
+            f'"overall_score": 5.4, '
+            f'"criteria_results": [{{"criterion_id": "AC-1", "status": "pass", "evidence": "renders correctly"}}, '
+            f'{{"criterion_id": "AC-2", "status": "fail", "reason": "Form submits without email validation"}}], '
+            f'"guidance": "Add email format validation to LoginForm.handleSubmit before the API call"}}\')\n```\n\n'
+            f"FAIL example (fundamental design flaw, not fixable by retry):\n"
+            f'```\nWrite(file_path="{signal_file_path}", content=\'{{"result": "fail", '
+            f'"reason": "Architecture incompatible with AC requirements", '
+            f'"scores": {{"correctness": 2, "completeness": 1, "code_quality": 3, "sd_adherence": 1, "process_discipline": 0}}, '
+            f'"overall_score": 1.8, '
+            f'"criteria_results": [{{"criterion_id": "AC-1", "status": "fail", "reason": "Wrong framework used"}}]}}\')\n```\n\n'
+            f"**IMPORTANT**: Be SPECIFIC in `criteria_results`. Each failed AC is a bug report the worker must fix. "
+            f"Vague feedback ('fix the tests') leads to repeated failures. "
+            f"Specific feedback ('AC-2: LoginForm.handleSubmit at line 45 skips email validation') leads to resolution."
         )
 
         # Git Commit Requirement section — only when files were changed and not opted out
@@ -2213,26 +2410,67 @@ class PipelineRunner:
             elif result == "fail":
                 retries = self.retry_counts.get(node_id, 0) + 1
                 self.retry_counts[node_id] = retries
-                if retries >= MAX_RETRIES:
+
+                # Track score history for plateau detection
+                overall_score = signal.get("overall_score")
+                if overall_score is not None:
+                    self.score_history.setdefault(node_id, []).append(float(overall_score))
+                    self._save_score_history()
+
+                # Plateau detection: if scores aren't improving after 2+ attempts,
+                # the approach is wrong — escalate to pilot instead of burning retries
+                plateau_detected = self._detect_score_plateau(node_id)
+
+                if retries >= MAX_RETRIES or plateau_detected:
+                    if plateau_detected and retries < MAX_RETRIES:
+                        log.warning(
+                            "[plateau] %s: scores not improving %s — escalating to pilot "
+                            "instead of retry %d/%d",
+                            node_id, self.score_history.get(node_id, []),
+                            retries, MAX_RETRIES,
+                        )
                     self._do_transition(node_id, "failed")
                     self.active_workers.pop(node_id, None)
-                    log.error("[signal] %s: validation FAIL (retry %d/%d) -> failed permanently",
-                              node_id, retries, MAX_RETRIES)
+                    log.error("[signal] %s: validation FAIL (retry %d/%d) -> failed permanently%s",
+                              node_id, retries, MAX_RETRIES,
+                              " (plateau)" if plateau_detected else "")
                 else:
                     # Store failure reason so re-dispatched worker gets context
                     failure_reason = signal.get("reason", "validation failed (no reason provided)")
-                    self.requeue_guidance[node_id] = (
-                        f"Your previous attempt failed validation.\n"
-                        f"Error: {failure_reason}\n"
-                        f"Fix the issue and re-signal completion."
-                    )
-                    # Reset to pending for retry (impl_complete -> failed -> active -> pending)
-                    if current_status == "impl_complete":
-                        self._do_transition(node_id, "failed")
-                    if current_status in ("failed", "impl_complete"):
-                        self._do_transition(node_id, "active")
-                    # We'll reset to pending by transitioning back
-                    # Note: active -> pending is not in VALID_TRANSITIONS; we mark failed + reset
+
+                    # Build structured feedback with AC-specific results and scores
+                    feedback_parts = [
+                        f"Your previous attempt failed validation (attempt {retries}/{MAX_RETRIES}).",
+                    ]
+
+                    # Include evaluator scores if present
+                    scores = signal.get("scores", {})
+                    if scores:
+                        feedback_parts.append("\n### Evaluator Scores")
+                        for dimension, score in scores.items():
+                            feedback_parts.append(f"  - {dimension}: {score}/10")
+                        overall = signal.get("overall_score")
+                        if overall is not None:
+                            feedback_parts.append(f"  - **Overall: {overall}/10**")
+
+                    # Include per-AC failure details if present
+                    criteria_results = signal.get("criteria_results", [])
+                    if criteria_results:
+                        feedback_parts.append("\n### Acceptance Criteria Results")
+                        for cr in criteria_results:
+                            status_icon = "PASS" if cr.get("status") == "pass" else "FAIL"
+                            feedback_parts.append(
+                                f"  - [{status_icon}] {cr.get('criterion_id', '?')}: "
+                                f"{cr.get('reason', cr.get('evidence', 'no details'))}"
+                            )
+
+                    feedback_parts.append(f"\n### Failure Summary\n{failure_reason}")
+                    feedback_parts.append("\nFix the issues described above and re-signal completion.")
+
+                    self.requeue_guidance[node_id] = "\n".join(feedback_parts)
+
+                    # Reset to pending for retry via _force_status (also persists guidance)
+                    self._force_status(node_id, "pending")
                     self.active_workers.pop(node_id, None)
                     log.warning("[signal] %s: validation FAIL (retry %d/%d) — requeuing",
                                 node_id, retries, MAX_RETRIES)
@@ -2242,13 +2480,58 @@ class PipelineRunner:
                 requeue_reason = signal.get("reason", "validation requested requeue")
                 retries = self.retry_counts.get(requeue_target, 0) + 1
                 self.retry_counts[requeue_target] = retries
-                if retries < MAX_RETRIES:
-                    # Store failure reason for re-dispatched worker
-                    self.requeue_guidance[requeue_target] = (
-                        f"Your previous implementation was rejected by validation.\n"
-                        f"Reason: {requeue_reason}\n"
-                        f"Fix the issue and re-signal completion."
+
+                # Track score history for plateau detection
+                overall_score = signal.get("overall_score")
+                if overall_score is not None:
+                    self.score_history.setdefault(requeue_target, []).append(float(overall_score))
+                    self._save_score_history()
+
+                # Check for plateau before allowing retry
+                plateau_detected = self._detect_score_plateau(requeue_target)
+                if plateau_detected and retries < MAX_RETRIES:
+                    log.warning(
+                        "[plateau] %s: scores not improving %s — treating as permanent failure",
+                        requeue_target, self.score_history.get(requeue_target, []),
                     )
+
+                if retries < MAX_RETRIES and not plateau_detected:
+                    # Build structured feedback with AC-specific results and scores
+                    feedback_parts = [
+                        f"Your previous implementation was rejected by validation (attempt {retries}/{MAX_RETRIES}).",
+                    ]
+
+                    # Include evaluator scores if present
+                    scores = signal.get("scores", {})
+                    if scores:
+                        feedback_parts.append("\n### Evaluator Scores")
+                        for dimension, score in scores.items():
+                            feedback_parts.append(f"  - {dimension}: {score}/10")
+                        overall = signal.get("overall_score")
+                        if overall is not None:
+                            feedback_parts.append(f"  - **Overall: {overall}/10**")
+
+                    # Include per-AC failure details if present
+                    criteria_results = signal.get("criteria_results", [])
+                    if criteria_results:
+                        feedback_parts.append("\n### Acceptance Criteria Results")
+                        for cr in criteria_results:
+                            status_icon = "PASS" if cr.get("status") == "pass" else "FAIL"
+                            feedback_parts.append(
+                                f"  - [{status_icon}] {cr.get('criterion_id', '?')}: "
+                                f"{cr.get('reason', cr.get('evidence', 'no details'))}"
+                            )
+
+                    feedback_parts.append(f"\n### Failure Summary\n{requeue_reason}")
+
+                    # Include guidance for the worker if provided
+                    guidance_text = signal.get("guidance", "")
+                    if guidance_text:
+                        feedback_parts.append(f"\n### Evaluator Guidance\n{guidance_text}")
+
+                    feedback_parts.append("\nFix the issues described above and re-signal completion.")
+
+                    self.requeue_guidance[requeue_target] = "\n".join(feedback_parts)
                     # Transition requeue_target back to pending via failed
                     target_node = next((n for n in data["nodes"] if n["id"] == requeue_target), None)
                     if target_node:
@@ -2600,6 +2883,32 @@ class PipelineRunner:
             log.warning("[checkpoint] Failed to save: %s", exc)
 
     # ------------------------------------------------------------------
+    # Score history persistence
+    # ------------------------------------------------------------------
+
+    def _load_score_history(self) -> None:
+        """Load score_history from sidecar JSON if it exists."""
+        try:
+            if os.path.exists(self._score_history_path):
+                with open(self._score_history_path) as fh:
+                    self.score_history = json.loads(fh.read())
+                log.info("[scores] Loaded score history: %d nodes tracked",
+                         len(self.score_history))
+        except (OSError, json.JSONDecodeError) as exc:
+            log.warning("[scores] Failed to load score history: %s", exc)
+
+    def _save_score_history(self) -> None:
+        """Persist score_history to sidecar JSON (atomic write)."""
+        try:
+            os.makedirs(os.path.dirname(self._score_history_path), exist_ok=True)
+            tmp = self._score_history_path + ".tmp"
+            with open(tmp, "w") as fh:
+                fh.write(json.dumps(self.score_history, indent=2))
+            os.replace(tmp, self._score_history_path)
+        except OSError as exc:
+            log.warning("[scores] Failed to save score history: %s", exc)
+
+    # ------------------------------------------------------------------
     # Resume helper
     # ------------------------------------------------------------------
 
@@ -2662,12 +2971,19 @@ class PipelineRunner:
             "2. **Plan with TodoWrite**: Break your task into steps and track progress.\n"
             "3. **Implement with Edit**: Make small, verified changes. Run tests after significant changes.\n"
             "4. **Adapt if reality differs**: The SD is a guide, not a contract.\n"
-            "   If a file moved or a function changed, find the real state and adapt.\n\n"
+            "   If a file moved or a function changed, find the real state and adapt.\n"
+            "   You are expected to improve on the SD when you discover better approaches.\n\n"
+            "### MANDATORY: Beads Task Tracking\n"
+            "A beads task has been created for your work. At session start:\n"
+            "- Run `bd list` to see your assigned task and its context\n"
+            "- Run `bd start <task-id>` to mark it as in-progress\n"
+            "- Run `bd done <task-id>` when implementation is complete (before writing signal)\n"
+            "Beads provides context continuity across retries. Skipping it loses history.\n\n"
             "### MCP Tools (Anthropic models only)\n"
             "Load code navigation tools before editing: `ToolSearch(query=\"serena\")`\n"
             "Load memory tools to recall/retain patterns: `ToolSearch(query=\"hindsight\")`\n"
             "ToolSearch must complete BEFORE you call the discovered tools.\n\n"
-            "Done when: All changes made, tests pass, signal written with files_changed list."
+            "Done when: All changes made, tests pass, beads updated, signal written with files_changed list."
         ),
         "research": (
             "## Your Role: Research\n"
@@ -2778,6 +3094,16 @@ class PipelineRunner:
             lines.append(f"\n## Solution Design\n{solution_design_content}")
         else:
             lines.append(f"\n## Solution Design Path\n{solution_design_path or '(none)'}")
+
+        # Inject bigger-picture context: what other epic nodes exist in this pipeline
+        epic_context = self._build_epic_context(nid, data)
+        if epic_context:
+            lines.append(f"\n## Bigger Picture (other tasks in this pipeline)\n{epic_context}")
+
+        # Inject prior progress context: what nodes completed before this one
+        progress_lines = self._build_progress_context(nid, data)
+        if progress_lines:
+            lines.append(f"\n## Pipeline Progress (completed before you)\n{progress_lines}")
 
         # Inject failure guidance if this is a requeued node
         # Persisted file is authoritative (written at requeue time, survives restarts).
