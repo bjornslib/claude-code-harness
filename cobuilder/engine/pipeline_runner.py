@@ -1127,6 +1127,38 @@ class PipelineRunner:
             return True
         return False
 
+    def _build_epic_context(self, current_node_id: str, data: dict) -> str:
+        """Build a summary of sibling worker nodes so the worker understands the bigger picture.
+
+        Shows what other tasks exist in the pipeline (their labels and acceptance criteria
+        summaries), so the worker can understand how their piece fits into the whole.
+        This prevents workers from making decisions that conflict with sibling tasks.
+        """
+        nodes = data.get("nodes", [])
+        sibling_lines = []
+        for n in nodes:
+            nid = n["id"]
+            if nid == current_node_id:
+                continue
+            handler = n["attrs"].get("handler", "")
+            if handler not in ("codergen", "research", "refine"):
+                continue  # Only show worker nodes, not gates/start/finish
+            label = n["attrs"].get("label", nid).replace("\\n", " ")
+            status = n["attrs"].get("status", "pending")
+            acceptance = n["attrs"].get("acceptance", "")
+            # Truncate acceptance to first 100 chars for context without bloat
+            ac_preview = (acceptance[:100] + "...") if len(acceptance) > 100 else acceptance
+            ac_display = f" — AC: {ac_preview}" if ac_preview else ""
+            sibling_lines.append(f"- **{label}** [{status}]{ac_display}")
+
+        if not sibling_lines:
+            return ""
+        return (
+            "Your task is one piece of a larger pipeline. "
+            "Understanding sibling tasks helps you avoid conflicts:\n"
+            + "\n".join(sibling_lines)
+        )
+
     def _build_progress_context(self, current_node_id: str, data: dict) -> str:
         """Build a summary of completed pipeline nodes so the worker knows what happened before it.
 
@@ -1834,7 +1866,15 @@ class PipelineRunner:
         ]
 
         if acceptance:
-            lines.append(f"\n## Acceptance Criteria\n{acceptance}")
+            lines.append(
+                f"\n## Acceptance Criteria\n{acceptance}\n\n"
+                f"For EACH criterion above, determine a verification method before scoring:\n"
+                f"- **unit-test**: Run relevant test suite (`pytest`, `jest`)\n"
+                f"- **browser-check**: Navigate UI via chrome-devtools/playwright MCP\n"
+                f"- **api-call**: Make HTTP requests to verify endpoints\n"
+                f"- **code-review**: Read the implementation code (lowest confidence — cap score at 7)\n\n"
+                f"Include the verification method used in each `criteria_results` entry."
+            )
         else:
             lines.append("\n## Acceptance Criteria\n(none specified — check for reasonable implementation)")
 
@@ -3014,6 +3054,11 @@ class PipelineRunner:
             lines.append(f"\n## Solution Design\n{solution_design_content}")
         else:
             lines.append(f"\n## Solution Design Path\n{solution_design_path or '(none)'}")
+
+        # Inject bigger-picture context: what other epic nodes exist in this pipeline
+        epic_context = self._build_epic_context(nid, data)
+        if epic_context:
+            lines.append(f"\n## Bigger Picture (other tasks in this pipeline)\n{epic_context}")
 
         # Inject prior progress context: what nodes completed before this one
         progress_lines = self._build_progress_context(nid, data)
