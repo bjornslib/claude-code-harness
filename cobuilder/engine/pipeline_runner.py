@@ -522,6 +522,8 @@ class PipelineRunner:
         # Used for plateau detection: if scores don't improve across retries,
         # escalate to pilot (GATE_WAIT_COBUILDER) instead of burning another retry
         self.score_history: dict[str, list[float]] = {}
+        self._score_history_path = os.path.join(self.signal_dir, "_score_history.json")
+        self._load_score_history()
 
         # Dispatch-time file mtimes: node_id -> {filepath: mtime_ns}
         # Recorded at dispatch time so _verify_worker_output can detect whether
@@ -1868,12 +1870,28 @@ class PipelineRunner:
         if acceptance:
             lines.append(
                 f"\n## Acceptance Criteria\n{acceptance}\n\n"
-                f"For EACH criterion above, determine a verification method before scoring:\n"
-                f"- **unit-test**: Run relevant test suite (`pytest`, `jest`)\n"
-                f"- **browser-check**: Navigate UI via chrome-devtools/playwright MCP\n"
-                f"- **api-call**: Make HTTP requests to verify endpoints\n"
-                f"- **code-review**: Read the implementation code (lowest confidence — cap score at 7)\n\n"
-                f"Include the verification method used in each `criteria_results` entry."
+                f"## Step 1: Write Gherkin Tests\n"
+                f"Before scoring, write a `.feature` file for this node's acceptance criteria.\n"
+                f"Save it to: `acceptance-tests/{self.pipeline_id}/{target_node_id}.feature`\n\n"
+                f"Tag each scenario with its verification method:\n"
+                f"- `@unit-test` — Run relevant test suite (`pytest`, `jest`)\n"
+                f"- `@browser-check` — Navigate UI via chrome-devtools/playwright MCP\n"
+                f"- `@api-call` — Make HTTP requests to verify endpoints\n"
+                f"- `@code-review` — Read the code (lowest confidence — cap score at 7)\n\n"
+                f"Example:\n```gherkin\nFeature: {label}\n\n"
+                f"  @api-call\n  Scenario: AC-1 User can authenticate\n"
+                f"    Given the API server is running\n"
+                f"    When I POST /api/auth/login with valid credentials\n"
+                f"    Then the response status is 200\n"
+                f"    And the response contains a JWT token\n\n"
+                f"  @unit-test\n  Scenario: AC-2 Token expiry\n"
+                f"    Given a JWT token is generated\n"
+                f"    Then it expires after 1 hour\n```\n\n"
+                f"## Step 2: Execute Each Scenario\n"
+                f"Run each Gherkin scenario using its tagged method. Record pass/fail per scenario.\n"
+                f"Do NOT skip execution — a scenario scored without running it caps at 7.\n\n"
+                f"## Step 3: Score Based on Results\n"
+                f"Score based on actual execution results from Step 2."
             )
         else:
             lines.append("\n## Acceptance Criteria\n(none specified — check for reasonable implementation)")
@@ -2397,6 +2415,7 @@ class PipelineRunner:
                 overall_score = signal.get("overall_score")
                 if overall_score is not None:
                     self.score_history.setdefault(node_id, []).append(float(overall_score))
+                    self._save_score_history()
 
                 # Plateau detection: if scores aren't improving after 2+ attempts,
                 # the approach is wrong — escalate to pilot instead of burning retries
@@ -2466,6 +2485,7 @@ class PipelineRunner:
                 overall_score = signal.get("overall_score")
                 if overall_score is not None:
                     self.score_history.setdefault(requeue_target, []).append(float(overall_score))
+                    self._save_score_history()
 
                 # Check for plateau before allowing retry
                 plateau_detected = self._detect_score_plateau(requeue_target)
@@ -2861,6 +2881,32 @@ class PipelineRunner:
                      stage, result.get("checkpoint_path", "?"))
         except Exception as exc:  # noqa: BLE001
             log.warning("[checkpoint] Failed to save: %s", exc)
+
+    # ------------------------------------------------------------------
+    # Score history persistence
+    # ------------------------------------------------------------------
+
+    def _load_score_history(self) -> None:
+        """Load score_history from sidecar JSON if it exists."""
+        try:
+            if os.path.exists(self._score_history_path):
+                with open(self._score_history_path) as fh:
+                    self.score_history = json.loads(fh.read())
+                log.info("[scores] Loaded score history: %d nodes tracked",
+                         len(self.score_history))
+        except (OSError, json.JSONDecodeError) as exc:
+            log.warning("[scores] Failed to load score history: %s", exc)
+
+    def _save_score_history(self) -> None:
+        """Persist score_history to sidecar JSON (atomic write)."""
+        try:
+            os.makedirs(os.path.dirname(self._score_history_path), exist_ok=True)
+            tmp = self._score_history_path + ".tmp"
+            with open(tmp, "w") as fh:
+                fh.write(json.dumps(self.score_history, indent=2))
+            os.replace(tmp, self._score_history_path)
+        except OSError as exc:
+            log.warning("[scores] Failed to save score history: %s", exc)
 
     # ------------------------------------------------------------------
     # Resume helper
