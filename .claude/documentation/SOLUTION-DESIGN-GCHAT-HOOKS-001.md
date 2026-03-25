@@ -1351,14 +1351,14 @@ This is the most architecturally significant edge case in the design. The two Cl
 
 | Session Type | Launch Command | tmux | AskUserQuestion Forwarding | GChat Injection |
 |-------------|---------------|------|--------------------------|-----------------|
-| CoBuilder | `ccsystem3` | Depends on `ccsystem3` implementation | Yes (outbound) | Only if tmux |
+| CoBuilder | `cccb` (formerly `ccsystem3`) | Depends on `cccb` implementation | Yes (outbound) | Only if tmux |
 | Orchestrator | `launchorchestrator [name]` | Always (tmux new-session) | Yes (outbound) | Yes |
 | Worker | Spawned as native teammate | Shares lead's tmux | Yes (outbound) | Through lead session |
 | Development / one-off | `claude` directly | No | Yes (outbound only) | No |
 
-### 5.2 The ccsystem3 tmux Situation
+### 5.2 The cccb tmux Situation
 
-Based on the memory context (tmux Spawn Pattern v3, 2026-02-17), `ccsystem3` is a zsh function that may or may not create a tmux session depending on whether the user invokes it from within tmux. The design must not assume CoBuilder always has tmux.
+Based on the memory context (tmux Spawn Pattern v3, 2026-02-17), `cccb` (formerly `ccsystem3`) is a zsh function that may or may not create a tmux session depending on whether the user invokes it from within tmux. The design must not assume CoBuilder always has tmux.
 
 **Proposed behavior:**
 
@@ -1399,12 +1399,12 @@ For sessions running without tmux (e.g., a developer running `claude` directly):
 
 This degradation is acceptable because non-tmux sessions are typically developer/interactive sessions where the user is physically present. The primary value of GChat injection is for autonomous orchestrator sessions running in background tmux panes.
 
-### 5.4 ccsystem3 tmux Wrapping Recommendation
+### 5.4 cccb tmux Wrapping Recommendation
 
-To enable full GChat injection for CoBuilder, `ccsystem3` should be updated to always start within tmux. The recommended pattern (from tmux Spawn Pattern v3):
+To enable full GChat injection for CoBuilder, `cccb` should be updated to always start within tmux. The recommended pattern (from tmux Spawn Pattern v3):
 
 ```bash
-function ccsystem3() {
+function cccb() {
     local SESSION_NAME="system3-$(date +%s)"
     export CLAUDE_SESSION_ID="$SESSION_NAME"
     unset CLAUDECODE  # Prevents nested session error
@@ -1778,7 +1778,7 @@ fi
 2. Test with a non-critical orchestrator session (e.g., a test epic)
 3. Manually verify injection by watching the tmux session while responding in GChat
 4. Monitor daemon logs for injection errors
-5. Update `ccsystem3` to always run in tmux (see section 5.4)
+5. Update `cccb` to always run in tmux (see section 5.4)
 
 **Success criteria for Phase 2**:
 - [ ] GChat reply "2" correctly selects Option B in the AskUserQuestion dialog

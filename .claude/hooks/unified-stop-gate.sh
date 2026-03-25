@@ -158,7 +158,7 @@ fi
 # Guard: CLAUDE_OUTPUT_STYLE != orchestrator (same as Steps 1.5, 1.7).
 
 # Note: CLAUDE_OUTPUT_STYLE guard removed — orchestrators exit at fast-path above.
-if [ "$PROMISE_PASSED" = false ] && [[ "$SESSION_ID" == system3-* ]]; then
+if [ "$PROMISE_PASSED" = false ] && ([[ "$SESSION_ID" == system3-* ]] || [[ "$SESSION_ID" == cccb-* ]]); then
     _TASK_LIST_ID="${CLAUDE_CODE_TASK_LIST_ID:-}"
     if [ -n "$_TASK_LIST_ID" ]; then
         _TASK_DIR="$HOME/.claude/tasks/$_TASK_LIST_ID"
@@ -220,7 +220,7 @@ fi
 # Guard: CLAUDE_OUTPUT_STYLE != orchestrator prevents false-positives (same as Step 1.5).
 
 # Note: CLAUDE_OUTPUT_STYLE guard removed — orchestrators exit at fast-path above.
-if [[ "$SESSION_ID" == system3-* ]]; then
+if [[ "$SESSION_ID" == system3-* ]] || [[ "$SESSION_ID" == cccb-* ]]; then
     GCHAT_ASK_DIR="$PROJECT_ROOT/.claude/state/gchat-forwarded-ask"
     if [ -d "$GCHAT_ASK_DIR" ]; then
         GCHAT_PENDING_FOR_SESSION=0
@@ -429,7 +429,7 @@ fi
 
 S3_MSG=""
 
-if [[ "$SESSION_ID" == system3-* ]]; then
+if [[ "$SESSION_ID" == system3-* ]] || [[ "$SESSION_ID" == cccb-* ]]; then
     TIMEOUT_CMD="timeout"
     if command -v gtimeout &> /dev/null; then
         TIMEOUT_CMD="gtimeout"

@@ -49,7 +49,7 @@ mcp__hindsight__retain(
 ### Step 2: Store to Project Bank (Team Context)
 
 ```python
-# Get project bank from environment (set by ccsystem3/ccorch)
+# Get project bank from environment (set by cccb/ccorch)
 import os
 PROJECT_BANK = os.environ.get("CLAUDE_PROJECT_BANK", "default-project")
 
