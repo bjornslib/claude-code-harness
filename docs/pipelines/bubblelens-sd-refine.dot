@@ -1,0 +1,299 @@
+digraph "bubblelens-sd-refine" {
+    graph [
+        label="BubbleLens: Research & Refine Solution Designs"
+        labelloc="t"
+        fontsize=16
+        rankdir="TB"
+        pipeline_id="bubblelens-sd-refine-001"
+        prd_ref="PRD-BUBBLELENS-001"
+        target_dir="/home/user/cobuilder-harness"
+    ];
+
+    node [fontname="Helvetica" fontsize=11 style=filled];
+    edge [fontname="Helvetica" fontsize=9];
+
+    // ─── Entry ───────────────────────────────────────────────────────
+    start [
+        shape=Mdiamond
+        label="START"
+        handler="start"
+        status="pending"
+        fillcolor=palegreen
+    ];
+
+    // ═══════════════════════════════════════════════════════════════════
+    // RESEARCH NODES (parallel, Context7 + Perplexity, Sonnet 4.6)
+    // Each researches the technology stack and patterns used in one SD
+    // ═══════════════════════════════════════════════════════════════════
+
+    research_epic1 [
+        shape=tab
+        label="Research\nEpic 1: Scaffolding"
+        handler="research"
+        worker_type="researcher"
+        llm_profile="anthropic-smart"
+        prd_ref="PRD-BUBBLELENS-P1-001"
+        solution_design="docs/sds/SD-BUBBLELENS-001-epic1-scaffolding.md"
+        frameworks="Next.js,Prisma,Neon PostgreSQL,Upstash Redis,Upstash QStash,Vercel"
+        research_queries="Next.js 14 App Router best practices 2026;Neon serverless PostgreSQL connection pooling Prisma;Upstash Redis rate limiting patterns;Vercel deployment environment branching"
+        downstream_node="refine_epic1"
+        status="pending"
+        fillcolor=lightcyan
+    ];
+
+    research_epic2 [
+        shape=tab
+        label="Research\nEpic 2: Chrome Extension"
+        handler="research"
+        worker_type="researcher"
+        llm_profile="anthropic-smart"
+        prd_ref="PRD-BUBBLELENS-P1-001"
+        solution_design="docs/sds/SD-BUBBLELENS-001-epic2-chrome-extension.md"
+        frameworks="Chrome Extensions Manifest V3,Webpack"
+        research_queries="Manifest V3 service worker lifecycle 2026;YouTube DOM structure ytd-rich-item-renderer current selectors;chrome.storage.local offline queue patterns;Content script message passing best practices"
+        downstream_node="refine_epic2"
+        status="pending"
+        fillcolor=lightcyan
+    ];
+
+    research_epic3 [
+        shape=tab
+        label="Research\nEpic 3: Feed Ingestion"
+        handler="research"
+        worker_type="researcher"
+        llm_profile="anthropic-smart"
+        prd_ref="PRD-BUBBLELENS-P1-001"
+        solution_design="docs/sds/SD-BUBBLELENS-001-epic4-feed-ingestion.md"
+        frameworks="Next.js API Routes,Zod,Prisma,Upstash Redis"
+        research_queries="Next.js Route Handler validation with Zod best practices;Prisma transaction patterns for upsert;Upstash Redis sliding window rate limiting;CORS configuration for Chrome extensions"
+        downstream_node="refine_epic3"
+        status="pending"
+        fillcolor=lightcyan
+    ];
+
+    research_epic4 [
+        shape=tab
+        label="Research\nEpic 4: Survey"
+        handler="research"
+        worker_type="researcher"
+        llm_profile="anthropic-smart"
+        prd_ref="PRD-BUBBLELENS-P1-001"
+        solution_design="docs/sds/SD-BUBBLELENS-001-epic4-survey.md"
+        frameworks="Chrome Extensions Manifest V3,Zod,Prisma"
+        research_queries="Chrome extension popup inline form UX patterns;chrome.storage state machine patterns;Zod optional field validation;Prisma upsert with optional fields"
+        downstream_node="refine_epic4"
+        status="pending"
+        fillcolor=lightcyan
+    ];
+
+    research_epic5 [
+        shape=tab
+        label="Research\nEpic 5: Metadata Enrichment"
+        handler="research"
+        worker_type="researcher"
+        llm_profile="anthropic-smart"
+        prd_ref="PRD-BUBBLELENS-P2-001"
+        solution_design="docs/sds/SD-BUBBLELENS-001-epic5-metadata-enrichment.md"
+        frameworks="YouTube Data API v3,Upstash QStash,Prisma"
+        research_queries="YouTube Data API v3 videos.list quota optimization 2026;QStash cron job patterns for batch processing;YouTube API quota management best practices;Batch video metadata fetching with error recovery"
+        downstream_node="refine_epic5"
+        status="pending"
+        fillcolor=lightcyan
+    ];
+
+    research_epic6 [
+        shape=tab
+        label="Research\nEpic 6: Classification"
+        handler="research"
+        worker_type="researcher"
+        llm_profile="anthropic-smart"
+        prd_ref="PRD-BUBBLELENS-P2-001"
+        solution_design="docs/sds/SD-BUBBLELENS-001-epic6-classification.md"
+        frameworks="Anthropic Claude API,Prisma"
+        research_queries="Claude Haiku structured output for content classification;Political content classification taxonomy best practices;LLM batch classification pipeline patterns;Channel-level classification aggregation caching"
+        downstream_node="refine_epic6"
+        status="pending"
+        fillcolor=lightcyan
+    ];
+
+    research_epic7 [
+        shape=tab
+        label="Research\nEpic 7: Persona Engine"
+        handler="research"
+        worker_type="researcher"
+        llm_profile="anthropic-smart"
+        prd_ref="PRD-BUBBLELENS-P2-001"
+        solution_design="docs/sds/SD-BUBBLELENS-001-epic7-persona-engine.md"
+        frameworks="Prisma,Upstash Redis,Next.js"
+        research_queries="Dynamic SQL construction with Prisma for persona matching;Feed aggregation algorithm frequency-recency ranking;Redis caching patterns for computed results;Demographic profile matching with fuzzy attribute tolerance"
+        downstream_node="refine_epic7"
+        status="pending"
+        fillcolor=lightcyan
+    ];
+
+    // ═══════════════════════════════════════════════════════════════════
+    // REFINE NODES (each follows its corresponding research, Sonnet 4.6)
+    // Rewrites SD sections with research findings + Hindsight reflection
+    // ═══════════════════════════════════════════════════════════════════
+
+    refine_epic1 [
+        shape=note
+        label="Refine\nEpic 1: Scaffolding"
+        handler="refine"
+        worker_type="solution-architect"
+        llm_profile="anthropic-smart"
+        prd_ref="PRD-BUBBLELENS-P1-001"
+        solution_design="docs/sds/SD-BUBBLELENS-001-epic1-scaffolding.md"
+        evidence_path=".claude/evidence/research_epic1/research-findings.json"
+        prompt="Refine the scaffolding SD using research findings. Focus on: Prisma schema correctness, Neon connection pooling config, QStash job patterns, CI pipeline steps. Ensure the simplified 3-field DemographicProfile schema is consistent with Epic 4 survey SD."
+        acceptance="SD updated with latest framework patterns; Prisma schema validated; no stale API references"
+        status="pending"
+        fillcolor=lightyellow
+    ];
+
+    refine_epic2 [
+        shape=note
+        label="Refine\nEpic 2: Chrome Extension"
+        handler="refine"
+        worker_type="solution-architect"
+        llm_profile="anthropic-smart"
+        prd_ref="PRD-BUBBLELENS-P1-001"
+        solution_design="docs/sds/SD-BUBBLELENS-001-epic2-chrome-extension.md"
+        evidence_path=".claude/evidence/research_epic2/research-findings.json"
+        prompt="Refine the Chrome extension SD using research findings. Focus on: Manifest V3 service worker constraints, YouTube DOM selector accuracy, offline queue reliability, anonymous UUID generation. Verify selectors against current YouTube DOM structure."
+        acceptance="SD uses current MV3 APIs; selectors validated; offline sync pattern is robust"
+        status="pending"
+        fillcolor=lightyellow
+    ];
+
+    refine_epic3 [
+        shape=note
+        label="Refine\nEpic 3: Feed Ingestion"
+        handler="refine"
+        worker_type="solution-architect"
+        llm_profile="anthropic-smart"
+        prd_ref="PRD-BUBBLELENS-P1-001"
+        solution_design="docs/sds/SD-BUBBLELENS-001-epic4-feed-ingestion.md"
+        evidence_path=".claude/evidence/research_epic3/research-findings.json"
+        prompt="Refine the feed ingestion SD using research findings. Focus on: Zod schema completeness, Prisma transaction for browser upsert + feed creation, rate limiting configuration, CORS for extension origins, error response format consistency."
+        acceptance="SD has production-ready API design; Zod schemas match Prisma models; rate limiting config is correct"
+        status="pending"
+        fillcolor=lightyellow
+    ];
+
+    refine_epic4 [
+        shape=note
+        label="Refine\nEpic 4: Survey"
+        handler="refine"
+        worker_type="solution-architect"
+        llm_profile="anthropic-smart"
+        prd_ref="PRD-BUBBLELENS-P1-001"
+        solution_design="docs/sds/SD-BUBBLELENS-001-epic4-survey.md"
+        evidence_path=".claude/evidence/research_epic4/research-findings.json"
+        prompt="Refine the demographic survey SD using research findings. Focus on: survey state machine completeness, chrome.storage patterns, API route validation, upsert logic, privacy note accuracy. Ensure genderOrientation combined field options are inclusive and well-reasoned."
+        acceptance="SD has complete state machine; API matches Prisma schema; privacy claims are accurate"
+        status="pending"
+        fillcolor=lightyellow
+    ];
+
+    refine_epic5 [
+        shape=note
+        label="Refine\nEpic 5: Metadata Enrichment"
+        handler="refine"
+        worker_type="solution-architect"
+        llm_profile="anthropic-smart"
+        prd_ref="PRD-BUBBLELENS-P2-001"
+        solution_design="docs/sds/SD-BUBBLELENS-001-epic5-metadata-enrichment.md"
+        evidence_path=".claude/evidence/research_epic5/research-findings.json"
+        prompt="Refine the metadata enrichment SD using research findings. Focus on: YouTube API v3 quota math accuracy, batch size optimization, QStash cron reliability, error recovery patterns, deduplication efficiency. Verify API response field mappings."
+        acceptance="SD has correct quota calculations; batch processing is efficient; error handling is comprehensive"
+        status="pending"
+        fillcolor=lightyellow
+    ];
+
+    refine_epic6 [
+        shape=note
+        label="Refine\nEpic 6: Classification"
+        handler="refine"
+        worker_type="solution-architect"
+        llm_profile="anthropic-smart"
+        prd_ref="PRD-BUBBLELENS-P2-001"
+        solution_design="docs/sds/SD-BUBBLELENS-001-epic6-classification.md"
+        evidence_path=".claude/evidence/research_epic6/research-findings.json"
+        prompt="Refine the classification SD using research findings. Focus on: Claude API structured output patterns, classification prompt engineering, topic taxonomy completeness, channel cache strategy, accuracy validation methodology. Ensure political leaning scale aligns with survey (1-5)."
+        acceptance="SD has validated classification prompts; taxonomy is comprehensive; accuracy testing plan is concrete"
+        status="pending"
+        fillcolor=lightyellow
+    ];
+
+    refine_epic7 [
+        shape=note
+        label="Refine\nEpic 7: Persona Engine"
+        handler="refine"
+        worker_type="solution-architect"
+        llm_profile="anthropic-smart"
+        prd_ref="PRD-BUBBLELENS-P2-001"
+        solution_design="docs/sds/SD-BUBBLELENS-001-epic7-persona-engine.md"
+        evidence_path=".claude/evidence/research_epic7/research-findings.json"
+        prompt="Refine the persona engine SD using research findings. Focus on: dynamic Prisma query construction, feed aggregation SQL performance, frequency-recency ranking algorithm, Redis caching strategy, comparison engine accuracy. Ensure persona attributes match simplified 3-field model (politicalLeaning, genderOrientation, ageRange). Verify matching query uses both real + seeded profiles."
+        acceptance="SD has optimized SQL queries; caching strategy validated; attribute model consistent with survey"
+        status="pending"
+        fillcolor=lightyellow
+    ];
+
+    // ═══════════════════════════════════════════════════════════════════
+    // HUMAN REVIEW GATE
+    // ═══════════════════════════════════════════════════════════════════
+
+    review_gate [
+        shape=hexagon
+        label="Human Review\nAll Refined SDs"
+        handler="wait.human"
+        status="pending"
+        fillcolor=lightsalmon
+        prompt="Review all 7 refined solution design documents in docs/sds/. Verify cross-document consistency (shared schema, API contracts, data flow). Approve to finalize or reject with feedback."
+    ];
+
+    // ─── Exit ────────────────────────────────────────────────────────
+    complete [
+        shape=Msquare
+        label="COMPLETE"
+        handler="exit"
+        status="pending"
+        fillcolor=palegreen
+    ];
+
+    // ═══════════════════════════════════════════════════════════════════
+    // EDGES — Research in parallel from start, then sequential refine
+    // ═══════════════════════════════════════════════════════════════════
+
+    // Fan-out: START → all research nodes (parallel)
+    start -> research_epic1 [label="begin"];
+    start -> research_epic2 [label="begin"];
+    start -> research_epic3 [label="begin"];
+    start -> research_epic4 [label="begin"];
+    start -> research_epic5 [label="begin"];
+    start -> research_epic6 [label="begin"];
+    start -> research_epic7 [label="begin"];
+
+    // Sequential: each research → its refine
+    research_epic1 -> refine_epic1 [label="findings ready"];
+    research_epic2 -> refine_epic2 [label="findings ready"];
+    research_epic3 -> refine_epic3 [label="findings ready"];
+    research_epic4 -> refine_epic4 [label="findings ready"];
+    research_epic5 -> refine_epic5 [label="findings ready"];
+    research_epic6 -> refine_epic6 [label="findings ready"];
+    research_epic7 -> refine_epic7 [label="findings ready"];
+
+    // Fan-in: all refine nodes → human review gate
+    refine_epic1 -> review_gate [label="refined"];
+    refine_epic2 -> review_gate [label="refined"];
+    refine_epic3 -> review_gate [label="refined"];
+    refine_epic4 -> review_gate [label="refined"];
+    refine_epic5 -> review_gate [label="refined"];
+    refine_epic6 -> review_gate [label="refined"];
+    refine_epic7 -> review_gate [label="refined"];
+
+    // Gate → exit
+    review_gate -> complete [label="approved"];
+}
