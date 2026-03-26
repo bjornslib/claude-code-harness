@@ -1534,6 +1534,8 @@ class PipelineRunner:
             messages = []
             result_text = ""
             _first_msg_logged = False
+            _stale_triggered = False
+            last_worker_text = ""
 
             # Use ClaudeSDKClient (bidirectional) instead of query() (unidirectional).
             # ClaudeSDKClient keeps the control protocol open, enabling Stop hooks
@@ -1564,6 +1566,8 @@ class PipelineRunner:
                                                      input_preview=str(getattr(block, "input", ""))[:300])
                                 elif block_type == "TextBlock":
                                     text = getattr(block, "text", "")
+                                    if text and len(text.strip()) > 5:
+                                        last_worker_text = text
                                     if text and len(text.strip()) > 5 and _LOGFIRE_AVAILABLE:
                                         logfire.info("worker_text {node_id}",
                                                      node_id=node_id, text=text[:300])
@@ -1885,7 +1889,7 @@ class PipelineRunner:
         if not _SDK_AVAILABLE or claude_code_sdk is None:
             log.warning("[validation] SDK not available — auto-passing %s", node_id)
             signal: dict = {"result": "pass", "reason": "auto-pass: SDK not available for validation"}
-            self._write_node_signal(node_id, signal)
+            self._write_node_signal(node_id, signal, signal_kind="validation")
             self.active_workers.pop(node_id, None)
             self._wake_event.set()
             if _span:
@@ -1987,7 +1991,7 @@ class PipelineRunner:
                 "status": "fail",
                 "result": "fail",
                 "reason": f"Validation timed out after {timeout}s",
-            })
+            }, signal_kind="validation")
             self.active_workers.pop(node_id, None)
             self._wake_event.set()
             if _span:
@@ -2003,7 +2007,7 @@ class PipelineRunner:
                 "reason": f"Validation agent crashed: {str(exc)[:200]}",
                 "validator_exit_code": -1,  # Indicate agent crash
                 "exception": type(exc).__name__,
-            })
+            }, signal_kind="validation")
             self.active_workers.pop(node_id, None)
             self._wake_event.set()
             if _span:
@@ -2015,7 +2019,7 @@ class PipelineRunner:
                          node_id=node_id, result=signal.get("result"),
                          reason=signal.get("reason", "")[:200])
 
-        self._write_node_signal(node_id, signal)
+        self._write_node_signal(node_id, signal, signal_kind="validation")
         self.active_workers.pop(node_id, None)
         self._wake_event.set()
         if _span:
@@ -2034,8 +2038,17 @@ class PipelineRunner:
             if not fname.endswith(".json"):
                 continue
 
-            # Signal filename is {node_id}.json
-            node_id = fname[:-5]  # strip .json
+            # Determine the node_id from the filename.
+            # Validation signals use the distinct suffix ``{node_id}-validation.json``
+            # to avoid the watchdog debounce race (worker and validation would otherwise
+            # share the same path, causing the second inotify event to be suppressed).
+            # For backward compatibility we also accept old-format ``{node_id}.json``
+            # files that carry a ``"result"`` key (i.e. validation payloads written
+            # by an older runner version into the worker-signal path).
+            if fname.endswith("-validation.json"):
+                node_id = fname[: -len("-validation.json")]
+            else:
+                node_id = fname[:-5]  # strip .json
 
             signal_path = os.path.join(self.signal_dir, fname)
             try:
@@ -2445,10 +2458,18 @@ class PipelineRunner:
     # Signal file helpers
     # ------------------------------------------------------------------
 
-    def _write_node_signal(self, node_id: str, payload: dict) -> str:
+    def _write_node_signal(self, node_id: str, payload: dict, signal_kind: str = "worker") -> str:
         """Atomically write a signal file using the temp file + rename pattern from research.
 
         Implements atomic signal writes with additional metadata for ordering and debugging.
+
+        Args:
+            node_id: The pipeline node this signal is for.
+            payload: Signal payload dict (mutated in-place with metadata fields).
+            signal_kind: ``"worker"`` (default) writes ``{node_id}.json``;
+                         ``"validation"`` writes ``{node_id}-validation.json`` to
+                         avoid the watchdog debounce race where the validation signal
+                         arrives <1 s after the worker signal on the same path.
         """
         os.makedirs(self.signal_dir, exist_ok=True)
 
@@ -2459,8 +2480,17 @@ class PipelineRunner:
         payload["_ts"] = datetime.datetime.utcnow().isoformat() + "Z"
         payload["_pid"] = os.getpid()
 
+        # Validation signals use a distinct filename to avoid the watchdog debounce
+        # race: worker writes {node_id}.json, then validation writes the same path
+        # <1 s later — the debounce suppresses the second inotify event.  Using a
+        # separate suffix guarantees a *new* path that the handler has not seen.
+        if signal_kind == "validation":
+            signal_filename = f"{node_id}-validation.json"
+        else:
+            signal_filename = f"{node_id}.json"
+
         # Create temporary file with unique name
-        signal_path = os.path.join(self.signal_dir, f"{node_id}.json")
+        signal_path = os.path.join(self.signal_dir, signal_filename)
         tmp_path = Path(signal_path).with_suffix(f'.tmp.{os.getpid()}.{int(time.monotonic_ns())}')
 
         # Implement GAP-6.3: Include sd_hash in signal evidence (preserved from original)
