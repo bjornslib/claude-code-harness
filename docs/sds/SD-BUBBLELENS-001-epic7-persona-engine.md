@@ -16,7 +16,7 @@ grade: authoritative
 
 ## Overview
 
-The core differentiating feature of BubbleLens. Users select demographic attributes (political leaning, sexual orientation, gender, ethnicity, age range, country) to create a "persona." The system finds **seeded research profiles** matching those attributes, aggregates their captured YouTube feeds, and presents a simulated feed ranked by video frequency. Users can then compare this simulated feed side-by-side with their own captured feed. For the PoC, demographic profiles are manually created from research YouTube accounts -- no user survey or auth required.
+The core differentiating feature of BubbleLens. Users select demographic attributes (political leaning, gender/orientation, age range) to create a "persona." The system finds **all demographic profiles** matching those attributes -- both real user-contributed profiles (from the lightweight 3-field survey in Epic 4) and seeded research profiles -- aggregates their captured YouTube feeds, and presents a simulated feed ranked by video frequency. Users can then compare this simulated feed side-by-side with their own captured feed. Seeded profiles ensure data coverage from day one; real user profiles supplement them as adoption grows.
 
 ## Architecture
 
@@ -36,8 +36,8 @@ The core differentiating feature of BubbleLens. Users select demographic attribu
 ┌──────────────────────────────────────────────────────────────────────────┐
 │  Persona Engine (Backend)                                                │
 │                                                                          │
-│  1. Match seeded profiles by demographic attributes (SQL query with      │
-│     dynamic WHERE, is_seed=true)                                         │
+│  1. Match all profiles by demographic attributes (SQL query with         │
+│     dynamic WHERE — both real user + seeded profiles)                    │
 │  2. Aggregate their feed_items (rank videos by frequency, weight by      │
 │     recency)                                                             │
 │  3. Enrich with video metadata + classification data                     │
@@ -55,30 +55,26 @@ The core differentiating feature of BubbleLens. Users select demographic attribu
 // src/types/persona.ts
 interface PersonaAttributes {
   politicalLeaning?: 1 | 2 | 3 | 4 | 5;  // undefined = "Any"
-  sexualOrientation?: 'straight' | 'gay' | 'lesbian' | 'bisexual';
-  gender?: 'male' | 'female' | 'non_binary';
+  genderOrientation?: 'straight_male' | 'straight_female' | 'gay_lesbian' | 'bisexual' | 'nonbinary_other';
   ageRange?: '18-24' | '25-34' | '35-44' | '45-54' | '55+';
-  country?: string;
-  ethnicity?: string[];
 }
 
 // Preset personas for quick selection
 const PERSONA_PRESETS: Record<string, { label: string; attributes: PersonaAttributes }> = {
-  conservative_american: {
-    label: 'Conservative American',
-    attributes: { politicalLeaning: 4, gender: 'male', ageRange: '45-54', country: 'US' },
+  conservative_male: {
+    label: 'Conservative Straight Male',
+    attributes: { politicalLeaning: 4, genderOrientation: 'straight_male', ageRange: '45-54' },
   },
-  progressive_european: {
-    label: 'Progressive European',
-    attributes: { politicalLeaning: 2, ageRange: '25-34' },
-    // country handled via European country list
+  progressive_young: {
+    label: 'Progressive Young Adult',
+    attributes: { politicalLeaning: 2, ageRange: '18-24' },
   },
-  young_urban_lgbtq: {
-    label: 'Young Urban LGBTQ+',
-    attributes: { politicalLeaning: 2, sexualOrientation: 'gay', ageRange: '18-24' },
+  young_lgbtq: {
+    label: 'Young LGBTQ+',
+    attributes: { politicalLeaning: 2, genderOrientation: 'gay_lesbian', ageRange: '18-24' },
   },
-  centrist_parent: {
-    label: 'Centrist Parent',
+  centrist_midlife: {
+    label: 'Centrist 35-44',
     attributes: { politicalLeaning: 3, ageRange: '35-44' },
   },
 };
@@ -93,9 +89,8 @@ Dynamic SQL construction based on selected attributes:
 import { Prisma } from '@prisma/client';
 
 function buildPersonaMatchQuery(attrs: PersonaAttributes): Prisma.DemographicProfileWhereInput {
-  const where: Prisma.DemographicProfileWhereInput = {
-    isSeed: true, // PoC: only match against seeded research profiles
-  };
+  // Match ALL profiles (both real user-contributed and seeded research profiles)
+  const where: Prisma.DemographicProfileWhereInput = {};
 
   if (attrs.politicalLeaning !== undefined) {
     // Match exact or +/- 1 on the scale for broader matching
@@ -105,24 +100,12 @@ function buildPersonaMatchQuery(attrs: PersonaAttributes): Prisma.DemographicPro
     };
   }
 
-  if (attrs.sexualOrientation) {
-    where.sexualOrientation = attrs.sexualOrientation;
-  }
-
-  if (attrs.gender) {
-    where.gender = attrs.gender;
+  if (attrs.genderOrientation) {
+    where.genderOrientation = attrs.genderOrientation;
   }
 
   if (attrs.ageRange) {
     where.ageRange = attrs.ageRange;
-  }
-
-  if (attrs.country) {
-    where.country = attrs.country;
-  }
-
-  if (attrs.ethnicity && attrs.ethnicity.length > 0) {
-    where.ethnicity = { hasSome: attrs.ethnicity };
   }
 
   return where;
@@ -499,7 +482,7 @@ Return available preset personas.
 | T7.1 | Persona selector component | `src/components/persona/persona-selector.tsx` | frontend-dev-expert | T1.1 |
 | T7.2 | Preset persona definitions | `src/lib/persona-presets.ts` | backend-solutions-engineer | None |
 | T7.3 | Seed data script (5+ research profiles with feed data) | `prisma/seed.ts` | backend-solutions-engineer | T1.3 |
-| T7.4 | Persona matching query (dynamic WHERE, is_seed=true) | `src/lib/persona-engine.ts` | backend-solutions-engineer | T7.3 |
+| T7.4 | Persona matching query (dynamic WHERE, real + seeded profiles) | `src/lib/persona-engine.ts` | backend-solutions-engineer | T7.3 |
 | T7.5 | Feed aggregation algorithm | `src/lib/persona-engine.ts` | backend-solutions-engineer | T7.4 |
 | T7.6 | GET /api/persona/simulate endpoint | `src/app/api/persona/simulate/route.ts` | backend-solutions-engineer | T7.5 |
 | T7.7 | Comparison engine | `src/lib/comparison.ts` | backend-solutions-engineer | T7.5 |

@@ -1,7 +1,7 @@
 ---
 title: "BubbleLens Phase 1 - Data Foundation & Infrastructure"
-description: "Chrome extension, anonymous feed ingestion, and cloud infrastructure for the BubbleLens PoC"
-version: "1.1.0"
+description: "Chrome extension, lightweight demographic survey, anonymous feed ingestion, and cloud infrastructure for the BubbleLens PoC"
+version: "1.2.0"
 last-updated: 2026-03-26
 status: draft
 type: prd
@@ -13,7 +13,7 @@ prd_id: PRD-BUBBLELENS-P1-001
 
 ## Overview
 
-Phase 1 establishes the data collection pipeline for the BubbleLens proof of concept: a Chrome extension that captures YouTube homepage recommendations and a backend API that ingests, normalizes, and stores feed data. No user authentication -- the PoC uses anonymous browser-generated UUIDs to identify sessions. At the end of Phase 1, anyone can install the extension, capture their YouTube feed, and the data is stored for Phase 2's analysis and persona simulation.
+Phase 1 establishes the complete data collection pipeline for the BubbleLens proof of concept: a Chrome extension that captures YouTube homepage recommendations, a lightweight 3-field demographic survey triggered after first capture, and a backend API that ingests and stores everything. No user accounts -- the PoC uses anonymous browser-generated UUIDs. At the end of Phase 1, users can install the extension, capture their YouTube feed, answer 3 demographic questions, and the demographically-tagged feed data is ready for Phase 2's persona simulation.
 
 **Parent PRD**: PRD-BUBBLELENS-001
 **Depends On**: Nothing (greenfield)
@@ -24,8 +24,8 @@ Phase 1 establishes the data collection pipeline for the BubbleLens proof of con
 ### Goal 1: Reliable Feed Capture
 The Chrome extension captures 95%+ of visible YouTube homepage video recommendations accurately and sends them to the backend within 3 seconds.
 
-### Goal 2: Zero-Friction Data Collection
-No signup, no login, no survey. Install extension, click "Capture Feed", done. Anonymous browser IDs handle identity.
+### Goal 2: Low-Friction Demographic Collection
+No signup, no login. After first capture, a 3-field survey collects political leaning, age range, and gender/orientation. All fields optional. Proves the end-to-end data pipeline with real user demographics.
 
 ### Goal 3: Scalable Data Ingestion
 The backend reliably ingests, validates, and stores feed captures with rate limiting and error handling.
@@ -193,6 +193,74 @@ Feature: Feed Ingestion API
 - T3.7: Add error handling and logging for ingestion failures
 - T3.8: Write integration tests for all API endpoints
 
+## Epic 4: Lightweight Demographic Survey
+
+### Description
+A 3-field mini-survey embedded in the Chrome extension popup, triggered after the user's first successful feed capture. No login, no accounts -- responses are submitted with the same anonymous browser UUID used for feed captures. This is the critical data collection step that tags feeds with demographics, enabling the persona simulation in Phase 2.
+
+### Acceptance Criteria
+
+```gherkin
+Feature: Post-Capture Demographic Survey
+
+  Scenario: Survey appears after first capture
+    Given I have just completed my first successful feed capture
+    When the capture success screen shows in the extension popup
+    Then below the success message I see a survey prompt:
+      "Help us understand filter bubbles — 3 quick optional questions"
+    And the survey displays 3 fields inline
+
+  Scenario: Survey fields
+    Given the survey is displayed
+    Then I see the following fields:
+      | Field | Type | Options |
+      | Political leaning | 5-point scale | Strong Left, Left, Center, Right, Strong Right, Prefer not to say |
+      | Age range | Radio | 18-24, 25-34, 35-44, 45-54, 55+, Prefer not to say |
+      | Gender / Orientation | Radio | Straight Male, Straight Female, Gay/Lesbian, Bisexual, Non-binary/Other, Prefer not to say |
+
+  Scenario: Submit survey
+    Given I have selected values for one or more fields
+    When I click "Submit"
+    Then responses are sent to POST /api/profile with my anonymous browser UUID
+    And the survey is replaced with a "Thank you" message
+    And chrome.storage records that the survey is complete
+
+  Scenario: Skip survey
+    Given the survey is displayed
+    When I click "Skip"
+    Then the survey disappears
+    And chrome.storage records that the survey was skipped
+    And the survey does not appear again on future captures
+
+  Scenario: Survey only shows once
+    Given I have already completed or skipped the survey
+    When I capture another feed
+    Then the survey does not appear
+    And instead I see a small "Update my profile" link
+
+  Scenario: Update profile later
+    Given I have previously completed or skipped the survey
+    When I click "Update my profile" in the extension popup
+    Then the survey form reappears pre-filled with my previous answers (if any)
+    And I can update and resubmit
+
+  Scenario: Profile API storage
+    Given I submit the survey with browserId "abc-123"
+    When the API processes the request
+    Then a demographic_profiles record is created (or updated) linked to browser "abc-123"
+    And the response returns 200 OK
+```
+
+### Task Breakdown
+- T4.1: Build inline survey UI component for extension popup (3 fields + submit/skip buttons)
+- T4.2: Implement survey trigger logic (show after first capture, remember completion/skip)
+- T4.3: Build `POST /api/profile` route handler (accepts browser UUID + 3 survey fields)
+- T4.4: Implement Zod validation schema for profile payload
+- T4.5: Implement profile upsert (create or update) linked to browser record
+- T4.6: Build "Update my profile" re-display flow in extension popup
+- T4.7: Write integration tests for profile API endpoints
+- T4.8: Write component tests for survey UI (display, submit, skip, pre-fill)
+
 ---
 
 ## Non-Functional Requirements
@@ -222,3 +290,4 @@ Feature: Feed Ingestion API
 | Epic 1: Project Scaffolding | Not Started | 2026-03-26 |
 | Epic 2: Chrome Extension | Not Started | 2026-03-26 |
 | Epic 3: Feed Ingestion API | Not Started | 2026-03-26 |
+| Epic 4: Lightweight Demographic Survey | Not Started | 2026-03-26 |

@@ -101,20 +101,14 @@ model Browser {
   @@map("browsers")
 }
 
-// Demographic profiles (seeded from research accounts for PoC)
+// Demographic profiles (from lightweight 3-field survey + seeded research accounts)
 model DemographicProfile {
   id                String   @id @default(uuid()) @db.Uuid
   browserId         String   @unique @map("browser_id") @db.Uuid
-  label             String?  // Human-readable label, e.g. "Left-leaning Gay Male 25-34"
-  politicalLeaning  Int?     @map("political_leaning") @db.SmallInt
-  country           String?
-  region            String?
-  ageRange          String?  @map("age_range")
-  gender            String?
-  sexualOrientation String?  @map("sexual_orientation")
-  ethnicity         String[] @default([])
-  interests         String[] @default([])
-  isSeed            Boolean  @default(false) @map("is_seed") // true for research accounts
+  politicalLeaning  Int?     @map("political_leaning") @db.SmallInt // 1-5 scale
+  ageRange          String?  @map("age_range")                      // '18-24' | '25-34' | '35-44' | '45-54' | '55+'
+  genderOrientation String?  @map("gender_orientation")             // 'straight_male' | 'straight_female' | 'gay_lesbian' | 'bisexual' | 'nonbinary_other'
+  isSeed            Boolean  @default(false) @map("is_seed")        // true for research accounts
   updatedAt         DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   browser Browser @relation(fields: [browserId], references: [id], onDelete: Cascade)

@@ -157,7 +157,7 @@ Feature: Content Classification
 ## Epic 7: Persona Engine - "Walk in Their Shoes" Simulation
 
 ### Description
-The core differentiating feature. Users select demographic attributes (political leaning, sexual orientation, gender, ethnicity, age, geography) to create a persona, and the system shows them a simulated YouTube feed based on aggregated data from profiles matching those attributes. For the PoC, demographic profiles are **seeded from research accounts** -- manually created YouTube accounts with known demographic attributes whose feeds are captured and tagged. This removes the auth/onboarding dependency while still demonstrating the core value proposition.
+The core differentiating feature. Users select demographic attributes (political leaning, gender/orientation, age range) to create a persona, and the system shows them a simulated YouTube feed based on aggregated data from **all matching profiles** -- both real user-contributed profiles (from the lightweight 3-field survey in Phase 1 Epic 4) and seeded research profiles. Seeded profiles ensure data coverage from day one; real user profiles supplement them as adoption grows. No auth dependency -- both profile types are linked to anonymous browser UUIDs.
 
 ### Acceptance Criteria
 
