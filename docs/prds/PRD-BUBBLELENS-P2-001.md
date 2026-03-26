@@ -1,7 +1,7 @@
 ---
 title: "BubbleLens Phase 2 - Walk in Their Shoes MVP"
 description: "Video classification, persona simulation engine, and dashboard for the BubbleLens Walk in Their Shoes launch feature"
-version: "1.0.0"
+version: "1.1.0"
 last-updated: 2026-03-26
 status: draft
 type: prd
@@ -18,8 +18,8 @@ Phase 2 transforms the raw feed data collected in Phase 1 into the user-facing "
 This is the launch phase. At its completion, BubbleLens has a usable product: users can capture their feed, see it analyzed, select a persona (e.g., "democrat, gay, 25-34, urban"), and view a simulated feed with side-by-side comparison.
 
 **Parent PRD**: PRD-BUBBLELENS-001
-**Depends On**: PRD-BUBBLELENS-P1-001 (requires feed data, auth, and infrastructure)
-**Blocks**: Phase 3 (Bubble Score, comparisons, digests)
+**Depends On**: PRD-BUBBLELENS-P1-001 (requires feed data and infrastructure -- no auth dependency)
+**Blocks**: Phase 3 (Auth, onboarding, real demographic profiles)
 
 ## Goals
 
@@ -157,7 +157,7 @@ Feature: Content Classification
 ## Epic 7: Persona Engine - "Walk in Their Shoes" Simulation
 
 ### Description
-The core differentiating feature. Users select demographic attributes (political leaning, sexual orientation, gender, ethnicity, age, geography) to create a persona, and the system shows them a simulated YouTube feed based on aggregated data from real users matching that profile.
+The core differentiating feature. Users select demographic attributes (political leaning, sexual orientation, gender, ethnicity, age, geography) to create a persona, and the system shows them a simulated YouTube feed based on aggregated data from profiles matching those attributes. For the PoC, demographic profiles are **seeded from research accounts** -- manually created YouTube accounts with known demographic attributes whose feeds are captured and tagged. This removes the auth/onboarding dependency while still demonstrating the core value proposition.
 
 ### Acceptance Criteria
 
@@ -188,21 +188,26 @@ Feature: Persona Selection
 
 Feature: Feed Simulation
 
-  Scenario: Simulated feed generation
+  Scenario: Simulated feed generation from seeded profiles
     Given I have selected persona attributes (Democrat + Gay + 25-34)
-    And at least 10 real users match those attributes (with wildcards)
+    And at least 2 seeded profiles match those attributes (with wildcards)
     When I click "See Their Feed"
-    Then the system aggregates feed data from matching users
+    Then the system aggregates feed data from matching seeded profiles
     And displays 20-40 videos ranked by frequency of appearance across matching feeds
     And each video shows: title, channel, thumbnail, political leaning badge, topic tags
 
+  Scenario: Seeded profile data
+    Given the database contains at least 5 seeded demographic profiles
+    And each profile has at least 3 captured feed snapshots
+    Then the persona engine can simulate feeds for multiple persona combinations
+    And seeded profiles cover: Left+LGBTQ+, Right+Straight, Center+Young, Left+Older, Right+Female
+
   Scenario: Insufficient data
     Given I have selected persona attributes
-    And fewer than 10 real users match those attributes
+    And fewer than 2 seeded profiles match those attributes
     When I click "See Their Feed"
     Then I see a "Not enough data yet" message
-    And an explanation that more users with this profile are needed
-    And an invitation to share BubbleLens to help build the dataset
+    And a list of available persona combinations that do have data
 
   Scenario: Simulation performance
     Given valid persona attributes with sufficient data
@@ -230,14 +235,15 @@ Feature: Side-by-Side Comparison
 ### Task Breakdown
 - T7.1: Build persona selector component with attribute controls and "Any" defaults
 - T7.2: Create preset persona definitions and quick-select buttons
-- T7.3: Implement persona matching query (find users whose demographic_profiles match selected attributes, with wildcard handling for "Any")
-- T7.4: Build feed aggregation algorithm (rank videos by frequency across matching users' feeds, weighted by recency)
-- T7.5: Create `GET /api/persona/simulate` endpoint that accepts persona attributes and returns simulated feed
-- T7.6: Implement comparison engine that computes overlap and divergence between two feeds
-- T7.7: Build simulated feed display component with classification overlays
-- T7.8: Build side-by-side comparison view with overlap highlighting
-- T7.9: Add caching layer (Redis) for persona simulation results (cache by attribute hash, TTL 1 hour)
-- T7.10: Handle insufficient data case with messaging and sharing prompt
+- T7.3: Create seed data script that populates demographic_profiles with 5+ research account profiles and their feed data
+- T7.4: Implement persona matching query (find profiles whose attributes match, with wildcard handling for "Any")
+- T7.5: Build feed aggregation algorithm (rank videos by frequency across matching profiles' feeds, weighted by recency)
+- T7.6: Create `GET /api/persona/simulate` endpoint that accepts persona attributes and returns simulated feed
+- T7.7: Implement comparison engine that computes overlap and divergence between two feeds
+- T7.8: Build simulated feed display component with classification overlays
+- T7.9: Build side-by-side comparison view with overlap highlighting
+- T7.10: Add caching layer (Redis) for persona simulation results (cache by attribute hash, TTL 1 hour)
+- T7.11: Handle insufficient data case with available persona suggestions
 
 ---
 
@@ -330,9 +336,10 @@ Feature: Feed Analysis Dashboard
 - Redis caching reduces repeated simulation queries by 80%
 
 ### Privacy
-- Persona simulation never reveals individual user data -- only aggregated results
-- Minimum 10 matching users required before simulation results are shown
-- No way to reverse-engineer individual feeds from aggregated simulation
+- PoC uses seeded research profiles, not real user demographic data
+- No PII collected from end users (anonymous browser IDs only)
+- Persona simulation aggregates seeded profile feeds -- no individual data exposed
+- Minimum 2 matching seeded profiles required before simulation results are shown
 
 ---
 
@@ -340,7 +347,7 @@ Feature: Feed Analysis Dashboard
 
 | Epic | Status | Last Updated |
 |------|--------|-------------|
-| Epic 5: Video Metadata Enrichment | Not Started | 2026-03-26 |
-| Epic 6: Content Classification | Not Started | 2026-03-26 |
-| Epic 7: Persona Engine | Not Started | 2026-03-26 |
-| Epic 8: Dashboard & Visualization | Not Started | 2026-03-26 |
+| Epic 4: Video Metadata Enrichment | Not Started | 2026-03-26 |
+| Epic 5: Content Classification | Not Started | 2026-03-26 |
+| Epic 6: Persona Engine (seeded profiles) | Not Started | 2026-03-26 |
+| Epic 7: Dashboard & Visualization | Not Started | 2026-03-26 |

@@ -16,7 +16,7 @@ grade: authoritative
 
 ## Overview
 
-The core differentiating feature of BubbleLens. Users select demographic attributes (political leaning, sexual orientation, gender, ethnicity, age range, country) to create a "persona." The system finds real users matching those attributes, aggregates their captured YouTube feeds, and presents a simulated feed ranked by video frequency across matching users. Users can then compare this simulated feed side-by-side with their own.
+The core differentiating feature of BubbleLens. Users select demographic attributes (political leaning, sexual orientation, gender, ethnicity, age range, country) to create a "persona." The system finds **seeded research profiles** matching those attributes, aggregates their captured YouTube feeds, and presents a simulated feed ranked by video frequency. Users can then compare this simulated feed side-by-side with their own captured feed. For the PoC, demographic profiles are manually created from research YouTube accounts -- no user survey or auth required.
 
 ## Architecture
 
@@ -36,7 +36,8 @@ The core differentiating feature of BubbleLens. Users select demographic attribu
 ┌──────────────────────────────────────────────────────────────────────────┐
 │  Persona Engine (Backend)                                                │
 │                                                                          │
-│  1. Match users by demographic attributes (SQL query with dynamic WHERE) │
+│  1. Match seeded profiles by demographic attributes (SQL query with      │
+│     dynamic WHERE, is_seed=true)                                         │
 │  2. Aggregate their feed_items (rank videos by frequency, weight by      │
 │     recency)                                                             │
 │  3. Enrich with video metadata + classification data                     │
@@ -92,7 +93,9 @@ Dynamic SQL construction based on selected attributes:
 import { Prisma } from '@prisma/client';
 
 function buildPersonaMatchQuery(attrs: PersonaAttributes): Prisma.DemographicProfileWhereInput {
-  const where: Prisma.DemographicProfileWhereInput = {};
+  const where: Prisma.DemographicProfileWhereInput = {
+    isSeed: true, // PoC: only match against seeded research profiles
+  };
 
   if (attrs.politicalLeaning !== undefined) {
     // Match exact or +/- 1 on the scale for broader matching
@@ -125,19 +128,19 @@ function buildPersonaMatchQuery(attrs: PersonaAttributes): Prisma.DemographicPro
   return where;
 }
 
-async function getMatchingUserIds(attrs: PersonaAttributes): Promise<{
-  userIds: string[];
+async function getMatchingBrowserIds(attrs: PersonaAttributes): Promise<{
+  browserIds: string[];
   matchCount: number;
 }> {
   const where = buildPersonaMatchQuery(attrs);
 
   const profiles = await db.demographicProfile.findMany({
     where,
-    select: { userId: true },
+    select: { browserId: true },
   });
 
   return {
-    userIds: profiles.map((p) => p.userId),
+    browserIds: profiles.map((p) => p.browserId),
     matchCount: profiles.length,
   };
 }
@@ -163,15 +166,15 @@ async function generateSimulatedFeed(
   attrs: PersonaAttributes,
   limit: number = 30
 ): Promise<{ videos: SimulatedFeedVideo[]; matchCount: number; insufficient: boolean }> {
-  const { userIds, matchCount } = await getMatchingUserIds(attrs);
+  const { browserIds, matchCount } = await getMatchingBrowserIds(attrs);
 
-  // Minimum threshold for meaningful simulation
-  if (matchCount < 10) {
+  // Minimum threshold for PoC (lower than production -- seeded profiles are limited)
+  if (matchCount < 2) {
     return { videos: [], matchCount, insufficient: true };
   }
 
-  // Aggregate: find videos that appear in matching users' recent feeds
-  // Rank by: frequency (how many matching users saw it) * recency weight
+  // Aggregate: find videos that appear in matching seeded profiles' recent feeds
+  // Rank by: frequency (how many matching profiles saw it) * recency weight
   const results = await db.$queryRaw<Array<{
     video_id: string;
     frequency: number;
@@ -180,17 +183,16 @@ async function generateSimulatedFeed(
   }>>`
     SELECT
       fi.video_id,
-      COUNT(DISTINCT fs.user_id) as frequency,
+      COUNT(DISTINCT fs.browser_id) as frequency,
       AVG(fi.position) as avg_position,
       MAX(fs.captured_at) as latest_capture
     FROM feed_items fi
     JOIN feed_snapshots fs ON fi.snapshot_id = fs.id
-    WHERE fs.user_id = ANY(${userIds}::uuid[])
-      AND fs.captured_at > NOW() - INTERVAL '30 days'
+    WHERE fs.browser_id = ANY(${browserIds}::uuid[])
+      AND fs.captured_at > NOW() - INTERVAL '90 days'
     GROUP BY fi.video_id
-    HAVING COUNT(DISTINCT fs.user_id) >= 2  -- Appears in at least 2 users' feeds
     ORDER BY
-      COUNT(DISTINCT fs.user_id) DESC,
+      COUNT(DISTINCT fs.browser_id) DESC,
       MAX(fs.captured_at) DESC
     LIMIT ${limit}
   `;
@@ -249,12 +251,15 @@ interface ComparisonResult {
 }
 
 async function compareFeedWithPersona(
-  userId: string,
+  browserId: string,
   personaAttrs: PersonaAttributes
 ): Promise<ComparisonResult> {
-  // Get user's latest feed
+  // Get browser's latest captured feed
+  const browser = await db.browser.findUnique({ where: { browserId } });
+  if (!browser) throw new Error('Browser not found');
+
   const latestSnapshot = await db.feedSnapshot.findFirst({
-    where: { userId },
+    where: { browserId: browser.id },
     orderBy: { capturedAt: 'desc' },
     include: {
       items: {
@@ -493,14 +498,15 @@ Return available preset personas.
 |------|-------------|-----------|-------------|-------------|
 | T7.1 | Persona selector component | `src/components/persona/persona-selector.tsx` | frontend-dev-expert | T1.1 |
 | T7.2 | Preset persona definitions | `src/lib/persona-presets.ts` | backend-solutions-engineer | None |
-| T7.3 | Persona matching query (dynamic WHERE) | `src/lib/persona-engine.ts` | backend-solutions-engineer | T1.3 |
-| T7.4 | Feed aggregation algorithm | `src/lib/persona-engine.ts` | backend-solutions-engineer | T7.3 |
-| T7.5 | GET /api/persona/simulate endpoint | `src/app/api/persona/simulate/route.ts` | backend-solutions-engineer | T7.4 |
-| T7.6 | Comparison engine | `src/lib/comparison.ts` | backend-solutions-engineer | T7.4 |
-| T7.7 | Simulated feed display component | `src/components/persona/simulated-feed.tsx` | frontend-dev-expert | T7.5 |
-| T7.8 | Side-by-side comparison view | `src/components/persona/comparison-view.tsx` | frontend-dev-expert | T7.6 |
-| T7.9 | Redis caching layer | `src/lib/persona-engine.ts` | backend-solutions-engineer | T7.5, T1.4 |
-| T7.10 | Insufficient data handling + sharing CTA | `src/components/persona/insufficient-data.tsx` | frontend-dev-expert | T7.7 |
+| T7.3 | Seed data script (5+ research profiles with feed data) | `prisma/seed.ts` | backend-solutions-engineer | T1.3 |
+| T7.4 | Persona matching query (dynamic WHERE, is_seed=true) | `src/lib/persona-engine.ts` | backend-solutions-engineer | T7.3 |
+| T7.5 | Feed aggregation algorithm | `src/lib/persona-engine.ts` | backend-solutions-engineer | T7.4 |
+| T7.6 | GET /api/persona/simulate endpoint | `src/app/api/persona/simulate/route.ts` | backend-solutions-engineer | T7.5 |
+| T7.7 | Comparison engine | `src/lib/comparison.ts` | backend-solutions-engineer | T7.5 |
+| T7.8 | Simulated feed display component | `src/components/persona/simulated-feed.tsx` | frontend-dev-expert | T7.6 |
+| T7.9 | Side-by-side comparison view | `src/components/persona/comparison-view.tsx` | frontend-dev-expert | T7.7 |
+| T7.10 | Redis caching layer | `src/lib/persona-engine.ts` | backend-solutions-engineer | T7.6, T1.4 |
+| T7.11 | Insufficient data handling with available personas | `src/components/persona/insufficient-data.tsx` | frontend-dev-expert | T7.8 |
 
 ## Testing Strategy
 

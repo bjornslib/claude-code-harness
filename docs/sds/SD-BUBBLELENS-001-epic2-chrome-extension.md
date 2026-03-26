@@ -152,11 +152,11 @@ function extractVideoId(href: string): string | null {
 
 ### Popup UI
 
-- **Authenticated state**: "Capture Feed" button, last capture timestamp, video count from last capture
-- **Unauthenticated state**: "Sign in to BubbleLens" link, extension explanation
+- **Ready state**: "Capture Feed" button, last capture timestamp, video count from last capture
 - **Capturing state**: Loading spinner, "Capturing..." text
-- **Success state**: Green checkmark, "Captured X videos", timestamp
+- **Success state**: Green checkmark, "Captured X videos", timestamp, link to dashboard
 - **Error state**: Red indicator, error message, "Retry" button
+- **Not on YouTube state**: "Navigate to youtube.com to capture your feed"
 
 ### Offline Storage & Sync
 
@@ -199,16 +199,26 @@ async function syncPendingCaptures(): Promise<void> {
 }
 ```
 
-### Authentication (`auth.ts`)
+### Anonymous Identity (`identity.ts`)
 
-The extension stores a Clerk session token obtained from the BubbleLens web app:
-1. User signs in on `bubblelens.app`
-2. Web app generates an extension auth token (long-lived JWT)
-3. User clicks "Connect Extension" button on web app, which uses `chrome.runtime.sendMessage` to pass the token to the extension (if installed)
-4. Extension stores token in `chrome.storage.local`
-5. Extension includes token in `Authorization: Bearer <token>` header on API calls
+No authentication for the PoC. The extension generates a persistent anonymous browser UUID:
 
-**Alternative flow**: Extension popup links to web app sign-in page with redirect back to extension.
+```typescript
+// src/lib/identity.ts
+async function getBrowserId(): Promise<string> {
+  const stored = await chrome.storage.local.get('browserId');
+  if (stored.browserId) return stored.browserId;
+
+  const browserId = crypto.randomUUID();
+  await chrome.storage.local.set({ browserId });
+  return browserId;
+}
+```
+
+- Generated on first extension install
+- Persists across browser sessions via `chrome.storage.local`
+- Included in every API request as `browserId` field in the JSON payload
+- No PII collected, no auth tokens, no login required
 
 ## Data Model
 
@@ -217,6 +227,7 @@ No new database tables. Extension sends data conforming to the `POST /api/feeds`
 **Request payload**:
 ```typescript
 interface FeedCapturePayload {
+  browserId: string; // Anonymous UUID generated on first install
   feedType: 'homepage' | 'up_next' | 'search';
   capturedAt: string; // ISO 8601
   videos: Array<{
@@ -232,8 +243,7 @@ interface FeedCapturePayload {
 ## API Design
 
 Extension is an API consumer only. It calls:
-- `POST /api/feeds` (Epic 4) — submit captured feed
-- `GET /api/auth/extension-token` (Epic 3) — get extension auth token after web login
+- `POST /api/feeds` (Epic 3) — submit captured feed with anonymous browserId
 
 ## Task Breakdown
 
@@ -241,11 +251,11 @@ Extension is an API consumer only. It calls:
 |------|-------------|-----------|-------------|-------------|
 | T2.1 | Extension project setup | `extension/manifest.json`, `extension/package.json`, `extension/webpack.config.js`, `extension/tsconfig.json` | frontend-dev-expert | T1.1 |
 | T2.2 | DOM parser with primary + fallback selectors | `extension/src/content/parser.ts` | frontend-dev-expert | T2.1 |
-| T2.3 | Popup UI (capture button, status, auth states) | `extension/src/popup/*` | frontend-dev-expert | T2.1 |
+| T2.3 | Popup UI (capture button, status display) | `extension/src/popup/*` | frontend-dev-expert | T2.1 |
 | T2.4 | Message passing (popup <-> content script <-> service worker) | `extension/src/content/content-script.ts`, `extension/src/background/service-worker.ts` | frontend-dev-expert | T2.2, T2.3 |
-| T2.5 | Offline capture storage | `extension/src/lib/storage.ts` | frontend-dev-expert | T2.4 |
-| T2.6 | Sync mechanism with retry | `extension/src/background/service-worker.ts`, `extension/src/lib/api-client.ts` | frontend-dev-expert | T2.5 |
-| T2.7 | Auth state check + token management | `extension/src/lib/auth.ts`, `extension/src/lib/api-client.ts` | frontend-dev-expert | T2.4 |
+| T2.5 | Anonymous browser UUID generation + persistence | `extension/src/lib/identity.ts` | frontend-dev-expert | T2.1 |
+| T2.6 | Offline capture storage | `extension/src/lib/storage.ts` | frontend-dev-expert | T2.4 |
+| T2.7 | Sync mechanism with retry | `extension/src/background/service-worker.ts`, `extension/src/lib/api-client.ts` | frontend-dev-expert | T2.6 |
 | T2.8 | Build + package for Chrome Web Store | `extension/webpack.config.js`, build scripts | frontend-dev-expert | T2.1-T2.7 |
 
 ## Testing Strategy

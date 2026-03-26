@@ -63,13 +63,20 @@ import { db } from '@/lib/db';
 import { DashboardClient } from '@/components/dashboard/dashboard-client';
 import { EmptyState } from '@/components/dashboard/empty-state';
 
-export default async function DashboardPage() {
-  const { userId } = await auth();
-  const user = await db.user.findUnique({ where: { clerkId: userId! } });
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: { browserId?: string };
+}) {
+  const browserId = searchParams.browserId;
+  if (!browserId) return <EmptyState />;
+
+  const browser = await db.browser.findUnique({ where: { browserId } });
+  if (!browser) return <EmptyState />;
 
   // Fetch latest feed snapshot with items and video metadata
   const latestFeed = await db.feedSnapshot.findFirst({
-    where: { userId: user!.id },
+    where: { browserId: browser.id },
     orderBy: { capturedAt: 'desc' },
     include: {
       items: {
@@ -89,7 +96,7 @@ export default async function DashboardPage() {
 
   // Fetch feed history for selector
   const feedHistory = await db.feedSnapshot.findMany({
-    where: { userId: user!.id },
+    where: { browserId: browser.id },
     orderBy: { capturedAt: 'desc' },
     take: 20,
     select: { id: true, capturedAt: true, _count: { select: { items: true } } },
@@ -292,7 +299,7 @@ No new API endpoints needed for this epic.
 
 | Task | Description | File Scope | Worker Type | Dependencies |
 |------|-------------|-----------|-------------|-------------|
-| T8.1 | Dashboard layout (responsive grid) | `src/app/(dashboard)/layout.tsx`, `src/app/(dashboard)/page.tsx` | frontend-dev-expert | T1.1, T3.1 |
+| T8.1 | Dashboard layout (responsive grid) | `src/app/(dashboard)/layout.tsx`, `src/app/(dashboard)/page.tsx` | frontend-dev-expert | T1.1 |
 | T8.2 | VideoCard component with classification overlays | `src/components/dashboard/video-card.tsx` | frontend-dev-expert | T8.1 |
 | T8.3 | Topic distribution chart (Recharts radar) | `src/components/dashboard/topic-chart.tsx` | frontend-dev-expert | T8.1 |
 | T8.4 | Political leaning spectrum chart (Recharts bar) | `src/components/dashboard/political-spectrum.tsx` | frontend-dev-expert | T8.1 |

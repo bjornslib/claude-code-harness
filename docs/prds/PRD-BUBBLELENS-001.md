@@ -36,17 +36,18 @@ All demographic data is opt-in, anonymized, and deletable. No PII is linked to f
 
 ## MVP Phasing Strategy
 
-The product is divided into two phases to reach MVP launch:
+The product is divided into two phases to reach a proof-of-concept MVP. Auth and onboarding are deferred to reduce complexity -- the PoC uses anonymous browser-generated IDs and seeded demographic profiles.
 
 | Phase | Name | Focus | Outcome |
 |-------|------|-------|---------|
-| **Phase 1** | Data Foundation | Extension + Auth + Feed Ingestion + Storage | Users can capture their YouTube feed and submit demographic profile |
-| **Phase 2** | Walk in Their Shoes MVP | Classification + Persona Engine + Dashboard | Users can simulate feeds for different personas and see their own feed analyzed |
+| **Phase 1** | Data Foundation | Extension + Feed Ingestion + Storage (no auth) | Users can capture their YouTube feed via the extension; feeds stored with anonymous browser IDs |
+| **Phase 2** | Walk in Their Shoes MVP | Classification + Persona Engine + Dashboard | Users can simulate feeds for different personas using seeded demographic profiles |
 
 Post-MVP phases (not in scope for this PRD):
-- Phase 3: Bubble Score, weekly digests, comparison engine
-- Phase 4: Multi-platform expansion (TikTok, Instagram, X)
-- Phase 5: Research API and institutional licensing
+- Phase 3: User authentication (Clerk), onboarding survey, real demographic profiles
+- Phase 4: Bubble Score, weekly digests, comparison engine
+- Phase 5: Multi-platform expansion (TikTok, Instagram, X)
+- Phase 6: Research API and institutional licensing
 
 ---
 
@@ -75,35 +76,23 @@ Build a Manifest V3 Chrome extension that captures YouTube homepage video recomm
 - AC-2.5: Extension handles YouTube DOM changes gracefully with fallback selectors
 - AC-2.6: Extension stores captures locally when offline and syncs when connection is restored
 
-### Epic 3: User Authentication & Onboarding Survey
+### Epic 3: Feed Ingestion API & Storage
 
-Implement user signup/login with Clerk and a demographic onboarding survey.
-
-**Acceptance Criteria:**
-- AC-3.1: Users can sign up and log in via Clerk (email + Google OAuth)
-- AC-3.2: Onboarding survey presents 7 optional demographic fields: political leaning (5-point scale), country/region, age range, primary interests (multi-select), ethnicity (multi-select, optional), gender (optional), sexual orientation (optional)
-- AC-3.3: All survey fields display "Prefer not to say" option
-- AC-3.4: Survey responses are stored with anonymous user IDs only -- no PII linkage
-- AC-3.5: Users can update or delete their demographic profile at any time
-- AC-3.6: Privacy policy and data handling explanation are shown before survey
-
-### Epic 4: Feed Ingestion API & Storage
-
-Build the API routes to receive feed captures from the extension and store them in the database.
+Build the API routes to receive feed captures from the extension and store them in the database. No authentication for the PoC -- users are identified by anonymous browser-generated UUIDs.
 
 **Acceptance Criteria:**
-- AC-4.1: `POST /api/feeds` endpoint accepts feed capture JSON from the extension
-- AC-4.2: Feed snapshots are stored in `feed_snapshots` table with timestamp and feed type
-- AC-4.3: Individual videos are normalized into `feed_items` table with position and context
-- AC-4.4: API validates payload structure and rejects malformed data with descriptive errors
-- AC-4.5: Rate limiting prevents abuse (max 10 captures per user per hour)
-- AC-4.6: API requires authenticated session (Clerk JWT validation)
+- AC-3.1: `POST /api/feeds` endpoint accepts feed capture JSON from the extension
+- AC-3.2: Feed snapshots are stored in `feed_snapshots` table with timestamp, feed type, and anonymous browser ID
+- AC-3.3: Individual videos are normalized into `feed_items` table with position and context
+- AC-3.4: API validates payload structure and rejects malformed data with descriptive errors
+- AC-3.5: Rate limiting prevents abuse (max 10 captures per IP per hour)
+- AC-3.6: Anonymous browser ID is generated client-side (UUID v4) and persisted in chrome.storage
 
 ---
 
 ## Phase 2: Walk in Their Shoes MVP
 
-### Epic 5: Video Metadata Enrichment Pipeline
+### Epic 4: Video Metadata Enrichment Pipeline
 
 Enrich captured video IDs with metadata from the YouTube Data API v3.
 
@@ -114,7 +103,7 @@ Enrich captured video IDs with metadata from the YouTube Data API v3.
 - AC-5.4: Videos already enriched are skipped (deduplication by `video_id`)
 - AC-5.5: Enrichment job runs on a schedule (QStash cron) and processes in batches of 50
 
-### Epic 6: Content Classification Pipeline
+### Epic 5: Content Classification Pipeline
 
 Classify enriched videos along political, topic, and diversity axes using AI.
 
@@ -126,19 +115,19 @@ Classify enriched videos along political, topic, and diversity axes using AI.
 - AC-6.5: Classification achieves >75% agreement with human annotators on a 200-video test set
 - AC-6.6: Classification runs as a background job, processing newly enriched videos
 
-### Epic 7: Persona Engine - "Walk in Their Shoes" Simulation
+### Epic 6: Persona Engine - "Walk in Their Shoes" Simulation
 
-Build the core differentiating feature: users select a demographic persona and see a simulated feed.
+Build the core differentiating feature: users select a demographic persona and see a simulated feed. For the PoC, demographic profiles are seeded from research accounts and manually tagged -- not collected via user surveys.
 
 **Acceptance Criteria:**
-- AC-7.1: User can select persona attributes via interactive controls: political leaning, sexual orientation, gender, ethnicity, age range, country/region
-- AC-7.2: System aggregates feed data from real users matching the selected persona attributes
-- AC-7.3: Simulated feed displays 20-40 videos with title, channel, thumbnail, and classification overlay (political leaning badge, topic tags)
-- AC-7.4: If insufficient data exists for a persona combination (<10 matching users), system displays a "Not enough data yet" message with an invitation to contribute
-- AC-7.5: User can compare their own feed side-by-side with the simulated persona feed
-- AC-7.6: Comparison highlights content overlap (videos appearing in both feeds) and divergence (unique to each)
+- AC-6.1: User can select persona attributes via interactive controls: political leaning, sexual orientation, gender, ethnicity, age range, country/region
+- AC-6.2: System aggregates feed data from seeded demographic profiles matching the selected persona attributes
+- AC-6.3: Simulated feed displays 20-40 videos with title, channel, thumbnail, and classification overlay (political leaning badge, topic tags)
+- AC-6.4: Database is seeded with at least 5 distinct demographic profiles with captured feed data for demonstration
+- AC-6.5: User can compare their own captured feed side-by-side with the simulated persona feed
+- AC-6.6: Comparison highlights content overlap (videos appearing in both feeds) and divergence (unique to each)
 
-### Epic 8: Dashboard & Visualization
+### Epic 7: Dashboard & Visualization
 
 Build the user-facing dashboard displaying feed analysis, persona simulation, and comparisons.
 
@@ -156,17 +145,18 @@ Build the user-facing dashboard displaying feed analysis, persona simulation, an
 ## Data Model (Core Tables)
 
 ```sql
--- Users (anonymous profiles)
-users: id (UUID PK), clerk_id (TEXT UNIQUE), created_at (TIMESTAMPTZ)
+-- Anonymous browser sessions (no auth for PoC)
+browsers: id (UUID PK), browser_id (TEXT UNIQUE), created_at (TIMESTAMPTZ)
 
--- Demographic profiles (all fields optional)
-demographic_profiles: user_id (UUID PK FK), political_leaning (SMALLINT 1-5),
-  country (TEXT), region (TEXT), age_range (TEXT), gender (TEXT),
-  sexual_orientation (TEXT), ethnicity (TEXT[]), interests (TEXT[]),
+-- Seeded demographic profiles (manually tagged for PoC, no user survey)
+demographic_profiles: id (UUID PK), browser_id (UUID FK), label (TEXT),
+  political_leaning (SMALLINT 1-5), country (TEXT), region (TEXT),
+  age_range (TEXT), gender (TEXT), sexual_orientation (TEXT),
+  ethnicity (TEXT[]), interests (TEXT[]), is_seed (BOOLEAN DEFAULT false),
   updated_at (TIMESTAMPTZ)
 
 -- Feed snapshots
-feed_snapshots: id (UUID PK), user_id (UUID FK), captured_at (TIMESTAMPTZ),
+feed_snapshots: id (UUID PK), browser_id (UUID FK), captured_at (TIMESTAMPTZ),
   feed_type (TEXT), raw_data (JSONB)
 
 -- Individual feed items (normalized)
@@ -196,7 +186,7 @@ comparisons: id (UUID PK), persona_a (JSONB), persona_b (JSONB),
 | Frontend | Next.js 14+ (App Router) + React + TypeScript | SSR for marketing; React for interactive dashboard |
 | UI Components | shadcn/ui + Tailwind CSS | Fast, accessible, professional |
 | Data Visualization | Recharts + D3.js | Recharts for standard charts; D3 for custom bubble visualizations |
-| Auth | Clerk + Google OAuth | Clerk for auth management; Google OAuth for optional YouTube linking |
+| Auth | Deferred (anonymous browser IDs for PoC) | Clerk + Google OAuth planned for post-MVP Phase 3 |
 | Backend/API | Next.js API Routes (Route Handlers) | Single deployable unit; extract later if needed |
 | Database | Neon PostgreSQL (serverless) | Scales to zero; branching for dev/staging; connection pooling |
 | ORM | Prisma | Type-safe queries; excellent Next.js integration |
@@ -235,9 +225,9 @@ comparisons: id (UUID PK), persona_a (JSONB), persona_b (JSONB),
 |------|--------|-------------|
 | Epic 1: Project Scaffolding | Not Started | 2026-03-26 |
 | Epic 2: Chrome Extension | Not Started | 2026-03-26 |
-| Epic 3: Auth & Onboarding | Not Started | 2026-03-26 |
-| Epic 4: Feed Ingestion API | Not Started | 2026-03-26 |
-| Epic 5: Video Metadata Enrichment | Not Started | 2026-03-26 |
-| Epic 6: Content Classification | Not Started | 2026-03-26 |
-| Epic 7: Persona Engine | Not Started | 2026-03-26 |
-| Epic 8: Dashboard & Visualization | Not Started | 2026-03-26 |
+| Epic 3: Feed Ingestion API | Not Started | 2026-03-26 |
+| Epic 4: Video Metadata Enrichment | Not Started | 2026-03-26 |
+| Epic 5: Content Classification | Not Started | 2026-03-26 |
+| Epic 6: Persona Engine | Not Started | 2026-03-26 |
+| Epic 7: Dashboard & Visualization | Not Started | 2026-03-26 |
+| ~~Auth & Onboarding~~ | Deferred to post-MVP | 2026-03-26 |

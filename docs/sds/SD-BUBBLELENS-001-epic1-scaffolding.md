@@ -24,13 +24,13 @@ This epic establishes the foundational infrastructure for BubbleLens: a Next.js 
 Repository: bubblelens/
 ├── src/
 │   ├── app/                    # Next.js App Router
-│   │   ├── (auth)/             # Auth-related pages (sign-in, sign-up)
-│   │   ├── (dashboard)/        # Protected dashboard routes
+│   │   ├── (dashboard)/        # Dashboard routes (no auth for PoC)
 │   │   ├── (marketing)/        # Public marketing/landing pages
 │   │   ├── api/                # API Route Handlers
 │   │   │   ├── feeds/          # Feed ingestion endpoints
-│   │   │   ├── profile/        # Demographic profile endpoints
-│   │   │   └── persona/        # Persona simulation endpoints
+│   │   │   ├── persona/        # Persona simulation endpoints
+│   │   │   ├── admin/          # Admin endpoints (enrichment/classification status)
+│   │   │   └── jobs/           # QStash background job endpoints
 │   │   ├── layout.tsx          # Root layout with providers
 │   │   └── page.tsx            # Landing page
 │   ├── components/             # Shared React components
@@ -65,8 +65,8 @@ Repository: bubblelens/
 - **Framework**: Next.js 14+ with App Router, React Server Components where possible
 - **Language**: TypeScript (strict mode)
 - **Styling**: Tailwind CSS v3 with shadcn/ui component library
-- **Route Groups**: `(auth)` for login/signup, `(dashboard)` for protected pages, `(marketing)` for public pages
-- **Middleware**: Clerk authentication middleware protecting `(dashboard)` routes
+- **Route Groups**: `(dashboard)` for app pages, `(marketing)` for public pages
+- **Middleware**: None for PoC (no auth). Auth middleware added in post-MVP Phase 3.
 
 ### Database (Neon PostgreSQL)
 
@@ -89,19 +89,23 @@ datasource db {
   directUrl = env("DIRECT_DATABASE_URL")
 }
 
-model User {
+// Anonymous browser sessions (no auth for PoC)
+model Browser {
   id        String   @id @default(uuid()) @db.Uuid
-  clerkId   String   @unique @map("clerk_id")
+  browserId String   @unique @map("browser_id") // UUID generated client-side
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   demographicProfile DemographicProfile?
   feedSnapshots      FeedSnapshot[]
 
-  @@map("users")
+  @@map("browsers")
 }
 
+// Demographic profiles (seeded from research accounts for PoC)
 model DemographicProfile {
-  userId            String   @id @map("user_id") @db.Uuid
+  id                String   @id @default(uuid()) @db.Uuid
+  browserId         String   @unique @map("browser_id") @db.Uuid
+  label             String?  // Human-readable label, e.g. "Left-leaning Gay Male 25-34"
   politicalLeaning  Int?     @map("political_leaning") @db.SmallInt
   country           String?
   region            String?
@@ -110,22 +114,23 @@ model DemographicProfile {
   sexualOrientation String?  @map("sexual_orientation")
   ethnicity         String[] @default([])
   interests         String[] @default([])
+  isSeed            Boolean  @default(false) @map("is_seed") // true for research accounts
   updatedAt         DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  browser Browser @relation(fields: [browserId], references: [id], onDelete: Cascade)
 
   @@map("demographic_profiles")
 }
 
 model FeedSnapshot {
   id         String   @id @default(uuid()) @db.Uuid
-  userId     String   @map("user_id") @db.Uuid
+  browserId  String   @map("browser_id") @db.Uuid
   capturedAt DateTime @default(now()) @map("captured_at") @db.Timestamptz
   feedType   String   @map("feed_type")
   rawData    Json     @map("raw_data")
 
-  user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  items FeedItem[]
+  browser Browser    @relation(fields: [browserId], references: [id], onDelete: Cascade)
+  items   FeedItem[]
 
   @@map("feed_snapshots")
 }
@@ -183,10 +188,10 @@ model Comparison {
 
 - **Client**: `@upstash/redis` (REST-based, works in serverless)
 - **Use Cases**:
-  - Rate limiting: sliding window counters per user
-  - Session cache: Clerk session tokens
+  - Rate limiting: sliding window counters per IP (no auth for PoC)
   - Enrichment quota: daily YouTube API quota counter
   - Persona simulation cache: keyed by attribute hash, TTL 1 hour
+  - Channel classification cache: aggregate leaning per channel
 
 ### QStash (Background Jobs)
 
@@ -218,9 +223,11 @@ jobs:
 
 See Prisma schema above. Key design decisions:
 - **UUID primary keys** for all tables (no sequential IDs that leak information)
-- **Cascading deletes** from User to DemographicProfile and FeedSnapshot (user deletion removes all data)
-- **Video table is shared** across all users -- a video exists once, referenced by many FeedItems
-- **JSONB for raw_data and persona attributes** -- flexible schema for evolving feed capture format
+- **Browser model replaces User** -- anonymous browser-generated UUIDs, no auth needed for PoC
+- **Seeded demographic profiles** -- `is_seed: true` flag distinguishes research accounts from future real users
+- **Cascading deletes** from Browser to DemographicProfile and FeedSnapshot
+- **Video table is shared** across all browsers -- a video exists once, referenced by many FeedItems
+- **JSONB for raw_data** -- flexible schema for evolving feed capture format
 
 ## API Design
 

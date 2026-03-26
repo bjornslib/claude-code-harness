@@ -1,7 +1,7 @@
 ---
 title: "BubbleLens Phase 1 - Data Foundation & Infrastructure"
-description: "Chrome extension, authentication, feed ingestion, and cloud infrastructure for the BubbleLens platform"
-version: "1.0.0"
+description: "Chrome extension, anonymous feed ingestion, and cloud infrastructure for the BubbleLens PoC"
+version: "1.1.0"
 last-updated: 2026-03-26
 status: draft
 type: prd
@@ -13,7 +13,7 @@ prd_id: PRD-BUBBLELENS-P1-001
 
 ## Overview
 
-Phase 1 establishes the complete data collection pipeline for BubbleLens: a Chrome extension that captures YouTube homepage recommendations, user authentication with demographic profiling, and a backend API that ingests, normalizes, and stores feed data. At the end of Phase 1, users can install the extension, create an account, fill out their demographic profile, and capture their YouTube feed -- building the dataset that powers Phase 2's "Walk in Their Shoes" feature.
+Phase 1 establishes the data collection pipeline for the BubbleLens proof of concept: a Chrome extension that captures YouTube homepage recommendations and a backend API that ingests, normalizes, and stores feed data. No user authentication -- the PoC uses anonymous browser-generated UUIDs to identify sessions. At the end of Phase 1, anyone can install the extension, capture their YouTube feed, and the data is stored for Phase 2's analysis and persona simulation.
 
 **Parent PRD**: PRD-BUBBLELENS-001
 **Depends On**: Nothing (greenfield)
@@ -24,14 +24,11 @@ Phase 1 establishes the complete data collection pipeline for BubbleLens: a Chro
 ### Goal 1: Reliable Feed Capture
 The Chrome extension captures 95%+ of visible YouTube homepage video recommendations accurately and sends them to the backend within 3 seconds.
 
-### Goal 2: Frictionless Onboarding
-Users can sign up, install the extension, and complete their demographic profile in under 5 minutes. All demographic fields are optional with clear privacy explanations.
+### Goal 2: Zero-Friction Data Collection
+No signup, no login, no survey. Install extension, click "Capture Feed", done. Anonymous browser IDs handle identity.
 
 ### Goal 3: Scalable Data Ingestion
-The backend reliably ingests, validates, and stores feed captures with rate limiting and error handling, ready to support thousands of concurrent users.
-
-### Goal 4: Privacy-First Architecture
-No PII is linked to feed data. Demographic profiles are anonymized. Users can delete all their data at any time. GDPR-compliant from day one.
+The backend reliably ingests, validates, and stores feed captures with rate limiting and error handling.
 
 ---
 
@@ -58,9 +55,9 @@ Feature: Project Infrastructure
     And connection pooling handles concurrent serverless function connections
 
   Scenario: Schema migrations work
-    Given Prisma schema with all core tables defined
+    Given Prisma schema with core tables defined
     When I run prisma migrate deploy
-    Then all tables (users, demographic_profiles, feed_snapshots, feed_items, videos, comparisons) are created
+    Then all tables (browsers, demographic_profiles, feed_snapshots, feed_items, videos) are created
     And foreign key relationships are enforced
 
   Scenario: CI pipeline catches issues
@@ -79,8 +76,8 @@ Feature: Project Infrastructure
 ### Task Breakdown
 - T1.1: Initialize Next.js 14+ App Router project with TypeScript, ESLint, Prettier
 - T1.2: Provision Neon PostgreSQL database with dev/staging/production branches
-- T1.3: Configure Prisma ORM with initial schema migration (all 6 core tables)
-- T1.4: Set up Upstash Redis for rate limiting and session cache
+- T1.3: Configure Prisma ORM with initial schema migration (core tables, no auth)
+- T1.4: Set up Upstash Redis for rate limiting and caching
 - T1.5: Configure Vercel deployment with environment variables
 - T1.6: Set up GitHub Actions CI pipeline (lint, type-check, test)
 - T1.7: Configure Upstash QStash for background job scheduling
@@ -90,7 +87,7 @@ Feature: Project Infrastructure
 ## Epic 2: Chrome Extension - Feed Capture
 
 ### Description
-Build a Manifest V3 Chrome extension that injects a content script on YouTube pages, parses the homepage video grid, and sends structured feed data to the BubbleLens API.
+Build a Manifest V3 Chrome extension that injects a content script on YouTube pages, parses the homepage video grid, and sends structured feed data to the BubbleLens API. No auth required -- the extension generates an anonymous browser UUID on first install.
 
 ### Acceptance Criteria
 
@@ -108,7 +105,14 @@ Feature: YouTube Feed Capture
     Given a successful feed capture with 30 videos
     When the capture completes
     Then structured JSON is sent to POST /api/feeds within 3 seconds
+    And the request includes the anonymous browser UUID
     And the response confirms successful storage
+
+  Scenario: Anonymous browser identity
+    Given I install the extension for the first time
+    Then the extension generates a UUID v4 and stores it in chrome.storage.local
+    And all subsequent captures include this UUID
+    And the UUID persists across browser sessions
 
   Scenario: Extension handles DOM changes
     Given YouTube has updated its DOM structure
@@ -121,12 +125,6 @@ Feature: YouTube Feed Capture
     When I click "Capture Feed"
     Then the capture is stored locally in chrome.storage
     And when connectivity is restored, pending captures sync automatically
-
-  Scenario: Extension requires authentication
-    Given I am not logged into BubbleLens
-    When I open the extension popup
-    Then I see a "Sign in to BubbleLens" prompt with a link to the web app
-    And the "Capture Feed" button is disabled
 ```
 
 ### Task Breakdown
@@ -134,97 +132,17 @@ Feature: YouTube Feed Capture
 - T2.2: Implement content script DOM parser for `ytd-rich-item-renderer` with fallback selectors
 - T2.3: Build popup UI with "Capture Feed" button, status display, and capture count
 - T2.4: Implement message passing between content script, popup, and service worker
-- T2.5: Add offline capture storage using chrome.storage API
-- T2.6: Implement sync mechanism with retry logic for pending captures
-- T2.7: Add authentication state check (validate Clerk session token)
+- T2.5: Implement anonymous browser UUID generation and persistence (chrome.storage.local)
+- T2.6: Add offline capture storage using chrome.storage API
+- T2.7: Implement sync mechanism with retry logic for pending captures
 - T2.8: Package extension for Chrome Web Store submission
 
 ---
 
-## Epic 3: User Authentication & Onboarding Survey
+## Epic 3: Feed Ingestion API & Storage
 
 ### Description
-Implement Clerk-based authentication with Google OAuth and a demographic onboarding survey where all fields are optional and privacy-first.
-
-### Acceptance Criteria
-
-```gherkin
-Feature: User Authentication
-
-  Scenario: Email signup
-    Given I am on the BubbleLens signup page
-    When I enter my email and password
-    Then a Clerk account is created
-    And I am redirected to the onboarding survey
-
-  Scenario: Google OAuth signup
-    Given I am on the BubbleLens signup page
-    When I click "Sign in with Google"
-    Then I complete Google OAuth flow
-    And a Clerk account is created linked to my Google account
-
-  Scenario: Returning user login
-    Given I have an existing BubbleLens account
-    When I log in with my credentials
-    Then I am redirected to the dashboard (not onboarding)
-
-Feature: Demographic Onboarding Survey
-
-  Scenario: Survey presentation
-    Given I have just signed up
-    When I land on the onboarding survey page
-    Then I see a privacy explanation at the top
-    And I see 7 demographic fields, each marked as optional
-    And each field has a "Prefer not to say" option
-
-  Scenario: Survey fields
-    Given I am on the onboarding survey
-    Then I see the following fields:
-      | Field | Type | Options |
-      | Political leaning | 5-point scale | Strong Left, Left, Center, Right, Strong Right, Prefer not to say |
-      | Country/Region | Dropdown | Major countries + regions |
-      | Age range | Radio | 18-24, 25-34, 35-44, 45-54, 55+, Prefer not to say |
-      | Primary interests | Multi-select | Politics, Tech, Entertainment, Sports, Education, News, Science, Music, Gaming, Other |
-      | Ethnicity | Multi-select, optional | Common categories + Prefer not to say |
-      | Gender | Radio, optional | Male, Female, Non-binary, Other, Prefer not to say |
-      | Sexual orientation | Radio, optional | Straight, Gay, Lesbian, Bisexual, Other, Prefer not to say |
-
-  Scenario: Skip survey entirely
-    Given I am on the onboarding survey
-    When I click "Skip for now"
-    Then I am redirected to the dashboard
-    And no demographic profile is created
-    And I can fill it out later from settings
-
-  Scenario: Anonymous storage
-    Given I submit the onboarding survey
-    Then my responses are stored with my anonymous user UUID only
-    And no PII (name, email) is stored in the demographic_profiles table
-
-  Scenario: Profile management
-    Given I have a demographic profile
-    When I go to Settings > My Profile
-    Then I can update any field
-    And I can delete my entire profile
-    And deletion is immediate and permanent
-```
-
-### Task Breakdown
-- T3.1: Integrate Clerk SDK with Next.js App Router (middleware, providers, sign-in/sign-up pages)
-- T3.2: Configure Google OAuth provider in Clerk dashboard
-- T3.3: Build onboarding survey page with all 7 demographic fields
-- T3.4: Implement survey submission API route (`POST /api/profile`)
-- T3.5: Build profile management page (view, update, delete)
-- T3.6: Add privacy policy page and data handling explanation
-- T3.7: Implement user data deletion endpoint (`DELETE /api/profile`)
-- T3.8: Add onboarding flow routing (new users -> survey, returning users -> dashboard)
-
----
-
-## Epic 4: Feed Ingestion API & Storage
-
-### Description
-Build the API layer that receives feed captures from the Chrome extension, validates them, normalizes them into the database, and provides rate limiting.
+Build the API layer that receives feed captures from the Chrome extension, validates them, normalizes them into the database, and provides rate limiting. No authentication -- uses anonymous browser IDs from the extension.
 
 ### Acceptance Criteria
 
@@ -232,10 +150,11 @@ Build the API layer that receives feed captures from the Chrome extension, valid
 Feature: Feed Ingestion API
 
   Scenario: Successful feed ingestion
-    Given I am authenticated
-    And I send a valid feed capture JSON to POST /api/feeds
+    Given I send a valid feed capture JSON to POST /api/feeds
+    And the request includes an anonymous browser UUID
     When the API processes the request
-    Then a feed_snapshot record is created with timestamp and feed_type
+    Then a browser record is created (or found) for the UUID
+    And a feed_snapshot record is created with timestamp and feed_type
     And each video in the feed creates a feed_items record with video_id, position, and context
     And the response returns 201 with the snapshot ID
 
@@ -246,15 +165,10 @@ Feature: Feed Ingestion API
     And no records are created in the database
 
   Scenario: Rate limiting
-    Given I have already submitted 10 feed captures in the past hour
+    Given I have already submitted 10 feed captures from the same IP in the past hour
     When I submit another capture
     Then the API returns 429 Too Many Requests
     And includes a Retry-After header
-
-  Scenario: Authentication required
-    Given I am not authenticated
-    When I send a feed capture to POST /api/feeds
-    Then the API returns 401 Unauthorized
 
   Scenario: Duplicate video handling
     Given a feed capture contains a video_id already in the videos table
@@ -263,21 +177,21 @@ Feature: Feed Ingestion API
     And no duplicate video record is created
 
   Scenario: Feed retrieval
-    Given I have captured 5 feeds
-    When I call GET /api/feeds
+    Given I have captured 5 feeds with browser UUID "abc-123"
+    When I call GET /api/feeds?browserId=abc-123
     Then I receive my feed snapshots ordered by most recent
     And each snapshot includes a video count
 ```
 
 ### Task Breakdown
-- T4.1: Build `POST /api/feeds` route handler with Clerk JWT validation
-- T4.2: Implement request payload validation (Zod schema)
-- T4.3: Implement feed snapshot creation and feed item normalization (Prisma transaction)
-- T4.4: Set up Upstash Redis rate limiting middleware (10 captures/user/hour)
-- T4.5: Build `GET /api/feeds` endpoint for listing user's feed snapshots
-- T4.6: Build `GET /api/feeds/[id]` endpoint for retrieving a specific feed with items
-- T4.7: Add error handling and logging for ingestion failures
-- T4.8: Write integration tests for all API endpoints
+- T3.1: Build `POST /api/feeds` route handler (no auth, accepts browser UUID)
+- T3.2: Implement request payload validation (Zod schema)
+- T3.3: Implement browser record upsert + feed snapshot creation + feed item normalization (Prisma transaction)
+- T3.4: Set up Upstash Redis rate limiting middleware (10 captures/IP/hour)
+- T3.5: Build `GET /api/feeds` endpoint for listing feed snapshots by browser ID
+- T3.6: Build `GET /api/feeds/[id]` endpoint for retrieving a specific feed with items
+- T3.7: Add error handling and logging for ingestion failures
+- T3.8: Write integration tests for all API endpoints
 
 ---
 
@@ -289,11 +203,10 @@ Feature: Feed Ingestion API
 - API response time <200ms for feed retrieval
 
 ### Security
-- All API routes require Clerk JWT authentication
-- Rate limiting on all mutation endpoints
+- Rate limiting on all mutation endpoints (IP-based for PoC)
 - Input validation on all API routes (Zod schemas)
 - CORS configured for extension and web app domains only
-- No PII in database tables beyond Clerk user ID reference
+- No PII collected or stored
 
 ### Scalability
 - Neon PostgreSQL connection pooling for serverless functions
@@ -308,5 +221,4 @@ Feature: Feed Ingestion API
 |------|--------|-------------|
 | Epic 1: Project Scaffolding | Not Started | 2026-03-26 |
 | Epic 2: Chrome Extension | Not Started | 2026-03-26 |
-| Epic 3: Auth & Onboarding | Not Started | 2026-03-26 |
-| Epic 4: Feed Ingestion API | Not Started | 2026-03-26 |
+| Epic 3: Feed Ingestion API | Not Started | 2026-03-26 |
