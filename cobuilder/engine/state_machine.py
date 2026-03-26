@@ -7,6 +7,10 @@ transitions for nodes matching a specific shape/handler combination.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from cobuilder.templates.manifest import StateMachineConstraint
 
 
 class ConstraintViolation(Exception):

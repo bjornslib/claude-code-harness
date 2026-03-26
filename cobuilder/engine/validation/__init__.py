@@ -17,6 +17,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from cobuilder.engine.graph import Graph
 
 
 # ---------------------------------------------------------------------------
@@ -183,7 +187,7 @@ class ValidationError(Exception):
 # Convenience re-exports
 # ---------------------------------------------------------------------------
 
-def validate_graph(graph: "Graph") -> ValidationResult:  # type: ignore[name-defined]
+def validate_graph(graph: Graph) -> ValidationResult:
     """Run the full 13-rule validation suite against *graph*.
 
     Convenience wrapper around ``Validator(graph).run()``.
