@@ -3,13 +3,14 @@ template:
   version: "2.0"
   description: >
     Self-driving CoBuilder Guardian lifecycle: research -> refine (with AT/HR gates) ->
-    plan (with AT/HR gates) -> execute (with AT/HR gates) -> close.
+    plan (with AT/HR gates) -> execute -> lint check -> validate (with AT/HR gates) -> close.
     Each codergen node has downstream wait.cobuilder + wait.human gates.
-    Passes strict validator. v2.0 removes cyclic evaluate loop and manager_loop
-    in favor of linear validated pipeline with guardian-level cycle management.
+    Lint check (ruff + pylint) runs between execute and validation, using the target
+    repo's own ruff.toml. Enabled by default; disable with enable_lint_check=false.
+    Passes strict validator. v2.1 adds lint enforcement node (PRD-LINT-ENFORCEMENT-001 E1).
   topology: linear
   min_nodes: 14
-  max_nodes: 18
+  max_nodes: 19
 
 parameters:
   initiative_id:
@@ -69,6 +70,16 @@ parameters:
     required: false
     default: ""
     description: "Comma-separated framework/topic queries for research node"
+  enable_lint_check:
+    type: boolean
+    required: false
+    default: true
+    description: "Insert a lint check (ruff + pylint) tool node between execute and validation. Runs against the target repo's ruff.toml config."
+  model_lint:
+    type: string
+    required: false
+    default: "anthropic-fast"
+    description: "Model for lint check node (Haiku recommended — mechanical task)"
 
 defaults:
   llm_profile: "anthropic-fast"

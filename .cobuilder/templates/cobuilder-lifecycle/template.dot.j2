@@ -185,7 +185,33 @@ digraph "cobuilder-{{ initiative_id }}" {
     ];
 
     hr_plan -> execute [label="approved"];
+{% if enable_lint_check | default(true) %}
+    // ================================================================
+    // LINT CHECK — ruff + optional pylint on changed files
+    // Runs in target_dir using the repo's own ruff.toml config.
+    // Only checks files changed by the execute node (git diff).
+    // ================================================================
+    lint_check [
+        shape=box
+        label="LINT CHECK\nruff + pylint"
+        handler="codergen"
+        worker_type="backend-solutions-engineer"
+        llm_profile="{{ model_lint | default('anthropic-fast') }}"
+        sd_path="{{ target_dir }}/ruff.toml"
+        bead_id="LIFECYCLE-{{ initiative_id }}-LINT"
+        prd_ref="PRD-{{ initiative_id }}"
+        prompt="Run ruff check on files changed by the previous implementation step. Steps: 1) cd {{ target_dir }} && git diff --name-only HEAD~1 -- '*.py' to find changed files. 2) Run: ruff check <changed_files>. 3) If violations found, fix them with ruff check --fix <changed_files> then verify. 4) If unfixable violations remain, document them. 5) Write signal with files_changed list including any auto-fixed files."
+        acceptance="ruff check on changed Python files returns 0 violations (or documented noqa exceptions)."
+        initiative_id="{{ initiative_id }}"
+        status="pending"
+        fillcolor=orange
+    ];
+
+    execute -> lint_check [label="execution complete"];
+    lint_check -> at_execute [label="lint clean"];
+{% else %}
     execute -> at_execute [label="execution complete"];
+{% endif %}
     at_execute -> hr_execute [label="validated"];
 
     // ================================================================
