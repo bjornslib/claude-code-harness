@@ -6,7 +6,7 @@ and logs all notification activity.
 Notification log location: ~/.claude/state/gchat-notification-log.json
 
 Event Types:
-    - heartbeat_finding: System 3 heartbeat findings (uses send_heartbeat_finding pattern)
+    - heartbeat_finding: CoBuilder heartbeat findings (uses send_heartbeat_finding pattern)
     - task_completion: Task status updates (uses send_task_completion pattern)
     - blocked_alert: Blocked work requiring user input (uses send_blocked_alert pattern)
     - morning_briefing: Morning daily briefing (uses send_daily_briefing pattern)

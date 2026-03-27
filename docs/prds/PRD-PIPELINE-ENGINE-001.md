@@ -11,7 +11,7 @@ grade: authoritative
 
 ## 1. Executive Summary
 
-Our DOT pipeline files are currently declarative descriptions that System 3 and orchestrators read and interpret manually. State transitions happen through convention (`bd update`, `attractor transition`) coordinated by humans and meta-orchestrators — not through an automated engine.
+Our DOT pipeline files are currently declarative descriptions that CoBuilder and orchestrators read and interpret manually. State transitions happen through convention (`bd update`, `attractor transition`) coordinated by humans and meta-orchestrators — not through an automated engine.
 
 This PRD bridges the gap from **Level 3** (task-scoped agents with manual coordination) to **Level 4** (spec-driven autonomous execution). The core deliverable is a Python execution engine that converts DOT pipeline files from documentation into executable programs: parsing the graph, traversing nodes, dispatching handlers, evaluating edge conditions, checkpointing state, and emitting structured events — all without human intervention between start and completion.
 
@@ -37,7 +37,7 @@ As a guardian, I want to run `cobuilder pipeline run pipeline.dot` and have the 
 As a guardian, when the engine crashes mid-pipeline, I want to run `cobuilder pipeline run pipeline.dot --resume` and have it detect the last checkpoint, skip completed nodes, and resume execution from where it stopped — so that no work is repeated and the pipeline continues within seconds.
 
 ### US-3: Monitoring Pipeline Progress
-As System 3, I want to observe pipeline execution in real-time through Logfire spans and a structured event stream, so that I can detect stalls, measure per-node duration, track token costs, and diagnose failures — without reading tmux output.
+As CoBuilder, I want to observe pipeline execution in real-time through Logfire spans and a structured event stream, so that I can detect stalls, measure per-node duration, track token costs, and diagnose failures — without reading tmux output.
 
 ### US-4: Validating Before Execution
 As any user, I want `cobuilder pipeline validate pipeline.dot` to run 13 structural checks (single start, reachable nodes, valid conditions, retry targets exist, etc.) before the engine burns any LLM tokens, so that I catch graph authoring mistakes early.
@@ -382,7 +382,7 @@ cobuilder pipeline run pipeline.dot
 - **Satisfaction testing / holdout scenarios** (Gap 7) — Important for Level 5 but requires separate infrastructure. Will be a follow-up PRD.
 - **Digital Twin Universe** (Gap 8) — External service clones are project-specific, not engine-level.
 - **Web dashboard / SSE streaming** — SSEEmitter stub included but not implemented. Logfire dashboard is sufficient for now.
-- **Changes to 3-level agent hierarchy** — System 3 → Orchestrator → Worker unchanged. Engine orchestrates WITHIN this hierarchy.
+- **Changes to 3-level agent hierarchy** — CoBuilder → Orchestrator → Worker unchanged. Engine orchestrates WITHIN this hierarchy.
 
 ## 11. Risks
 
@@ -506,7 +506,7 @@ All 4 are in the E3↔E1 integration boundary (edge selector condition evaluatio
 ---
 
 **Version**: 1.3.0 (Implementation status update, E6 headless dispatch added)
-**Author**: System 3 Meta-Orchestrator
+**Author**: CoBuilder Meta-Orchestrator
 **Date**: 2026-03-04
 **Design Challenge**: AMEND verdict — 3 critical issues resolved, 8 blocking amendments applied. See `docs/sds/design-challenge-PRD-PIPELINE-ENGINE-001.md`.
 **Research Foundation**: `docs/research/attractor-spec-analysis.md`, `docs/research/attractor-community-implementations.md`
@@ -520,7 +520,7 @@ All 4 are in the E3↔E1 integration boundary (edge selector condition evaluatio
 
 **Epic 2 validator consolidation**: Two validator implementations exist (`cobuilder/pipeline/validator.py` with 11 rules, `.claude/scripts/attractor/validator.py` with 12 rules + refine support). Epic 2 consolidates these into one canonical validator in `cobuilder/pipeline/validator.py`, bringing in refine node support and adding the 13th rule.
 
-**Epic 5 escalation target corrected**: Loop detection signals escalate to the **guardian** (which runs the engine), not directly to System 3. The guardian decides whether to escalate further to S3.
+**Epic 5 escalation target corrected**: Loop detection signals escalate to the **guardian** (which runs the engine), not directly to CoBuilder. The guardian decides whether to escalate further to S3.
 
 ### AMD-10: E6 Headless CLI Worker Mode (2026-03-04)
 

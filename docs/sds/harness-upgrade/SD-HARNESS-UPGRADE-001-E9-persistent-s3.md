@@ -1,17 +1,17 @@
 ---
-title: "SD-HARNESS-UPGRADE-001 Epic 9: Persistent System 3 Controller"
+title: "SD-HARNESS-UPGRADE-001 Epic 9: Persistent CoBuilder Controller"
 status: draft
-type: solution-design
+type: sd
 last_verified: 2026-03-06T00:00:00.000Z
 grade: draft
 ---
-# SD-HARNESS-UPGRADE-001 Epic 9: Persistent System 3 Controller
+# SD-HARNESS-UPGRADE-001 Epic 9: Persistent CoBuilder Controller
 
 > **Phase 3 — Future Work (\~6-12 months)**. This SD is a vision document, not an implementation spec.
 
 ## 1. Problem Statement
 
-System 3 currently runs as episodic Claude Code sessions. Each session must:
+CoBuilder currently runs as episodic Claude Code sessions. Each session must:
 1. Recall state from Hindsight
 2. Read session handoff documents
 3. Reconstruct pipeline state from DOT files

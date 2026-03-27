@@ -34,8 +34,8 @@ export PATH="${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/completion-state:$PATH"
 # Verify cs-promise CLI is available
 cs-status 2>/dev/null || echo "ERROR: completion-state scripts not found"
 
-# Verify ccsystem3 function is available
-which ccsystem3 2>/dev/null || type ccsystem3 2>/dev/null
+# Verify cccb function is available
+which cccb 2>/dev/null || type cccb 2>/dev/null
 ```
 
 ### 1.2 Business Spec (BS) Verification
@@ -429,7 +429,7 @@ See [validation-scoring.md](validation-scoring.md) Section 10 for the complete k
 
 **Trigger**: Gaps have been identified in Sections 5.3-5.3b, but BEFORE making the final decision in 5.4.
 
-**Purpose**: System 3 autonomously creates codergen fix-it nodes for gaps that can be fixed without architectural or UX decisions, modifies the DOT pipeline in-place, and re-validates affected scenarios. This ensures only gaps requiring user input (architectural/design decisions) are escalated to `wait.human`.
+**Purpose**: CoBuilder autonomously creates codergen fix-it nodes for gaps that can be fixed without architectural or UX decisions, modifies the DOT pipeline in-place, and re-validates affected scenarios. This ensures only gaps requiring user input (architectural/design decisions) are escalated to `wait.human`.
 
 #### Decision Tree for Each Gap
 
@@ -1132,7 +1132,7 @@ Pipelines that contain **only research and refine nodes** (no codergen) are a va
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│  Layer 0: System 3 (you)                                         │
+│  Layer 0: CoBuilder (you)                                         │
 │    Calls: launch_guardian.py --dot-file <pipeline.dot>           │
 │                                                                  │
 │  Layer 1: guardian_agent.py (Sonnet, pipeline coordinator)       │
@@ -1331,16 +1331,16 @@ The script at `.claude/scripts/attractor/spawn_orchestrator.py` handles:
 - Pattern 1 (Enter as separate send-keys call)
 - Respawn logic if session dies
 
-**CRITICAL: `IMPL_REPO` must point to the directory that contains `.claude/`** — this is the Claude Code project root. For monorepo layouts like `zenagent2/zenagent/agencheck/`, the project root is at `agencheck/` (where `.claude/output-styles/`, `.claude/settings.json`, etc. live), NOT at a subdirectory like `agencheck-support-agent/` or `agencheck-support-frontend/`. Spawning at the wrong level means the orchestrator boots without output styles, hooks, or skills.
+**CRITICAL: `IMPL_REPO` must point to the directory that contains `.claude/`** — this is the Claude Code project root. For monorepo layouts like `my-org/my-org/my-project/`, the project root is at `my-project/` (where `.claude/output-styles/`, `.claude/settings.json`, etc. live), NOT at a subdirectory like `my-project-backend/` or `my-project-frontend/`. Spawning at the wrong level means the orchestrator boots without output styles, hooks, or skills.
 
 ```bash
 EPIC_NAME="epic1"
 # ✅ CORRECT: points to directory containing .claude/
-IMPL_REPO="/path/to/impl-repo/agencheck"
-# ❌ WRONG: git root — .claude/ is in agencheck/, not here
-# IMPL_REPO="/path/to/impl-repo/zenagent"  # DON'T use the git/monorepo root!
+IMPL_REPO="/path/to/impl-repo/my-project"
+# ❌ WRONG: git root — .claude/ is in my-project/, not here
+# IMPL_REPO="/path/to/impl-repo/my-org"  # DON'T use the git/monorepo root!
 # ❌ WRONG: subdirectory — no .claude/ here, orchestrator boots broken
-# IMPL_REPO="/path/to/impl-repo/agencheck/agencheck-support-agent"  # DON'T use subdirectories!
+# IMPL_REPO="/path/to/impl-repo/my-project/my-project-backend"  # DON'T use subdirectories!
 PRD_ID="PRD-XXX-001"
 
 # 1. Write the wisdom/prompt to a temp file FIRST
@@ -1443,8 +1443,8 @@ tmux send-keys -t "orch-v2-ux" "" Enter
 | No `Skill("orchestrator-multiagent")` in prompt | Orchestrator doesn't know HOW to create teams, delegate tasks, or coordinate workers. |
 | `Enter` appended to command | tmux may silently drop the Enter key, causing commands to not execute. |
 | Direct paste instead of file reference | Large wisdom text can overflow tmux paste buffer, causing truncation. |
-| `IMPL_REPO` points to git/monorepo root instead of `.claude/` root | Worktree created at wrong level; orchestrator can't find output styles, hooks, or skills. e.g., using `zenagent/` instead of `zenagent/agencheck/`. |
-| `IMPL_REPO` points to subdirectory instead of `.claude/` root | Orchestrator boots without output styles, hooks, or skills. e.g., using `agencheck-support-agent/` instead of `agencheck/`. |
+| `IMPL_REPO` points to git/monorepo root instead of `.claude/` root | Worktree created at wrong level; orchestrator can't find output styles, hooks, or skills. e.g., using `my-org/` instead of `my-org/my-project/`. |
+| `IMPL_REPO` points to subdirectory instead of `.claude/` root | Orchestrator boots without output styles, hooks, or skills. e.g., using `my-project-backend/` instead of `my-project/`. |
 
 **The fix is always the same:** Use `spawn_orchestrator.py` with `--repo-root` pointing to the directory that contains `.claude/`.
 
@@ -1610,7 +1610,7 @@ After dispatching fix-it nodes, retain the gap closure record to Hindsight:
 
 ```python
 mcp__hindsight__retain(
-    bank_id="claude-code-agencheck",
+    bank_id="claude-code-my-project",
     content="""
 ## Gap Closure Audit: PRD-{ID}
 Date: {date}

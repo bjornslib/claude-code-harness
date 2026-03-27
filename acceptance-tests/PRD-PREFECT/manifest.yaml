@@ -5,8 +5,8 @@ description: |
   Gherkin-style descriptive acceptance scenarios for blind validation of
   Prefect productionisation work. Confidence-scored (0.0-1.0), not binary.
 
-  System 3 uses these as a rubric to independently evaluate orchestrator
-  claims. When uncertain, System 3 must investigate further — reading code,
+  CoBuilder uses these as a rubric to independently evaluate orchestrator
+  claims. When uncertain, CoBuilder must investigate further — reading code,
   querying databases, running endpoints — until confidence is >= 0.95.
 
   ULTIMATE BUSINESS GOAL: POST /api/v1/verify automatically kicks off the
@@ -68,5 +68,5 @@ validation_protocol: |
     1. Read the actual source files in the implementation repo
     2. Query the running database for state assertions
     3. Call API endpoints and inspect responses
-    4. Ask the other System 3 operator to demonstrate the claim
+    4. Ask the other CoBuilder operator to demonstrate the claim
     5. Do NOT accept self-reported "done" — verify independently

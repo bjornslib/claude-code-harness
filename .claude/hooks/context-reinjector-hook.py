@@ -2,7 +2,7 @@
 """
 SessionStart hook for context re-injection after compaction.
 
-Reads preserved System3 context and selectively re-injects it
+Reads preserved CoBuilder context and selectively re-injects it
 when the session resumes after context compression.
 
 This works with context-preserver-hook.py:

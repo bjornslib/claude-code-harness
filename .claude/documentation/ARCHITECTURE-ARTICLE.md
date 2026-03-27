@@ -29,7 +29,7 @@ The Claude Harness solves these with a biologically-inspired 4-layer architectur
 ## Architecture: 4 Layers of Autonomous Execution
 
 ```
-Layer 0 ─ Terminal (User / System 3 Meta-Orchestrator)
+Layer 0 ─ Terminal (User / CoBuilder Meta-Orchestrator)
     │
     │  DOT pipeline + completion promises
     │
@@ -48,7 +48,7 @@ Each layer is a separate Claude Code process. They communicate through atomic JS
 
 ### Layer 0: The Terminal (Strategic Command)
 
-The Terminal is either a human operator or System 3, our meta-orchestrator. It sets the goal, creates a completion promise, and defines the execution plan as a DOT directed graph.
+The Terminal is either a human operator or CoBuilder, our meta-orchestrator. It sets the goal, creates a completion promise, and defines the execution plan as a DOT directed graph.
 
 **Completion Promises** are UUID-tracked commitments that bind a session to verifiable outcomes:
 
@@ -357,7 +357,7 @@ Each signal has: `source` (who sent it), `target` (who should read it), `signal_
 
 ## Completion Promises: Sessions That Keep Their Word
 
-The stop hook is the enforcement mechanism that makes everything work. A System 3 session creates a completion promise at the start:
+The stop hook is the enforcement mechanism that makes everything work. A CoBuilder session creates a completion promise at the start:
 
 ```bash
 cs-promise --create "Build JWT auth system" \
@@ -425,7 +425,7 @@ Pipeline graphs support a `target_dir` attribute that propagates through the ent
 │  1. User states goal                                             │
 │     "Build authentication with JWT, login UI, session mgmt"     │
 │                                                                  │
-│  2. System 3 creates:                                            │
+│  2. CoBuilder creates:                                            │
 │     ├── Completion promise (UUID, 3 acceptance criteria)        │
 │     ├── Beads (AUTH-001, AUTH-002, AUTH-003)                    │
 │     └── DOT pipeline (3 codergen + 3 validation nodes)         │
@@ -512,7 +512,7 @@ In software testing, the gold standard is independent verification — the perso
 For creating a visual diagram, the key elements are:
 
 ### Boxes (Layers)
-- **Layer 0**: Terminal / System 3 — gold/yellow
+- **Layer 0**: Terminal / CoBuilder — gold/yellow
 - **Layer 1**: Guardian — green (independent, trusted)
 - **Layer 2**: Runner — blue (observer, unbiased)
 - **Layer 3**: Orchestrator + Workers — orange (implementation)
@@ -544,7 +544,7 @@ The Claude Code Harness Setup is the configuration framework that powers this ar
 **Key directories**:
 - `.claude/scripts/attractor/` — Guardian, Runner, signal protocol, CLI
 - `.claude/skills/cobuilder-guardian/` — Guardian skill with blind validation pattern
-- `.claude/skills/system3-orchestrator/` — System 3 meta-orchestration
+- `.claude/skills/system3-orchestrator/` — CoBuilder meta-orchestration
 - `.claude/skills/orchestrator-multiagent/` — Worker coordination patterns
 - `.claude/scripts/completion-state/` — Promise tracking CLI
 

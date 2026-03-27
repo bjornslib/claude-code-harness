@@ -75,3 +75,9 @@ Remove or update all references to `runner.py --spawn` in the system prompt.
 3. Gate handling instructions present
 4. Guardian can handle the hello-world pipeline without deadlock
 5. `guardian.py --dry-run` still works
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

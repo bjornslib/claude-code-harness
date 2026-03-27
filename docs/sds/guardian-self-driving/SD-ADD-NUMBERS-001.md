@@ -39,3 +39,9 @@ def test_add_zero():
 ## Acceptance Criteria
 - Both files exist in `state/`
 - `pytest state/test_add_numbers.py -v` passes all tests
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

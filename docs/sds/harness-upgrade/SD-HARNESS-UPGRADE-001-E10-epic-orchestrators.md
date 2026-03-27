@@ -1,7 +1,7 @@
 ---
 title: "SD-HARNESS-UPGRADE-001 Epic 10: Epic-Scoped Orchestrators + Parallel Execution"
 status: draft
-type: solution-design
+type: sd
 last_verified: 2026-03-06T00:00:00.000Z
 grade: draft
 ---

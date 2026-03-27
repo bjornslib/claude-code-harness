@@ -2,7 +2,7 @@
 title: "SD-SEQ-RETRY-LOOP-GAPS-001: Gap Analysis — Sequence Routing & Deployment Convergence"
 status: active
 type: reference
-last_verified: 2026-03-10T00:00:00.000Z
+last_verified: 2026-03-10
 ---
 # SD-SEQ-RETRY-LOOP-GAPS-001: Gap Analysis — Sequence Routing & Deployment Convergence
 
@@ -279,3 +279,9 @@ The `replaceSequenceWithVersioning` API endpoint ensures atomic sequence replace
 3. **CheckTypeEnum → DB-driven**: Confirmed — link to `check_types` table as source of truth?
 
 4. **Webhook deprecation**: Since `log_state_to_db` already updates `background_tasks.status` directly AND Logfire traces all transitions — should we deprecate the webhook hooks, or keep the belt-and-suspenders pattern?
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

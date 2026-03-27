@@ -33,7 +33,7 @@ Key insight: A lightweight classifier decides WHICH guidance to inject, not WHET
 │  │ - Stop       │    │ Analyzes:        │    │ - Error recovery │  │
 │  │ - PreCompact │    │ - Error patterns │    │ - Doom loops     │  │
 │  │ - SessionStrt│    │ - Doom loops     │    │ - Delegation     │  │
-│  └──────────────┘    │ - Worker status  │    │ - Consult System3│  │
+│  └──────────────┘    │ - Worker status  │    │ - Consult CoBuilder│  │
 │                      │ - Stop attempts  │    │ - Re-read context│  │
 │                      └──────────────────┘    └──────────────────┘  │
 │                                                                      │
@@ -50,7 +50,7 @@ Key insight: A lightweight classifier decides WHICH guidance to inject, not WHET
 
 ### 1. Context Preservation After Compression (PreCompact Hook)
 
-**Problem**: System3 instructions are lost after context compression.
+**Problem**: CoBuilder instructions are lost after context compression.
 
 **Solution**: Before compaction, extract and persist key instructions to be selectively re-injected.
 
@@ -59,10 +59,10 @@ Key insight: A lightweight classifier decides WHICH guidance to inject, not WHET
 # Trigger: Before context compression
 
 def extract_key_instructions():
-    """Extract critical instructions from System3 to persist across compaction."""
+    """Extract critical instructions from CoBuilder to persist across compaction."""
 
     # 1. Read current transcript
-    # 2. Extract System3 directives (tagged with specific markers)
+    # 2. Extract CoBuilder directives (tagged with specific markers)
     # 3. Store in .claude/state/decision-guidance/preserved-context.json
 
     preserved = {
@@ -175,11 +175,11 @@ Recent errors:
     }
 ```
 
-### 3. Worker Failure → System3 Guidance Protocol
+### 3. Worker Failure → CoBuilder Guidance Protocol
 
 **Problem**: When workers fail, orchestrators often retry the same failing approach.
 
-**Solution**: Detect worker failure patterns and trigger System3 consultation.
+**Solution**: Detect worker failure patterns and trigger CoBuilder consultation.
 
 **Detection Mechanism**:
 
@@ -210,11 +210,11 @@ def detect_worker_failure(hook_input):
     return None
 ```
 
-**System3 Consultation Trigger**:
+**CoBuilder Consultation Trigger**:
 
 ```python
 def should_consult_system3(worker_failures):
-    """Determine if orchestrator should pause and consult System3."""
+    """Determine if orchestrator should pause and consult CoBuilder."""
 
     # Triggers:
     # 1. Same worker failed 2+ times on same task
@@ -231,7 +231,7 @@ def should_consult_system3(worker_failures):
     return False
 
 def inject_consultation_guidance():
-    """Guide orchestrator to consult System3."""
+    """Guide orchestrator to consult CoBuilder."""
 
     return {
         "continue": True,
@@ -245,7 +245,7 @@ Worker execution failed multiple times. Before retrying:
    bd update <id> --status=impl_complete
    ```
 
-2. **Wait for System3 response** - System3 monitors bead status changes
+2. **Wait for CoBuilder response** - CoBuilder monitors bead status changes
 
 3. **Alternative**: Create a fresh plan from first principles instead of retrying
 
@@ -299,12 +299,12 @@ def orchestrator_stop_gate(session_id, context):
                 "reason": f"""
 ## 🚫 Orchestrator Stop Gate: Unescalated Blockers
 
-You have {len(blockers)} blocker(s) that should be escalated to System3 before stopping:
+You have {len(blockers)} blocker(s) that should be escalated to CoBuilder before stopping:
 
 {format_blockers(blockers)}
 
 **Required Action**:
-1. Update bead status to signal System3:
+1. Update bead status to signal CoBuilder:
    ```bash
    bd update <id> --status=impl_complete
    ```
@@ -340,7 +340,7 @@ doom_loop:
 consult_external:
   trigger: "Worker failure on same task 2+ times"
   message: |
-    💡 Consider consulting System3 for a fresh perspective.
+    💡 Consider consulting CoBuilder for a fresh perspective.
     Use: bd update <id> --status=impl_complete
 
 delegation_reminder:
@@ -461,7 +461,7 @@ class SignalTracker:
 | All rules in output-style (front-loaded) | Selective injection at decision points |
 | One-time reminder after compaction | Continuous monitoring with targeted intervention |
 | No error pattern detection | Rolling window error tracking |
-| Workers fail silently | Failure triggers System3 consultation |
+| Workers fail silently | Failure triggers CoBuilder consultation |
 | Orchestrators stop without escalation | Stop-gate enforces blocker escalation |
 
 ## Implementation Status
@@ -488,7 +488,7 @@ class SignalTracker:
    - Requires blocker escalation before stopping
    - 2-attempt bypass (like momentum check)
 
-5. **System3 Guidance Protocol** (`.claude/hooks/decision_guidance/system3_protocol.py`)
+5. **CoBuilder Guidance Protocol** (`.claude/hooks/decision_guidance/system3_protocol.py`)
    - Request/response tracking
    - Bead status integration helpers
    - Response formatting for injection
@@ -576,20 +576,20 @@ When an orchestrator tries to stop with unescalated blockers:
 ```
 ## Orchestrator Guidance: Unescalated Blockers
 
-You have 2 blocker(s) that should be escalated to System3:
+You have 2 blocker(s) that should be escalated to CoBuilder:
 
 - **error_pattern**: 5 errors in last 10 minutes
 - **worker_failure**: 2 worker failure(s)
 
-**Recommended Action - Update bead status to signal System3:**
+**Recommended Action - Update bead status to signal CoBuilder:**
 bd update <id> --status=impl_complete
 
 *Attempt 1/2. Stop 2 more time(s) to bypass.*
 ```
 
-#### Requesting System3 Guidance
+#### Requesting CoBuilder Guidance
 
-From orchestrator, update bead status to signal System3:
+From orchestrator, update bead status to signal CoBuilder:
 
 ```bash
 # Signal completion/need for guidance via bead status

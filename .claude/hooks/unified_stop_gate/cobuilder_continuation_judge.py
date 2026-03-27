@@ -1,6 +1,6 @@
-"""System 3 continuation judge checker using Haiku API for session evaluation.
+"""CoBuilder continuation judge checker using Haiku API for session evaluation.
 
-Only runs for System 3 (system3-*) sessions. Non-System 3 sessions (orchestrators,
+Only runs for CoBuilder (system3-*) sessions. Non-CoBuilder sessions (orchestrators,
 workers) skip the judge entirely at the top of check() — they always pass immediately.
 
 CRITICAL: Workers MUST NOT be told to use AskUserQuestion. In native Agent Team
@@ -66,14 +66,14 @@ def _extract_json_object(text: str) -> str:
 
 
 # System prompt for the Haiku judge
-SYSTEM3_JUDGE_SYSTEM_PROMPT = """You are a session completion evaluator for a System 3 meta-orchestrator.
+SYSTEM3_JUDGE_SYSTEM_PROMPT = """You are a session completion evaluator for a CoBuilder meta-orchestrator.
 
-System 3 operates in SDK mode: it launches pipeline_runner.py which dispatches AgentSDK workers
+CoBuilder operates in SDK mode: it launches pipeline_runner.py which dispatches AgentSDK workers
 via DOT pipeline files. Workers run as background subprocesses (not tmux). Work is tracked via
 beads (bd) and session promises (cs-promise/cs-verify).
 
 ## Core Principle
-The ONLY valid exit for a System 3 session is to have sincerely exhausted all options to
+The ONLY valid exit for a CoBuilder session is to have sincerely exhausted all options to
 continue productive work independently, OR the user explicitly asked to stop.
 
 ## What You Receive
@@ -83,20 +83,20 @@ continue productive work independently, OR the user explicitly asked to stop.
 ## Assessment
 
 ### Layer 1: Protocol Compliance
-Before stopping, System 3 MUST have:
+Before stopping, CoBuilder MUST have:
 1. **Completion Promises**: All session promises verified (cs-verify --check passed), or none created.
 2. **Post-Session Reflection**: Learnings stored to Hindsight (mcp__hindsight__retain).
 3. **Pipeline State**: Any active pipelines (pipeline_runner.py) have reached a terminal state
    or are intentionally left running (e.g. long-running background workers with monitoring in place).
 
 ### Layer 2: Work Availability
-- Unmet promises owned by this session → System 3 MUST continue
-- Ready beads (P0-P2) with no external blockers → System 3 SHOULD continue
-- Pipeline nodes stuck in pending/active without a monitor → System 3 SHOULD continue
+- Unmet promises owned by this session → CoBuilder MUST continue
+- Ready beads (P0-P2) with no external blockers → CoBuilder SHOULD continue
+- Pipeline nodes stuck in pending/active without a monitor → CoBuilder SHOULD continue
 - If the user asked to stop, ALWAYS allow regardless of available work
 
 ### Layer 3: Session Exit
-- Has System 3 completed its assigned goal or genuinely exhausted available actions?
+- Has CoBuilder completed its assigned goal or genuinely exhausted available actions?
 - Is it blocked on an external factor (user decision needed, service unavailable)?
 
 ## ALLOW stop when:
@@ -108,12 +108,12 @@ Before stopping, System 3 MUST have:
 - Session promises exist but cs-verify was not run
 - Hindsight retention (mcp__hindsight__retain) was not called this session
 - Unfinished tasks slipped through (pending/in_progress in work state)
-- High-priority (P0-P2) beads are ready and System 3 has not addressed them
+- High-priority (P0-P2) beads are ready and CoBuilder has not addressed them
 - Work was started but left visibly incomplete mid-task
 - **Background pipeline monitor launched**: If the transcript shows a pipeline monitor
   launched with `run_in_background=True` (or `run_in_background: true`), this is a
   protocol violation. Pipeline monitors MUST be blocking (`run_in_background=False`).
-  Background monitors detach from System 3, leaving the pipeline unmonitored. BLOCK
+  Background monitors detach from CoBuilder, leaving the pipeline unmonitored. BLOCK
   and suggest relaunching as a blocking monitor.
 - **Guardian Phase 1 skipped (blind Gherkin tests)**: If the transcript shows a DOT pipeline
   was created or dispatched (pipeline_runner, codergen nodes, .dot file), check whether
@@ -137,10 +137,10 @@ should_continue=true means BLOCK the stop
 should_continue=false means ALLOW the stop"""
 
 
-class System3ContinuationJudgeChecker:
+class CoBuilderContinuationJudgeChecker:
     """P3.5: Session continuation evaluator using LLM API.
 
-    Runs only for System 3 (system3-*) sessions. All other sessions skip
+    Runs only for CoBuilder (system3-*) sessions. All other sessions skip
     this check and stop freely.
 
     Fails open on any errors to avoid blocking valid stops.
@@ -157,19 +157,19 @@ class System3ContinuationJudgeChecker:
         self.session = session
 
     def check(self) -> CheckResult:
-        """Check if System 3 session should be allowed to stop.
+        """Check if CoBuilder session should be allowed to stop.
 
         Returns:
             CheckResult with:
-            - passed=True if not System3, no transcript, judge approves, or error (fail-open)
+            - passed=True if not CoBuilder, no transcript, judge approves, or error (fail-open)
             - passed=False if judge blocks stop (session has more work to do)
         """
-        # Only run for System 3 sessions — all other sessions stop freely
+        # Only run for CoBuilder sessions — all other sessions stop freely
         if not self.config.is_system3:
             return CheckResult(
                 priority=Priority.P3_5_SYSTEM3_JUDGE,
                 passed=True,
-                message="Non-System 3 session — judge skipped",
+                message="Non-CoBuilder session — judge skipped",
                 blocking=True,
             )
 
@@ -177,7 +177,7 @@ class System3ContinuationJudgeChecker:
         # Claude Code passes transcript_path as a common field in all hook inputs.
         # The shell script exports it via CLAUDE_HOOK_INPUT → SessionInfo.from_hook_input().
         transcript_path = self.session.transcript_path
-        print(f"[System3Judge] transcript_path from hook input: {transcript_path!r}", file=sys.stderr)
+        print(f"[CoBuilderJudge] transcript_path from hook input: {transcript_path!r}", file=sys.stderr)
         if not transcript_path or not os.path.exists(transcript_path):
             # Fallback 1: search by session_id (works when hook input session_id == transcript filename UUID)
             try:
@@ -188,9 +188,9 @@ class System3ContinuationJudgeChecker:
                     matches = glob.glob(search_pattern)
                     if matches:
                         transcript_path = matches[0]
-                        print(f"[System3Judge] Found transcript via session_id fallback: {transcript_path}", file=sys.stderr)
+                        print(f"[CoBuilderJudge] Found transcript via session_id fallback: {transcript_path}", file=sys.stderr)
             except Exception as e:
-                print(f"[System3Judge] session_id fallback failed: {e}", file=sys.stderr)
+                print(f"[CoBuilderJudge] session_id fallback failed: {e}", file=sys.stderr)
 
         if not transcript_path or not os.path.exists(transcript_path):
             # Fallback 2: most recently modified .jsonl in the project's transcript dir.
@@ -204,9 +204,9 @@ class System3ContinuationJudgeChecker:
                 matches = sorted(glob.glob(search_pattern), key=os.path.getmtime, reverse=True)
                 if matches:
                     transcript_path = matches[0]
-                    print(f"[System3Judge] Found transcript via most-recent fallback: {transcript_path}", file=sys.stderr)
+                    print(f"[CoBuilderJudge] Found transcript via most-recent fallback: {transcript_path}", file=sys.stderr)
             except Exception as e:
-                print(f"[System3Judge] most-recent fallback failed: {e}", file=sys.stderr)
+                print(f"[CoBuilderJudge] most-recent fallback failed: {e}", file=sys.stderr)
 
         # Final check: if still no transcript, skip judge
         if not transcript_path or not os.path.exists(transcript_path):
@@ -257,7 +257,7 @@ class System3ContinuationJudgeChecker:
             # Return result based on judgment
             if should_continue:
                 # BLOCK - session should continue
-                message = f"System 3 Judge: {reason}"
+                message = f"CoBuilder Judge: {reason}"
                 if suggestion:
                     message += f"\n\nSuggestion: {suggestion}"
                 return CheckResult(
@@ -271,14 +271,14 @@ class System3ContinuationJudgeChecker:
                 return CheckResult(
                     priority=Priority.P3_5_SYSTEM3_JUDGE,
                     passed=True,
-                    message=f"System 3 Judge approves stop: {reason}",
+                    message=f"CoBuilder Judge approves stop: {reason}",
                     blocking=True,
                 )
 
         except Exception as e:
             # Fail-open on any error
             error_msg = str(e)[:200]  # Truncate long errors
-            print(f"[System3Judge] Error during evaluation: {error_msg}", file=sys.stderr)
+            print(f"[CoBuilderJudge] Error during evaluation: {error_msg}", file=sys.stderr)
             return CheckResult(
                 priority=Priority.P3_5_SYSTEM3_JUDGE,
                 passed=True,
@@ -331,7 +331,7 @@ class System3ContinuationJudgeChecker:
             return turns[-num_turns:] if len(turns) > num_turns else turns
 
         except Exception as e:
-            print(f"[System3Judge] Error reading transcript: {e}", file=sys.stderr)
+            print(f"[CoBuilderJudge] Error reading transcript: {e}", file=sys.stderr)
             raise
 
     def _extract_content_summary(self, entry: Dict[str, Any], role: str) -> str:
@@ -444,7 +444,7 @@ class System3ContinuationJudgeChecker:
         work_state = os.environ.get('WORK_STATE_SUMMARY', '').strip()
 
         # Build prompt with work state FIRST for prominence
-        prompt_parts = ["Evaluate this System 3 session for completion readiness.\n"]
+        prompt_parts = ["Evaluate this CoBuilder session for completion readiness.\n"]
 
         if work_state:
             prompt_parts.append(f"## WORK STATE AND TASK PRIMITIVES\n\n{work_state}\n")
@@ -455,12 +455,12 @@ class System3ContinuationJudgeChecker:
             "## GCHAT COMMUNICATION STATUS\n\n"
             f"{gchat_status['details']}\n\n"
             "- If the user replied to a question, their reply informs whether stopping is appropriate.\n"
-            "- If a question was asked but not yet replied to, System 3 should wait.\n"
+            "- If a question was asked but not yet replied to, CoBuilder should wait.\n"
         )
 
         prompt_parts.append(
             "## KEY QUESTION\n"
-            "Has System 3 sincerely exhausted all options to continue productive work "
+            "Has CoBuilder sincerely exhausted all options to continue productive work "
             "independently? Is there a clear reason the session should stop?\n"
         )
 
@@ -522,7 +522,7 @@ class System3ContinuationJudgeChecker:
                 except (OSError, _json.JSONDecodeError):
                     continue
         except Exception as e:
-            print(f"[System3Judge] Error checking GChat markers: {e}", file=sys.stderr)
+            print(f"[CoBuilderJudge] Error checking GChat markers: {e}", file=sys.stderr)
 
         result["asked"] = asked_count > 0
         result["answered"] = resolved_count > 0
@@ -541,7 +541,7 @@ class System3ContinuationJudgeChecker:
                 parts.append(f"Latest question asked: \"{latest_question}\"")
             result["details"] = " ".join(parts)
 
-        print(f"[System3Judge] GChat markers: asked={asked_count}, resolved={resolved_count}, pending={pending_count}", file=sys.stderr)
+        print(f"[CoBuilderJudge] GChat markers: asked={asked_count}, resolved={resolved_count}, pending={pending_count}", file=sys.stderr)
         return result
 
     def _resolve_judge_config(self) -> Dict[str, Any]:
@@ -589,16 +589,16 @@ class System3ContinuationJudgeChecker:
                         'base_url': profile.get('base_url', 'https://api.anthropic.com'),
                     }
                     print(
-                        f"[System3Judge] Using judge_profile '{judge_profile_name}' "
+                        f"[CoBuilderJudge] Using judge_profile '{judge_profile_name}' "
                         f"(model={config['model']}, base_url={config['base_url']})",
                         file=sys.stderr,
                     )
                     return config
         except Exception as e:
-            print(f"[System3Judge] Failed to load providers.yaml: {e}", file=sys.stderr)
+            print(f"[CoBuilderJudge] Failed to load providers.yaml: {e}", file=sys.stderr)
 
         # Fallback: env vars (legacy behavior)
-        print("[System3Judge] Falling back to environment variables for judge config", file=sys.stderr)
+        print("[CoBuilderJudge] Falling back to environment variables for judge config", file=sys.stderr)
         return {
             'model': os.environ.get('ANTHROPIC_MODEL', 'claude-haiku-4-5-20251001'),
             'api_key': os.environ.get('ANTHROPIC_API_KEY') or os.environ.get('DASHSCOPE_API_KEY'),

@@ -76,7 +76,7 @@ Monitor captures detailed evidence:
 ```json
 {
   "file_exists": true,
-  "file_path": "/Users/theb/.claude/tests/demo/test_monitor_demo.py",
+  "file_path": ".claude/tests/demo/test_monitor_demo.py",
   "file_size": 2098,
   "has_test_code": true,
   "pytest_output": "...",
@@ -157,7 +157,7 @@ python ~/.claude/validation/validation-test-agent-monitor.py \
 [INFO]
 [INFO] PHASE 2: Validating work product...
 [INFO] ----------------------------------------------------------------------
-[INFO] File found: /Users/theb/.claude/tests/demo/test_monitor_demo.py (2098 bytes)
+[INFO] File found: .claude/tests/demo/test_monitor_demo.py (2098 bytes)
 [INFO] File content (2098 chars)
 [INFO] Found test function definitions
 [INFO] Python syntax validation: OK
@@ -182,7 +182,7 @@ python ~/.claude/validation/validation-test-agent-monitor.py \
   "message": "Task #15 completed and work product validated",
   "evidence": {
     "file_exists": true,
-    "file_path": "/Users/theb/.claude/tests/demo/test_monitor_demo.py",
+    "file_path": ".claude/tests/demo/test_monitor_demo.py",
     "file_size": 2098,
     "has_test_code": true,
     "pytest_output": "============================= test session starts ...",
@@ -264,12 +264,12 @@ while not all_tasks_complete:
         time.sleep(30)
 ```
 
-### With System 3
+### With CoBuilder
 
-System 3 uses monitor for real-time visibility:
+CoBuilder uses monitor for real-time visibility:
 
 ```python
-# System 3 monitors orchestrator health
+# CoBuilder monitors orchestrator health
 report = Task(
     subagent_type="validation-test-agent",
     prompt="--mode=monitor --session-id orch-homepage-123 --task-list-id orch-tasks"
@@ -424,7 +424,7 @@ pytest ~/.claude/tests/demo/test_monitor_demo.py -v
 - `task-list-monitor.py` - Underlying polling utility
 - `validation-test-agent` modes overview - All operating modes
 - Orchestrator integration patterns - How to use in orchestrators
-- System 3 documentation - Meta-orchestrator integration
+- CoBuilder documentation - Meta-orchestrator integration
 
 ## Related Documentation
 

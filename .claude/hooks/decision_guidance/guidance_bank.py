@@ -33,7 +33,7 @@ class GuidanceBank:
 2. Check your assumptions - is the file/path/command correct?
 3. Try a different approach if the same one keeps failing
 
-*If you've tried 3+ different approaches without success, consider consulting System3 for guidance.*
+*If you've tried 3+ different approaches without success, consider consulting CoBuilder for guidance.*
 """,
         },
         "doom_loop": {
@@ -52,7 +52,7 @@ Same file(s) edited multiple times without progress:
 **Recommended actions:**
 1. Step back and reconsider the approach
 2. Check if tests are failing for a different reason than you think
-3. Consider asking System3 for a fresh perspective
+3. Consider asking CoBuilder for a fresh perspective
 
 *Don't keep editing the same file - try something different.*
 """,
@@ -64,16 +64,16 @@ Same file(s) edited multiple times without progress:
 
 {reason}
 
-**Escalate to System3 via beads:**
+**Escalate to CoBuilder via beads:**
 ```bash
 bd update <id> --status=impl_complete
 ```
 
 **Why consult?**
 - A fresh perspective from a different model often recognizes solutions the stuck agent cannot
-- System3 can provide strategic guidance without the failed attempts polluting its context
+- CoBuilder can provide strategic guidance without the failed attempts polluting its context
 
-*Update the bead status and wait for System3 to pick it up.*
+*Update the bead status and wait for CoBuilder to pick it up.*
 """,
         },
         "delegation_reminder": {
@@ -130,9 +130,9 @@ Worker {worker_id} failed on task {task_id}.
 **Before retrying with the same approach:**
 1. Check if the worker's approach was correct
 2. Consider if prerequisites are missing
-3. Consult System3 for alternative strategies
+3. Consult CoBuilder for alternative strategies
 
-**To consult System3:**
+**To consult CoBuilder:**
 ```bash
 bd update <id> --status=impl_complete
 ```
@@ -150,7 +150,7 @@ You have blockers that should be escalated before stopping:
 {blocker_list}
 
 **Required action:**
-1. Escalate to System3 via beads:
+1. Escalate to CoBuilder via beads:
    ```bash
    bd update <id> --status=impl_complete
    ```

@@ -59,7 +59,7 @@ This document compares what we built against the 3-step collaborative vision:
 - One-shot: generates everything at once, no intermediate review step
 - No PRD analysis — works from beads only (not from PRD text)
 
-### 2.4 System 3 Integration
+### 2.4 CoBuilder Integration
 - Output style includes "DOT Graph Navigation" section
 - Execution loop: read state → identify dispatchable → dispatch → monitor → validate → loop
 - Checkpoint after every transition
@@ -189,7 +189,7 @@ adjust → validate again → checkpoint save → proceed to execution
 
 ### Gap 9: Parallel Dispatch Lacks Locking
 
-**Current**: System 3 output style describes parallel dispatch conceptually, but no locking prevents two sessions from dispatching the same node.
+**Current**: CoBuilder output style describes parallel dispatch conceptually, but no locking prevents two sessions from dispatching the same node.
 **Needed**: File-based or beads-based locking:
 
 ```bash
@@ -258,7 +258,7 @@ If clean: attractor checkpoint save       # Lock in the design
 ### Step 3: Execution with Programmatic Enforcement
 
 ```
-System 3 reads the validated, LLM-refined pipeline.dot
+CoBuilder reads the validated, LLM-refined pipeline.dot
     ↓
 DOT Graph Navigation loop (existing):
     status → identify ready nodes → dispatch → monitor → validate → loop

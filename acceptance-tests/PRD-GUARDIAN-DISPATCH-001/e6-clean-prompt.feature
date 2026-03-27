@@ -1,4 +1,4 @@
-Feature: E6 — Remove Promise/System3 Assumptions from Guardian Prompt
+Feature: E6 — Remove Promise/CoBuilder Assumptions from Guardian Prompt
   Guardian system prompt focuses on pipeline execution only
 
   Scenario: No promise-related instructions
@@ -20,7 +20,7 @@ Feature: E6 — Remove Promise/System3 Assumptions from Guardian Prompt
     Given guardian.py exists
     When I read the system prompt
     Then it contains instructions for: parse, validate, dispatch, monitor, gate-handle, checkpoint
-    And it does NOT contain "System 3" (should say "Guardian" or "Layer 0")
+    And it does NOT contain "CoBuilder" (should say "Guardian" or "Layer 0")
     # Scoring: 0.5 if execution focus but S3 refs remain, 1.0 if fully clean
 
   Scenario: Turn budget efficiency

@@ -34,7 +34,7 @@ class EnvironmentConfig:
 
     @property
     def is_system3(self) -> bool:
-        """Check if this is a System 3 meta-orchestrator session.
+        """Check if this is a CoBuilder meta-orchestrator session.
 
         Requires BOTH conditions to be true:
         1. Session ID starts with 'system3-' (set by ccsystem3 shell function)
@@ -43,7 +43,10 @@ class EnvironmentConfig:
         This prevents false positives when an orchestrator session inherits a stale
         system3-* CLAUDE_SESSION_ID from a parent shell environment.
         """
-        session_ok = bool(self.session_id and self.session_id.startswith("system3-"))
+        session_ok = bool(self.session_id and (
+            self.session_id.startswith("system3-") or
+            self.session_id.startswith("cccb-")
+        ))
         # If CLAUDE_OUTPUT_STYLE is explicitly 'orchestrator', this is definitively NOT system3
         output_style = os.environ.get("CLAUDE_OUTPUT_STYLE", "")
         not_orchestrator = output_style != "orchestrator"
@@ -99,7 +102,7 @@ class Priority(IntEnum):
     P2_BEADS_SYNC = 2           # data integrity - BLOCK if dirty
     P2_5_ORCHESTRATOR_GUIDANCE = 25  # orchestrator blocker escalation - BLOCK
     P3_TODO_CONTINUATION = 3    # momentum - BLOCK if missing
-    P3_5_SYSTEM3_JUDGE = 35     # System 3 continuation evaluation - BLOCK if premature
+    P3_5_SYSTEM3_JUDGE = 35     # CoBuilder continuation evaluation - BLOCK if premature
     P4_GIT_STATUS = 4           # advisory - WARN only
     P5_BUSINESS_OUTCOMES = 5    # focused mode - BLOCK if enforced
 
@@ -142,7 +145,7 @@ class PathResolver:
     """Resolves paths for completion state, supporting session isolation.
 
     Provides centralized path resolution for all completion state files,
-    with support for System3 parallel initiative isolation via CLAUDE_SESSION_DIR.
+    with support for CoBuilder parallel initiative isolation via CLAUDE_SESSION_DIR.
 
     Attributes:
         config: The environment configuration containing project and session dirs.

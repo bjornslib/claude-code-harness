@@ -106,7 +106,7 @@ for node in pipeline.nodes_with_attr("worker_type"):
 
 `runner.py` gains `--mode=python` flag to route to `pipeline_runner.py` (the pure Python runner from E7.2):
 ```bash
-python3 runner.py --dot-file pipeline.dot --mode=python  # Use pipeline_runner.py (3-layer: System 3 → Runner → Workers)
+python3 runner.py --dot-file pipeline.dot --mode=python  # Use pipeline_runner.py (3-layer: CoBuilder → Runner → Workers)
 python3 runner.py --dot-file pipeline.dot --mode=sdk     # Use existing SDK runner (backward compat)
 ```
 

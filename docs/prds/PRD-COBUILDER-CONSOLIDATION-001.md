@@ -127,7 +127,7 @@ claude-harness-setup/
 │   ├── attractor/              # NEW: Absorbed from .claude/scripts/attractor/
 │   │   ├── pipeline_runner.py  # Production state machine (1,669 lines)
 │   │   ├── session_runner.py   # Renamed from runner.py (avoid engine clash)
-│   │   ├── guardian.py         # System 3 terminal + guardian agent
+│   │   ├── guardian.py         # CoBuilder terminal + guardian agent
 │   │   ├── dispatch_worker.py
 │   │   ├── run_research.py
 │   │   ├── run_refine.py

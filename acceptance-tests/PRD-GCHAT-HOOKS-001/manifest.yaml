@@ -64,7 +64,7 @@ features:
     rationale: "Session end notification — supporting feature"
 
   - id: F2.4
-    title: "Direct gchat-send Usage in System 3"
+    title: "Direct gchat-send Usage in CoBuilder"
     weight: 0.05
     epic: "E2"
     rationale: "Output style migration — documentation change"
@@ -72,7 +72,7 @@ features:
   # === EPIC 4: s3-communicator Removal + Migration ===
 
   - id: F4.1
-    title: "Update System 3 Output Style"
+    title: "Update CoBuilder Output Style"
     weight: 0.08
     epic: "E4"
     rationale: "Migration path — removes old communicator patterns"

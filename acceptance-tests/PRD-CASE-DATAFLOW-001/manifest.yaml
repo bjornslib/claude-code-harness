@@ -33,6 +33,24 @@ features:
     description: "Both outcome paths produce identical VerificationOutcome via PostCheckProcessor"
     validation_method: "code-analysis"
 
+  - name: "E2E: Backend Integration Tests"
+    weight: 0.00
+    feature_file: "e2e-backend-integration.feature"
+    description: "Runtime backend tests: pytest, tsc, npm build, API contract, JSONB round-trip"
+    validation_method: "runtime-execution"
+
+  - name: "E2E: Full Journey — Submit, Verify, Confirm"
+    weight: 0.00
+    feature_file: "e2e-full-journey.feature"
+    description: "Browser-driven E2E: frontend form → DB → SLA → Prefect → email → /verify-check → chat → outcome"
+    validation_method: "browser-automation"
+
+  - name: "E2E: Retry Sequence — Second Email"
+    weight: 0.00
+    feature_file: "e2e-retry-sequence.feature"
+    description: "Retry flow: unanswered email → Prefect creates follow-up background_task"
+    validation_method: "browser-automation"
+
 scoring_guide:
   per_scenario:
     pass: 1.0

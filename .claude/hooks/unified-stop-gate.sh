@@ -7,7 +7,7 @@
 #   2. Orchestrator Guidance: BLOCKS orch-* sessions with unescalated blockers
 #   3. Beads Sync Check: BLOCKS if .beads/ has uncommitted changes
 #   4. Work Exhaustion Check: BLOCKS if work available but no sensible continuation
-#   5. System 3 Judge: BLOCKS system3-* sessions if Haiku judge says continue
+#   5. CoBuilder Judge: BLOCKS system3-* sessions if Haiku judge says continue
 #   6. Work Available: INFORMS about priority-ordered work (NEVER blocks)
 #
 # Changes from v2:
@@ -98,18 +98,20 @@ ${message}"
     exit 0
 }
 
-# --- Fast path: Agencheck project directories stop freely ---
-# Sessions in agencheck directories are externally monitored and should not
+# --- Fast path: Externally-monitored project directories stop freely ---
+# Sessions in externally-monitored directories (e.g., my-project) should not
 # be blocked by harness-level stop gate checks.
+# To use: set STOP_GATE_BYPASS_PATTERN to a glob matching your project directory.
+# Example: export STOP_GATE_BYPASS_PATTERN="*my-project*"
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}"
-if [[ "$PROJECT_DIR" == *agencheck* ]]; then
+if [ -n "${STOP_GATE_BYPASS_PATTERN:-}" ] && [[ "$PROJECT_DIR" == $STOP_GATE_BYPASS_PATTERN ]]; then
     printf '%s\n%s\n' "0" "$(date +%s)" > "$BLOCK_COUNT_FILE"
-    output_json "approve" "systemMessage" "Agencheck project directory — approved (stop gate bypassed)"
+    output_json "approve" "systemMessage" "Bypass pattern matched — approved (stop gate bypassed)"
     exit 0
 fi
 
 # --- Fast path: Non-enforced sessions stop freely ---
-# Only System 3 sets CLAUDE_ENFORCE_BO=true. Orchestrators, workers, and
+# Only CoBuilder sets CLAUDE_ENFORCE_BO=true. Orchestrators, workers, and
 # untagged sessions are externally monitored and bypass the stop gate.
 # This single check replaces all CLAUDE_OUTPUT_STYLE and session ID prefix guards.
 if [[ "${CLAUDE_ENFORCE_BO:-false}" != "true" ]]; then
@@ -126,7 +128,7 @@ PROMISE_MESSAGE=""
 BG_AGENTS_ACTIVE=false  # set to true by Step 1.4 when background agents are found
 
 # Note: Orchestrators/workers never reach this point (CLAUDE_ENFORCE_BO fast-path above).
-# This code only runs for CLAUDE_ENFORCE_BO=true (System 3) sessions.
+# This code only runs for CLAUDE_ENFORCE_BO=true (CoBuilder) sessions.
 if [ -z "$SESSION_ID" ]; then
     # No session ID = no promise tracking = always OK to stop
     PROMISE_MESSAGE="No CLAUDE_SESSION_ID set - OK to stop"
@@ -150,13 +152,13 @@ else
 fi
 
 # --- Step 1.4: Active Background Agents Check ---
-# If promise check failed for a system3 session, check if the session's TaskList
+# If promise check failed for a CoBuilder session, check if the session's TaskList
 # has in_progress tasks owned by non-lead agents. If so, those agents will wake
 # the session via SendMessage when they complete — allow stop now.
 # Guard: CLAUDE_OUTPUT_STYLE != orchestrator (same as Steps 1.5, 1.7).
 
 # Note: CLAUDE_OUTPUT_STYLE guard removed — orchestrators exit at fast-path above.
-if [ "$PROMISE_PASSED" = false ] && [[ "$SESSION_ID" == system3-* ]]; then
+if [ "$PROMISE_PASSED" = false ] && ([[ "$SESSION_ID" == system3-* ]] || [[ "$SESSION_ID" == cccb-* ]]); then
     _TASK_LIST_ID="${CLAUDE_CODE_TASK_LIST_ID:-}"
     if [ -n "$_TASK_LIST_ID" ]; then
         _TASK_DIR="$HOME/.claude/tasks/$_TASK_LIST_ID"
@@ -213,12 +215,12 @@ fi
 # session stops unnecessarily. Session-scoped teams are optional, not mandatory.
 
 # --- Step 1.7: Pending GChat Questions Check (system3-* sessions only) ---
-# S3 sessions must not stop if they have unanswered GChat questions for THIS session.
+# CoBuilder sessions must not stop if they have unanswered GChat questions for THIS session.
 # The hook writes session_id (CLAUDE_SESSION_ID) into each marker file.
 # Guard: CLAUDE_OUTPUT_STYLE != orchestrator prevents false-positives (same as Step 1.5).
 
 # Note: CLAUDE_OUTPUT_STYLE guard removed — orchestrators exit at fast-path above.
-if [[ "$SESSION_ID" == system3-* ]]; then
+if [[ "$SESSION_ID" == system3-* ]] || [[ "$SESSION_ID" == cccb-* ]]; then
     GCHAT_ASK_DIR="$PROJECT_ROOT/.claude/state/gchat-forwarded-ask"
     if [ -d "$GCHAT_ASK_DIR" ]; then
         GCHAT_PENDING_FOR_SESSION=0
@@ -338,7 +340,7 @@ fi
 
 # --- Step 4: Work Exhaustion Check (replaces simple Todo Continuation) ---
 # Three-layer evaluation: promises + beads + task sensibility
-# Produces WORK_STATE_SUMMARY for Step 5 (System 3 Judge)
+# Produces WORK_STATE_SUMMARY for Step 5 (CoBuilder Judge)
 
 WORK_EXHAUSTION_PASSED=true
 WORK_STATE_SUMMARY=""
@@ -420,14 +422,14 @@ fi
 # Removing the early approval ensures Step 5 judge always runs for S3 sessions,
 # which enforces the "must present AskUserQuestion before stopping" rule.
 
-# --- Step 5: Continuation Judge (System 3 sessions only) ---
-# Uses Haiku 4.5 API call to evaluate if System 3 session should continue
-# Non-System 3 sessions skip this step entirely (Step 4 already passes them)
+# --- Step 5: Continuation Judge (CoBuilder sessions only) ---
+# Uses Haiku 4.5 API call to evaluate if CoBuilder session should continue
+# Non-CoBuilder sessions skip this step entirely (Step 4 already passes them)
 # Note: CLAUDE_OUTPUT_STYLE guard removed — orchestrators exit at CLAUDE_ENFORCE_BO fast-path above.
 
 S3_MSG=""
 
-if [[ "$SESSION_ID" == system3-* ]]; then
+if [[ "$SESSION_ID" == system3-* ]] || [[ "$SESSION_ID" == cccb-* ]]; then
     TIMEOUT_CMD="timeout"
     if command -v gtimeout &> /dev/null; then
         TIMEOUT_CMD="gtimeout"
@@ -442,26 +444,26 @@ import os
 sys.path.insert(0, os.path.join(os.environ.get('CLAUDE_PROJECT_DIR', os.getcwd()), '.claude', 'hooks'))
 
 try:
-    from unified_stop_gate.cobuilder_continuation_judge import System3ContinuationJudgeChecker
+    from unified_stop_gate.cobuilder_continuation_judge import CoBuilderContinuationJudgeChecker
     from unified_stop_gate.config import EnvironmentConfig
     from unified_stop_gate.checkers import SessionInfo
 
     hook_input = json.loads(os.environ.get('CLAUDE_HOOK_INPUT', '{}'))
     config = EnvironmentConfig.from_env()
     session = SessionInfo.from_hook_input(hook_input)
-    checker = System3ContinuationJudgeChecker(config, session)
+    checker = CoBuilderContinuationJudgeChecker(config, session)
     result = checker.check()
 
     print(json.dumps({"passed": result.passed, "message": result.message}))
 except Exception as e:
-    print(json.dumps({"passed": True, "message": f"System 3 judge error: {e}"}))
+    print(json.dumps({"passed": True, "message": f"CoBuilder judge error: {e}"}))
 S3_CHECK
 ) || S3_EXIT=$?
     if [ $S3_EXIT -eq 124 ]; then
-        echo "⚠️  System 3 judge timed out (90s), allowing stop" >&2
+        echo "⚠️  CoBuilder judge timed out (90s), allowing stop" >&2
         S3_RESULT='{"passed": true, "message": "Judge timed out, allowing stop"}'
     elif [ $S3_EXIT -ne 0 ] && [ -z "$S3_RESULT" ]; then
-        echo "⚠️  System 3 judge failed (exit $S3_EXIT), allowing stop" >&2
+        echo "⚠️  CoBuilder judge failed (exit $S3_EXIT), allowing stop" >&2
         S3_RESULT='{"passed": true, "message": "Judge failed (fail-open), allowing stop"}'
     fi
 
@@ -486,7 +488,7 @@ if [ -d "$PROJECT_ROOT/.beads" ] && command -v bd &>/dev/null; then
     READY_WORK=$(bd list --status=open 2>/dev/null | grep -E '\[P[0-9]\]' | sort -t'[' -k2,2n | head -5) || READY_WORK=""
 fi
 
-# Check for impl_complete tasks awaiting S3 validation
+# Check for impl_complete tasks awaiting CoBuilder validation
 IMPL_COMPLETE_WORK=""
 if [ -d "$PROJECT_ROOT/.beads" ] && command -v bd &>/dev/null; then
     IMPL_COMPLETE_WORK=$(bd list --status=impl_complete 2>/dev/null | grep -E '(beads-|bd-)' | head -5) || IMPL_COMPLETE_WORK=""
@@ -495,7 +497,7 @@ fi
 # Build final message — judge verdict first for visibility
 MSG_PARTS=""
 
-# System 3 judge verdict always shown first (even on approve)
+# CoBuilder judge verdict always shown first (even on approve)
 if [ -n "$S3_MSG" ]; then
     MSG_PARTS="🧠 Judge: ${S3_MSG}"
 fi
@@ -531,20 +533,20 @@ fi
 if [ -n "$IMPL_COMPLETE_WORK" ]; then
     MSG_PARTS="${MSG_PARTS}
 
-## Awaiting S3 Validation (impl_complete)
+## Awaiting CoBuilder Validation (impl_complete)
 
 \`\`\`
 ${IMPL_COMPLETE_WORK}
 \`\`\`
 
-These tasks have been implemented but not yet validated by System 3's oversight team."
+These tasks have been implemented but not yet validated by CoBuilder's oversight team."
 fi
 
 # Session end GChat notifications DISABLED per user request (2026-02-22).
 # Only AskUserQuestion forwarding is sent to GChat.
 # Previously: sent "Session Ending" messages via gchat-send.sh --type session_end
 # if [[ "$SESSION_ID" == system3-* ]] || [[ "$CLAUDE_OUTPUT_STYLE" == *system3* ]]; then
-#     _session_summary="System 3 session ending."
+#     _session_summary="CoBuilder session ending."
 #     if [[ -n "${CLAUDE_SESSION_ID:-}" ]]; then
 #         _session_summary="$_session_summary Session: $CLAUDE_SESSION_ID."
 #     fi

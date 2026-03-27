@@ -31,7 +31,7 @@ This PRD extends the doc-gardener to enforce consistent documentation standards 
 As an AI agent navigating the docs/ directory, I need every file to have a consistent header with title, description, version, and last-updated date so I can quickly assess relevance, recency, and purpose without reading the full document.
 
 ### US-2: Guardian Checking Implementation Status
-As a System 3 guardian validating an initiative, I need PRDs and SDs to contain an "Implementation Status" section so I can determine which epics are done, in-progress, or remaining without cross-referencing beads.
+As a CoBuilder guardian validating an initiative, I need PRDs and SDs to contain an "Implementation Status" section so I can determine which epics are done, in-progress, or remaining without cross-referencing beads.
 
 ### US-3: Developer Finding Documentation
 As a developer, I need all PRD/SD/specification files to live in docs/ so I can find them in one place instead of scattered across .claude/documentation/, .claude/evidence/, and the repo root.

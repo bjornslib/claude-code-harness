@@ -3,7 +3,7 @@
 PreToolUse hook: gchat-ask-user-forward.py
 ==========================================
 
-Intercepts AskUserQuestion tool calls in System 3 sessions and forwards
+Intercepts AskUserQuestion tool calls in CoBuilder sessions and forwards
 the question to Google Chat via webhook instead of asking interactively.
 
 Claude Code will then DENY the interactive ask; a separate poller (Haiku
@@ -133,7 +133,7 @@ HAIKU_MODEL: str = "claude-haiku-4-5-20251001"
 
 def is_system3_session(session_id: str) -> bool:
     """
-    Return True if the current session is a System 3 (meta-orchestrator) session.
+    Return True if the current session is a CoBuilder (meta-orchestrator) session.
 
     Checks (in order):
     1. CLAUDE_OUTPUT_STYLE env var contains "system3"
@@ -144,7 +144,7 @@ def is_system3_session(session_id: str) -> bool:
         return True
 
     # Common S3 session ID prefixes (e.g. "system3-20260222T...", "s3-...")
-    if session_id.startswith(("system3-", "s3-")):
+    if session_id.startswith(("system3-", "s3-", "cccb-")):
         return True
 
     return False
@@ -405,7 +405,7 @@ def _format_manually(questions: list[dict], session_id: str) -> str:
     short_session = session_id[:24]
     project_ctx = _get_project_context()
     lines: list[str] = [
-        f"*[Claude Code — System 3]* Question from session `{short_session}`",
+        f"*[Claude Code — CoBuilder]* Question from session `{short_session}`",
         f"_{project_ctx}_",
         "",
     ]

@@ -29,7 +29,7 @@ features:
       - "checkpoint_and_promise"
 
   - name: "Epic 3: Implementation Navigation"
-    description: "System 3 reads .dot to dispatch orchestrators with node metadata"
+    description: "CoBuilder reads .dot to dispatch orchestrators with node metadata"
     weight: 0.15
     validation_method: code-analysis
     scenarios:

@@ -4,7 +4,7 @@ description: This skill should be used when the CoBuilder Guardian needs to act 
 version: 1.1.0
 title: "CoBuilder Guardian"
 status: active
-last_verified: 2026-03-09
+last_verified: 2026-03-22
 ---
 
 # CoBuilder Guardian — Independent Validation Pattern
@@ -186,10 +186,17 @@ TodoWrite([
 
 This makes the skip visible. If you delete "Phase 1" from the todo list, you're consciously choosing to skip — not silently forgetting.
 
+### Pre-Phase: Brainstorming (When Starting From a Vague Idea)
+
+When the user provides a vague goal ("I want to build X", "let's brainstorm a feature"), invoke `Skill("cobuilder:ideation-to-execution")` **before** entering Phase 0. This provides structured discovery through dialogue — clarifying goals, challenging assumptions via `parallel-solutioning`, and converging on a brief in `docs/brainstorms/{initiative-id}-brief.md`. The brainstorm template is at `skills/cobuilder/ideation-to-execution/references/brainstorm-template.md`.
+
+**When to skip brainstorming**: The user provides a concrete, well-defined goal with clear requirements — proceed directly to Phase 0 (BS authoring).
+
 ### Phase Table
 
 | Phase | Purpose | Reference |
 |-------|---------|-----------|
+| **Pre-Phase** | Structured brainstorming for vague/exploratory goals. Produces a brainstorm brief with problem statement, approach, and proto-acceptance criteria. | `Skill("cobuilder:ideation-to-execution")` Phase 1 |
 | **Phase 0** | Business Spec (BS) authoring with CoBuilder RepoMap context injection, DOT pipeline creation (with research→refine→codergen chain validation), Task Master parsing, design challenge. **2 user checkpoints**: Checkpoint A (after pipeline creation) and Checkpoint B (after design challenge) | [references/phase0-prd-design.md](references/phase0-prd-design.md) |
 | **Phase 1** | Generate per-epic Gherkin tests, journey tests, and executable browser test scripts | [references/gherkin-test-patterns.md](references/gherkin-test-patterns.md) |
 | **Phase 2** | Orchestrator spawning via `spawn_orchestrator.py`, headless/SDK/tmux dispatch, DOT-driven dispatch | [references/guardian-workflow.md](references/guardian-workflow.md) |
@@ -281,7 +288,7 @@ The Guardian spawns a lightweight Haiku 4.5 sub-agent to monitor pipeline progre
 Task(
     subagent_type="monitor",
     model="haiku",
-    run_in_background=False,  # Blocking monitor (NOT background) - System 3 waits for result
+    run_in_background=False,  # Blocking monitor (NOT background) - CoBuilder waits for result
     prompt=f"""Monitor pipeline progress for {pipeline_id} for a maximum of 10 minutes.
 
     Signal directory: {signal_dir}
@@ -343,6 +350,18 @@ The reference covers:
 - Handler type mapping (start, codergen, research, refine, wait.cobuilder, wait.human, exit)
 - Required vs optional node attributes per handler
 - Validation via `cli.py validate`
+
+### TDD Pipeline Template (Alternative)
+
+For initiatives with a test-driven workflow (RED → GREEN → REFACTOR per worker), use `Skill("cobuilder:tdd-pipeline")` instead of the standard `cobuilder-lifecycle` template. The TDD template generates three codergen nodes per worker task (write failing tests → minimal implementation → refactor) with automatic retry on validation failure. Instantiate via:
+
+```bash
+python3 cobuilder/templates/instantiator.py tdd-validated \
+  --param prd_ref=PRD-{ID} --param sd_path=docs/sds/SD-{ID}.md \
+  --param-file workers.yaml --output .pipelines/pipelines/{id}-tdd.dot
+```
+
+Workers in TDD pipelines receive `worker_powers` attributes that enable `Skill("worker-superpowers")` sub-skills (TDD, systematic debugging, verification). See the `cobuilder:tdd-pipeline` skill for workers YAML format and parameter reference.
 
 ### SDK Mode Entry Points
 
@@ -407,20 +426,32 @@ Load these reference files when entering each phase or when you need detailed gu
 
 **DO NOT load all references at once.** Load on-demand as you progress through phases.
 
+### Related CoBuilder Sub-Skills
+
+The `cobuilder` parent skill provides orchestration-level sub-skills that complement the guardian workflow:
+
+| Sub-Skill | Invoke As | When to Use |
+|-----------|-----------|-------------|
+| **ideation-to-execution** | `Skill("cobuilder:ideation-to-execution")` | Starting from a vague idea — structured brainstorming (Phase 1) → PRD (Phase 2) → SD (Phase 3) → worktree + pipeline (Phase 4) → autonomous pilot (Phase 5). Use Pre-Phase brainstorming before entering guardian Phase 0. |
+| **tdd-pipeline** | `Skill("cobuilder:tdd-pipeline")` | Generating TDD-specific DOT pipelines with RED → GREEN → REFACTOR nodes per worker. Alternative to `cobuilder-lifecycle` template when test-driven workflow is preferred. |
+
+**Worker-level powers** (TDD, debugging, verification) are in the separate `Skill("worker-superpowers")` — not loaded by the guardian directly, but referenced by pipeline node `worker_powers` attributes.
+
 ---
 
-**Version**: 1.0.0
-**Dependencies**: cs-promise CLI (requires PATH setup — see Prerequisites section), pipeline_runner.py + claude_code_sdk (primary dispatch), tmux (tmux mode — interactive, lower API cost), Hindsight MCP, ccsystem3 shell function, Task Master MCP, ZeroRepo
+**Version**: 1.2.0
+**Dependencies**: cs-promise CLI (requires PATH setup — see Prerequisites section), pipeline_runner.py + claude_code_sdk (primary dispatch), tmux (tmux mode — interactive, lower API cost), Hindsight MCP, cccb shell function (formerly ccsystem3), Task Master MCP, ZeroRepo
 **Integration**: cobuilder-guardian skill, completion-promise skill, acceptance-test-writer skill, parallel-solutioning skill, research-first skill
 **Theory**: Independent verification eliminates self-reporting bias in agentic systems
 
 **Changelog**:
-- v1.1.0: Added Phase Gates (G0→1, G1→2, G2→4) as mandatory structural checkpoints between phases. G1→2 (acceptance tests must exist before dispatch) is the most commonly skipped gate due to cognitive momentum. Added Mode Transition protocol (investigation → guardian) with TodoWrite checklist injection at transition point. Added `scripts/verify-phase-gate.py` for programmatic gate verification. Added "Urgency Bypass" anti-pattern documentation. Added Phase 0 → Phase 1 transition section to `phase0-prd-design.md`. Root cause: System 3 skipped Phase 1 (blind acceptance tests) when user asked for "PRD and SD" in one breath — cognitive momentum overrode the process.
+- v1.2.0: Cross-referenced `cobuilder` parent skill sub-skills. Added Pre-Phase (brainstorming via `Skill("cobuilder:ideation-to-execution")`) for sessions starting from vague ideas — structured discovery before Phase 0 BS authoring. Added TDD Pipeline Template section referencing `Skill("cobuilder:tdd-pipeline")` as alternative to cobuilder-lifecycle for test-driven workflows. Added "Related CoBuilder Sub-Skills" table to Additional Resources with `ideation-to-execution`, `tdd-pipeline`, and `worker-superpowers` cross-references. Root cause: guardian skill had no awareness of sibling cobuilder sub-skills, causing sessions to skip structured brainstorming and miss the TDD pipeline template option.
+- v1.1.0: Added Phase Gates (G0→1, G1→2, G2→4) as mandatory structural checkpoints between phases. G1→2 (acceptance tests must exist before dispatch) is the most commonly skipped gate due to cognitive momentum. Added Mode Transition protocol (investigation → guardian) with TodoWrite checklist injection at transition point. Added `scripts/verify-phase-gate.py` for programmatic gate verification. Added "Urgency Bypass" anti-pattern documentation. Added Phase 0 → Phase 1 transition section to `phase0-prd-design.md`. Root cause: CoBuilder skipped Phase 1 (blind acceptance tests) when user asked for "PRD and SD" in one breath — cognitive momentum overrode the process.
 - v1.0.0: Terminology migration — prose-level renaming only. "PRD" → "Business Spec (BS)" and "Solution Design/SD" → "Technical Spec (TS)" throughout descriptive prose in SKILL.md and all reference files. Code identifiers (`prd_ref`, `sd_path`), file-identifier strings like `PRD-XXX-001`, historical changelog entries, and content inside code blocks are unchanged. New spec file paths: `docs/specs/business/` (BS) and `docs/specs/technical/` (TS) for future specs; historical specs remain in `docs/prds/` and `docs/sds/`.
 - v0.9.0: Added Phase 5 (Session Closing Protocol) as mandatory final phase. PRD/SD implementation status updates and bead closure are now an atomic operation — never one without the other. This ensures source documents remain the single source of truth for progress tracking.
 - v0.8.0: Added validation acceptance thresholds (ACCEPT ≥ 0.70, INVESTIGATE 0.50-0.69, REJECT < 0.50) and bead closure process references throughout. Updated `description` field with autonomous threshold-based accept/reject capability and new trigger keywords ("validation thresholds", "gradient scoring decision", "bead creation for gaps"). Expanded Phase 4 row in Guardian Workflow Phases table with threshold summary and references to guardian-workflow.md §§ 5.X and 6.5. Added Phase 4.6 Bead Closure row to Quick Reference table. Bumped `last_verified` to 2026-03-09.
 - v0.7.0: Removed headless mode (`--mode headless`, `spawn_orchestrator.py --mode headless`, `_build_headless_worker_cmd`, `run_headless_worker`). Headless mode is dead code — all dispatch now uses AgentSDK via `pipeline_runner.py`. Updated architecture diagram, mode table, SDK Mode Entry Points section, dependencies line. Deleted test_headless_dispatch.py and test_headless_worker.py. Two dispatch modes remain: Pipeline (PRIMARY) and tmux (interactive). Root cause: no API credits, headless = `claude -p` = API-billed, made it dead code.
-- v0.5.2: Corrected dispatch model throughout. `pipeline_runner.py --dot-file` is the PRIMARY dispatch path and uses **AgentSDK** (`claude_code_sdk`) — NOT `claude -p`. Seeing `claude` in `ps` when pipeline_runner runs is normal SDK behavior (SDK internally shells to the claude binary). `claude -p` is ONLY used by `spawn_orchestrator.py --mode headless` (legacy). Updated architecture diagram, mode table, anti-patterns, and dependencies line. Root cause: System 3 misread `ps` output and incorrectly concluded pipeline_runner uses `claude -p` — the process signature looks identical but the dispatch layer is entirely different.
+- v0.5.2: Corrected dispatch model throughout. `pipeline_runner.py --dot-file` is the PRIMARY dispatch path and uses **AgentSDK** (`claude_code_sdk`) — NOT `claude -p`. Seeing `claude` in `ps` when pipeline_runner runs is normal SDK behavior (SDK internally shells to the claude binary). `claude -p` is ONLY used by `spawn_orchestrator.py --mode headless` (legacy). Updated architecture diagram, mode table, anti-patterns, and dependencies line. Root cause: CoBuilder misread `ps` output and incorrectly concluded pipeline_runner uses `claude -p` — the process signature looks identical but the dispatch layer is entirely different.
 - v0.5.1: Rebalanced mode descriptions — tmux is equal peer to headless, not deprecated/legacy. Removed "Default for workers" label from headless. Added explicit tmux spawn command example in Quick Reference with wisdom file template. Updated system3-meta-orchestrator.md to remove "legacy tmux" and "for debugging only" language. Root cause: recent tmux-as-legacy language in docs caused orchestrator prompts to drop mandatory `Skill("orchestrator-multiagent")` invocation, resulting in direct implementation instead of delegation to workers.
 - v0.6.0: 3-layer attractor consolidation. Created `guardian.py` (composes launch_guardian + guardian_agent), `runner.py` (composes spawn_runner + runner_agent with `--spawn` mode), `dispatch_worker.py` (extracted headless functions from spawn_orchestrator.py). Guardian system prompt now references `runner.py --spawn` instead of `spawn_runner.py`. Old files untouched — backward-compatible re-exports from spawn_orchestrator.py. Zero test breakage (987 tests pass).
 - v0.5.0: Added headless CLI worker mode (Epic 6). Workers run via `claude -p` with Three-Layer Context: ROLE (--system-prompt from .claude/agents/), TASK (-p prompt), IDENTITY (env vars). New functions: `_build_headless_worker_cmd()` and `run_headless_worker()` in dispatch_worker.py (re-exported from spawn_orchestrator.py). `--mode headless` added to runner.py, spawn_orchestrator.py, and guardian_agent.py system prompt. tmux mode deprecated in favor of headless. JSON output parsing replaces tmux capture-pane monitoring.

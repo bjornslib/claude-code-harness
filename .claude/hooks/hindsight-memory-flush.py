@@ -100,7 +100,7 @@ def _mark_flushed(state_dir: Path, fingerprint: str) -> None:
 
 
 def _is_system3_session() -> bool:
-    """Detect whether this is a System 3 meta-orchestrator session."""
+    """Detect whether this is a CoBuilder meta-orchestrator session."""
     output_style = os.environ.get("CLAUDE_OUTPUT_STYLE", "")
     session_id = os.environ.get("CLAUDE_SESSION_ID", "")
     # Check output style for system3 indicator
@@ -109,6 +109,9 @@ def _is_system3_session() -> bool:
     # Check session ID for explicit system3 or s3- prefix patterns
     sid_lower = session_id.lower()
     if "system3" in sid_lower:
+        return True
+    # Accept cccb- prefix (new cccb alias replacing ccsystem3)
+    if session_id.startswith("cccb-"):
         return True
     # Match s3- prefix or -s3- infix but not arbitrary substrings like "test-non-s3"
     import re
@@ -294,7 +297,7 @@ def main():
         # 6. Retain to shared bank (always)
         _retain(SHARED_BANK, [shared_item], state_dir)
 
-        # 7. Retain to private bank (only for System 3 sessions)
+        # 7. Retain to private bank (only for CoBuilder sessions)
         if _is_system3_session():
             private_item = dict(shared_item)
             private_item["context"] = "system3-active-goals"
@@ -302,7 +305,7 @@ def main():
                 f"s3-precompact-{context.get('session_id', 'unknown')}-{fingerprint}"
             )
             _retain(PRIVATE_BANK, [private_item], state_dir)
-            _log(state_dir, "Flushed to both banks (System 3 session)")
+            _log(state_dir, "Flushed to both banks (CoBuilder session)")
         else:
             _log(state_dir, "Flushed to shared bank only")
 

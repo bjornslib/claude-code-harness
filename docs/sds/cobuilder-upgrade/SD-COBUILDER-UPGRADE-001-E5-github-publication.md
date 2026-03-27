@@ -763,7 +763,7 @@ Thank you for your interest in contributing!
 ## Architecture
 
 This project uses a 3-level agent hierarchy:
-- **System 3** (meta-orchestrator): Strategic planning
+- **CoBuilder** (meta-orchestrator): Strategic planning
 - **Orchestrator**: Feature coordination
 - **Workers**: Implementation specialists
 

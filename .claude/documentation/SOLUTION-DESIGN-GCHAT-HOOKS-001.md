@@ -184,10 +184,10 @@ Claude Code              Notification Hook         gchat-send.sh         GChat
     │◄─ (no output, fire-forget│                        │                   │
 ```
 
-### 1.6 Data Flow D: System 3 Direct Outbound (Bash to GChat)
+### 1.6 Data Flow D: CoBuilder Direct Outbound (Bash to GChat)
 
 ```
-System 3 Claude Code                gchat-send.sh               GChat
+CoBuilder Claude Code                gchat-send.sh               GChat
     │                                     │                        │
     │ Bash("gchat-send --type             │                        │
     │   task_completion 'Epic done'")     │                        │
@@ -1249,9 +1249,9 @@ The Stop hook is extended within `unified-stop-gate.sh` itself (see section 4.4)
     <key>ProgramArguments</key>
     <array>
         <string>/usr/bin/python3</string>
-        <string>/Users/theb/Documents/Windsurf/claude-harness-setup/.claude/scripts/gchat-response-poller/gchat-response-poller.py</string>
+        <string>$CLAUDE_PROJECT_DIR/.claude/scripts/gchat-response-poller/gchat-response-poller.py</string>
         <string>--pending-dir</string>
-        <string>/Users/theb/Documents/Windsurf/claude-harness-setup/.claude/state/pending-questions</string>
+        <string>$CLAUDE_PROJECT_DIR/.claude/state/pending-questions</string>
         <string>--poll-interval</string>
         <string>10</string>
     </array>
@@ -1271,15 +1271,15 @@ The Stop hook is extended within `unified-stop-gate.sh` itself (see section 4.4)
     <integer>20</integer>
 
     <key>StandardOutPath</key>
-    <string>/Users/theb/.claude/logs/gchat-response-poller.log</string>
+    <string>~/.claude/logs/gchat-response-poller.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/Users/theb/.claude/logs/gchat-response-poller.err</string>
+    <string>~/.claude/logs/gchat-response-poller.err</string>
 
     <key>EnvironmentVariables</key>
     <dict>
         <key>GOOGLE_CHAT_CREDENTIALS_FILE</key>
-        <string>/Users/theb/.config/google/service-account.json</string>
+        <string>~/.config/google/service-account.json</string>
         <key>GOOGLE_CHAT_SPACE_ID</key>
         <string>spaces/AAAA...</string>
         <key>PATH</key>
@@ -1287,7 +1287,7 @@ The Stop hook is extended within `unified-stop-gate.sh` itself (see section 4.4)
     </dict>
 
     <key>WorkingDirectory</key>
-    <string>/Users/theb/Documents/Windsurf/claude-harness-setup</string>
+    <string>$CLAUDE_PROJECT_DIR</string>
 </dict>
 </plist>
 ```
@@ -1351,14 +1351,14 @@ This is the most architecturally significant edge case in the design. The two Cl
 
 | Session Type | Launch Command | tmux | AskUserQuestion Forwarding | GChat Injection |
 |-------------|---------------|------|--------------------------|-----------------|
-| System 3 | `ccsystem3` | Depends on `ccsystem3` implementation | Yes (outbound) | Only if tmux |
+| CoBuilder | `cccb` (formerly `ccsystem3`) | Depends on `cccb` implementation | Yes (outbound) | Only if tmux |
 | Orchestrator | `launchorchestrator [name]` | Always (tmux new-session) | Yes (outbound) | Yes |
 | Worker | Spawned as native teammate | Shares lead's tmux | Yes (outbound) | Through lead session |
 | Development / one-off | `claude` directly | No | Yes (outbound only) | No |
 
-### 5.2 The ccsystem3 tmux Situation
+### 5.2 The cccb tmux Situation
 
-Based on the memory context (tmux Spawn Pattern v3, 2026-02-17), `ccsystem3` is a zsh function that may or may not create a tmux session depending on whether the user invokes it from within tmux. The design must not assume System 3 always has tmux.
+Based on the memory context (tmux Spawn Pattern v3, 2026-02-17), `cccb` (formerly `ccsystem3`) is a zsh function that may or may not create a tmux session depending on whether the user invokes it from within tmux. The design must not assume CoBuilder always has tmux.
 
 **Proposed behavior:**
 
@@ -1399,12 +1399,12 @@ For sessions running without tmux (e.g., a developer running `claude` directly):
 
 This degradation is acceptable because non-tmux sessions are typically developer/interactive sessions where the user is physically present. The primary value of GChat injection is for autonomous orchestrator sessions running in background tmux panes.
 
-### 5.4 ccsystem3 tmux Wrapping Recommendation
+### 5.4 cccb tmux Wrapping Recommendation
 
-To enable full GChat injection for System 3, `ccsystem3` should be updated to always start within tmux. The recommended pattern (from tmux Spawn Pattern v3):
+To enable full GChat injection for CoBuilder, `cccb` should be updated to always start within tmux. The recommended pattern (from tmux Spawn Pattern v3):
 
 ```bash
-function ccsystem3() {
+function cccb() {
     local SESSION_NAME="system3-$(date +%s)"
     export CLAUDE_SESSION_ID="$SESSION_NAME"
     unset CLAUDECODE  # Prevents nested session error
@@ -1428,7 +1428,7 @@ This is a recommendation for the Epic 4 migration phase, not a requirement for t
 
 ### 6.1 Multiple Simultaneous AskUserQuestion Dialogs
 
-**Scenario**: System 3, two orchestrators, and a worker all hit `AskUserQuestion` within the same 10-second poll window.
+**Scenario**: CoBuilder, two orchestrators, and a worker all hit `AskUserQuestion` within the same 10-second poll window.
 
 **Handling**:
 - Each session writes its own `{session_id}-{timestamp}.json` file
@@ -1442,17 +1442,17 @@ This is a recommendation for the Epic 4 migration phase, not a requirement for t
 
 ### 6.2 User Responds to Wrong Question Thread
 
-**Scenario**: User replies "2" to the System 3 thread but meant to reply to the `orch-epic4` thread.
+**Scenario**: User replies "2" to the CoBuilder thread but meant to reply to the `orch-epic4` thread.
 
 **Handling**:
-1. The daemon matches the "2" reply to the System 3 pending question (correct thread key)
-2. System 3 receives the injected answer
+1. The daemon matches the "2" reply to the CoBuilder pending question (correct thread key)
+2. CoBuilder receives the injected answer
 3. The `orch-epic4` pending question remains unanswered until the user replies to its thread
 4. There is no automatic detection or correction of cross-thread responses
 
 **Mitigation in UI**: The GChat message format must clearly identify the session. Additionally, the thread title (set by GChat from the first message in the thread) includes the session ID, making it harder to confuse.
 
-**Worst case**: System 3 receives an answer intended for an orchestrator. The AskUserQuestion resolves with a potentially wrong answer. This is treated as user error and is equivalent to pressing the wrong key locally. The user can observe the result in GChat via the confirmation message from `gchat-ask-user-answered.py`.
+**Worst case**: CoBuilder receives an answer intended for an orchestrator. The AskUserQuestion resolves with a potentially wrong answer. This is treated as user error and is equivalent to pressing the wrong key locally. The user can observe the result in GChat via the confirmation message from `gchat-ask-user-answered.py`.
 
 ### 6.3 Session Crashes Between Question and Answer
 
@@ -1778,14 +1778,14 @@ fi
 2. Test with a non-critical orchestrator session (e.g., a test epic)
 3. Manually verify injection by watching the tmux session while responding in GChat
 4. Monitor daemon logs for injection errors
-5. Update `ccsystem3` to always run in tmux (see section 5.4)
+5. Update `cccb` to always run in tmux (see section 5.4)
 
 **Success criteria for Phase 2**:
 - [ ] GChat reply "2" correctly selects Option B in the AskUserQuestion dialog
 - [ ] Multi-select responses work correctly
 - [ ] Custom text responses work correctly
 - [ ] Session-end notifications sent to GChat when stop gate passes
-- [ ] System 3 uses `gchat-send` for at least one message type
+- [ ] CoBuilder uses `gchat-send` for at least one message type
 
 **Rollback**: Set daemon to dry-run mode. tmux injection stops but outbound continues.
 
@@ -1796,7 +1796,7 @@ fi
 **Prerequisites**: Phase 2 running stably for 72+ hours without regressions.
 
 **Steps**:
-1. Update System 3 output style (`system3-meta-orchestrator.md`):
+1. Update CoBuilder output style (`system3-meta-orchestrator.md`):
    - Remove s3-communicator spawn instructions
    - Replace `SendMessage(recipient="s3-communicator", ...)` with `Bash("gchat-send ...")`
    - Update cost estimates and agent count
@@ -1809,11 +1809,11 @@ fi
    - Update s3-heartbeat SKILL.md
    - Update system3-orchestrator SKILL.md
 4. Update SYSTEM3_CHANGELOG.md with migration notes
-5. Start a new System 3 session (fresh session without s3-communicator spawn)
+5. Start a new CoBuilder session (fresh session without s3-communicator spawn)
 6. Verify all GChat communication works through hooks only
 
 **Success criteria for Phase 3**:
-- [ ] System 3 starts without spawning s3-communicator
+- [ ] CoBuilder starts without spawning s3-communicator
 - [ ] All outbound GChat messages delivered (no regression)
 - [ ] AskUserQuestion forwarding and injection working
 - [ ] Stop gate passes without s3-communicator in team
@@ -1824,7 +1824,7 @@ fi
 1. Restore `system3-meta-orchestrator.md` from git
 2. Restore `communicator_checker.py` from git
 3. Move skill back from `_archived/`
-4. Launch new System 3 session (it will spawn s3-communicator as before)
+4. Launch new CoBuilder session (it will spawn s3-communicator as before)
 5. The hooks and daemon continue running (harmless alongside s3-communicator)
 
 ### 8.4 Rollback Summary

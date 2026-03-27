@@ -34,7 +34,7 @@ This solution design covers two tightly coupled subsystems of the Pipeline Execu
 
 - **Epic 3 — Condition Expression Language**: A hand-rolled lexer, recursive-descent parser, AST, and evaluator that translates DOT edge `condition` attribute strings (e.g., `$retry_count < 3 && $status = success`) into boolean decisions at runtime. These decisions are the first step of the 5-step edge selection algorithm, making this subsystem the critical path of every conditional routing decision in the engine.
 
-- **Epic 5 — Loop Detection and Retry Policy**: A visit-counter and pattern-detection subsystem that tracks how many times each node has been executed in the current run, detects repeating node subsequences, enforces per-node and pipeline-wide limits, and escalates to System 3 via the existing signal protocol when limits are exceeded.
+- **Epic 5 — Loop Detection and Retry Policy**: A visit-counter and pattern-detection subsystem that tracks how many times each node has been executed in the current run, detects repeating node subsequences, enforces per-node and pipeline-wide limits, and escalates to CoBuilder via the existing signal protocol when limits are exceeded.
 
 The two epics are combined in one SD because they share pipeline context as a runtime dependency: condition expressions read `$node_visits.<node_id>` from the same context store where the loop detector writes, and both subsystems are consulted on every node execution cycle. Designing them together prevents redundant context-access patterns and ensures a single, consistent visit-count authority.
 
@@ -44,7 +44,7 @@ The implementation is greenfield code in `cobuilder/engine/conditions/` and `cob
 
 ## 2. Business Context and Motivation
 
-The DOT pipeline files driving our multi-agent workflows currently rely on System 3 reading edge labels and manually deciding which branch to follow. This is the gap between Level 3 (manual coordination) and Level 4 (spec-driven autonomous execution) described in PRD-PIPELINE-ENGINE-001.
+The DOT pipeline files driving our multi-agent workflows currently rely on CoBuilder reading edge labels and manually deciding which branch to follow. This is the gap between Level 3 (manual coordination) and Level 4 (spec-driven autonomous execution) described in PRD-PIPELINE-ENGINE-001.
 
 Two specific failures motivate these epics:
 

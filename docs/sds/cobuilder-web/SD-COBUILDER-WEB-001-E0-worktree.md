@@ -16,7 +16,7 @@ Pipeline workers dispatched by `pipeline_runner.py` currently execute in a singl
 
 1. **Merge conflicts between concurrent workers.** Two codergen nodes editing the same file in parallel will race. The second worker to `git add && git commit` silently overwrites the first worker's changes, or fails with a dirty-tree error.
 
-2. **No isolation between pipeline runs.** When System 3 launches a second pipeline against the same target repository, workers from pipeline A and pipeline B share a working directory. Partial commits from one pipeline pollute the other.
+2. **No isolation between pipeline runs.** When CoBuilder launches a second pipeline against the same target repository, workers from pipeline A and pipeline B share a working directory. Partial commits from one pipeline pollute the other.
 
 3. **Stale worktree accumulation.** The existing `spawn_orchestrator.py` creates worktrees at `.claude/worktrees/<node_id>/` via `claude --worktree`, but nothing cleans them up after the pipeline completes. Over time, abandoned worktrees consume disk and confuse `git branch --list`.
 
@@ -375,7 +375,7 @@ Two new graph-level attributes:
 digraph "PRD-COBUILDER-WEB-001" {
     graph [
         prd_ref="PRD-COBUILDER-WEB-001"
-        target_dir="/Users/theb/Documents/Windsurf/target-repo"
+        target_dir="/path/to/target-repo"
         worktree_path=".claude/worktrees/PRD-COBUILDER-WEB-001/"  // NEW
         base_branch="main"                                         // NEW (optional)
     ];
@@ -505,9 +505,9 @@ for attempt in range(3):
 **Mitigation:** Two-layer defense:
 
 1. **`git worktree prune`** is called at the start of `get_or_create()` to remove stale entries where the directory has been deleted but the git metadata remains.
-2. **Periodic garbage collection.** A future System 3 health check (not in this epic) can call `list_active()` across all target repos and compare against running pipelines. Orphans older than 24 hours get cleaned up.
+2. **Periodic garbage collection.** A future CoBuilder health check (not in this epic) can call `list_active()` across all target repos and compare against running pipelines. Orphans older than 24 hours get cleaned up.
 
-For this epic, the `cleanup()` method is the primary defense. The PRD notes that System 3 should call cleanup after validating pipeline results.
+For this epic, the `cleanup()` method is the primary defense. The PRD notes that CoBuilder should call cleanup after validating pipeline results.
 
 ### 7.3 Branch Conflicts
 
@@ -527,7 +527,7 @@ For this epic, the `cleanup()` method is the primary defense. The PRD notes that
 
 ### 7.5 Path Length Limits
 
-**Risk:** Deeply nested paths like `/Users/theb/Documents/Windsurf/target-repo/.claude/worktrees/PRD-COBUILDER-WEB-001/` approach filesystem limits on some platforms.
+**Risk:** Deeply nested paths like `/path/to/target-repo/.claude/worktrees/PRD-COBUILDER-WEB-001/` approach filesystem limits on some platforms.
 
 **Mitigation:** The `prd_id` is used directly as the directory name (no additional nesting). PRD IDs are typically 15-25 characters. The full path stays well under the 260-character Windows limit and the 1024-character macOS/Linux limit. No action needed beyond documenting the convention.
 

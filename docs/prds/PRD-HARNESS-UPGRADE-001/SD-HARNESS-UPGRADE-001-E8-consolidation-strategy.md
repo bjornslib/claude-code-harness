@@ -2,7 +2,7 @@
 title: "SD: Attractor-to-CoBuilder Consolidation Strategy — Probabilistic Analysis"
 status: active
 type: architecture
-last_verified: 2026-03-09T00:00:00.000Z
+last_verified: 2026-03-09
 grade: authoritative
 sd_id: SD-HARNESS-UPGRADE-001-E8-CONSOLIDATION
 parent_prd: PRD-HARNESS-UPGRADE-001
@@ -371,7 +371,7 @@ Based on Hindsight patterns and this codebase's specific constraints:
 
 ## 9. Hindsight Integration
 
-Findings from `mcp__hindsight__reflect()` consulted during this analysis (bank_id: claude-code-agencheck):
+Findings from `mcp__hindsight__reflect()` consulted during this analysis (bank_id: claude-code-my-project):
 
 - **Thin adapter pattern** (validated): "Using thin adapters for incremental migration
   provides a safe layer that allows the codebase to continue importing old V1 names
@@ -421,3 +421,9 @@ Findings from `mcp__hindsight__reflect()` consulted during this analysis (bank_i
 *This document was produced by Architect 6 (Probabilistic Reasoning mode). All
 probability estimates are empirically grounded; the confidence intervals in
 Section 5 document where estimates rely on unverified assumptions.*
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

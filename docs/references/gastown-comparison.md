@@ -234,7 +234,7 @@ Gastown also notes diminishing returns beyond a certain number of parallel agent
 
 **Attractor Pipeline:**
 Designed for depth-first pipeline execution with controlled parallelism at the `parallel` node type. Our primary scaling axis is pipeline complexity (number of nodes), not agent concurrency. Key constraints:
-- Guardian is the single pipeline driver; it cannot itself be parallelized across pipelines without a higher-level System 3 orchestrator.
+- Guardian is the single pipeline driver; it cannot itself be parallelized across pipelines without a higher-level CoBuilder orchestrator.
 - Node dependencies in the DOT graph enforce sequential ordering where required.
 - Parallel branches are an explicit graph construct, not an emergent property.
 
@@ -285,7 +285,7 @@ The Go binary manages settings isolation actively — it writes the correct `set
 **Attractor Pipeline:**
 Configuration lives in the `.claude/` harness directory:
 - `settings.json` configures hooks system-wide
-- `output-styles/` defines behavior for orchestrator and System 3 levels
+- `output-styles/` defines behavior for orchestrator and CoBuilder levels
 - `agents/` defines specialist agent configurations
 - Workers inherit settings from the worktree they are launched in
 

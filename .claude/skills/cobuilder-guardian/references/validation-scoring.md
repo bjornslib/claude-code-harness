@@ -480,7 +480,7 @@ The evidence gate is the last line of defense: even if the prompt instruction is
 
 ## 11. Phase 4.5: Autonomous Gap Closure
 
-After Phase 4 validation produces a confidence score and identifies gaps, System 3 must attempt autonomous closure of **closable** gaps before escalating any work to the wait.human stage. This phase is the critical link between validation findings and user escalation.
+After Phase 4 validation produces a confidence score and identifies gaps, CoBuilder must attempt autonomous closure of **closable** gaps before escalating any work to the wait.human stage. This phase is the critical link between validation findings and user escalation.
 
 ### Gap Classification Decision Tree
 
@@ -1001,7 +1001,7 @@ def validate_dot_pipeline_node(node_id: str, node_attrs: dict):
 
 ### Phase 4.5: Autonomous Gap Closure
 
-After Phase 4 validation identifies gaps, System 3 autonomously decides whether to close each gap via a codergen fix-it node or escalate it to the `wait.human` gate. The goal is to **never report gaps to the user that can be fixed without architectural or UX decisions**.
+After Phase 4 validation identifies gaps, CoBuilder autonomously decides whether to close each gap via a codergen fix-it node or escalate it to the `wait.human` gate. The goal is to **never report gaps to the user that can be fixed without architectural or UX decisions**.
 
 This phase implements the gap closure decision tree documented in `gap-closure-protocol.md` and `gap-decision-tree.md`.
 
@@ -1021,7 +1021,7 @@ Phase 4.5: Autonomous Gap Closure (this phase)
 wait.human Gate (only gaps requiring user input/decision)
 ```
 
-Only when all autonomously-fixable gaps are closed does System 3 transition the pipeline to the `wait.human` gate.
+Only when all autonomously-fixable gaps are closed does CoBuilder transition the pipeline to the `wait.human` gate.
 
 #### Gap Analysis Decision Tree
 
@@ -1047,7 +1047,7 @@ For each gap identified in Phase 4:
 
 #### Autonomous Fix-It Node Pattern
 
-When System 3 decides to close a gap autonomously:
+When CoBuilder decides to close a gap autonomously:
 
 1. **Create the fix-it node in DOT** (e.g., `fix_gap_1`)
    - Handler: `codergen`
@@ -1067,7 +1067,7 @@ When System 3 decides to close a gap autonomously:
 
 3. **Dispatch and re-validate**
    - Runner dispatches fix-it codergen node
-   - After completion, System 3 re-runs the exact Gherkin scenario that failed
+   - After completion, CoBuilder re-runs the exact Gherkin scenario that failed
    - If scenario passes → mark gap as closed, continue to next gap
    - If scenario still fails → requeue fix-it with updated guidance
 

@@ -10,7 +10,7 @@ grade: reference
 
 **Status**: Draft
 **Date**: 2026-02-19
-**Author**: System 3 Meta-Orchestrator
+**Author**: CoBuilder Meta-Orchestrator
 **Parent PRD**: PRD-S3-ATTRACTOR-001 (Attractor-Inspired Graph Orchestration)
 **Bead ID**: claude-harness-setup-ej8c
 
@@ -20,20 +20,20 @@ grade: reference
 
 ### Why an Execution Engine
 
-PRD-S3-ATTRACTOR-001 establishes the Attractor-style DOT graph as the primary orchestration artifact for System 3. However, under that PRD, System 3 remains responsible for manually reading pipeline state (`attractor status`), deciding which node to advance next, calling `attractor transition`, spawning orchestrators, and checkpointing progress. This manual graph navigation consumes significant System 3 context and cognitive budget on mechanical traversal logic rather than strategic oversight.
+PRD-S3-ATTRACTOR-001 establishes the Attractor-style DOT graph as the primary orchestration artifact for CoBuilder. However, under that PRD, CoBuilder remains responsible for manually reading pipeline state (`attractor status`), deciding which node to advance next, calling `attractor transition`, spawning orchestrators, and checkpointing progress. This manual graph navigation consumes significant CoBuilder context and cognitive budget on mechanical traversal logic rather than strategic oversight.
 
-An execution engine removes this burden. System 3 declares its intent by authoring (or approving) a DOT pipeline graph, and the engine handles the mechanical work of traversal: evaluating dependencies, spawning workers for ready nodes, collecting validation results, advancing state, and checkpointing.
+An execution engine removes this burden. CoBuilder declares its intent by authoring (or approving) a DOT pipeline graph, and the engine handles the mechanical work of traversal: evaluating dependencies, spawning workers for ready nodes, collecting validation results, advancing state, and checkpointing.
 
 ### Goal
 
-**System 3 declares intent via DOT graph; the engine handles traversal.**
+**CoBuilder declares intent via DOT graph; the engine handles traversal.**
 
-The engine is not a replacement for System 3. It is an automation layer that eliminates the repetitive graph-navigation loop while preserving System 3's role as strategic overseer, anti-gaming enforcer, and business-outcome validator. System 3 remains the authority on what to build (the graph) and whether it was built correctly (validation). The engine handles the how of moving through the graph.
+The engine is not a replacement for CoBuilder. It is an automation layer that eliminates the repetitive graph-navigation loop while preserving CoBuilder's role as strategic overseer, anti-gaming enforcer, and business-outcome validator. CoBuilder remains the authority on what to build (the graph) and whether it was built correctly (validation). The engine handles the how of moving through the graph.
 
 ### Design Principles
 
 1. **Progressive automation**: Start with CLI tools humans can inspect, layer automation on top.
-2. **Same tools, different caller**: The engine calls the same `attractor` CLI commands System 3 calls manually. No new APIs needed for Phase 2.
+2. **Same tools, different caller**: The engine calls the same `attractor` CLI commands CoBuilder calls manually. No new APIs needed for Phase 2.
 3. **Oversight never automated away**: Validation gates (`hexagon` nodes) always require independent verification. The engine orchestrates validation but cannot self-validate.
 4. **Crash resilience**: Every state transition is checkpointed. The engine can resume from any interruption.
 5. **Anti-gaming by design**: The engine enforces the triple-gate protocol. Agents cannot mark their own work as validated.
@@ -47,7 +47,7 @@ The execution engine evolves through three progressive phases, each building on 
 ```
 Phase 1 (Current)          Phase 2 (Next)              Phase 3 (Future)
 ┌──────────────────┐      ┌──────────────────┐        ┌──────────────────┐
-│  System 3         │      │  System 3         │        │  System 3         │
+│  CoBuilder         │      │  CoBuilder         │        │  CoBuilder         │
 │  (manual graph    │      │  (oversight +     │        │  (strategic only) │
 │   navigation)     │      │   approval)       │        │                   │
 │                   │      │                   │        │                   │
@@ -75,36 +75,36 @@ Phase 1 (Current)          Phase 2 (Next)              Phase 3 (Future)
 Phase 1 is the foundation delivered by PRD-S3-ATTRACTOR-001. All graph interaction is manual.
 
 **How it works:**
-1. System 3 authors or generates a DOT pipeline graph for an initiative.
-2. System 3 calls `attractor parse` and `attractor validate` to verify the graph.
-3. System 3 reads `attractor status` to identify which nodes are `pending` with all dependencies satisfied.
-4. System 3 spawns an orchestrator (via tmux) for the next ready `codergen` node.
-5. When the orchestrator reports `impl_complete`, System 3 transitions the node and dispatches validation via `attractor transition`.
-6. System 3 evaluates validation results and advances or retries the node.
-7. System 3 calls `attractor checkpoint save` after each transition.
+1. CoBuilder authors or generates a DOT pipeline graph for an initiative.
+2. CoBuilder calls `attractor parse` and `attractor validate` to verify the graph.
+3. CoBuilder reads `attractor status` to identify which nodes are `pending` with all dependencies satisfied.
+4. CoBuilder spawns an orchestrator (via tmux) for the next ready `codergen` node.
+5. When the orchestrator reports `impl_complete`, CoBuilder transitions the node and dispatches validation via `attractor transition`.
+6. CoBuilder evaluates validation results and advances or retries the node.
+7. CoBuilder calls `attractor checkpoint save` after each transition.
 8. Repeat steps 3-7 until the pipeline reaches the `exit` node.
-9. System 3 runs `cs-verify --promise` for the triple-gate finalization.
+9. CoBuilder runs `cs-verify --promise` for the triple-gate finalization.
 
 **What exists after Phase 1:**
 - DOT vocabulary and schema (`.pipelines/schema.md`)
 - CLI tools: `attractor parse`, `validate`, `status`, `transition`, `checkpoint`
 - Completion promise integration (`cs-init`, `cs-promise`, `cs-verify`)
 - Checkpoint/restore for crash recovery
-- System 3 output style with DOT graph navigation workflow
+- CoBuilder output style with DOT graph navigation workflow
 - Stop gate integration (blocks session end if pipeline has unvalidated nodes)
 
 **Limitations of Phase 1:**
-- System 3 spends substantial context on graph traversal logic.
+- CoBuilder spends substantial context on graph traversal logic.
 - Each status check, dependency evaluation, and transition call is a tool use consuming context budget.
-- No event-driven progression -- System 3 must actively poll.
-- Multi-pipeline management requires System 3 to interleave manually.
+- No event-driven progression -- CoBuilder must actively poll.
+- Multi-pipeline management requires CoBuilder to interleave manually.
 - Error handling and retry logic is ad-hoc per session.
 
 ---
 
 ### Phase 2: Agent SDK Integration
 
-Phase 2 introduces a **Pipeline Runner Agent** -- a purpose-built agent that reads the DOT graph and automates traversal. System 3 shifts from manual navigation to oversight and approval.
+Phase 2 introduces a **Pipeline Runner Agent** -- a purpose-built agent that reads the DOT graph and automates traversal. CoBuilder shifts from manual navigation to oversight and approval.
 
 **Architecture:**
 
@@ -137,8 +137,8 @@ Phase 2 introduces a **Pipeline Runner Agent** -- a purpose-built agent that rea
 │  │       c. On pass: attractor transition                         │  │
 │  │       d. On fail: attractor transition --status=failed         │  │
 │  │    4. attractor checkpoint save                                │  │
-│  │    5. If exit node reached: signal System 3 for FINALIZE       │  │
-│  │    6. If no ready nodes and not done: report STUCK to System 3 │  │
+│  │    5. If exit node reached: signal CoBuilder for FINALIZE       │  │
+│  │    6. If no ready nodes and not done: report STUCK to CoBuilder │  │
 │  │                                                                 │  │
 │  │  Tools: attractor CLI, tmux, validation-test-agent,            │  │
 │  │         cs-promise                                              │  │
@@ -164,24 +164,24 @@ Phase 2 introduces a **Pipeline Runner Agent** -- a purpose-built agent that rea
    - The runner does not poll on a timer; it reacts to orchestrator completion signals.
    - Completion signals come via: (a) bead status updates, (b) tmux session exit, (c) task list changes detected by `task-list-monitor.py`.
 
-3. **System 3 approval gates**
+3. **CoBuilder approval gates**
    - The runner advances `codergen` -> `impl_complete` -> `validated` automatically for technical validation.
-   - Business validation gates (`gate=business`) require System 3 approval before the runner advances.
-   - The runner signals System 3 via `SendMessage` when business approval is needed.
-   - System 3 can override the runner's decisions at any point.
+   - Business validation gates (`gate=business`) require CoBuilder approval before the runner advances.
+   - The runner signals CoBuilder via `SendMessage` when business approval is needed.
+   - CoBuilder can override the runner's decisions at any point.
 
 4. **Same CLI tools, different caller**
-   - The runner calls `attractor status`, `attractor transition`, `attractor checkpoint` -- the exact same commands System 3 calls in Phase 1.
+   - The runner calls `attractor status`, `attractor transition`, `attractor checkpoint` -- the exact same commands CoBuilder calls in Phase 1.
    - No new infrastructure needed. The runner is a caller, not a platform.
 
 5. **Checkpoint recovery**
    - The runner checkpoints after every transition (same as Phase 1).
-   - If the runner crashes, System 3 relaunches it. The runner reads the latest checkpoint and resumes.
+   - If the runner crashes, CoBuilder relaunches it. The runner reads the latest checkpoint and resumes.
    - Checkpoint frequency: after every node state transition (not time-based).
 
 6. **Single-pipeline scope**
    - Phase 2 supports exactly one active pipeline per runner instance.
-   - For multi-initiative work, System 3 launches multiple runner instances.
+   - For multi-initiative work, CoBuilder launches multiple runner instances.
    - Cross-pipeline dependencies are not supported (those require Phase 3).
 
 **What Phase 2 adds:**
@@ -189,7 +189,7 @@ Phase 2 introduces a **Pipeline Runner Agent** -- a purpose-built agent that rea
 - Event-driven node evaluation (react to completion, not poll)
 - Automatic worker spawning from graph nodes
 - Automatic validation dispatching
-- System 3 approval gates for business validation
+- CoBuilder approval gates for business validation
 - Crash recovery via checkpoint/restore
 
 **What Phase 2 does NOT change:**
@@ -220,14 +220,14 @@ Phase 3 envisions a native Attractor-compatible runtime. This phase may never be
 6. **Pluggable backends**: The `CodergenBackend` abstraction from Attractor, allowing different implementation strategies (Claude Code, other LLM tools, human workers) to be plugged in as node handlers.
 
 **Why Phase 3 may not be needed:**
-- Phase 2's single-pipeline runner + System 3 oversight may be sufficient for all practical workloads.
-- Multi-pipeline orchestration adds significant complexity for marginal benefit when System 3 can manage 2-3 concurrent runners.
+- Phase 2's single-pipeline runner + CoBuilder oversight may be sufficient for all practical workloads.
+- Multi-pipeline orchestration adds significant complexity for marginal benefit when CoBuilder can manage 2-3 concurrent runners.
 - Distributed execution is only relevant if work exceeds a single machine's capacity (unlikely for our use case).
-- Event streams are nice-to-have but not critical when System 3 has direct access to pipeline state.
+- Event streams are nice-to-have but not critical when CoBuilder has direct access to pipeline state.
 
 **Decision gate**: After 3 months of Phase 2 usage, evaluate whether any Phase 3 capability is truly needed based on:
 - Number of concurrent pipelines being managed
-- Frequency of System 3 context exhaustion from runner management
+- Frequency of CoBuilder context exhaustion from runner management
 - Whether external stakeholders need real-time pipeline visibility
 - Whether distributed execution would meaningfully improve throughput
 
@@ -253,8 +253,8 @@ Timeline:
   t5: Runner transitions backend to validated
   t6: Runner identifies frontend node as ready (dependency satisfied)
   t7: Repeat for frontend
-  t8: Runner reaches exit node, signals System 3
-  t9: System 3 runs cs-verify triple-gate -> PASS
+  t8: Runner reaches exit node, signals CoBuilder
+  t9: CoBuilder runs cs-verify triple-gate -> PASS
   t10: Pipeline finalized
 
 Expected: All nodes green. Promise verified. Pipeline in history.
@@ -280,8 +280,8 @@ Timeline:
 
 Expected: Backend node shows retry path (failed -> active -> impl_complete -> validated).
           Checkpoint file shows the retry history.
-          Runner handles retry without System 3 intervention.
-Max retries: 3 per node. After 3 failures, runner signals STUCK to System 3.
+          Runner handles retry without CoBuilder intervention.
+Max retries: 3 per node. After 3 failures, runner signals STUCK to CoBuilder.
 ```
 
 #### Cascading Failure: Dependency Chain
@@ -292,11 +292,11 @@ Pipeline: A -> B -> C (serial dependency chain)
 Timeline:
   t0: A completes and validates
   t1: B starts, fails validation 3 times
-  t2: Runner signals STUCK to System 3
+  t2: Runner signals STUCK to CoBuilder
   t3: C never starts (blocked by B)
 
 Expected: Runner reports exactly which node is stuck, with failure history.
-          System 3 can: (a) provide guidance and reset retry count,
+          CoBuilder can: (a) provide guidance and reset retry count,
                         (b) skip the node with override, or
                         (c) abort the pipeline.
           C remains in pending state (never transitions to active).
@@ -352,7 +352,7 @@ Gate 2: Validation Response (independent check)
   - Trust level: MEDIUM (independent but still LLM-based)
 
 Gate 3: Independent Verify (ground truth)
-  - System 3 dispatches s3-investigator (Explore agent) to verify claims
+  - CoBuilder dispatches s3-investigator (Explore agent) to verify claims
   - Reads actual code, runs actual commands, compares to acceptance criteria
   - Uses git log to verify changes are real (not fabricated)
   - Trust level: HIGH (independent and evidence-based)
@@ -366,7 +366,7 @@ Gate 3: Independent Verify (ground truth)
 
 3. **Evidence timestamping**: All evidence is timestamped. Evidence older than the most recent `impl_complete` transition is rejected as stale.
 
-4. **Random spot-checks by System 3**: System 3 randomly selects 20% of validated nodes for manual re-verification. The selection is unpredictable (based on hash of session ID + node ID). If a spot-check fails, ALL nodes validated in the same session are re-validated.
+4. **Random spot-checks by CoBuilder**: CoBuilder randomly selects 20% of validated nodes for manual re-verification. The selection is unpredictable (based on hash of session ID + node ID). If a spot-check fails, ALL nodes validated in the same session are re-validated.
 
 5. **Acceptance criteria immutability**: Once a pipeline is validated (`attractor validate`), acceptance criteria on nodes cannot be weakened. They can only be strengthened (adding criteria) or clarified (rewording without reducing scope). The `attractor validate` command rejects graphs where `acceptance` attributes have been narrowed.
 
@@ -391,34 +391,34 @@ Gate 3: Independent Verify (ground truth)
 |------------|-------------|
 | **Single pipeline execution** | One Pipeline Runner per DOT file. Multiple concurrent runners for multi-initiative work. |
 | **CLI tool integration** | Runner calls existing `attractor` CLI commands. No new infrastructure. |
-| **System 3 manual oversight** | System 3 approves business validation gates and can override/intervene at any point. |
+| **CoBuilder manual oversight** | CoBuilder approves business validation gates and can override/intervene at any point. |
 | **Checkpoint/restore for crash recovery** | Runner checkpoints after every transition. Survives crashes, context resets, and session restarts. |
 | **Worker spawning from graph nodes** | Runner reads `codergen` nodes, spawns orchestrators in tmux with appropriate worker_type and acceptance criteria. |
-| **Automatic technical validation** | Runner dispatches `validation-test-agent --mode=technical` without System 3 involvement. |
-| **Business validation gating** | Runner pauses at `gate=business` nodes and signals System 3 for approval. |
-| **Retry logic** | Up to 3 automatic retries per node with feedback injection. After 3 failures, escalate to System 3. |
+| **Automatic technical validation** | Runner dispatches `validation-test-agent --mode=technical` without CoBuilder involvement. |
+| **Business validation gating** | Runner pauses at `gate=business` nodes and signals CoBuilder for approval. |
+| **Retry logic** | Up to 3 automatic retries per node with feedback injection. After 3 failures, escalate to CoBuilder. |
 | **Parallel node management** | Runner correctly handles parallel fan-out/fan-in groups. |
-| **Pipeline completion signaling** | Runner signals System 3 when exit node is reached for FINALIZE. |
+| **Pipeline completion signaling** | Runner signals CoBuilder when exit node is reached for FINALIZE. |
 | **Anti-gaming enforcement** | Triple-gate protocol, fresh evidence, spot-checks, audit trail. |
 
 ### OUT of Scope (Phase 3 or Never)
 
 | Capability | Why Deferred | Phase |
 |------------|-------------|-------|
-| **Auto-traversal without human oversight** | Core design principle: System 3 always has veto power. Business gates always require approval. | Never (by design) |
+| **Auto-traversal without human oversight** | Core design principle: CoBuilder always has veto power. Business gates always require approval. | Never (by design) |
 | **Event streams** | Polling-based approach is sufficient when the runner is the only consumer. External dashboards are not a current requirement. | Phase 3 |
-| **Multi-pipeline orchestration (single runtime)** | System 3 can launch multiple runner instances. A unified multi-pipeline runtime adds complexity without proven need. | Phase 3 |
+| **Multi-pipeline orchestration (single runtime)** | CoBuilder can launch multiple runner instances. A unified multi-pipeline runtime adds complexity without proven need. | Phase 3 |
 | **Distributed execution** | Single-machine capacity is sufficient for current workloads. | Phase 3 |
-| **Real-time status dashboard** | `attractor status` CLI output is sufficient for System 3. External stakeholders don't currently need pipeline visibility. | Phase 3 |
+| **Real-time status dashboard** | `attractor status` CLI output is sufficient for CoBuilder. External stakeholders don't currently need pipeline visibility. | Phase 3 |
 | **CodergenBackend abstraction** | The current worker architecture (Claude Code + native Agent Teams) is the only backend. Pluggable backends add abstraction without current benefit. | Phase 3 |
-| **model_stylesheet** | Attractor's model_stylesheet concept for per-node model selection is interesting but not needed when System 3 controls model selection at orchestrator spawn time. | Phase 3 |
+| **model_stylesheet** | Attractor's model_stylesheet concept for per-node model selection is interesting but not needed when CoBuilder controls model selection at orchestrator spawn time. | Phase 3 |
 | **HTTP API** | No external consumers need to interact with the pipeline programmatically. | Phase 3 |
-| **Cross-pipeline dependencies** | Rare edge case. System 3 can manually coordinate between runner instances for now. | Phase 3 |
+| **Cross-pipeline dependencies** | Rare edge case. CoBuilder can manually coordinate between runner instances for now. | Phase 3 |
 
 ### Boundary Decision Criteria
 
 A capability moves from "Out of Scope" to "In Scope" when:
-1. System 3 context exhaustion from manual management exceeds 30% of session budget.
+1. CoBuilder context exhaustion from manual management exceeds 30% of session budget.
 2. The same coordination pattern is repeated manually 5+ times across sessions.
 3. An external stakeholder (user, team) requests the capability with a concrete use case.
 4. A Phase 2 limitation causes a pipeline failure that the capability would have prevented.
@@ -596,7 +596,7 @@ If the POC validates successfully, the production Pipeline Runner adds:
 1. **Action execution**: Actually call `attractor transition`, spawn tmux sessions, dispatch validators.
 2. **Event loop**: Wait for orchestrator completion signals instead of one-shot planning.
 3. **Checkpoint integration**: Save state after each action.
-4. **System 3 communication**: Signal approval requests and completion via SendMessage.
+4. **CoBuilder communication**: Signal approval requests and completion via SendMessage.
 5. **Retry logic**: Automatic retry with feedback injection up to 3x.
 
 ---
@@ -609,25 +609,25 @@ If the POC validates successfully, the production Pipeline Runner adds:
 - Pro: No startup cost for each event. Maintains context across node completions.
 - Con: Consumes resources when idle. Risk of context exhaustion on long pipelines.
 
-**Option B: Per-session invocation** -- System 3 launches the runner for each "round" of graph evaluation.
+**Option B: Per-session invocation** -- CoBuilder launches the runner for each "round" of graph evaluation.
 - Pro: Fresh context every round. No resource waste when idle.
 - Con: Startup cost (graph parsing, state loading) on each invocation. No cross-round context.
 
-**Current lean**: Per-session invocation (Option B) for Phase 2. The runner is stateless -- all state is in the checkpoint file. System 3 launches it when an event occurs (orchestrator completion, timer, manual trigger). This is simpler and avoids context exhaustion.
+**Current lean**: Per-session invocation (Option B) for Phase 2. The runner is stateless -- all state is in the checkpoint file. CoBuilder launches it when an event occurs (orchestrator completion, timer, manual trigger). This is simpler and avoids context exhaustion.
 
 ### Q2: How to Handle Multi-Initiative Pipelines?
 
-When System 3 is managing 3 concurrent initiatives (each with its own DOT file), how do runner instances coordinate?
+When CoBuilder is managing 3 concurrent initiatives (each with its own DOT file), how do runner instances coordinate?
 
-**Option A: Fully independent** -- Each runner knows nothing about other pipelines. System 3 manages cross-pipeline concerns.
+**Option A: Fully independent** -- Each runner knows nothing about other pipelines. CoBuilder manages cross-pipeline concerns.
 - Pro: Simple. No coordination complexity.
-- Con: System 3 bears the cognitive load of cross-pipeline coordination.
+- Con: CoBuilder bears the cognitive load of cross-pipeline coordination.
 
 **Option B: Shared state file** -- Runners read a `multi-pipeline-state.json` that tracks resource allocation (e.g., "only 2 concurrent orchestrators allowed").
 - Pro: Automatic resource management.
 - Con: Shared state introduces coordination complexity and race conditions.
 
-**Current lean**: Option A (fully independent) for Phase 2. System 3 already manages multi-initiative work manually. The runner automates WITHIN a pipeline, not across pipelines.
+**Current lean**: Option A (fully independent) for Phase 2. CoBuilder already manages multi-initiative work manually. The runner automates WITHIN a pipeline, not across pipelines.
 
 ### Q3: What is the Right Checkpoint Frequency?
 
@@ -639,17 +639,17 @@ When System 3 is managing 3 concurrent initiatives (each with its own DOT file),
 
 **Current lean**: After every node state transition. The checkpoint is a single JSON file write (~1KB). The cost is negligible compared to the cost of re-running a failed node. For a 10-node pipeline, this means ~30-40 checkpoints (each node transitions 3-4 times on average).
 
-### Q4: How Should the Engine Communicate with System 3?
+### Q4: How Should the Engine Communicate with CoBuilder?
 
-**Option A: Native Agent Teams** -- Runner is a teammate of System 3's s3-live team, uses SendMessage.
+**Option A: Native Agent Teams** -- Runner is a teammate of CoBuilder's s3-live team, uses SendMessage.
 - Pro: Event-driven (SendMessage triggers immediately). No polling.
 - Con: Requires runner to be a persistent team member (conflicts with per-session invocation).
 
-**Option B: Bead status updates** -- Runner updates bead statuses; System 3 monitors bead state.
+**Option B: Bead status updates** -- Runner updates bead statuses; CoBuilder monitors bead state.
 - Pro: Uses existing infrastructure. Durable. Auditable.
 - Con: Polling-based. Adds latency.
 
-**Current lean**: Option A (Native Agent Teams) for Phase 2. The runner is spawned as a background task in the s3-live team with `run_in_background=True`. It uses SendMessage to communicate with System 3. This aligns with the existing s3-live team pattern (s3-communicator, s3-heartbeat, s3-validator are all team members).
+**Current lean**: Option A (Native Agent Teams) for Phase 2. The runner is spawned as a background task in the s3-live team with `run_in_background=True`. It uses SendMessage to communicate with CoBuilder. This aligns with the existing s3-live team pattern (s3-communicator, s3-heartbeat, s3-validator are all team members).
 
 ### Q5: How Does the Runner Handle Context Exhaustion?
 
@@ -664,9 +664,9 @@ Long pipelines (10+ nodes) may cause the runner to exhaust its context window be
 
 ### Q6: Should the Runner Support Pipeline Modification Mid-Execution?
 
-Can System 3 add or remove nodes from a pipeline while the runner is executing?
+Can CoBuilder add or remove nodes from a pipeline while the runner is executing?
 
-**Current lean**: No. Pipeline graphs are immutable once execution begins. If changes are needed, System 3 must:
+**Current lean**: No. Pipeline graphs are immutable once execution begins. If changes are needed, CoBuilder must:
 1. Pause the runner (signal via SendMessage)
 2. Checkpoint current state
 3. Modify the graph
@@ -696,7 +696,13 @@ This keeps the runner simple and avoids race conditions between graph modificati
 |----------|------|-------------|
 | PRD-S3-ATTRACTOR-001 | `.taskmaster/docs/PRD-S3-ATTRACTOR-001.md` | Parent PRD (current phase) |
 | Attractor DOT Schema | `.pipelines/schema.md` | DOT vocabulary definition |
-| System 3 Output Style | `.claude/output-styles/system3-meta-orchestrator.md` | S3 navigation approach |
+| CoBuilder Output Style | `.claude/output-styles/system3-meta-orchestrator.md` | S3 navigation approach |
 | Dual Closure Gate | `.claude/documentation/DUAL_CLOSURE_GATE.md` | Independent validation protocol |
 | Completion Promise CLI | `.claude/skills/system3-orchestrator/references/completion-promise-cli.md` | Promise management |
 | Monitoring Architecture | `.claude/documentation/SYSTEM3_MONITORING_ARCHITECTURE.md` | Monitor/watcher patterns |
+
+## Implementation Status
+
+| Epic | Status | Date | Commit |
+|------|--------|------|--------|
+| - | Remaining | - | - |

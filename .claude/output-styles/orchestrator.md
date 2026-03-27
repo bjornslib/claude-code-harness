@@ -22,7 +22,7 @@ When AGENT_TEAMS is unavailable, fall back to Task(subagent_type=...) subagents.
 ## 3-Tier Hierarchy
 
 ```
-TIER 1: System 3      ──Task──>  TIER 2: Orchestrator/Team Lead (YOU)  ──Team──>  TIER 3: Worker (teammate)
+TIER 1: CoBuilder      ──Task──>  TIER 2: Orchestrator/Team Lead (YOU)  ──Team──>  TIER 3: Worker (teammate)
 (Meta-orchestrator)               (Coordinator)                                    (Direct implementer)
 ```
 
@@ -230,7 +230,7 @@ This loads the execution toolkit (PREFLIGHT, worker templates, beads integration
      - SD combines business context (from PRD) + technical design — this is what Task Master parses
    - Parse **SD** with `task-master parse-prd .taskmaster/docs/SD-{ID}.md --append`
    - Note ID range of new tasks
-   - **Run sync from `zenagent/` root** (not agencheck/) with `--from-id`, `--to-id`, `--tasks-path`
+   - **Run sync from `my-project/` root** (not project root/) with `--from-id`, `--to-id`, `--tasks-path`
    - Sync auto-closes Task Master tasks after creating beads
    - **Generate acceptance tests**: Invoke `Skill("acceptance-test-writer", args="--source=.taskmaster/docs/SD-{ID}.md --prd=PRD-XXX")` to create executable test scripts
    - Commit acceptance tests before Phase 3 begins (ensures tests exist before implementation)

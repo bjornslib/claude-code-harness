@@ -24,7 +24,7 @@ This SD designs the consolidation: attractor scripts that are still active merge
 
 ## 2. Hindsight Findings
 
-Queried Hindsight (bank: `claude-code-agencheck`) before finalising this design.
+Queried Hindsight (bank: `claude-code-my-project`) before finalising this design.
 
 **Relevant prior learnings:**
 - **13 dead files** in `.claude/scripts/attractor/` were identified in the 2026-03-04 cleanup audit (POC scripts, tmux-era tools, deprecated signal protocol CLIs). These are confirmed dead and safe to delete.
@@ -405,7 +405,7 @@ agents_app = typer.Typer(help="Inspect and manage agent identity records")
 app.add_typer(agents_app, name="agents")
 # Wire all commands from agents_cmd.py into agents_app
 
-guardian_app = typer.Typer(help="System 3 read-only pipeline monitor")
+guardian_app = typer.Typer(help="CoBuilder read-only pipeline monitor")
 app.add_typer(guardian_app, name="guardian")
 # Wire all commands from runner_guardian.py into guardian_app
 ```

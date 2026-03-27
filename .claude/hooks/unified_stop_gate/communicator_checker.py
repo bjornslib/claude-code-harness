@@ -1,12 +1,12 @@
 """Communicator active checker for the unified stop gate hook.
 
-P1.5: Prevents System 3 from stopping while an active S3 Communicator
+P1.5: Prevents CoBuilder from stopping while an active S3 Communicator
 teammate is running in the s3-live team. The communicator is a heartbeat
-agent that monitors orchestrators — System 3 must shut it down gracefully
+agent that monitors orchestrators — CoBuilder must shut it down gracefully
 before ending its session.
 
-Only applies to System 3 sessions (session ID starts with 'system3-').
-Non-System 3 sessions always pass this check.
+Only applies to CoBuilder sessions (session ID starts with 'system3-').
+Non-CoBuilder sessions always pass this check.
 """
 
 import json
@@ -29,12 +29,12 @@ S3_COMMUNICATOR_MEMBER_NAME = "s3-communicator"
 class CommunicatorActiveChecker:
     """P1.5: Check if an active S3 Communicator is running.
 
-    Prevents System 3 from stopping while it has an active communicator
+    Prevents CoBuilder from stopping while it has an active communicator
     teammate that should be gracefully shut down first. The communicator
     runs a heartbeat loop monitoring orchestrators — abandoning it leaves
     a zombie agent consuming resources.
 
-    Only applies to System 3 sessions. All other session types pass immediately.
+    Only applies to CoBuilder sessions. All other session types pass immediately.
 
     Detection logic:
         1. Read ~/.claude/teams/s3-live-{hash}/config.json (session-scoped)
@@ -115,7 +115,7 @@ An active S3 Communicator teammate is running:
   - Team: {self._get_team_name()}
 
 The communicator runs a heartbeat loop monitoring orchestrators.
-Stopping System 3 without shutting it down leaves a zombie agent.
+Stopping CoBuilder without shutting it down leaves a zombie agent.
 
 REQUIRED ACTIONS before stopping:
 

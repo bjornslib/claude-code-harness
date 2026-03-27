@@ -46,16 +46,16 @@ Reviewer recommended additions to strengthen execution clarity and governance:
   - Observability SLO checks passing for pilot initiatives
 </COMMENTS>
 
-# PRD-SYSTEM3-ORCHESTRATOR-AUTONOMY-001: Autonomous System 3 and Orchestrator Development Mode
+# PRD-SYSTEM3-ORCHESTRATOR-AUTONOMY-001: Autonomous CoBuilder and Orchestrator Development Mode
 
 ```yaml
 prd_id: PRD-SYSTEM3-ORCHESTRATOR-AUTONOMY-001
-title: "Autonomous System 3 and Orchestrator Development Mode"
+title: "Autonomous CoBuilder and Orchestrator Development Mode"
 product: "Claude Harness Setup"
 version: "1.0"
 status: draft
 created: "2026-02-16"
-author: "System 3 + Harness Engineering"
+author: "CoBuilder + Harness Engineering"
 ```
 
 **Status:** Draft for implementation
@@ -66,7 +66,7 @@ author: "System 3 + Harness Engineering"
 
 ## 1. Executive Summary
 
-We will evolve the harness into a product-grade autonomous development platform where System 3 and orchestrators run in a strict contract environment: repository-local source of truth, enforced docs/test artifacts, agent-legible telemetry, and graded autonomy.
+We will evolve the harness into a product-grade autonomous development platform where CoBuilder and orchestrators run in a strict contract environment: repository-local source of truth, enforced docs/test artifacts, agent-legible telemetry, and graded autonomy.
 
 The immediate gap is not lack of ideas; it is lack of enforcement. We already have markdown E2E specs, orchestration skills, Logfire integration, and parallel-solutioning guidance, but these are inconsistently applied and not continuously gated.
 
@@ -86,7 +86,7 @@ Current autonomous development mode has four core issues:
 ### 2.1 Evidence Snapshot (from current analysis)
 
 - Markdown E2E workflow is documented as primary, but enforcement is procedural, not mechanical.
-- No `.github/workflows/` gate exists in the analyzed `agencheck` repo for spec/report/evidence conformance.
+- No `.github/workflows/` gate exists in the analyzed `my-project` repo for spec/report/evidence conformance.
 - Drift exists between docs and runtime config (for example, E2E docs referencing `5001` while frontend dev config is `5002`).
 - Execution reports show fallback to API-only validation when browser MCP was unavailable, but no automatic policy fail/waiver mechanism.
 - Root and frontend E2E directories are duplicated with uneven completeness.
@@ -128,7 +128,7 @@ Current autonomous development mode has four core issues:
 
 ### 4.1 In Scope
 
-- System 3/orchestrator operating contract and policy
+- CoBuilder/orchestrator operating contract and policy
 - Documentation governance and canonical indexing
 - Markdown test-spec execution standard with strict validation
 - Observability contract (logs/metrics/traces) and Logfire integration into loop
@@ -157,9 +157,9 @@ Current autonomous development mode has four core issues:
 
 ### 6.1 Control Plane
 
-System 3 (meta-governance) -> Orchestrator (initiative lead) -> Workers (specialists)
+CoBuilder (meta-governance) -> Orchestrator (initiative lead) -> Workers (specialists)
 
-- System 3 owns goals, policy decisions, and escalation.
+- CoBuilder owns goals, policy decisions, and escalation.
 - Orchestrator owns decomposition, assignment, and synthesis.
 - Workers execute implementation, tests, and evidence capture.
 
@@ -245,7 +245,7 @@ Acceptance:
 - Zero path ambiguity for active journeys
 - Automated drift detection between docs and runtime configuration
 
-### Initiative I4: System 3 / Orchestrator Loop Expansion
+### Initiative I4: CoBuilder / Orchestrator Loop Expansion
 
 Deliverables:
 - Mandatory phase model: Research -> Parallel Solutioning -> Plan -> Implement -> Validate -> Review

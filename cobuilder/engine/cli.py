@@ -63,7 +63,7 @@ def main() -> None:
         print("  gardener      Run doc-gardener remediation (delegates to doc-gardener)")
         print("  install-hooks Install pre-push git hook for doc-gardener")
         print("  run           Run the production pipeline runner agent")
-        print("  guardian      System 3 read-only monitor for pipeline runner state")
+        print("  guardian      CoBuilder read-only monitor for pipeline runner state")
         print("  agents        Inspect and manage agent identity records")
         print("  merge-queue   Manage the sequential merge queue (list/enqueue/process)")
         print()
