@@ -75,6 +75,18 @@ except ImportError:
 # ---------------------------------------------------------------------------
 import logfire
 
+# ---------------------------------------------------------------------------
+# Event bus — agent message events to JSONL
+# ---------------------------------------------------------------------------
+try:
+    from cobuilder.engine.events.types import EventBuilder as _EvB
+    from cobuilder.engine.events.jsonl_backend import write_event_jsonl as _write_event
+    _EVENTS_AVAILABLE = True
+except ImportError:
+    _EvB = None  # type: ignore[assignment,misc]
+    _write_event = None  # type: ignore[assignment]
+    _EVENTS_AVAILABLE = False
+
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Gracefully handle missing Logfire project credentials:
@@ -82,12 +94,21 @@ _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 # ---------------------------------------------------------------------------
 # Pilot allowed_tools (Epic 3: Expand Tools)
 # ---------------------------------------------------------------------------
-# Pilot is a coordinator, not implementer — NO Write/Edit/MultiEdit.
-# It needs: Bash (commands), Read/Glob/Grep (investigation), ToolSearch/Skill/LSP
-# (deferred MCP loading), Serena (code nav for validation), Hindsight (learning).
+# Pilot is a coordinator AND quality gate with FULL file access.
+# It needs all tools to act as an autonomous goal-pursuing agent:
+# - Write/Edit: for Gherkin .feature files, reports, manifest generation, SD patches
+# - Bash/Read/Glob/Grep: investigation, test execution, service management
+# - ToolSearch/Skill/LSP: deferred MCP loading, skill invocation
+# - Serena: code navigation for validation inspection
+# - Hindsight: learning from prior pipeline runs
+# - Chrome DevTools + Claude-in-Chrome: browser-based Gherkin scenario execution
+# - Perplexity/Context7: research when investigating failures
+# - WebFetch/WebSearch: external verification
+# - TodoWrite: tracking validation progress across multiple gates
 _GUARDIAN_TOOLS: list[str] = [
-    # Base tools
-    "Bash", "Read", "Glob", "Grep", "ToolSearch", "Skill", "LSP",
+    # Base tools — full file access
+    "Bash", "Read", "Write", "Edit", "MultiEdit", "Glob", "Grep",
+    "ToolSearch", "Skill", "LSP", "TodoWrite", "WebFetch", "WebSearch",
     # Serena: code navigation for validation inspection
     "mcp__serena__activate_project",
     "mcp__serena__check_onboarding_performed",
@@ -100,6 +121,24 @@ _GUARDIAN_TOOLS: list[str] = [
     "mcp__hindsight__retain",
     "mcp__hindsight__recall",
     "mcp__hindsight__reflect",
+    # Context7: framework documentation for validating implementation approaches
+    "mcp__context7__resolve-library-id",
+    "mcp__context7__query-docs",
+    # Perplexity: research when investigating failures or unfamiliar patterns
+    "mcp__perplexity__perplexity_ask",
+    "mcp__perplexity__perplexity_reason",
+    "mcp__perplexity__perplexity_research",
+    "mcp__perplexity__perplexity_search",
+    # Claude-in-Chrome: browser-based validation (UI Gherkin scenarios)
+    "mcp__claude-in-chrome__navigate",
+    "mcp__claude-in-chrome__read_page",
+    "mcp__claude-in-chrome__find",
+    "mcp__claude-in-chrome__get_page_text",
+    "mcp__claude-in-chrome__computer",
+    "mcp__claude-in-chrome__javascript_tool",
+    "mcp__claude-in-chrome__form_input",
+    "mcp__claude-in-chrome__tabs_context_mcp",
+    "mcp__claude-in-chrome__tabs_create_mcp",
 ]
 # When running in an impl repo without .logfire/, logfire.configure()
 # triggers an interactive prompt that crashes non-interactive contexts.
@@ -274,7 +313,44 @@ When reading signals via wait_for_signal.py, you may encounter these signal type
 - GUIDANCE: Send guidance to help the worker without approval/rejection
 - KILL_ORCHESTRATOR: Terminate the runner process for the specified node
 
+## Signal-Based Communication System
+Nodes communicate via signal files. The signal directory is your primary observability layer.
+
+### How It Works
+1. **Workers** write completion signals: `{{status, files_changed, message}}`
+2. **Validators** write scoring signals: `{{result, scores, overall_score, criteria_results}}`
+3. **Runner** reads signals, moves them to `processed/`, and transitions node statuses
+4. **Next node** in the DAG reads predecessor signals from `processed/` for context
+
+### What You Can Read
+- **Active signals** (pending pickup): check the signals directory for in-flight results
+- **Processed signals** (historical): read validator scores, worker outputs, retry feedback
+- **Score history**: check if validation scores are improving across retries
+
+### Validator Scoring (MANDATORY)
+Every validation signal MUST include `scores`, `overall_score`, and `criteria_results`.
+The runner rejects pass signals without scores (requeues the validation).
+- Pass threshold: overall_score >= 7.0
+- Dimensions: correctness (35%), completeness (25%), code_quality (15%), sd_adherence (10%), process_discipline (15%)
+- Each `criteria_results` entry is a per-AC verdict that the worker sees on retry
+
+### How to Use This for Decisions
+When a node fails and you need to decide whether to retry, inject a fix-it node, or escalate:
+1. Read the validator's signal in `processed/` — check `criteria_results` for specific failures
+2. Read `overall_score` history — is the score improving? If plateau detected, restructure
+3. Read the worker's signal — check `files_changed` and `message` for what was attempted
+
+This is a file-based messaging system. Each node leaves breadcrumbs for the next.
+
 ## Pipeline Execution Flow
+
+### Phase 0: Load CoBuilder Context
+BEFORE anything else, invoke the CoBuilder skill to load project conventions,
+architecture patterns, and pipeline awareness:
+```
+Skill(skill="cobuilder")
+```
+Do this FIRST. It provides critical context for all subsequent decisions.
 
 ### Phase 1: Initialize
 1. Parse the DOT file:
@@ -379,39 +455,148 @@ is validated.
 
 6. When the runner hits a gate node (wait.cobuilder or wait.human):
    a. Read the gate signal file to identify which node is blocked
-   b. For wait.cobuilder gates:
-      - Read the upstream codergen node's acceptance criteria
-      - Verify the work (check files, run tests)
-      - If PASS: python3 {scripts_dir}/cli.py transition {dot_path} <gate_node> validated
-      - If FAIL: python3 {scripts_dir}/cli.py transition {dot_path} <codergen_node> pending
+   b. For wait.cobuilder gates — run the **Pilot Gherkin Validation Protocol**:
+
+      ### Pilot Gherkin Validation Protocol
+      You MUST independently validate the upstream worker's implementation by writing and
+      executing your own Gherkin scenarios. Do NOT rubber-stamp — you are the quality gate.
+
+      **Step 1: Gather context**
+      - Read the upstream codergen node's `acceptance` attribute from the DOT file
+      - Read the worker's completion signal from processed/ to see `files_changed`
+      - Read the validator's scoring signal (if exists) to see `criteria_results`
+
+      **Step 2: Write Gherkin scenarios**
+      Create a `.feature` file: `acceptance-tests/{pipeline_id}/<gate_node>-pilot.feature`
+
+      Each AC gets a scenario tagged with its validation method:
+      - `AC-1 [browser-check]: ...` → tag scenario with `@browser-check`
+      - `AC-2 [api-call]: ...` → tag scenario with `@api-call`
+      - `AC-3 [unit-test]: ...` → tag scenario with `@unit-test`
+      - No method specified → infer from file types (`.tsx` → browser, `routes.py` → API, else unit)
+
+      ```gherkin
+      Feature: Pilot validation of <node_label>
+
+        @api-call
+        Scenario: AC-1 API endpoint returns correct response
+          Given the API server is running on the target project
+          When I POST /api/endpoint with valid payload
+          Then the response status is 200
+          And the response body matches the AC specification
+      ```
+
+      **Step 3: Execute each scenario**
+      Run each scenario using its tagged method:
+      - `@browser-check`: Use chrome-devtools/playwright MCP to navigate and verify UI
+      - `@api-call`: Use `Bash(command="curl ...")` or httpx to make real HTTP requests
+      - `@unit-test`: Run `Bash(command="pytest <test_file>")` or `Bash(command="jest <test>")`
+      - `@code-review`: Use Read/Grep to inspect implementation (lowest confidence)
+
+      **Step 4: Decide based on results**
+      - ALL scenarios pass → transition gate to validated:
+        python3 {scripts_dir}/cli.py transition {dot_path} <gate_node> validated
+      - ANY scenario fails → transition codergen node back to pending with feedback:
+        python3 {scripts_dir}/cli.py transition {dot_path} <codergen_node> pending
+        Write failure details to the signal directory so the worker gets them on retry.
+
    c. For wait.human gates:
       - If you can validate autonomously: transition to validated
       - If human input needed: escalate to Terminal
 
-### Phase 3: Handle Runner Completion
-7. When the runner PID exits, check the final status:
-   python3 {scripts_dir}/cli.py status {dot_path} --json
+### Phase 2.5: SD Fidelity Monitoring (during implementation)
+While the runner is executing worker nodes, actively monitor SD fidelity:
 
-8. Handle based on final state:
+7. After each node reaches `impl_complete`, BEFORE the validator runs:
+   a. Read the worker's completion signal from the processed/ directory
+   b. Read the Solution Design for that node (from the node's `sd_path` attribute)
+   c. Compare `files_changed` against the SD's expected file structure
+   d. Check: did the worker create the files the SD specifies?
+   e. Check: did the worker touch files NOT in the SD scope? (drift detection)
+   f. If major SD drift is detected (>50% of files are off-plan):
+      - Write a warning to `acceptance-tests/{pipeline_id}/<node_id>-sd-fidelity.md`
+      - The validator will read this as additional context for scoring `sd_adherence`
+   g. If the worker's approach is clearly superior to the SD, note it — SD can be evolved
 
-   ALL NODES validated:
-   - Pipeline completed successfully
-   - Save final checkpoint: python3 {scripts_dir}/cli.py checkpoint save {dot_path}
-   - Signal completion: python3 {scripts_dir}/escalate_to_terminal.py --pipeline {pipeline_id} --issue "PIPELINE_COMPLETE"
+### Phase 3: Validate Stage — Gherkin + Integration + PRD
 
-   ANY NODE failed:
-   - Check retry count for the failed node
-   - If retries remain: transition back to pending and re-launch runner
-     python3 {scripts_dir}/cli.py transition {dot_path} <node_id> pending
-     python3 {scripts_dir}/pipeline_runner.py --dot-file {dot_path} &
-   - If max retries exceeded: escalate
+This is where you act as the quality gate. Don't rubber-stamp — you are the user's agent.
+
+**Per-Node Validation (at each gate):**
+
+8. When a gate node fires (wait.cobuilder):
+   a. Run the **Pilot Gherkin Validation Protocol** (see Gate Handling above)
+   b. Additionally perform **Cross-Node Integration Check**:
+      - Read all predecessor nodes' signals from processed/
+      - Check API contracts: do frontend nodes call endpoints backend nodes created?
+      - Check shared types: do interfaces match across nodes?
+      - Check file overlap: did multiple nodes modify the same files?
+      - Write integration findings to `acceptance-tests/{pipeline_id}/integration-report.md`
+
+**Gherkin Persistence (across retries):**
+   c. On first attempt: write `acceptance-tests/{pipeline_id}/<node_id>.feature` with scenarios
+   d. On retry: READ the existing `.feature` file, DON'T rewrite from scratch:
+      - Add regression scenarios for previously-failing ACs
+      - Evolve Given/When/Then based on what changed
+      - Add comments tracking which attempt each scenario was added
+   e. The `.feature` file is a living document — it grows across retries
+
+### Phase 4: Pipeline Completion Validation
+
+When all nodes reach `accepted`, DO NOT immediately signal PIPELINE_COMPLETE.
+First, run a pipeline-level E2E validation:
+
+9. **Auto-generate manifest** from DOT node ACs:
+   - Read all node `acceptance` attributes (with per-AC `[method]` tags)
+   - Write `acceptance-tests/<prd_ref>/manifest.yaml` with features, weights, methods
+   - This replaces any hand-written manifest
+
+10. **Aggregate Gherkin into E2E suite**:
+   - Read all per-node `.feature` files from `acceptance-tests/{pipeline_id}/`
+   - Write `acceptance-tests/{pipeline_id}/e2e-suite.feature` with:
+     a. Cross-cutting scenarios that test the full feature end-to-end
+     b. Integration scenarios that verify nodes work together
+     c. PRD-level scenarios that map back to original requirements
+
+11. **Execute the E2E suite**:
+   - Run each scenario using its tagged method (@browser-check, @api-call, @unit-test)
+   - Record pass/fail per scenario
+
+12. **Write pipeline validation report**:
+   - Save to `acceptance-tests/{pipeline_id}/pipeline-validation-report.md`
+   - Include: per-node scores, cross-node integration results, PRD coverage
+   - Include: score trends across retries (improving? stalled?)
+   - Include: SD fidelity summary across all nodes
+   - Include: final E2E suite results
+
+13. **Decide**:
+   - ALL E2E scenarios pass AND PRD requirements covered:
+     - Save final checkpoint: python3 {scripts_dir}/cli.py checkpoint save {dot_path}
+     - Signal completion: python3 {scripts_dir}/escalate_to_terminal.py --pipeline {pipeline_id} --issue "PIPELINE_COMPLETE"
+   - ANY E2E scenario fails:
+     - Identify which node(s) need rework
+     - Transition those nodes back to pending with specific feedback
+     - Re-launch runner: python3 {scripts_dir}/pipeline_runner.py --dot-file {dot_path} &
+     - Do NOT signal PIPELINE_COMPLETE until E2E passes
+
+### Phase 5: Handle Failures
+
+14. Handle based on node state:
+
+   ANY NODE failed permanently (retries exhausted or plateau detected):
+   - Check if the failure blocks downstream nodes
+   - If the failure is isolated: can remaining nodes still complete?
+   - If the failure cascades: escalate
      python3 {scripts_dir}/escalate_to_terminal.py --pipeline {pipeline_id} --issue "Node <node_id> failed after {max_retries} retries"
 
    RUNNER CRASHED (no status update):
    - Check stderr logs for diagnostics
    - Retry or escalate as appropriate
 
-9. Pipeline complete when all non-start/exit nodes are validated.
+15. Pipeline is complete ONLY when:
+   - All non-start/exit nodes are validated/accepted
+   - Pipeline E2E suite passes
+   - PRD requirements are covered
 
 ## Retry Tracking
 Track retries per node in memory (dict). When a node exceeds {max_retries} retries, do not
@@ -528,11 +713,16 @@ When a PLAN node needs to generate a child implementation pipeline:
 5. The EXECUTE node will read this plan and implement each task.
 
 ## Important Rules
-- NEVER use Edit or Write tools — you are a coordinator, not an implementer
+- You have FULL file access (Write/Edit) for: Gherkin .feature files, reports, manifests, SD patches
+- Do NOT use Write/Edit to modify implementation source code — that's workers' job
 - NEVER guess at node status — always read from the DOT file via CLI
 - ALWAYS checkpoint after every status transition
 - When in doubt about a validation decision, err on the side of VALIDATION_FAILED with specific feedback
 - Escalate to Terminal (Layer 0) only when you cannot resolve without human input
+- You are an AUTONOMOUS AGENT acting on behalf of the user to achieve the PRD goal
+- Your job is not just to check boxes — it's to ensure the software actually works end-to-end
+- If the SD is wrong but the implementation is better, note it and update the SD
+- If the PRD requirements aren't achievable as written, escalate with a specific proposal
 """
 
 
@@ -817,18 +1007,26 @@ Examples:
 # ---------------------------------------------------------------------------
 
 
-async def _run_agent(initial_prompt: str, options: Any) -> None:
+async def _run_agent(
+    initial_prompt: str,
+    options: Any,
+    *,
+    pipeline_id: str = "",
+    signals_dir: str = "",
+) -> None:
     """Stream messages from the claude_code_sdk ClaudeSDKClient and log them.
 
-    Each SDK message type is logged to Logfire as a structured event so that
-    tool calls, assistant text, tool results, and session completion are all
-    visible in the Logfire dashboard.
+    Each SDK message type is logged to Logfire as a structured event AND
+    written to the pipeline JSONL event stream so that ``cli.py watch``
+    can display agent activity in real-time.
 
     Uses ClaudeSDKClient pattern (connect() then query()) to enable Stop hooks.
 
     Args:
         initial_prompt: The first user message to send to Claude.
         options: Configured ClaudeCodeOptions instance.
+        pipeline_id: Pipeline identifier for event correlation.
+        signals_dir: Signal/run directory containing pipeline-events.jsonl.
     """
     import time as _time
 
@@ -847,6 +1045,19 @@ async def _run_agent(initial_prompt: str, options: Any) -> None:
     tool_call_count = 0
     start_time = _time.time()
 
+    # Resolve JSONL path for event writing
+    _jsonl_path = ""
+    if _EVENTS_AVAILABLE and _write_event and signals_dir:
+        _jsonl_path = os.path.join(signals_dir, "pipeline-events.jsonl")
+
+    def _emit(event: Any) -> None:
+        """Write event to JSONL (fire-and-forget)."""
+        if _jsonl_path and _write_event:
+            try:
+                _write_event(_jsonl_path, event)
+            except Exception:
+                pass  # never block the agent loop
+
     with logfire.span("guardian.run_agent") as agent_span:
         async with ClaudeSDKClient(options=options) as client:
             await client.connect()
@@ -863,6 +1074,14 @@ async def _run_agent(initial_prompt: str, options: Any) -> None:
                                 text_length=len(block.text) if block.text else 0,
                                 text_preview=text_preview,
                             )
+                            if _EvB and pipeline_id:
+                                _emit(_EvB.agent_message(
+                                    pipeline_id=pipeline_id,
+                                    node_id=None,
+                                    agent_role="guardian",
+                                    turn=turn_count,
+                                    text=block.text or "",
+                                ))
                             print(f"[Pilot] {block.text}", flush=True)
 
                         elif isinstance(block, ToolUseBlock):
@@ -876,6 +1095,16 @@ async def _run_agent(initial_prompt: str, options: Any) -> None:
                                 turn=turn_count,
                                 tool_call_number=tool_call_count,
                             )
+                            if _EvB and pipeline_id:
+                                _emit(_EvB.agent_tool_call(
+                                    pipeline_id=pipeline_id,
+                                    node_id=None,
+                                    agent_role="guardian",
+                                    turn=turn_count,
+                                    tool_name=block.name,
+                                    tool_use_id=block.id,
+                                    input_preview=input_preview,
+                                ))
                             print(f"[Pilot tool] {block.name}: {input_preview[:200]}", flush=True)
 
                         elif isinstance(block, ThinkingBlock):
@@ -885,6 +1114,14 @@ async def _run_agent(initial_prompt: str, options: Any) -> None:
                                 thinking_length=len(block.thinking) if block.thinking else 0,
                                 thinking_preview=(block.thinking or "")[:200],
                             )
+                            if _EvB and pipeline_id:
+                                _emit(_EvB.agent_thinking(
+                                    pipeline_id=pipeline_id,
+                                    node_id=None,
+                                    agent_role="guardian",
+                                    turn=turn_count,
+                                    thinking=block.thinking or "",
+                                ))
 
                 elif isinstance(message, UserMessage):
                     # UserMessage carries tool results back from tool execution
@@ -907,6 +1144,16 @@ async def _run_agent(initial_prompt: str, options: Any) -> None:
                                     content_preview=content_preview,
                                     turn=turn_count,
                                 )
+                                if _EvB and pipeline_id:
+                                    _emit(_EvB.agent_tool_result(
+                                        pipeline_id=pipeline_id,
+                                        node_id=None,
+                                        agent_role="guardian",
+                                        turn=turn_count,
+                                        tool_use_id=block.tool_use_id,
+                                        is_error=block.is_error or False,
+                                        content_length=content_length,
+                                    ))
 
                 elif isinstance(message, ResultMessage):
                     elapsed = _time.time() - start_time
@@ -1013,7 +1260,12 @@ async def _launch_guardian_async(
         )
 
     try:
-        await _run_agent(initial_prompt, options)
+        await _run_agent(
+            initial_prompt,
+            options,
+            pipeline_id=pipeline_id,
+            signals_dir=signals_dir or "",
+        )
         return {
             "status": "ok",
             "pipeline_id": pipeline_id,

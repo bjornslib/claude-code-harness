@@ -95,6 +95,18 @@ from cobuilder.engine.dispatch_worker import load_engine_env
 # ---------------------------------------------------------------------------
 import logfire
 
+# ---------------------------------------------------------------------------
+# Event bus — agent message events to JSONL
+# ---------------------------------------------------------------------------
+try:
+    from cobuilder.engine.events.types import EventBuilder as _EvB
+    from cobuilder.engine.events.jsonl_backend import write_event_jsonl as _write_event
+    _EVENTS_AVAILABLE = True
+except ImportError:
+    _EvB = None  # type: ignore[assignment,misc]
+    _write_event = None  # type: ignore[assignment]
+    _EVENTS_AVAILABLE = False
+
 # Gracefully handle missing Logfire project credentials:
 # When running in an impl repo without .logfire/, logfire.configure()
 # triggers an interactive prompt that crashes non-interactive contexts.
@@ -910,16 +922,26 @@ class RunnerStateMachine:
 # ---------------------------------------------------------------------------
 
 
-async def _run_agent(initial_prompt: str, options: Any) -> None:
+async def _run_agent(
+    initial_prompt: str,
+    options: Any,
+    *,
+    pipeline_id: str = "",
+    node_id: str = "",
+    signals_dir: str = "",
+) -> None:
     """Stream messages from the claude_code_sdk query and log them.
 
-    Each SDK message type is logged to Logfire as a structured event so that
-    tool calls, assistant text, tool results, and session completion are all
-    visible in the Logfire dashboard.
+    Each SDK message type is logged to Logfire as a structured event AND
+    written to the pipeline JSONL event stream so that ``cli.py watch``
+    can display agent activity in real-time.
 
     Args:
         initial_prompt: The first user message to send to Claude.
         options: Configured ClaudeCodeOptions instance.
+        pipeline_id: Pipeline/PRD identifier for event correlation.
+        node_id: Node identifier this runner is executing.
+        signals_dir: Signal/run directory containing pipeline-events.jsonl.
     """
     import time as _time
 
@@ -938,6 +960,19 @@ async def _run_agent(initial_prompt: str, options: Any) -> None:
     tool_call_count = 0
     start_time = _time.time()
 
+    # Resolve JSONL path for event writing
+    _jsonl_path = ""
+    if _EVENTS_AVAILABLE and _write_event and signals_dir:
+        _jsonl_path = os.path.join(signals_dir, "pipeline-events.jsonl")
+
+    def _emit(event: Any) -> None:
+        """Write event to JSONL (fire-and-forget)."""
+        if _jsonl_path and _write_event:
+            try:
+                _write_event(_jsonl_path, event)
+            except Exception:
+                pass  # never block the agent loop
+
     with logfire.span("runner.run_agent") as agent_span:
         async for message in query(prompt=initial_prompt, options=options):
             if isinstance(message, AssistantMessage):
@@ -951,6 +986,14 @@ async def _run_agent(initial_prompt: str, options: Any) -> None:
                             text_length=len(block.text) if block.text else 0,
                             text_preview=text_preview,
                         )
+                        if _EvB and pipeline_id:
+                            _emit(_EvB.agent_message(
+                                pipeline_id=pipeline_id,
+                                node_id=node_id or None,
+                                agent_role="runner",
+                                turn=turn_count,
+                                text=block.text or "",
+                            ))
                         print(f"[Runner] {block.text}", flush=True)
 
                     elif isinstance(block, ToolUseBlock):
@@ -964,6 +1007,16 @@ async def _run_agent(initial_prompt: str, options: Any) -> None:
                             turn=turn_count,
                             tool_call_number=tool_call_count,
                         )
+                        if _EvB and pipeline_id:
+                            _emit(_EvB.agent_tool_call(
+                                pipeline_id=pipeline_id,
+                                node_id=node_id or None,
+                                agent_role="runner",
+                                turn=turn_count,
+                                tool_name=block.name,
+                                tool_use_id=block.id,
+                                input_preview=input_preview,
+                            ))
                         print(f"[Runner tool] {block.name}: {input_preview[:200]}", flush=True)
 
                     elif isinstance(block, ThinkingBlock):
@@ -973,6 +1026,14 @@ async def _run_agent(initial_prompt: str, options: Any) -> None:
                             thinking_length=len(block.thinking) if block.thinking else 0,
                             thinking_preview=(block.thinking or "")[:200],
                         )
+                        if _EvB and pipeline_id:
+                            _emit(_EvB.agent_thinking(
+                                pipeline_id=pipeline_id,
+                                node_id=node_id or None,
+                                agent_role="runner",
+                                turn=turn_count,
+                                thinking=block.thinking or "",
+                            ))
 
             elif isinstance(message, UserMessage):
                 # UserMessage carries tool results back from tool execution
@@ -995,6 +1056,16 @@ async def _run_agent(initial_prompt: str, options: Any) -> None:
                                 content_preview=content_preview,
                                 turn=turn_count,
                             )
+                            if _EvB and pipeline_id:
+                                _emit(_EvB.agent_tool_result(
+                                    pipeline_id=pipeline_id,
+                                    node_id=node_id or None,
+                                    agent_role="runner",
+                                    turn=turn_count,
+                                    tool_use_id=block.tool_use_id,
+                                    is_error=block.is_error or False,
+                                    content_length=content_length,
+                                ))
 
             elif isinstance(message, ResultMessage):
                 elapsed = _time.time() - start_time
@@ -1318,7 +1389,13 @@ def main(argv: list[str] | None = None) -> None:
             )
 
             try:
-                asyncio.run(_run_agent(worker_initial_prompt, worker_options))
+                asyncio.run(_run_agent(
+                    worker_initial_prompt,
+                    worker_options,
+                    pipeline_id=args.prd or "",
+                    node_id=node_id,
+                    signals_dir=args.signals_dir or "",
+                ))
                 # Success: transition node to impl_complete
                 subprocess.run(
                     [sys.executable, cli_script, "transition",
@@ -1401,7 +1478,13 @@ def main(argv: list[str] | None = None) -> None:
         else:
             # Legacy tmux monitoring path: invoke the Agent SDK loop.
             try:
-                asyncio.run(_run_agent(initial_prompt, options))
+                asyncio.run(_run_agent(
+                    initial_prompt,
+                    options,
+                    pipeline_id=args.prd or "",
+                    node_id=node_id,
+                    signals_dir=args.signals_dir or "",
+                ))
                 # Clean shutdown
                 try:
                     identity_registry.mark_terminated(role="runner", name=node_id)

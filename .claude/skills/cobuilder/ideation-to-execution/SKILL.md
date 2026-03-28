@@ -64,8 +64,15 @@ grade: authoritative
 ---
 ```
 
-4. **Include acceptance criteria** — Each requirement must have testable acceptance criteria written as Gherkin scenarios
-5. **Generate blind acceptance tests** — Use `Skill("acceptance-test-writer")` to create executable test scripts from the PRD before any implementation begins
+4. **Include acceptance criteria with validation methods** — Each requirement must have testable acceptance criteria written as Gherkin scenarios. Use the per-AC method tag format:
+   ```
+   AC-1 [browser-check]: Login form renders with email and password fields
+   AC-2 [api-call]: POST /auth/login returns JWT with valid credentials
+   AC-3 [unit-test]: Token TTL is configurable via environment variable
+   AC-4 [code-review]: Error messages follow i18n pattern
+   ```
+   Valid tags: `[browser-check]`, `[api-call]`, `[unit-test]`, `[code-review]`. If omitted, the validator infers from file types.
+5. **Generate blind acceptance tests** — Use `Skill("acceptance-test-writer")` to create executable test scripts from the PRD before any implementation begins. Each scenario should be tagged with `@browser-check`, `@api-call`, `@unit-test`, or `@code-review` matching the AC's method.
 
 ### PRD Structure
 
@@ -108,7 +115,10 @@ Create the technical blueprint that workers will follow.
 ## Task Breakdown
 ### Task 1: [Name] (worker_type: frontend-dev-expert)
 - Scope: [files]
-- Acceptance: [criteria]
+- Acceptance:
+  AC-1 [browser-check]: Login form renders with email and password fields
+  AC-2 [api-call]: POST /auth/login returns JWT with valid credentials
+  AC-3 [unit-test]: Token TTL is configurable via env var
 - Dependencies: [none | task IDs]
 ### Task 2: ...
 ## Testing Strategy
@@ -146,7 +156,22 @@ Hand off to the pipeline runner for autonomous execution.
 1. **Validate pipeline** — `python3 cobuilder/engine/cli.py validate {pipeline.dot}`
 2. **Launch runner** — `python3 cobuilder/engine/pipeline_runner.py --dot-file {pipeline.dot}`
 3. **Monitor via Haiku sub-agent** — Spawn blocking monitor that completes on gate detection, failure, or stall
-4. **Handle gates** — Validate work against blind acceptance tests using `Skill("acceptance-test-runner")`
+4. **Handle gates via Pilot Gherkin Validation Protocol** — At each `wait.cobuilder` gate, the pilot independently:
+   a. Reads the upstream node's acceptance criteria (with per-AC `[method]` tags)
+   b. Reads the worker's completion signal and validator's scoring signal from `processed/`
+   c. Writes its own `.feature` file: `acceptance-tests/{pipeline_id}/<gate>-pilot.feature`
+   d. Executes each scenario using its tagged method (`@browser-check`, `@api-call`, `@unit-test`)
+   e. Decides pass/fail based on actual execution results
+
+### Signal-Based Communication
+
+All pipeline nodes communicate via signal files:
+- **Workers** write: `{status, files_changed, message}` — successors read these from `processed/`
+- **Validators** write: `{result, scores, overall_score, criteria_results}` — pilots read for gate decisions
+- **Runner** moves signals to `processed/` and injects signal history into retry prompts
+- **Pilot** reads `processed/` signals to understand what happened before making gate decisions
+
+Each node can see its predecessors' and successors' signal file paths via the "Pipeline Graph" section injected into its prompt.
 
 ---
 

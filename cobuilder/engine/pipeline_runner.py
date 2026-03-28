@@ -1213,6 +1213,587 @@ class PipelineRunner:
         return "\n".join(completed_nodes)
 
     # ------------------------------------------------------------------
+    # Signal history + graph neighborhood (inter-node communication)
+    # ------------------------------------------------------------------
+
+    def _build_signal_history(self, node_id: str) -> str:
+        """Scan processed signals for a node and return a human-readable summary.
+
+        This gives workers/validators full visibility into what happened on
+        prior attempts: scores, feedback, files changed, and timing.
+        """
+        processed_dir = os.path.join(self.signal_dir, "processed")
+        if not os.path.isdir(processed_dir):
+            return ""
+
+        signals: list[tuple[str, dict]] = []
+        for fname in sorted(os.listdir(processed_dir)):
+            if node_id not in fname or not fname.endswith(".json"):
+                continue
+            try:
+                with open(os.path.join(processed_dir, fname)) as fh:
+                    sig = json.load(fh)
+                signals.append((fname, sig))
+            except (OSError, json.JSONDecodeError):
+                continue
+
+        if not signals:
+            return ""
+
+        lines = []
+        for fname, sig in signals:
+            # Determine signal type: worker completion or validator result
+            result = sig.get("result")  # validator signals have "result"
+            status = sig.get("status")  # worker signals have "status"
+
+            if result:
+                # Validator signal
+                overall = sig.get("overall_score", "?")
+                reason = sig.get("reason", "")
+                guidance = sig.get("guidance", "")
+                scores = sig.get("scores", {})
+                criteria = sig.get("criteria_results", [])
+
+                score_str = ", ".join(f"{k}:{v}" for k, v in scores.items()) if scores else "none"
+                lines.append(f"- **Validator** [{fname}]: result={result}, overall_score={overall}")
+                if score_str != "none":
+                    lines.append(f"  Scores: {score_str}")
+                if criteria:
+                    for cr in criteria:
+                        icon = "PASS" if cr.get("status") == "pass" else "FAIL"
+                        detail = cr.get("reason", cr.get("evidence", ""))
+                        lines.append(f"  [{icon}] {cr.get('criterion_id', '?')}: {detail}")
+                if reason:
+                    lines.append(f"  Reason: {reason}")
+                if guidance:
+                    lines.append(f"  Guidance: {guidance}")
+            elif status:
+                # Worker completion signal
+                message = sig.get("message", "")
+                files = sig.get("files_changed", [])
+                lines.append(f"- **Worker** [{fname}]: status={status}")
+                if message:
+                    lines.append(f"  Message: {message}")
+                if files:
+                    lines.append(f"  Files: {', '.join(files[:10])}")
+            else:
+                lines.append(f"- **Signal** [{fname}]: {json.dumps(sig)[:200]}")
+
+        return "\n".join(lines)
+
+    def _build_graph_neighborhood(self, node_id: str, data: dict) -> str:
+        """Build a view of the node's direct predecessors and successors in the DAG.
+
+        Shows each neighbor's id, label, handler, status, and signal file path
+        so agents can read predecessor outputs and know who consumes their work.
+        """
+        edges = data.get("edges", [])
+        nodes_by_id = {n["id"]: n for n in data.get("nodes", [])}
+
+        pred_ids = []
+        succ_ids = []
+        for edge in edges:
+            if edge["dst"] == node_id:
+                pred_ids.append(edge["src"])
+            if edge["src"] == node_id:
+                succ_ids.append(edge["dst"])
+
+        def _describe_node(nid: str) -> str:
+            node = nodes_by_id.get(nid)
+            if not node:
+                return f"- {nid} (unknown)"
+            attrs = node["attrs"]
+            label = attrs.get("label", nid).replace("\\n", " ")
+            handler = attrs.get("handler", "?")
+            status = attrs.get("status", "pending")
+            signal_path = os.path.join(self.signal_dir, f"{nid}.json")
+            processed_glob = os.path.join(self.signal_dir, "processed", f"*{nid}*")
+            return (
+                f"- **{label}** (id=`{nid}`, handler={handler}, status={status})\n"
+                f"  Signal: `{signal_path}` | Processed: `{processed_glob}`"
+            )
+
+        lines = []
+        if pred_ids:
+            lines.append("### Predecessors (completed before you)")
+            for pid in pred_ids:
+                lines.append(_describe_node(pid))
+            lines.append(
+                "\nRead predecessor signals in `processed/` to understand what was built before you."
+            )
+        if succ_ids:
+            lines.append("\n### Successors (will run after you)")
+            for sid in succ_ids:
+                lines.append(_describe_node(sid))
+            lines.append(
+                "\nYour successors will read YOUR signal. Include detailed `files_changed` and "
+                "`message` so they know what you did."
+            )
+
+        if not lines:
+            return ""
+        return "\n".join(lines)
+
+    @staticmethod
+    def _parse_acceptance_criteria(acceptance: str) -> list[dict]:
+        """Parse acceptance criteria text into structured entries with optional validation methods.
+
+        Supports two formats:
+        1. Structured: ``AC-1 [browser-check]: Login form renders``
+           The ``[method]`` tag is optional. Valid methods: browser-check, api-call, unit-test, code-review.
+        2. Plain text: falls back to a single AC with no method specified.
+
+        Returns:
+            List of dicts with keys: ``id``, ``text``, ``method`` (or None).
+        """
+        import re
+        if not acceptance:
+            return []
+
+        # Pattern: AC-<id> [optional-method]: description
+        # Also matches: AC-<id>: description (no method tag)
+        pattern = re.compile(
+            r"^(AC-\S+)\s*(?:\[(\w[\w-]*)\])?\s*:\s*(.+)$",
+            re.MULTILINE,
+        )
+        matches = pattern.findall(acceptance)
+        if matches:
+            valid_methods = {"browser-check", "api-call", "unit-test", "code-review"}
+            return [
+                {
+                    "id": m[0],
+                    "method": m[1] if m[1] in valid_methods else None,
+                    "text": m[2].strip(),
+                }
+                for m in matches
+            ]
+
+        # Fallback: treat each non-empty line as an AC, or the whole string as one
+        lines = [ln.strip() for ln in acceptance.strip().splitlines() if ln.strip()]
+        if len(lines) <= 1:
+            return [{"id": "AC-1", "method": None, "text": acceptance.strip()}]
+        return [
+            {"id": f"AC-{i+1}", "method": None, "text": ln}
+            for i, ln in enumerate(lines)
+        ]
+
+    # ------------------------------------------------------------------
+    # Pilot autonomy: SD fidelity, cross-node, E2E, manifest
+    # ------------------------------------------------------------------
+
+    def _build_sd_fidelity_context(self, node_id: str, data: dict) -> str:
+        """Extract SD task breakdown for a node and compare to worker's files_changed.
+
+        Returns a structured report showing:
+        - What the SD specifies for this node (expected files, components, patterns)
+        - What the worker actually produced (files_changed from signal)
+        - Gaps: files expected but not touched
+        - Drift: files touched but not in SD scope
+        """
+        node = next((n for n in data["nodes"] if n["id"] == node_id), None)
+        if not node:
+            return ""
+
+        attrs = node["attrs"]
+        sd_path = attrs.get("sd_path", "") or attrs.get("solution_design", "")
+        if not sd_path:
+            return ""
+
+        # Read SD content
+        sd_content = ""
+        candidates = []
+        if not os.path.isabs(sd_path):
+            cobuilder_root = self._get_cobuilder_root()
+            candidates.append(os.path.join(cobuilder_root, sd_path))
+            target = self._get_target_dir()
+            if target != cobuilder_root:
+                candidates.append(os.path.join(target, sd_path))
+        else:
+            candidates.append(sd_path)
+
+        for sd_abs in candidates:
+            if os.path.exists(sd_abs):
+                try:
+                    with open(sd_abs) as fh:
+                        sd_content = fh.read()
+                    break
+                except OSError:
+                    pass
+
+        if not sd_content:
+            return ""
+
+        # Extract expected file patterns from SD (look for file paths in code blocks and bullet points)
+        import re
+        # Match patterns like: `src/components/Login.tsx`, path/to/file.py, etc.
+        file_patterns = re.findall(
+            r'[`*\-]\s*([a-zA-Z][\w./\-]*\.\w{1,10})',
+            sd_content,
+        )
+        # Also match explicit "Scope:" or "Files:" lines
+        scope_patterns = re.findall(
+            r'(?:Scope|Files|file_scope|target_files)\s*[:=]\s*(.+)',
+            sd_content, re.IGNORECASE,
+        )
+        for sp in scope_patterns:
+            file_patterns.extend(re.findall(r'[\w./\-]+\.\w{1,10}', sp))
+
+        # Deduplicate and filter obvious non-files
+        expected_files = sorted(set(
+            f for f in file_patterns
+            if not f.startswith('http') and '/' in f or f.endswith(('.py', '.ts', '.tsx', '.js', '.jsx', '.md', '.yaml', '.yml'))
+        ))
+
+        # Read worker's files_changed from processed signals
+        files_changed = []
+        processed_dir = os.path.join(self.signal_dir, "processed")
+        if os.path.isdir(processed_dir):
+            for fname in sorted(os.listdir(processed_dir), reverse=True):
+                if node_id in fname and fname.endswith(".json"):
+                    try:
+                        with open(os.path.join(processed_dir, fname)) as fh:
+                            sig = json.load(fh)
+                            if sig.get("files_changed"):
+                                files_changed = sig["files_changed"]
+                                break
+                    except (OSError, json.JSONDecodeError):
+                        continue
+
+        if not expected_files and not files_changed:
+            return ""
+
+        lines = ["### SD Fidelity Analysis"]
+
+        if expected_files:
+            lines.append(f"\n**Expected files from SD** ({len(expected_files)}):")
+            for f in expected_files[:20]:  # Cap to prevent bloat
+                status = "found" if any(f in fc for fc in files_changed) else "NOT TOUCHED"
+                lines.append(f"- `{f}` — {status}")
+
+        if files_changed:
+            # Detect drift: files touched but not in SD scope
+            drift_files = [
+                fc for fc in files_changed
+                if not any(ef in fc for ef in expected_files)
+            ] if expected_files else []
+
+            if drift_files:
+                lines.append(f"\n**Drift (files not in SD scope)** ({len(drift_files)}):")
+                for f in drift_files[:10]:
+                    lines.append(f"- `{f}` — worker touched this but SD doesn't mention it")
+                lines.append(
+                    "\nDrift isn't always bad (workers may discover better approaches), "
+                    "but large drift signals the worker may have ignored the SD."
+                )
+
+        return "\n".join(lines)
+
+    def _build_cross_node_context(self, node_id: str, data: dict) -> str:
+        """Build integration context by reading all predecessor and sibling signals.
+
+        Checks for:
+        - API contract consistency: do frontend nodes call endpoints backend nodes created?
+        - Shared type consistency: do interfaces match across nodes?
+        - File overlap: do multiple nodes touch the same files (potential conflicts)?
+        """
+        edges = data.get("edges", [])
+        nodes_by_id = {n["id"]: n for n in data.get("nodes", [])}
+
+        # Collect all completed worker nodes (not just direct predecessors)
+        processed_dir = os.path.join(self.signal_dir, "processed")
+        if not os.path.isdir(processed_dir):
+            return ""
+
+        # Read all processed signals to build a map of node_id -> files_changed
+        node_files: dict[str, list[str]] = {}
+        node_messages: dict[str, str] = {}
+        for fname in sorted(os.listdir(processed_dir)):
+            if not fname.endswith(".json"):
+                continue
+            try:
+                with open(os.path.join(processed_dir, fname)) as fh:
+                    sig = json.load(fh)
+                # Worker signals have "status", validator signals have "result"
+                if sig.get("status") and sig.get("files_changed"):
+                    # Extract node_id from filename (format: timestamp-node_id.json)
+                    parts = fname.rsplit("-", 1)
+                    if len(parts) >= 2:
+                        sig_node_id = parts[-1].replace(".json", "")
+                    else:
+                        sig_node_id = fname.replace(".json", "")
+                    # Only track if this is a real node
+                    if sig_node_id in nodes_by_id:
+                        node_files[sig_node_id] = sig.get("files_changed", [])
+                        node_messages[sig_node_id] = sig.get("message", "")
+            except (OSError, json.JSONDecodeError):
+                continue
+
+        if len(node_files) < 2:
+            return ""  # Need at least 2 completed nodes for cross-node analysis
+
+        lines = ["### Cross-Node Integration Context"]
+
+        # Check for file overlap (multiple nodes touching same files)
+        file_owners: dict[str, list[str]] = {}
+        for nid, files in node_files.items():
+            for f in files:
+                file_owners.setdefault(f, []).append(nid)
+
+        overlapping = {f: owners for f, owners in file_owners.items() if len(owners) > 1}
+        if overlapping:
+            lines.append(f"\n**Shared files** ({len(overlapping)} files touched by multiple nodes):")
+            for f, owners in sorted(overlapping.items())[:10]:
+                owner_labels = []
+                for o in owners:
+                    n = nodes_by_id.get(o)
+                    label = n["attrs"].get("label", o).replace("\\n", " ") if n else o
+                    owner_labels.append(label)
+                lines.append(f"- `{f}` — modified by: {', '.join(owner_labels)}")
+            lines.append(
+                "\nShared files require careful integration. Check that later nodes "
+                "didn't overwrite earlier nodes' work."
+            )
+
+        # Summarize what each completed node built
+        lines.append("\n**Completed nodes and their outputs:**")
+        for nid, files in node_files.items():
+            if nid == node_id:
+                continue
+            n = nodes_by_id.get(nid)
+            label = n["attrs"].get("label", nid).replace("\\n", " ") if n else nid
+            msg = node_messages.get(nid, "")
+            file_summary = ", ".join(files[:5])
+            if len(files) > 5:
+                file_summary += f" (+{len(files)-5} more)"
+            lines.append(f"- **{label}**: {msg}")
+            if file_summary:
+                lines.append(f"  Files: {file_summary}")
+
+        # Hint: what to check for integration
+        lines.append(
+            "\n**Integration checks to perform:**\n"
+            "- Do API endpoints match what frontend components call?\n"
+            "- Do shared types/interfaces match across nodes?\n"
+            "- Do import paths resolve correctly across node boundaries?\n"
+            "- Were shared files merged correctly (not overwritten)?"
+        )
+
+        return "\n".join(lines)
+
+    def _build_pipeline_e2e_context(self, data: dict) -> str:
+        """Build a pipeline-level E2E context for final validation.
+
+        Aggregates all node ACs, scores, and completion messages into a
+        holistic view of whether the PRD goals were achieved.
+        """
+        nodes = data.get("nodes", [])
+        graph_attrs = data.get("graph_attrs", {})
+        prd_ref = graph_attrs.get("prd_ref", "")
+
+        lines = [
+            "# Pipeline E2E Validation",
+            "",
+            f"Pipeline: {self.pipeline_id}",
+        ]
+        if prd_ref:
+            lines.append(f"PRD: {prd_ref}")
+
+        # Read PRD content if available
+        prd_path = graph_attrs.get("prd_path", "")
+        if prd_path:
+            prd_abs = prd_path if os.path.isabs(prd_path) else os.path.join(self._get_cobuilder_root(), prd_path)
+            if os.path.exists(prd_abs):
+                try:
+                    with open(prd_abs) as fh:
+                        prd_content = fh.read()
+                    # Extract just the requirements/AC section (first 3000 chars to avoid bloat)
+                    lines.append(f"\n## PRD Requirements (first 3000 chars)\n{prd_content[:3000]}")
+                except OSError:
+                    pass
+
+        # Aggregate per-node results
+        lines.append("\n## Per-Node Results Summary\n")
+        lines.append("| Node | Status | Score | AC Pass/Fail | Key Output |")
+        lines.append("|------|--------|-------|-------------|------------|")
+
+        processed_dir = os.path.join(self.signal_dir, "processed")
+        all_files_changed: list[str] = []
+
+        for n in nodes:
+            nid = n["id"]
+            handler = n["attrs"].get("handler", "")
+            if handler not in ("codergen", "research", "refine", "acceptance-test-writer"):
+                continue
+
+            status = n["attrs"].get("status", "pending")
+            label = n["attrs"].get("label", nid).replace("\\n", " ")
+
+            # Read latest validator signal for this node
+            score = "—"
+            ac_summary = "—"
+            message = "—"
+            if os.path.isdir(processed_dir):
+                for fname in sorted(os.listdir(processed_dir), reverse=True):
+                    if nid not in fname or not fname.endswith(".json"):
+                        continue
+                    try:
+                        with open(os.path.join(processed_dir, fname)) as fh:
+                            sig = json.load(fh)
+                        if sig.get("overall_score") is not None:
+                            score = str(sig["overall_score"])
+                            criteria = sig.get("criteria_results", [])
+                            if criteria:
+                                passes = sum(1 for c in criteria if c.get("status") == "pass")
+                                fails = len(criteria) - passes
+                                ac_summary = f"{passes}P/{fails}F"
+                            break
+                        elif sig.get("files_changed"):
+                            message = sig.get("message", "")[:50]
+                            all_files_changed.extend(sig["files_changed"])
+                    except (OSError, json.JSONDecodeError):
+                        continue
+
+            lines.append(f"| {label} | {status} | {score} | {ac_summary} | {message} |")
+
+        # Score history trends
+        if self.score_history:
+            lines.append("\n## Score Trends\n")
+            for nid, scores in self.score_history.items():
+                n = next((n for n in nodes if n["id"] == nid), None)
+                label = n["attrs"].get("label", nid).replace("\\n", " ") if n else nid
+                trend = " → ".join(f"{s:.1f}" for s in scores)
+                direction = "improving" if len(scores) >= 2 and scores[-1] > scores[-2] else "stalled" if len(scores) >= 2 else "single attempt"
+                lines.append(f"- **{label}**: {trend} ({direction})")
+
+        # All files changed across pipeline
+        if all_files_changed:
+            unique_files = sorted(set(all_files_changed))
+            lines.append(f"\n## All Files Modified ({len(unique_files)} unique)\n")
+            for f in unique_files[:30]:
+                lines.append(f"- `{f}`")
+            if len(unique_files) > 30:
+                lines.append(f"- ... and {len(unique_files) - 30} more")
+
+        lines.append(
+            "\n## E2E Validation Instructions\n"
+            "1. **Aggregate Gherkin**: Read all per-node `.feature` files from "
+            f"`acceptance-tests/{self.pipeline_id}/`\n"
+            f"2. **Write E2E suite**: Create `acceptance-tests/{self.pipeline_id}/e2e-suite.feature` "
+            "with cross-cutting scenarios that test the full feature end-to-end\n"
+            "3. **Execute**: Run browser, API, and unit test scenarios\n"
+            "4. **Check PRD coverage**: Verify every PRD requirement has at least one passing scenario\n"
+            "5. **Write report**: Save results to "
+            f"`acceptance-tests/{self.pipeline_id}/pipeline-validation-report.md`"
+        )
+
+        return "\n".join(lines)
+
+    def _auto_generate_manifest(self, data: dict) -> str | None:
+        """Auto-generate acceptance-tests/{prd_ref}/manifest.yaml from DOT node ACs.
+
+        Returns the manifest path if generated, None otherwise.
+        """
+        graph_attrs = data.get("graph_attrs", {})
+        prd_ref = graph_attrs.get("prd_ref", "")
+        if not prd_ref:
+            return None
+
+        nodes = data.get("nodes", [])
+        features = []
+
+        for n in nodes:
+            handler = n["attrs"].get("handler", "")
+            if handler not in ("codergen", "acceptance-test-writer"):
+                continue
+
+            acceptance = n["attrs"].get("acceptance", "")
+            if not acceptance:
+                continue
+
+            label = n["attrs"].get("label", n["id"]).replace("\\n", " ")
+            parsed_acs = self._parse_acceptance_criteria(acceptance)
+
+            # Determine dominant validation method from per-AC tags
+            methods = [ac["method"] for ac in parsed_acs if ac["method"]]
+            if "browser-check" in methods:
+                dominant_method = "browser-required"
+            elif "api-call" in methods:
+                dominant_method = "api-required"
+            elif "unit-test" in methods:
+                dominant_method = "unit-test"
+            else:
+                dominant_method = "code-analysis"
+
+            # Weight based on number of ACs (more ACs = more important feature)
+            weight = round(len(parsed_acs) / max(sum(
+                len(self._parse_acceptance_criteria(nn["attrs"].get("acceptance", "")))
+                for nn in nodes if nn["attrs"].get("handler") in ("codergen", "acceptance-test-writer")
+            ), 1), 2)
+
+            scenarios = [ac["id"].lower().replace("-", "_") for ac in parsed_acs]
+
+            features.append({
+                "name": label,
+                "node_id": n["id"],
+                "weight": weight,
+                "validation_method": dominant_method,
+                "scenarios": scenarios,
+                "acceptance_criteria": [
+                    {"id": ac["id"], "method": ac["method"] or "infer", "text": ac["text"]}
+                    for ac in parsed_acs
+                ],
+            })
+
+        if not features:
+            return None
+
+        # Write manifest
+        manifest_dir = os.path.join(self._get_cobuilder_root(), "acceptance-tests", prd_ref)
+        os.makedirs(manifest_dir, exist_ok=True)
+        manifest_path = os.path.join(manifest_dir, "manifest.yaml")
+
+        try:
+            import yaml
+        except ImportError:
+            # Fallback to manual YAML construction
+            yaml = None
+
+        manifest = {
+            "prd_id": prd_ref,
+            "prd_title": graph_attrs.get("label", prd_ref),
+            "generated": "auto-generated from DOT pipeline ACs",
+            "pipeline_id": self.pipeline_id,
+            "mode": "guardian",
+            "thresholds": {"accept": 0.70, "investigate": 0.40},
+            "features": features,
+        }
+
+        try:
+            with open(manifest_path, "w") as fh:
+                if yaml:
+                    yaml.dump(manifest, fh, default_flow_style=False, sort_keys=False)
+                else:
+                    # Manual YAML (good enough for structured data)
+                    fh.write(f"prd_id: {prd_ref}\n")
+                    fh.write(f"prd_title: \"{graph_attrs.get('label', prd_ref)}\"\n")
+                    fh.write(f"generated: \"auto-generated from DOT pipeline ACs\"\n")
+                    fh.write(f"pipeline_id: {self.pipeline_id}\n")
+                    fh.write("mode: guardian\n\nthresholds:\n  accept: 0.70\n  investigate: 0.40\n\nfeatures:\n")
+                    for f in features:
+                        fh.write(f"  - name: \"{f['name']}\"\n")
+                        fh.write(f"    node_id: {f['node_id']}\n")
+                        fh.write(f"    weight: {f['weight']}\n")
+                        fh.write(f"    validation_method: {f['validation_method']}\n")
+                        fh.write(f"    scenarios:\n")
+                        for s in f["scenarios"]:
+                            fh.write(f"      - \"{s}\"\n")
+            log.info("[manifest] Auto-generated manifest at %s (%d features)", manifest_path, len(features))
+            return manifest_path
+        except OSError as e:
+            log.warning("[manifest] Failed to write manifest: %s", e)
+            return None
+
+    # ------------------------------------------------------------------
     # Node dispatch
     # ------------------------------------------------------------------
 
@@ -1868,30 +2449,50 @@ class PipelineRunner:
         ]
 
         if acceptance:
+            # Parse structured ACs (with optional per-AC validation methods)
+            parsed_acs = self._parse_acceptance_criteria(acceptance)
+
+            # Build a structured AC table showing method per criterion
+            ac_table_lines = ["| AC | Validation Method | Criterion |",
+                              "|-----|-------------------|-----------|"]
+            for ac in parsed_acs:
+                method = ac["method"] or "infer"
+                ac_table_lines.append(f"| {ac['id']} | `@{method}` | {ac['text']} |")
+
             lines.append(
                 f"\n## Acceptance Criteria\n{acceptance}\n\n"
+                f"### Per-AC Validation Methods\n"
+                + "\n".join(ac_table_lines) + "\n\n"
+                f"Methods: `@browser-check` (navigate UI via MCP), `@api-call` (HTTP requests), "
+                f"`@unit-test` (run test suite), `@code-review` (read code — cap score at 7), "
+                f"`@infer` (you choose based on what's testable).\n\n"
                 f"## Step 1: Write Gherkin Tests\n"
-                f"Before scoring, write a `.feature` file for this node's acceptance criteria.\n"
-                f"Save it to: `acceptance-tests/{self.pipeline_id}/{target_node_id}.feature`\n\n"
-                f"Tag each scenario with its verification method:\n"
-                f"- `@unit-test` — Run relevant test suite (`pytest`, `jest`)\n"
-                f"- `@browser-check` — Navigate UI via chrome-devtools/playwright MCP\n"
-                f"- `@api-call` — Make HTTP requests to verify endpoints\n"
-                f"- `@code-review` — Read the code (lowest confidence — cap score at 7)\n\n"
-                f"Example:\n```gherkin\nFeature: {label}\n\n"
-                f"  @api-call\n  Scenario: AC-1 User can authenticate\n"
-                f"    Given the API server is running\n"
-                f"    When I POST /api/auth/login with valid credentials\n"
-                f"    Then the response status is 200\n"
-                f"    And the response contains a JWT token\n\n"
-                f"  @unit-test\n  Scenario: AC-2 Token expiry\n"
-                f"    Given a JWT token is generated\n"
-                f"    Then it expires after 1 hour\n```\n\n"
+                f"Write a `.feature` file with one scenario per AC. Use the method from the table above.\n"
+                f"Save to: `acceptance-tests/{self.pipeline_id}/{target_node_id}.feature`\n\n"
+                f"```gherkin\nFeature: {label}\n"
+            )
+            # Generate skeleton Gherkin from parsed ACs
+            for ac in parsed_acs:
+                tag = ac["method"] or "infer"
+                lines.append(
+                    f"\n  @{tag}\n  Scenario: {ac['id']} {ac['text']}\n"
+                    f"    Given <precondition>\n"
+                    f"    When <action>\n"
+                    f"    Then <expected result>"
+                )
+            lines.append(
+                f"\n```\n\n"
+                f"Fill in the Given/When/Then steps with concrete, testable assertions.\n\n"
                 f"## Step 2: Execute Each Scenario\n"
                 f"Run each Gherkin scenario using its tagged method. Record pass/fail per scenario.\n"
+                f"- `@browser-check`: Use chrome-devtools/playwright MCP tools\n"
+                f"- `@api-call`: Use curl/httpx to make real HTTP requests\n"
+                f"- `@unit-test`: Run `pytest`/`jest` and check results\n"
+                f"- `@code-review`: Read the actual source code (cap score at 7)\n"
                 f"Do NOT skip execution — a scenario scored without running it caps at 7.\n\n"
                 f"## Step 3: Score Based on Results\n"
-                f"Score based on actual execution results from Step 2."
+                f"Score based on actual execution results from Step 2. "
+                f"Each AC in `criteria_results` MUST reference its validation method used."
             )
         else:
             lines.append("\n## Acceptance Criteria\n(none specified — check for reasonable implementation)")
@@ -1916,6 +2517,39 @@ class PipelineRunner:
             lines.append("\nRead these files to verify the implementation.")
         else:
             lines.append("\n## Files Changed\n(not reported — search the codebase to find relevant changes)")
+
+        # Graph neighborhood: show what nodes feed into this validation and what follows
+        neighborhood = self._build_graph_neighborhood(target_node_id, data)
+        if neighborhood:
+            lines.append(f"\n## Pipeline Graph (this node's neighbors)\n{neighborhood}")
+
+        # Signal history: show all prior signals for the target node being validated
+        signal_history = self._build_signal_history(target_node_id)
+        if signal_history:
+            lines.append(
+                f"\n## Signal History (prior attempts for {target_node_id})\n"
+                f"Previous worker and validator signals for this node:\n\n"
+                f"{signal_history}\n\n"
+                f"Use this history to calibrate: are scores improving? Is the worker addressing feedback?"
+            )
+
+        # Signal directories for the validator
+        lines.append(
+            f"\n## Signal Directories\n"
+            f"- **Active signals**: `{self.signal_dir}/`\n"
+            f"- **Processed signals**: `{os.path.join(self.signal_dir, 'processed')}/`\n"
+            f"- **Read predecessor outputs**: `Glob(pattern=\"{os.path.join(self.signal_dir, 'processed')}/*\")`"
+        )
+
+        # SD fidelity: did the worker follow the SD architecture?
+        sd_fidelity = self._build_sd_fidelity_context(target_node_id, data)
+        if sd_fidelity:
+            lines.append(f"\n## SD Fidelity Check\n{sd_fidelity}")
+
+        # Cross-node integration: do sibling nodes' outputs integrate correctly?
+        cross_node = self._build_cross_node_context(target_node_id, data)
+        if cross_node:
+            lines.append(f"\n## Cross-Node Integration\n{cross_node}")
 
         # Inline SD if available - use same multi-candidate strategy as _build_worker_prompt
         if sd_path:
@@ -1945,9 +2579,18 @@ class PipelineRunner:
             if not sd_found:
                 lines.append(f"\n## Solution Design Path\n{sd_path}")
 
-        # Read manifest validation_method and prepend method-specific instructions
+        # Determine validation method hint for allowed_tools.
+        # Check per-AC method tags first, then fall back to manifest.
         prd_ref = attrs.get("prd_ref", data.get("graph_attrs", {}).get("prd_ref", ""))
         self._validation_method_hint = None  # Store for allowed_tools decision
+
+        # Per-AC method detection: if any AC has [browser-check] or [api-call], set hint
+        if acceptance:
+            _ac_methods = {ac["method"] for ac in self._parse_acceptance_criteria(acceptance) if ac["method"]}
+            if "browser-check" in _ac_methods:
+                self._validation_method_hint = "browser-required"
+            elif "api-call" in _ac_methods:
+                self._validation_method_hint = "api-required"
         if prd_ref:
             # Walk up from DOT file directory to find acceptance-tests/{prd_ref}/manifest.yaml
             manifest_path = ""
@@ -2123,10 +2766,20 @@ class PipelineRunner:
             clean_env["PROJECT_TARGET_DIR"] = effective_dir
             # Apply LLM config env vars (api_key, base_url) from resolved profile
             clean_env.update(llm_config.to_env_dict())
-            # Base tools for validation; extend for browser-required PRDs
-            validation_tools = ["Read", "Write", "Bash", "Grep", "Glob", "ToolSearch", "Skill"]
-            if getattr(self, "_validation_method_hint", None) == "browser-required":
+            # Validator tools: base + code nav + memory. Chrome tools added for browser-required.
+            validation_tools = [
+                # Base
+                "Read", "Write", "Bash", "Grep", "Glob", "ToolSearch", "Skill",
+                "WebFetch", "WebSearch", "TodoWrite",
+                # Serena: code navigation for verifying implementation
+                *self._SERENA_TOOLS,
+                # Hindsight: recall patterns from prior validations
+                *self._HINDSIGHT_TOOLS,
+            ]
+            _hint = getattr(self, "_validation_method_hint", None)
+            if _hint == "browser-required":
                 validation_tools.extend([
+                    # Chrome DevTools for direct browser validation
                     "mcp__claude-in-chrome__navigate",
                     "mcp__claude-in-chrome__read_page",
                     "mcp__claude-in-chrome__find",
@@ -2137,6 +2790,9 @@ class PipelineRunner:
                     "mcp__claude-in-chrome__tabs_context_mcp",
                     "mcp__claude-in-chrome__tabs_create_mcp",
                 ])
+            elif _hint == "api-required":
+                # API validation primarily uses Bash (curl/httpx) which is already included
+                pass
             options = claude_code_sdk.ClaudeCodeOptions(  # type: ignore[attr-defined]
                 system_prompt=self._build_system_prompt("validation-test-agent"),
                 allowed_tools=validation_tools,
@@ -2395,6 +3051,37 @@ class PipelineRunner:
         # --- Validation agent results ---
         if "result" in signal:
             result = signal["result"]
+
+            # Scoring enforcement: every validation signal MUST include scores.
+            # Without scores the evaluator-optimizer loop is broken — the runner
+            # can't build structured feedback for workers on retry, and plateau
+            # detection has no data.  Reject score-less passes; treat score-less
+            # fail/requeue as a warning (still process them so nodes don't stick).
+            _has_scores = (
+                signal.get("overall_score") is not None
+                and signal.get("scores")
+                and signal.get("criteria_results")
+            )
+            if not _has_scores:
+                if result == "pass":
+                    log.warning(
+                        "[scoring] %s: validation PASS signal MISSING scores/overall_score/"
+                        "criteria_results — rejecting. Validator must score before passing. "
+                        "Requeuing to validator.",
+                        node_id,
+                    )
+                    # Requeue the validation: reset to impl_complete so the
+                    # dispatch loop re-triggers validation with the same prompt.
+                    self._force_status(node_id, "impl_complete")
+                    self.active_workers.pop(node_id, None)
+                    return
+                else:
+                    log.warning(
+                        "[scoring] %s: validation %s signal missing scores — "
+                        "processing anyway but feedback to worker will be degraded",
+                        node_id, result.upper(),
+                    )
+
             if result == "pass":
                 # Guard: ignore duplicate pass signals for already-terminal nodes
                 if current_status in ("validated", "accepted"):
@@ -2402,10 +3089,18 @@ class PipelineRunner:
                               node_id, current_status)
                     self.active_workers.pop(node_id, None)
                     return
+
+                # Track score history even on pass (useful for dashboards/analytics)
+                overall_score = signal.get("overall_score")
+                if overall_score is not None:
+                    self.score_history.setdefault(node_id, []).append(float(overall_score))
+                    self._save_score_history()
+
                 self._do_transition(node_id, "validated")
                 self._do_transition(node_id, "accepted")
                 self.active_workers.pop(node_id, None)
-                log.info("[signal] %s: validation PASS -> accepted", node_id)
+                log.info("[signal] %s: validation PASS (score: %s) -> accepted",
+                         node_id, signal.get("overall_score", "?"))
 
             elif result == "fail":
                 retries = self.retry_counts.get(node_id, 0) + 1
@@ -2990,26 +3685,37 @@ class PipelineRunner:
             "Investigate the topic and document findings. Do NOT modify source code.\n\n"
             "### How to Work\n"
             "1. Read the Solution Design to understand what to research.\n"
-            "2. Use WebSearch, WebFetch, and Read to gather information.\n"
-            "3. Write findings to a NEW markdown file in the evidence directory.\n\n"
+            "2. **Check predecessor signals** — read processed signal files from nodes that ran before you.\n"
+            "   They contain context about what's already been discovered or built.\n"
+            "3. Use WebSearch, WebFetch, and Read to gather information.\n"
+            "4. Write findings to a NEW markdown file in the evidence directory.\n\n"
             "### MCP Tools (Anthropic models only)\n"
             "Load research tools via ToolSearch before use:\n"
             "- `ToolSearch(query=\"context7\")` — framework/library documentation\n"
             "- `ToolSearch(query=\"perplexity\")` — web research\n"
             "- `ToolSearch(query=\"hindsight\")` — recall prior findings\n\n"
+            "### Signal Communication\n"
+            "Your signal is read by successor nodes (refine, codergen). Include:\n"
+            "- `files_changed`: paths to research docs you wrote\n"
+            "- `message`: key findings summary so successors know what you discovered\n\n"
             "Done when: Research doc written with findings. Signal written with doc path."
         ),
         "refine": (
             "## Your Role: Refinement\n"
             "Merge research findings into the Solution Design document.\n\n"
             "### How to Work\n"
-            "1. Read predecessor signal files to find research doc paths.\n"
+            "1. **Read predecessor signal files** in the processed signals directory to find research doc paths.\n"
+            "   The Pipeline Graph section below shows exactly where to find them.\n"
             "2. Read the research docs and the current SD.\n"
             "3. Edit the SD to incorporate findings as first-class content (not annotations).\n\n"
             "### MCP Tools (Anthropic models only)\n"
             "Load tools via ToolSearch before use:\n"
             "- `ToolSearch(query=\"hindsight\")` — reflect before editing, retain after\n"
             "- `ToolSearch(query=\"perplexity\")` — reason through conflicting findings\n\n"
+            "### Signal Communication\n"
+            "Your signal is read by successor codergen nodes. Include:\n"
+            "- `files_changed`: the SD file path you updated\n"
+            "- `message`: what sections changed and key decisions made\n\n"
             "Done when: SD updated with research findings integrated. No annotations remain."
         ),
         "acceptance-test-writer": (
@@ -3017,10 +3723,15 @@ class PipelineRunner:
             "Create Gherkin acceptance test scenarios from PRD acceptance criteria.\n\n"
             "### How to Work\n"
             "1. Read the PRD and acceptance criteria carefully.\n"
-            "2. Explore the codebase structure (Glob/Read) to understand what exists.\n"
-            "3. Write .feature files with Given/When/Then. Tests should be blind (don't peek at implementation).\n\n"
+            "2. **Check predecessor signals** — read processed signal files to understand what's been built.\n"
+            "3. Explore the codebase structure (Glob/Read) to understand what exists.\n"
+            "4. Write .feature files with Given/When/Then. Tests should be blind (don't peek at implementation).\n\n"
             "### MCP Tools (Anthropic models only)\n"
             "Load code navigation: `ToolSearch(query=\"serena\")`\n\n"
+            "### Signal Communication\n"
+            "Your signal is read by validation nodes. Include:\n"
+            "- `files_changed`: paths to .feature files you wrote\n"
+            "- `message`: summary of coverage (which ACs have scenarios)\n\n"
             "Done when: Feature files written covering all PRD acceptance criteria."
         ),
     }
@@ -3105,6 +3816,35 @@ class PipelineRunner:
         if progress_lines:
             lines.append(f"\n## Pipeline Progress (completed before you)\n{progress_lines}")
 
+        # Graph neighborhood: show direct predecessors and successors with signal paths
+        neighborhood = self._build_graph_neighborhood(nid, data)
+        if neighborhood:
+            lines.append(f"\n## Pipeline Graph (your neighbors)\n{neighborhood}")
+
+        # Signal history: inject all prior signals for this node (worker + validator)
+        signal_history = self._build_signal_history(nid)
+        if signal_history:
+            lines.append(
+                f"\n## Signal History (prior attempts for this node)\n"
+                f"The runner has recorded these signals from previous attempts:\n\n"
+                f"{signal_history}"
+            )
+
+        # Cross-node integration context: what peers built (files, APIs, types)
+        cross_node = self._build_cross_node_context(nid, data)
+        if cross_node:
+            lines.append(f"\n## Cross-Node Integration\n{cross_node}")
+
+        # SD fidelity notice: workers should know they'll be checked
+        sd_path = attrs.get("sd_path", "") or attrs.get("solution_design", "")
+        if sd_path:
+            lines.append(
+                "\n## SD Fidelity Notice\n"
+                "The validator and pilot will check your implementation against the Solution Design.\n"
+                "They compare your `files_changed` to the SD's expected file structure.\n"
+                "If you deviate from the SD (different file paths, missing components), explain why in your signal message."
+            )
+
         # Inject failure guidance if this is a requeued node
         # Persisted file is authoritative (written at requeue time, survives restarts).
         # In-memory dict is fallback for same-process retries before file is written.
@@ -3135,6 +3875,16 @@ class PipelineRunner:
             f'```\n\n'
             f"IMPORTANT: Use this EXACT path. Do NOT construct your own path.\n"
             f"For modifying existing source code files, ALWAYS use Edit (not Write)."
+        )
+
+        # Signal directory awareness — compact reference (details are in Graph Neighborhood above)
+        processed_dir = os.path.join(self.signal_dir, "processed")
+        lines.append(
+            f"\n## Signal Directories\n"
+            f"- **Active signals**: `{self.signal_dir}/` (runner watches this)\n"
+            f"- **Processed signals**: `{processed_dir}/` (historical — read predecessor outputs here)\n"
+            f"- **Your predecessors' signals**: `Glob(pattern=\"{processed_dir}/*\")`\n"
+            f"- **Your node's history**: `Glob(pattern=\"{processed_dir}/*{nid}*\")`"
         )
 
         return "\n".join(lines)
