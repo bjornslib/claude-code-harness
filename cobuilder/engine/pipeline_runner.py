@@ -3004,13 +3004,6 @@ class PipelineRunner:
         "codergen": (
             "## Your Role: Implementation\n"
             "You implement features by exploring the codebase first, then making changes.\n\n"
-            "### FIRST: Invoke the CoBuilder Skill\n"
-            "Before doing anything else, invoke the CoBuilder skill to load pipeline context:\n"
-            "```\n"
-            "Skill(skill=\"cobuilder\")\n"
-            "```\n"
-            "This loads project conventions, architecture patterns, and pipeline awareness.\n"
-            "Do this BEFORE exploring the codebase.\n\n"
             "### How to Work\n"
             "1. **Explore first**: Read the Solution Design, then Glob/Grep/Read to understand the codebase.\n"
             "   Read every file before editing it. Trace data flows to understand dependencies.\n"

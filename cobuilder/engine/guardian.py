@@ -276,6 +276,14 @@ When reading signals via wait_for_signal.py, you may encounter these signal type
 
 ## Pipeline Execution Flow
 
+### Phase 0: Load CoBuilder Context
+BEFORE anything else, invoke the CoBuilder skill to load project conventions,
+architecture patterns, and pipeline awareness:
+```
+Skill(skill="cobuilder")
+```
+Do this FIRST. It provides critical context for all subsequent decisions.
+
 ### Phase 1: Initialize
 1. Parse the DOT file:
    python3 {scripts_dir}/cli.py parse {dot_path} --output json
