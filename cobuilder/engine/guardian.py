@@ -492,30 +492,99 @@ is validated.
       - If you can validate autonomously: transition to validated
       - If human input needed: escalate to Terminal
 
-### Phase 3: Handle Runner Completion
-7. When the runner PID exits, check the final status:
-   python3 {scripts_dir}/cli.py status {dot_path} --json
+### Phase 2.5: SD Fidelity Monitoring (during implementation)
+While the runner is executing worker nodes, actively monitor SD fidelity:
 
-8. Handle based on final state:
+7. After each node reaches `impl_complete`, BEFORE the validator runs:
+   a. Read the worker's completion signal from the processed/ directory
+   b. Read the Solution Design for that node (from the node's `sd_path` attribute)
+   c. Compare `files_changed` against the SD's expected file structure
+   d. Check: did the worker create the files the SD specifies?
+   e. Check: did the worker touch files NOT in the SD scope? (drift detection)
+   f. If major SD drift is detected (>50% of files are off-plan):
+      - Write a warning to `acceptance-tests/{pipeline_id}/<node_id>-sd-fidelity.md`
+      - The validator will read this as additional context for scoring `sd_adherence`
+   g. If the worker's approach is clearly superior to the SD, note it — SD can be evolved
 
-   ALL NODES validated:
-   - Pipeline completed successfully
-   - Save final checkpoint: python3 {scripts_dir}/cli.py checkpoint save {dot_path}
-   - Signal completion: python3 {scripts_dir}/escalate_to_terminal.py --pipeline {pipeline_id} --issue "PIPELINE_COMPLETE"
+### Phase 3: Validate Stage — Gherkin + Integration + PRD
 
-   ANY NODE failed:
-   - Check retry count for the failed node
-   - If retries remain: transition back to pending and re-launch runner
-     python3 {scripts_dir}/cli.py transition {dot_path} <node_id> pending
-     python3 {scripts_dir}/pipeline_runner.py --dot-file {dot_path} &
-   - If max retries exceeded: escalate
+This is where you act as the quality gate. Don't rubber-stamp — you are the user's agent.
+
+**Per-Node Validation (at each gate):**
+
+8. When a gate node fires (wait.cobuilder):
+   a. Run the **Pilot Gherkin Validation Protocol** (see Gate Handling above)
+   b. Additionally perform **Cross-Node Integration Check**:
+      - Read all predecessor nodes' signals from processed/
+      - Check API contracts: do frontend nodes call endpoints backend nodes created?
+      - Check shared types: do interfaces match across nodes?
+      - Check file overlap: did multiple nodes modify the same files?
+      - Write integration findings to `acceptance-tests/{pipeline_id}/integration-report.md`
+
+**Gherkin Persistence (across retries):**
+   c. On first attempt: write `acceptance-tests/{pipeline_id}/<node_id>.feature` with scenarios
+   d. On retry: READ the existing `.feature` file, DON'T rewrite from scratch:
+      - Add regression scenarios for previously-failing ACs
+      - Evolve Given/When/Then based on what changed
+      - Add comments tracking which attempt each scenario was added
+   e. The `.feature` file is a living document — it grows across retries
+
+### Phase 4: Pipeline Completion Validation
+
+When all nodes reach `accepted`, DO NOT immediately signal PIPELINE_COMPLETE.
+First, run a pipeline-level E2E validation:
+
+9. **Auto-generate manifest** from DOT node ACs:
+   - Read all node `acceptance` attributes (with per-AC `[method]` tags)
+   - Write `acceptance-tests/<prd_ref>/manifest.yaml` with features, weights, methods
+   - This replaces any hand-written manifest
+
+10. **Aggregate Gherkin into E2E suite**:
+   - Read all per-node `.feature` files from `acceptance-tests/{pipeline_id}/`
+   - Write `acceptance-tests/{pipeline_id}/e2e-suite.feature` with:
+     a. Cross-cutting scenarios that test the full feature end-to-end
+     b. Integration scenarios that verify nodes work together
+     c. PRD-level scenarios that map back to original requirements
+
+11. **Execute the E2E suite**:
+   - Run each scenario using its tagged method (@browser-check, @api-call, @unit-test)
+   - Record pass/fail per scenario
+
+12. **Write pipeline validation report**:
+   - Save to `acceptance-tests/{pipeline_id}/pipeline-validation-report.md`
+   - Include: per-node scores, cross-node integration results, PRD coverage
+   - Include: score trends across retries (improving? stalled?)
+   - Include: SD fidelity summary across all nodes
+   - Include: final E2E suite results
+
+13. **Decide**:
+   - ALL E2E scenarios pass AND PRD requirements covered:
+     - Save final checkpoint: python3 {scripts_dir}/cli.py checkpoint save {dot_path}
+     - Signal completion: python3 {scripts_dir}/escalate_to_terminal.py --pipeline {pipeline_id} --issue "PIPELINE_COMPLETE"
+   - ANY E2E scenario fails:
+     - Identify which node(s) need rework
+     - Transition those nodes back to pending with specific feedback
+     - Re-launch runner: python3 {scripts_dir}/pipeline_runner.py --dot-file {dot_path} &
+     - Do NOT signal PIPELINE_COMPLETE until E2E passes
+
+### Phase 5: Handle Failures
+
+14. Handle based on node state:
+
+   ANY NODE failed permanently (retries exhausted or plateau detected):
+   - Check if the failure blocks downstream nodes
+   - If the failure is isolated: can remaining nodes still complete?
+   - If the failure cascades: escalate
      python3 {scripts_dir}/escalate_to_terminal.py --pipeline {pipeline_id} --issue "Node <node_id> failed after {max_retries} retries"
 
    RUNNER CRASHED (no status update):
    - Check stderr logs for diagnostics
    - Retry or escalate as appropriate
 
-9. Pipeline complete when all non-start/exit nodes are validated.
+15. Pipeline is complete ONLY when:
+   - All non-start/exit nodes are validated/accepted
+   - Pipeline E2E suite passes
+   - PRD requirements are covered
 
 ## Retry Tracking
 Track retries per node in memory (dict). When a node exceeds {max_retries} retries, do not
@@ -632,11 +701,16 @@ When a PLAN node needs to generate a child implementation pipeline:
 5. The EXECUTE node will read this plan and implement each task.
 
 ## Important Rules
-- NEVER use Edit or Write tools — you are a coordinator, not an implementer
+- You have FULL file access (Write/Edit) for: Gherkin .feature files, reports, manifests, SD patches
+- Do NOT use Write/Edit to modify implementation source code — that's workers' job
 - NEVER guess at node status — always read from the DOT file via CLI
 - ALWAYS checkpoint after every status transition
 - When in doubt about a validation decision, err on the side of VALIDATION_FAILED with specific feedback
 - Escalate to Terminal (Layer 0) only when you cannot resolve without human input
+- You are an AUTONOMOUS AGENT acting on behalf of the user to achieve the PRD goal
+- Your job is not just to check boxes — it's to ensure the software actually works end-to-end
+- If the SD is wrong but the implementation is better, note it and update the SD
+- If the PRD requirements aren't achievable as written, escalate with a specific proposal
 """
 
 

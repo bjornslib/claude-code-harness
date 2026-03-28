@@ -1378,6 +1378,422 @@ class PipelineRunner:
         ]
 
     # ------------------------------------------------------------------
+    # Pilot autonomy: SD fidelity, cross-node, E2E, manifest
+    # ------------------------------------------------------------------
+
+    def _build_sd_fidelity_context(self, node_id: str, data: dict) -> str:
+        """Extract SD task breakdown for a node and compare to worker's files_changed.
+
+        Returns a structured report showing:
+        - What the SD specifies for this node (expected files, components, patterns)
+        - What the worker actually produced (files_changed from signal)
+        - Gaps: files expected but not touched
+        - Drift: files touched but not in SD scope
+        """
+        node = next((n for n in data["nodes"] if n["id"] == node_id), None)
+        if not node:
+            return ""
+
+        attrs = node["attrs"]
+        sd_path = attrs.get("sd_path", "") or attrs.get("solution_design", "")
+        if not sd_path:
+            return ""
+
+        # Read SD content
+        sd_content = ""
+        candidates = []
+        if not os.path.isabs(sd_path):
+            cobuilder_root = self._get_cobuilder_root()
+            candidates.append(os.path.join(cobuilder_root, sd_path))
+            target = self._get_target_dir()
+            if target != cobuilder_root:
+                candidates.append(os.path.join(target, sd_path))
+        else:
+            candidates.append(sd_path)
+
+        for sd_abs in candidates:
+            if os.path.exists(sd_abs):
+                try:
+                    with open(sd_abs) as fh:
+                        sd_content = fh.read()
+                    break
+                except OSError:
+                    pass
+
+        if not sd_content:
+            return ""
+
+        # Extract expected file patterns from SD (look for file paths in code blocks and bullet points)
+        import re
+        # Match patterns like: `src/components/Login.tsx`, path/to/file.py, etc.
+        file_patterns = re.findall(
+            r'[`*\-]\s*([a-zA-Z][\w./\-]*\.\w{1,10})',
+            sd_content,
+        )
+        # Also match explicit "Scope:" or "Files:" lines
+        scope_patterns = re.findall(
+            r'(?:Scope|Files|file_scope|target_files)\s*[:=]\s*(.+)',
+            sd_content, re.IGNORECASE,
+        )
+        for sp in scope_patterns:
+            file_patterns.extend(re.findall(r'[\w./\-]+\.\w{1,10}', sp))
+
+        # Deduplicate and filter obvious non-files
+        expected_files = sorted(set(
+            f for f in file_patterns
+            if not f.startswith('http') and '/' in f or f.endswith(('.py', '.ts', '.tsx', '.js', '.jsx', '.md', '.yaml', '.yml'))
+        ))
+
+        # Read worker's files_changed from processed signals
+        files_changed = []
+        processed_dir = os.path.join(self.signal_dir, "processed")
+        if os.path.isdir(processed_dir):
+            for fname in sorted(os.listdir(processed_dir), reverse=True):
+                if node_id in fname and fname.endswith(".json"):
+                    try:
+                        with open(os.path.join(processed_dir, fname)) as fh:
+                            sig = json.load(fh)
+                            if sig.get("files_changed"):
+                                files_changed = sig["files_changed"]
+                                break
+                    except (OSError, json.JSONDecodeError):
+                        continue
+
+        if not expected_files and not files_changed:
+            return ""
+
+        lines = ["### SD Fidelity Analysis"]
+
+        if expected_files:
+            lines.append(f"\n**Expected files from SD** ({len(expected_files)}):")
+            for f in expected_files[:20]:  # Cap to prevent bloat
+                status = "found" if any(f in fc for fc in files_changed) else "NOT TOUCHED"
+                lines.append(f"- `{f}` — {status}")
+
+        if files_changed:
+            # Detect drift: files touched but not in SD scope
+            drift_files = [
+                fc for fc in files_changed
+                if not any(ef in fc for ef in expected_files)
+            ] if expected_files else []
+
+            if drift_files:
+                lines.append(f"\n**Drift (files not in SD scope)** ({len(drift_files)}):")
+                for f in drift_files[:10]:
+                    lines.append(f"- `{f}` — worker touched this but SD doesn't mention it")
+                lines.append(
+                    "\nDrift isn't always bad (workers may discover better approaches), "
+                    "but large drift signals the worker may have ignored the SD."
+                )
+
+        return "\n".join(lines)
+
+    def _build_cross_node_context(self, node_id: str, data: dict) -> str:
+        """Build integration context by reading all predecessor and sibling signals.
+
+        Checks for:
+        - API contract consistency: do frontend nodes call endpoints backend nodes created?
+        - Shared type consistency: do interfaces match across nodes?
+        - File overlap: do multiple nodes touch the same files (potential conflicts)?
+        """
+        edges = data.get("edges", [])
+        nodes_by_id = {n["id"]: n for n in data.get("nodes", [])}
+
+        # Collect all completed worker nodes (not just direct predecessors)
+        processed_dir = os.path.join(self.signal_dir, "processed")
+        if not os.path.isdir(processed_dir):
+            return ""
+
+        # Read all processed signals to build a map of node_id -> files_changed
+        node_files: dict[str, list[str]] = {}
+        node_messages: dict[str, str] = {}
+        for fname in sorted(os.listdir(processed_dir)):
+            if not fname.endswith(".json"):
+                continue
+            try:
+                with open(os.path.join(processed_dir, fname)) as fh:
+                    sig = json.load(fh)
+                # Worker signals have "status", validator signals have "result"
+                if sig.get("status") and sig.get("files_changed"):
+                    # Extract node_id from filename (format: timestamp-node_id.json)
+                    parts = fname.rsplit("-", 1)
+                    if len(parts) >= 2:
+                        sig_node_id = parts[-1].replace(".json", "")
+                    else:
+                        sig_node_id = fname.replace(".json", "")
+                    # Only track if this is a real node
+                    if sig_node_id in nodes_by_id:
+                        node_files[sig_node_id] = sig.get("files_changed", [])
+                        node_messages[sig_node_id] = sig.get("message", "")
+            except (OSError, json.JSONDecodeError):
+                continue
+
+        if len(node_files) < 2:
+            return ""  # Need at least 2 completed nodes for cross-node analysis
+
+        lines = ["### Cross-Node Integration Context"]
+
+        # Check for file overlap (multiple nodes touching same files)
+        file_owners: dict[str, list[str]] = {}
+        for nid, files in node_files.items():
+            for f in files:
+                file_owners.setdefault(f, []).append(nid)
+
+        overlapping = {f: owners for f, owners in file_owners.items() if len(owners) > 1}
+        if overlapping:
+            lines.append(f"\n**Shared files** ({len(overlapping)} files touched by multiple nodes):")
+            for f, owners in sorted(overlapping.items())[:10]:
+                owner_labels = []
+                for o in owners:
+                    n = nodes_by_id.get(o)
+                    label = n["attrs"].get("label", o).replace("\\n", " ") if n else o
+                    owner_labels.append(label)
+                lines.append(f"- `{f}` — modified by: {', '.join(owner_labels)}")
+            lines.append(
+                "\nShared files require careful integration. Check that later nodes "
+                "didn't overwrite earlier nodes' work."
+            )
+
+        # Summarize what each completed node built
+        lines.append("\n**Completed nodes and their outputs:**")
+        for nid, files in node_files.items():
+            if nid == node_id:
+                continue
+            n = nodes_by_id.get(nid)
+            label = n["attrs"].get("label", nid).replace("\\n", " ") if n else nid
+            msg = node_messages.get(nid, "")
+            file_summary = ", ".join(files[:5])
+            if len(files) > 5:
+                file_summary += f" (+{len(files)-5} more)"
+            lines.append(f"- **{label}**: {msg}")
+            if file_summary:
+                lines.append(f"  Files: {file_summary}")
+
+        # Hint: what to check for integration
+        lines.append(
+            "\n**Integration checks to perform:**\n"
+            "- Do API endpoints match what frontend components call?\n"
+            "- Do shared types/interfaces match across nodes?\n"
+            "- Do import paths resolve correctly across node boundaries?\n"
+            "- Were shared files merged correctly (not overwritten)?"
+        )
+
+        return "\n".join(lines)
+
+    def _build_pipeline_e2e_context(self, data: dict) -> str:
+        """Build a pipeline-level E2E context for final validation.
+
+        Aggregates all node ACs, scores, and completion messages into a
+        holistic view of whether the PRD goals were achieved.
+        """
+        nodes = data.get("nodes", [])
+        graph_attrs = data.get("graph_attrs", {})
+        prd_ref = graph_attrs.get("prd_ref", "")
+
+        lines = [
+            "# Pipeline E2E Validation",
+            "",
+            f"Pipeline: {self.pipeline_id}",
+        ]
+        if prd_ref:
+            lines.append(f"PRD: {prd_ref}")
+
+        # Read PRD content if available
+        prd_path = graph_attrs.get("prd_path", "")
+        if prd_path:
+            prd_abs = prd_path if os.path.isabs(prd_path) else os.path.join(self._get_cobuilder_root(), prd_path)
+            if os.path.exists(prd_abs):
+                try:
+                    with open(prd_abs) as fh:
+                        prd_content = fh.read()
+                    # Extract just the requirements/AC section (first 3000 chars to avoid bloat)
+                    lines.append(f"\n## PRD Requirements (first 3000 chars)\n{prd_content[:3000]}")
+                except OSError:
+                    pass
+
+        # Aggregate per-node results
+        lines.append("\n## Per-Node Results Summary\n")
+        lines.append("| Node | Status | Score | AC Pass/Fail | Key Output |")
+        lines.append("|------|--------|-------|-------------|------------|")
+
+        processed_dir = os.path.join(self.signal_dir, "processed")
+        all_files_changed: list[str] = []
+
+        for n in nodes:
+            nid = n["id"]
+            handler = n["attrs"].get("handler", "")
+            if handler not in ("codergen", "research", "refine", "acceptance-test-writer"):
+                continue
+
+            status = n["attrs"].get("status", "pending")
+            label = n["attrs"].get("label", nid).replace("\\n", " ")
+
+            # Read latest validator signal for this node
+            score = "—"
+            ac_summary = "—"
+            message = "—"
+            if os.path.isdir(processed_dir):
+                for fname in sorted(os.listdir(processed_dir), reverse=True):
+                    if nid not in fname or not fname.endswith(".json"):
+                        continue
+                    try:
+                        with open(os.path.join(processed_dir, fname)) as fh:
+                            sig = json.load(fh)
+                        if sig.get("overall_score") is not None:
+                            score = str(sig["overall_score"])
+                            criteria = sig.get("criteria_results", [])
+                            if criteria:
+                                passes = sum(1 for c in criteria if c.get("status") == "pass")
+                                fails = len(criteria) - passes
+                                ac_summary = f"{passes}P/{fails}F"
+                            break
+                        elif sig.get("files_changed"):
+                            message = sig.get("message", "")[:50]
+                            all_files_changed.extend(sig["files_changed"])
+                    except (OSError, json.JSONDecodeError):
+                        continue
+
+            lines.append(f"| {label} | {status} | {score} | {ac_summary} | {message} |")
+
+        # Score history trends
+        if self.score_history:
+            lines.append("\n## Score Trends\n")
+            for nid, scores in self.score_history.items():
+                n = next((n for n in nodes if n["id"] == nid), None)
+                label = n["attrs"].get("label", nid).replace("\\n", " ") if n else nid
+                trend = " → ".join(f"{s:.1f}" for s in scores)
+                direction = "improving" if len(scores) >= 2 and scores[-1] > scores[-2] else "stalled" if len(scores) >= 2 else "single attempt"
+                lines.append(f"- **{label}**: {trend} ({direction})")
+
+        # All files changed across pipeline
+        if all_files_changed:
+            unique_files = sorted(set(all_files_changed))
+            lines.append(f"\n## All Files Modified ({len(unique_files)} unique)\n")
+            for f in unique_files[:30]:
+                lines.append(f"- `{f}`")
+            if len(unique_files) > 30:
+                lines.append(f"- ... and {len(unique_files) - 30} more")
+
+        lines.append(
+            "\n## E2E Validation Instructions\n"
+            "1. **Aggregate Gherkin**: Read all per-node `.feature` files from "
+            f"`acceptance-tests/{self.pipeline_id}/`\n"
+            f"2. **Write E2E suite**: Create `acceptance-tests/{self.pipeline_id}/e2e-suite.feature` "
+            "with cross-cutting scenarios that test the full feature end-to-end\n"
+            "3. **Execute**: Run browser, API, and unit test scenarios\n"
+            "4. **Check PRD coverage**: Verify every PRD requirement has at least one passing scenario\n"
+            "5. **Write report**: Save results to "
+            f"`acceptance-tests/{self.pipeline_id}/pipeline-validation-report.md`"
+        )
+
+        return "\n".join(lines)
+
+    def _auto_generate_manifest(self, data: dict) -> str | None:
+        """Auto-generate acceptance-tests/{prd_ref}/manifest.yaml from DOT node ACs.
+
+        Returns the manifest path if generated, None otherwise.
+        """
+        graph_attrs = data.get("graph_attrs", {})
+        prd_ref = graph_attrs.get("prd_ref", "")
+        if not prd_ref:
+            return None
+
+        nodes = data.get("nodes", [])
+        features = []
+
+        for n in nodes:
+            handler = n["attrs"].get("handler", "")
+            if handler not in ("codergen", "acceptance-test-writer"):
+                continue
+
+            acceptance = n["attrs"].get("acceptance", "")
+            if not acceptance:
+                continue
+
+            label = n["attrs"].get("label", n["id"]).replace("\\n", " ")
+            parsed_acs = self._parse_acceptance_criteria(acceptance)
+
+            # Determine dominant validation method from per-AC tags
+            methods = [ac["method"] for ac in parsed_acs if ac["method"]]
+            if "browser-check" in methods:
+                dominant_method = "browser-required"
+            elif "api-call" in methods:
+                dominant_method = "api-required"
+            elif "unit-test" in methods:
+                dominant_method = "unit-test"
+            else:
+                dominant_method = "code-analysis"
+
+            # Weight based on number of ACs (more ACs = more important feature)
+            weight = round(len(parsed_acs) / max(sum(
+                len(self._parse_acceptance_criteria(nn["attrs"].get("acceptance", "")))
+                for nn in nodes if nn["attrs"].get("handler") in ("codergen", "acceptance-test-writer")
+            ), 1), 2)
+
+            scenarios = [ac["id"].lower().replace("-", "_") for ac in parsed_acs]
+
+            features.append({
+                "name": label,
+                "node_id": n["id"],
+                "weight": weight,
+                "validation_method": dominant_method,
+                "scenarios": scenarios,
+                "acceptance_criteria": [
+                    {"id": ac["id"], "method": ac["method"] or "infer", "text": ac["text"]}
+                    for ac in parsed_acs
+                ],
+            })
+
+        if not features:
+            return None
+
+        # Write manifest
+        manifest_dir = os.path.join(self._get_cobuilder_root(), "acceptance-tests", prd_ref)
+        os.makedirs(manifest_dir, exist_ok=True)
+        manifest_path = os.path.join(manifest_dir, "manifest.yaml")
+
+        try:
+            import yaml
+        except ImportError:
+            # Fallback to manual YAML construction
+            yaml = None
+
+        manifest = {
+            "prd_id": prd_ref,
+            "prd_title": graph_attrs.get("label", prd_ref),
+            "generated": "auto-generated from DOT pipeline ACs",
+            "pipeline_id": self.pipeline_id,
+            "mode": "guardian",
+            "thresholds": {"accept": 0.70, "investigate": 0.40},
+            "features": features,
+        }
+
+        try:
+            with open(manifest_path, "w") as fh:
+                if yaml:
+                    yaml.dump(manifest, fh, default_flow_style=False, sort_keys=False)
+                else:
+                    # Manual YAML (good enough for structured data)
+                    fh.write(f"prd_id: {prd_ref}\n")
+                    fh.write(f"prd_title: \"{graph_attrs.get('label', prd_ref)}\"\n")
+                    fh.write(f"generated: \"auto-generated from DOT pipeline ACs\"\n")
+                    fh.write(f"pipeline_id: {self.pipeline_id}\n")
+                    fh.write("mode: guardian\n\nthresholds:\n  accept: 0.70\n  investigate: 0.40\n\nfeatures:\n")
+                    for f in features:
+                        fh.write(f"  - name: \"{f['name']}\"\n")
+                        fh.write(f"    node_id: {f['node_id']}\n")
+                        fh.write(f"    weight: {f['weight']}\n")
+                        fh.write(f"    validation_method: {f['validation_method']}\n")
+                        fh.write(f"    scenarios:\n")
+                        for s in f["scenarios"]:
+                            fh.write(f"      - \"{s}\"\n")
+            log.info("[manifest] Auto-generated manifest at %s (%d features)", manifest_path, len(features))
+            return manifest_path
+        except OSError as e:
+            log.warning("[manifest] Failed to write manifest: %s", e)
+            return None
+
+    # ------------------------------------------------------------------
     # Node dispatch
     # ------------------------------------------------------------------
 
@@ -2124,6 +2540,16 @@ class PipelineRunner:
             f"- **Processed signals**: `{os.path.join(self.signal_dir, 'processed')}/`\n"
             f"- **Read predecessor outputs**: `Glob(pattern=\"{os.path.join(self.signal_dir, 'processed')}/*\")`"
         )
+
+        # SD fidelity: did the worker follow the SD architecture?
+        sd_fidelity = self._build_sd_fidelity_context(target_node_id, data)
+        if sd_fidelity:
+            lines.append(f"\n## SD Fidelity Check\n{sd_fidelity}")
+
+        # Cross-node integration: do sibling nodes' outputs integrate correctly?
+        cross_node = self._build_cross_node_context(target_node_id, data)
+        if cross_node:
+            lines.append(f"\n## Cross-Node Integration\n{cross_node}")
 
         # Inline SD if available - use same multi-candidate strategy as _build_worker_prompt
         if sd_path:
@@ -3402,6 +3828,21 @@ class PipelineRunner:
                 f"\n## Signal History (prior attempts for this node)\n"
                 f"The runner has recorded these signals from previous attempts:\n\n"
                 f"{signal_history}"
+            )
+
+        # Cross-node integration context: what peers built (files, APIs, types)
+        cross_node = self._build_cross_node_context(nid, data)
+        if cross_node:
+            lines.append(f"\n## Cross-Node Integration\n{cross_node}")
+
+        # SD fidelity notice: workers should know they'll be checked
+        sd_path = attrs.get("sd_path", "") or attrs.get("solution_design", "")
+        if sd_path:
+            lines.append(
+                "\n## SD Fidelity Notice\n"
+                "The validator and pilot will check your implementation against the Solution Design.\n"
+                "They compare your `files_changed` to the SD's expected file structure.\n"
+                "If you deviate from the SD (different file paths, missing components), explain why in your signal message."
             )
 
         # Inject failure guidance if this is a requeued node

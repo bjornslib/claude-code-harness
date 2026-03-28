@@ -6,14 +6,21 @@ This file provides guidance for Claude Code sessions working within the `cobuild
 
 CoBuilder is the **pipeline execution engine** for multi-agent orchestration. It runs DOT-defined directed acyclic graph pipelines where each node dispatches an AgentSDK worker. The runner itself has zero LLM cost — all intelligence lives in the workers it dispatches.
 
-**3-layer hierarchy:**
+**4-layer hierarchy:**
 ```
-CoBuilder (Opus LLM)           — strategic planning, Gherkin E2E validation
+CoBuilder (Opus LLM)           — strategic planning, PRD authorship
+    |
+    Pilot (guardian.py)        — AUTONOMOUS goal-pursuing agent:
+    |                            SD fidelity monitoring, Gherkin validation,
+    |                            cross-node integration, pipeline E2E
     |
     pipeline_runner.py         — Python state machine, $0, <1s graph ops
+    |                            Scoring enforcement, context injection
         |
         Workers                — AgentSDK: codergen, research, refine, validation
 ```
+
+See `docs/sds/SD-PILOT-AUTONOMY-001.md` for the full pilot autonomy design.
 
 ## Module Map
 
@@ -93,16 +100,41 @@ Worker result format (written to `.pipelines/pipelines/signals/{pipeline_id}/{no
 }
 ```
 
-Validation result format:
+Validation result format (MANDATORY: `scores`, `overall_score`, `criteria_results` — runner rejects passes without them):
 ```json
 {
   "result": "pass" | "fail" | "requeue",
   "reason": "Explanation",
+  "scores": {"correctness": 9, "completeness": 8, "code_quality": 8, "sd_adherence": 9, "process_discipline": 8},
+  "overall_score": 8.5,
+  "criteria_results": [
+    {"criterion_id": "AC-1", "status": "pass", "method": "api-call", "evidence": "..."},
+    {"criterion_id": "AC-2", "status": "fail", "method": "browser-check", "reason": "..."}
+  ],
   "requeue_target": "node_id_to_reset"
 }
 ```
 
-On `requeue`: runner sets `requeue_target` back to `pending` mechanically.
+On `requeue`: runner sets `requeue_target` back to `pending` with structured feedback.
+
+### 1b. Signal-Based Communication System
+
+Nodes communicate via the signal directory:
+- **Active**: `{signal_dir}/{node_id}.json` — runner watches, picks up, applies
+- **Processed**: `{signal_dir}/processed/{timestamp}-{node_id}.json` — historical, nodes read for context
+- **Score history**: `{signal_dir}/_score_history.json` — trends across retries
+
+The runner injects signal history, graph neighborhood, SD fidelity, and cross-node integration context into every worker and validator prompt. See `_build_signal_history()`, `_build_graph_neighborhood()`, `_build_sd_fidelity_context()`, `_build_cross_node_context()`.
+
+### 1c. Per-AC Validation Methods
+
+Acceptance criteria support inline method tags:
+```
+AC-1 [browser-check]: Login form renders
+AC-2 [api-call]: POST /auth/login returns JWT
+AC-3 [unit-test]: Token TTL is configurable
+```
+Parsed by `_parse_acceptance_criteria()`. Validator prompt generates per-AC Gherkin with matching `@method` tags.
 
 ### 2. Status Chain
 

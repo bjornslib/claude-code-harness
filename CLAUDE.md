@@ -27,7 +27,7 @@ Zero-LLM-cost state machine that turns DOT graph pipelines into working software
 
 | Subdirectory | Purpose |
 |---|---|
-| `engine/` | Core runner (`pipeline_runner.py`), node handlers, signal protocol, checkpoint system, CLI |
+| `engine/` | Core runner (`pipeline_runner.py`), pilot agent (`guardian.py`), node handlers, signal protocol, checkpoint system, CLI. Pilot is an autonomous goal-pursuing agent: SD fidelity monitoring, cross-node integration, Gherkin E2E, manifest auto-generation. See `docs/sds/SD-PILOT-AUTONOMY-001.md`. |
 | `engine/handlers/` | Node implementations: `codergen` (LLM work), `research` (Context7+Perplexity), `refine` (SD rewriting), `wait_human` (gates), `manager_loop` (sub-pipelines) |
 | `engine/providers.yaml` | Named LLM profiles (anthropic-fast/smart/opus, alibaba-glm5/qwen3) |
 | `repomap/` | **ZeroRepo** — codebase intelligence via graph construction and embeddings for context-aware agent guidance |
