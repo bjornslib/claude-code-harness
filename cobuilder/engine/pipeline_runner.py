@@ -2395,6 +2395,37 @@ class PipelineRunner:
         # --- Validation agent results ---
         if "result" in signal:
             result = signal["result"]
+
+            # Scoring enforcement: every validation signal MUST include scores.
+            # Without scores the evaluator-optimizer loop is broken — the runner
+            # can't build structured feedback for workers on retry, and plateau
+            # detection has no data.  Reject score-less passes; treat score-less
+            # fail/requeue as a warning (still process them so nodes don't stick).
+            _has_scores = (
+                signal.get("overall_score") is not None
+                and signal.get("scores")
+                and signal.get("criteria_results")
+            )
+            if not _has_scores:
+                if result == "pass":
+                    log.warning(
+                        "[scoring] %s: validation PASS signal MISSING scores/overall_score/"
+                        "criteria_results — rejecting. Validator must score before passing. "
+                        "Requeuing to validator.",
+                        node_id,
+                    )
+                    # Requeue the validation: reset to impl_complete so the
+                    # dispatch loop re-triggers validation with the same prompt.
+                    self._force_status(node_id, "impl_complete")
+                    self.active_workers.pop(node_id, None)
+                    return
+                else:
+                    log.warning(
+                        "[scoring] %s: validation %s signal missing scores — "
+                        "processing anyway but feedback to worker will be degraded",
+                        node_id, result.upper(),
+                    )
+
             if result == "pass":
                 # Guard: ignore duplicate pass signals for already-terminal nodes
                 if current_status in ("validated", "accepted"):
@@ -2402,10 +2433,18 @@ class PipelineRunner:
                               node_id, current_status)
                     self.active_workers.pop(node_id, None)
                     return
+
+                # Track score history even on pass (useful for dashboards/analytics)
+                overall_score = signal.get("overall_score")
+                if overall_score is not None:
+                    self.score_history.setdefault(node_id, []).append(float(overall_score))
+                    self._save_score_history()
+
                 self._do_transition(node_id, "validated")
                 self._do_transition(node_id, "accepted")
                 self.active_workers.pop(node_id, None)
-                log.info("[signal] %s: validation PASS -> accepted", node_id)
+                log.info("[signal] %s: validation PASS (score: %s) -> accepted",
+                         node_id, signal.get("overall_score", "?"))
 
             elif result == "fail":
                 retries = self.retry_counts.get(node_id, 0) + 1
@@ -2965,6 +3004,13 @@ class PipelineRunner:
         "codergen": (
             "## Your Role: Implementation\n"
             "You implement features by exploring the codebase first, then making changes.\n\n"
+            "### FIRST: Invoke the CoBuilder Skill\n"
+            "Before doing anything else, invoke the CoBuilder skill to load pipeline context:\n"
+            "```\n"
+            "Skill(skill=\"cobuilder\")\n"
+            "```\n"
+            "This loads project conventions, architecture patterns, and pipeline awareness.\n"
+            "Do this BEFORE exploring the codebase.\n\n"
             "### How to Work\n"
             "1. **Explore first**: Read the Solution Design, then Glob/Grep/Read to understand the codebase.\n"
             "   Read every file before editing it. Trace data flows to understand dependencies.\n"
@@ -3135,6 +3181,25 @@ class PipelineRunner:
             f'```\n\n'
             f"IMPORTANT: Use this EXACT path. Do NOT construct your own path.\n"
             f"For modifying existing source code files, ALWAYS use Edit (not Write)."
+        )
+
+        # Signal directory awareness — let workers inspect validator outputs and peer signals
+        processed_dir = os.path.join(self.signal_dir, "processed")
+        lines.append(
+            f"\n## Signal File Locations\n"
+            f"All pipeline signal files live in these directories:\n\n"
+            f"- **Active signals**: `{self.signal_dir}/`\n"
+            f"  Workers and validators write results here. The runner picks them up.\n"
+            f"- **Processed signals**: `{processed_dir}/`\n"
+            f"  After the runner reads a signal, it moves it here. Contains historical results.\n\n"
+            f"### Validator Output Files\n"
+            f"If this is a **retry** (your previous attempt was rejected), the validator's\n"
+            f"scoring signal is in the processed directory. Read it for detailed feedback:\n"
+            f"```\n"
+            f"Glob(pattern=\"{processed_dir}/*{nid}*\")\n"
+            f"```\n"
+            f"Each validator signal contains `scores`, `overall_score`, and `criteria_results`\n"
+            f"with per-AC pass/fail verdicts. Use these to target your fixes precisely."
         )
 
         return "\n".join(lines)
