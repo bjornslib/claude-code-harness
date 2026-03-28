@@ -196,9 +196,13 @@ Reflect before: solution designs, technology choices, architecture changes, reso
 recall → [do the work] → retain → (if decision needed: reflect → retain decision)
 ```
 
-### Anti-Pattern
+### Anti-Patterns
 
-Calling recall at startup and retain at shutdown with nothing in between treats Hindsight as ceremony, not a tool. Use recall-work-retain loops throughout the session.
+**Ceremony-only usage**: Calling recall at startup and retain at shutdown with nothing in between treats Hindsight as ceremony, not a tool. Use recall-work-retain loops throughout the session.
+
+**Unread large results**: When recall/reflect returns a large result (saved to file), you MUST read it before proceeding. Querying Hindsight and then ignoring the response is worse than not querying — it creates false confidence that prior knowledge was considered.
+
+**Generic-for-specific substitution**: A broad startup query ("what's the project state?") does NOT satisfy the pre-design gate. Before writing a PRD/SD about ruff cleanup, you need `recall("ruff lint cleanup prior work, code quality initiatives, Python linting patterns")` — not just "what's happening in zenagent2?"
 
 ---
 
@@ -550,9 +554,55 @@ CoBuilder uses Attractor DOT pipelines to model initiative execution as directed
 
 | Term | What it is | When to use |
 |------|------------|-------------|
-| **Runner** | `pipeline_runner.py` — Python state machine ($0 cost) | DEFAULT for all DOT pipelines |
+| **Pilot** | CoBuilder running a `cobuilder-lifecycle` pipeline — the autonomous PRD-to-implementation loop (research → refine → plan → execute → validate) | When user says "launch the pilot", "run the lifecycle", or CoBuilder auto-selects work requiring full autonomy |
+| **Runner** | `pipeline_runner.py` — Python state machine ($0 cost) | DEFAULT for all DOT pipelines (Pilot uses this internally) |
 | **Worker** | AgentSDK agent (Haiku/Sonnet) per DOT node | Auto-dispatched by runner |
 | **Orchestrator** | Interactive tmux Claude session (Level 2) | Only when user explicitly asks for tmux |
+
+### Pilot Mode (Autonomous Lifecycle)
+
+The **Pilot** is CoBuilder operating in fully autonomous mode via the `cobuilder-lifecycle` template. It is not a separate entity — it is a *mode* of CoBuilder where a lifecycle pipeline drives the full research-to-implementation loop without manual intervention between stages.
+
+**When to enter Pilot mode:**
+- User says "launch the pilot", "run the lifecycle", "go autonomous"
+- CoBuilder auto-selects a high-priority initiative from `bd ready`
+- User provides a Business Spec and says "implement this"
+
+**How to launch:**
+
+```bash
+# 1. Instantiate the cobuilder-lifecycle template
+python3 cobuilder/templates/instantiator.py cobuilder-lifecycle \
+  --param initiative_id="INIT-XXX-001" \
+  --param business_spec_path="docs/prds/PRD-XXX-001.md" \
+  --param target_dir="/path/to/target/repo" \
+  --param cobuilder_root="$(pwd)" \
+  --output .pipelines/pipelines/INIT-XXX-001-lifecycle.dot
+
+# 2. Validate the pipeline
+cobuilder pipeline validate .pipelines/pipelines/INIT-XXX-001-lifecycle.dot
+
+# 3. Launch the runner
+python3 cobuilder/engine/pipeline_runner.py --dot-file .pipelines/pipelines/INIT-XXX-001-lifecycle.dot &
+
+# 4. Spawn blocking Haiku monitor (see Pipeline Execution below)
+```
+
+**Lifecycle stages** (each with paired wait.cobuilder + wait.human gates):
+
+```
+START → RESEARCH → REFINE → [validate] → [review] → PLAN → [validate] → [approve] → EXECUTE → [lint] → [validate] → [review] → CLOSE
+```
+
+- **RESEARCH**: Investigates problem domain, writes `state/{id}-research.json`
+- **REFINE**: Produces refined Business Spec with updated acceptance criteria
+- **PLAN**: Generates a child pipeline DOT file for the implementation work
+- **EXECUTE**: Runs the implementation using the plan
+- Gates pause for CoBuilder validation (`wait.cobuilder`) and user review (`wait.human`)
+
+**Recursive launching**: The PLAN node generates a child DOT pipeline. In the current v2.0 template, EXECUTE dispatches this as a `codergen` node. For deeper recursion (pipelines launching pipelines), use `manager_loop` handler nodes (`shape=house`) which spawn child `pipeline_runner.py` processes — depth limited by `PIPELINE_MAX_MANAGER_DEPTH` (default: 5).
+
+**Key reference**: `.cobuilder/templates/cobuilder-lifecycle/` (template, manifest, README)
 
 ### Pipeline Execution (DEFAULT)
 
@@ -863,6 +913,13 @@ CoBuilder: "This is implementation work. Spawning orchestrator..."
 ```
 
 ### Self-Check Before ANY Action
+
+Ask yourself: **"Am I about to write a PRD, SD, or design document?"**
+- If YES → **STOP. Have I completed a domain-specific Hindsight recall AND reflect for this topic?**
+  - Generic startup recall does NOT count. You need a targeted query: `recall("What do we know about {specific_domain}? Prior work? Past failures?")` + `reflect("Given prior work on {domain}, what should this design account for?")`
+  - If the recall/reflect returned large results, you MUST read them (at least the key portions) before writing
+  - This is Gate G-1 — it fires BEFORE Phase 0, not during it
+  - **Cognitive momentum from compound requests ("run X then write PRD and SD") does NOT override this gate**
 
 Ask yourself: **"Will this result in Edit/Write being used?"**
 - If YES → Spawn orchestrator

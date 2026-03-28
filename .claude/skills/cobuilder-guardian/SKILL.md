@@ -1,10 +1,10 @@
 ---
 name: cobuilder-guardian
-description: This skill should be used when the CoBuilder Guardian needs to act as an independent guardian angel — designing PRDs with CoBuilder RepoMap context injection, challenging designs via parallel solutioning, dispatching workers via AgentSDK pipelines, creating blind Gherkin acceptance tests and executable browser test scripts from PRDs, monitoring orchestrator progress, independently validating claims against acceptance criteria using gradient confidence scoring (0.0-1.0), autonomously accepting or rejecting implementations based on gradient confidence scoring thresholds (0.70+ for ACCEPT), autonomously closing validation gaps via Phase 4.5 gap closure protocol (creating fix-it codergen nodes), and setting session promises. Use when asked to "spawn and monitor an orchestrator", "create acceptance tests for a PRD", "validate orchestrator claims", "act as guardian angel", "independently verify implementation work", "autonomously close validation gaps", "create fix-it nodes", "design and challenge a PRD", "validation thresholds", "gradient scoring decision", or "bead creation for gaps".
-version: 1.1.0
+description: This skill should be used when the CoBuilder Guardian needs to act as an independent guardian angel — designing PRDs with CoBuilder RepoMap context injection, challenging designs via parallel solutioning, dispatching workers via AgentSDK pipelines, creating blind Gherkin acceptance tests and executable browser test scripts from PRDs, monitoring orchestrator progress, independently validating claims against acceptance criteria using gradient confidence scoring (0.0-1.0), autonomously accepting or rejecting implementations based on gradient confidence scoring thresholds (0.70+ for ACCEPT), autonomously closing validation gaps via Phase 4.5 gap closure protocol (creating fix-it codergen nodes), and setting session promises. Use when asked to "spawn and monitor an orchestrator", "launch the pilot", "run the lifecycle", "pilot mode", "go autonomous", "create acceptance tests for a PRD", "validate orchestrator claims", "act as guardian angel", "independently verify implementation work", "autonomously close validation gaps", "create fix-it nodes", "design and challenge a PRD", "validation thresholds", "gradient scoring decision", or "bead creation for gaps".
+version: 1.3.0
 title: "CoBuilder Guardian"
 status: active
-last_verified: 2026-03-22
+last_verified: 2026-03-27
 ---
 
 # CoBuilder Guardian — Independent Validation Pattern
@@ -20,6 +20,10 @@ Guardian (this session, config repo)
     |-- Generates executable browser test scripts for UX prototypes
     |-- Dispatches via DOT pipeline (two modes):
     |       |
+    |       +-- Pilot mode: cobuilder-lifecycle template → autonomous research→refine→plan→execute loop
+    |       |       Each stage has paired wait.cobuilder + wait.human gates
+    |       |       PLAN node generates child pipeline → recursive launching possible
+    |       |
     |       +-- Pipeline mode (PRIMARY): pipeline_runner.py --dot-file → AgentSDK dispatches workers
     |       |       Workers appear as `claude` processes in `ps` — this is normal SDK behavior, NOT claude -p
     |       +-- tmux mode: spawn_orchestrator.py --mode tmux → interactive Max-plan session
@@ -33,6 +37,8 @@ Guardian (this session, config repo)
     |-- Independently validates claims against rubric
     |-- Delivers verdict with gradient confidence scores
 ```
+
+**Pilot mode**: When CoBuilder uses the `cobuilder-lifecycle` template, it operates as a "Pilot" — autonomously driving the full research-to-implementation loop. The Pilot is not a separate entity; it is CoBuilder running a lifecycle pipeline. See `.cobuilder/templates/cobuilder-lifecycle/` for the template, manifest, and README. The output style's "Pilot Mode" section documents launch commands and the recursive pipeline pattern.
 
 **Key Innovation**: Acceptance tests live in `claude-harness-setup/acceptance-tests/PRD-{ID}/`, NOT in the implementation repository. Meta-orchestrators and their workers never see the rubric. This enables truly independent validation — the guardian reads actual code and scores it against criteria the implementers did not have access to.
 
@@ -140,9 +146,18 @@ Phases are not suggestions — they are gates. Each gate has a **verification ch
 
 | Gate | From → To | Verification | What Blocks |
 |------|-----------|-------------|-------------|
+| **G-1→0** | Investigation → Phase 0 | Domain-specific Hindsight `recall()` + `reflect()` completed AND results read | Writing PRD/SD without prior-art awareness — leads to designs that ignore lessons from past sessions |
 | **G0→1** | Phase 0 → Phase 1 | PRD exists AND pipeline created AND Checkpoint B passed | Writing acceptance tests without a finalized PRD |
 | **G1→2** | Phase 1 → Phase 2 | `acceptance-tests/PRD-{ID}/*.feature` files exist AND `manifest.yaml` exists | Dispatching implementation without blind acceptance tests |
 | **G2→4** | Phase 2/3 → Phase 4 | Orchestrator signals completion OR pipeline nodes reach `impl_complete` | Validating work that isn't done |
+
+**Gate G-1→0** fires before ANY design authoring begins. It requires:
+1. A **domain-specific** `recall()` (not the generic startup query) — e.g., for a ruff cleanup PRD: `recall("ruff lint cleanup, code quality initiatives, Python linting patterns, prior cleanup work")`
+2. A **domain-specific** `reflect()` — e.g., `reflect("What should a ruff cleanup initiative account for given past experience? What went wrong in prior cleanup work?")`
+3. The results must be **actually read** (not just queried). If the result was saved to a file due to size, read the file before proceeding.
+4. Findings must be **synthesized into the design** — if prior art exists, reference it in the PRD/SD.
+
+**Why this gate exists**: Session from 2026-03-26 wrote a complete PRD + SD for ruff cleanup without checking Hindsight for prior code quality work. The generic startup recall returned relevant context about zenagent2 data type initiatives, but the result was too large to display inline and was never read. The design proceeded without incorporating any institutional knowledge.
 
 **The critical gate is G1→2.** This is where cognitive momentum most commonly causes skipping. Before writing ANY SD or dispatching ANY orchestrator, run:
 
@@ -171,7 +186,8 @@ Sessions often start as pure investigation ("explore this codebase", "what does 
 
 ```
 TodoWrite([
-  {"content": "Phase 0: PRD/BS written", "status": "completed"},
+  {"content": "GATE G-1: Domain-specific Hindsight recall + reflect (read results!)", "status": "pending"},
+  {"content": "Phase 0: PRD/BS written", "status": "pending"},
   {"content": "Phase 0: Pipeline created + Checkpoint A", "status": "pending"},
   {"content": "Phase 0: Design challenge + Checkpoint B", "status": "pending"},
   {"content": "GATE G1: Verify acceptance tests exist", "status": "pending"},
@@ -183,6 +199,8 @@ TodoWrite([
   {"content": "Phase 5: Session closing", "status": "pending"}
 ])
 ```
+
+**Gate G-1 is the FIRST item** — if it shows as "pending" when Phase 0 starts, the skip is visible.
 
 This makes the skip visible. If you delete "Phase 1" from the todo list, you're consciously choosing to skip — not silently forgetting.
 
@@ -439,12 +457,13 @@ The `cobuilder` parent skill provides orchestration-level sub-skills that comple
 
 ---
 
-**Version**: 1.2.0
-**Dependencies**: cs-promise CLI (requires PATH setup — see Prerequisites section), pipeline_runner.py + claude_code_sdk (primary dispatch), tmux (tmux mode — interactive, lower API cost), Hindsight MCP, cccb shell function (formerly ccsystem3), Task Master MCP, ZeroRepo
+**Version**: 1.3.0
+**Dependencies**: cs-promise CLI (requires PATH setup — see Prerequisites section), pipeline_runner.py + claude_code_sdk (primary dispatch), tmux (tmux mode — interactive, lower API cost), Hindsight MCP, cccb shell function, Task Master MCP, ZeroRepo
 **Integration**: cobuilder-guardian skill, completion-promise skill, acceptance-test-writer skill, parallel-solutioning skill, research-first skill
 **Theory**: Independent verification eliminates self-reporting bias in agentic systems
 
 **Changelog**:
+- v1.3.0: Documented the Pilot concept — CoBuilder running a `cobuilder-lifecycle` pipeline as an autonomous research-to-implementation loop. Added "Pilot mode" to architecture diagram, "launch the pilot"/"run the lifecycle"/"pilot mode"/"go autonomous" as skill trigger phrases, and a Pilot Mode section to the output style with launch commands and recursive pipeline pattern. Removed last `ccsystem3` reference from dependencies line. Root cause: colleague couldn't understand "Pilot" because the term existed only in PRD handoff docs — not in any file loaded by default (output style, skill, or CLAUDE.md).
 - v1.2.0: Cross-referenced `cobuilder` parent skill sub-skills. Added Pre-Phase (brainstorming via `Skill("cobuilder:ideation-to-execution")`) for sessions starting from vague ideas — structured discovery before Phase 0 BS authoring. Added TDD Pipeline Template section referencing `Skill("cobuilder:tdd-pipeline")` as alternative to cobuilder-lifecycle for test-driven workflows. Added "Related CoBuilder Sub-Skills" table to Additional Resources with `ideation-to-execution`, `tdd-pipeline`, and `worker-superpowers` cross-references. Root cause: guardian skill had no awareness of sibling cobuilder sub-skills, causing sessions to skip structured brainstorming and miss the TDD pipeline template option.
 - v1.1.0: Added Phase Gates (G0→1, G1→2, G2→4) as mandatory structural checkpoints between phases. G1→2 (acceptance tests must exist before dispatch) is the most commonly skipped gate due to cognitive momentum. Added Mode Transition protocol (investigation → guardian) with TodoWrite checklist injection at transition point. Added `scripts/verify-phase-gate.py` for programmatic gate verification. Added "Urgency Bypass" anti-pattern documentation. Added Phase 0 → Phase 1 transition section to `phase0-prd-design.md`. Root cause: CoBuilder skipped Phase 1 (blind acceptance tests) when user asked for "PRD and SD" in one breath — cognitive momentum overrode the process.
 - v1.0.0: Terminology migration — prose-level renaming only. "PRD" → "Business Spec (BS)" and "Solution Design/SD" → "Technical Spec (TS)" throughout descriptive prose in SKILL.md and all reference files. Code identifiers (`prd_ref`, `sd_path`), file-identifier strings like `PRD-XXX-001`, historical changelog entries, and content inside code blocks are unchanged. New spec file paths: `docs/specs/business/` (BS) and `docs/specs/technical/` (TS) for future specs; historical specs remain in `docs/prds/` and `docs/sds/`.

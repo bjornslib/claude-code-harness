@@ -59,6 +59,7 @@ from cobuilder.engine.providers import (  # noqa: E402
     ResolvedLLMConfig,
 )
 from cobuilder.engine.transition import apply_transition, VALID_TRANSITIONS  # noqa: E402
+from cobuilder.engine.status import build_predecessors  # noqa: E402
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -957,17 +958,17 @@ class PipelineRunner:
         - handler is not None/empty
         - not already in active_workers
         - all predecessor nodes are in ("validated", "accepted")
+
+        Back-edges from diamond (conditional) nodes with condition="fail" or
+        style containing "dashed" are excluded from the predecessor map so that
+        rework cycles do not permanently block the rework target node.
+        This mirrors the exclusion logic in build_predecessors() / validator._check_cycles().
         """
         nodes = data.get("nodes", [])
-        edges = data.get("edges", [])
 
-        # Build predecessor map: node_id -> set of predecessor node_ids
-        predecessors: dict[str, set[str]] = {n["id"]: set() for n in nodes}
-        for edge in edges:
-            dst = edge["dst"]
-            src = edge["src"]
-            if dst in predecessors:
-                predecessors[dst].add(src)
+        # Build predecessor map excluding retry back-edges (condition=fail, style=dashed).
+        # This prevents rework cycles from deadlocking dispatch of their target nodes.
+        predecessors = build_predecessors(data)
 
         # Build status map
         status_of: dict[str, str] = {

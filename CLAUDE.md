@@ -6,11 +6,14 @@ Claude Code harness for multi-agent AI orchestration. Contains configuration, sk
 
 ```
 CoBuilder (cccb)               → Strategic planning, business validation
+  Pilot (cobuilder-lifecycle)    → Autonomous research→refine→plan→execute→validate loop
   Orchestrator (launchorchestrator) → Feature coordination, worker delegation
     Workers (Agent Teams)         → Implementation, testing, focused execution
 ```
 
 **Key Principle**: Higher levels coordinate; lower levels implement.
+
+**Pilot mode**: CoBuilder running a `cobuilder-lifecycle` pipeline — the autonomous PRD-to-implementation loop. Not a separate entity; a mode of CoBuilder. Say "launch the pilot" to trigger it. Template: `.cobuilder/templates/cobuilder-lifecycle/`.
 
 Launch commands:
 - CoBuilder: `cccb`
