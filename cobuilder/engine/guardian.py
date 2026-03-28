@@ -82,12 +82,20 @@ _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 # ---------------------------------------------------------------------------
 # Pilot allowed_tools (Epic 3: Expand Tools)
 # ---------------------------------------------------------------------------
-# Pilot is a coordinator, not implementer — NO Write/Edit/MultiEdit.
-# It needs: Bash (commands), Read/Glob/Grep (investigation), ToolSearch/Skill/LSP
-# (deferred MCP loading), Serena (code nav for validation), Hindsight (learning).
+# Pilot is a coordinator AND quality gate. It needs:
+# - Write: for Gherkin .feature files during gate validation (NOT for source code)
+# - Bash/Read/Glob/Grep: investigation and test execution
+# - ToolSearch/Skill/LSP: deferred MCP loading, skill invocation
+# - Serena: code navigation for validation inspection
+# - Hindsight: learning from prior pipeline runs
+# - Chrome DevTools + Claude-in-Chrome: browser-based Gherkin scenario execution
+# - Perplexity/Context7: research when investigating failures
+# - WebFetch/WebSearch: external verification
+# - TodoWrite: tracking validation progress across multiple gates
 _GUARDIAN_TOOLS: list[str] = [
     # Base tools
-    "Bash", "Read", "Glob", "Grep", "ToolSearch", "Skill", "LSP",
+    "Bash", "Read", "Write", "Glob", "Grep", "ToolSearch", "Skill", "LSP",
+    "TodoWrite", "WebFetch", "WebSearch",
     # Serena: code navigation for validation inspection
     "mcp__serena__activate_project",
     "mcp__serena__check_onboarding_performed",
@@ -100,6 +108,24 @@ _GUARDIAN_TOOLS: list[str] = [
     "mcp__hindsight__retain",
     "mcp__hindsight__recall",
     "mcp__hindsight__reflect",
+    # Context7: framework documentation for validating implementation approaches
+    "mcp__context7__resolve-library-id",
+    "mcp__context7__query-docs",
+    # Perplexity: research when investigating failures or unfamiliar patterns
+    "mcp__perplexity__perplexity_ask",
+    "mcp__perplexity__perplexity_reason",
+    "mcp__perplexity__perplexity_research",
+    "mcp__perplexity__perplexity_search",
+    # Claude-in-Chrome: browser-based validation (UI Gherkin scenarios)
+    "mcp__claude-in-chrome__navigate",
+    "mcp__claude-in-chrome__read_page",
+    "mcp__claude-in-chrome__find",
+    "mcp__claude-in-chrome__get_page_text",
+    "mcp__claude-in-chrome__computer",
+    "mcp__claude-in-chrome__javascript_tool",
+    "mcp__claude-in-chrome__form_input",
+    "mcp__claude-in-chrome__tabs_context_mcp",
+    "mcp__claude-in-chrome__tabs_create_mcp",
 ]
 # When running in an impl repo without .logfire/, logfire.configure()
 # triggers an interactive prompt that crashes non-interactive contexts.

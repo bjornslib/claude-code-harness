@@ -2153,9 +2153,18 @@ class PipelineRunner:
             if not sd_found:
                 lines.append(f"\n## Solution Design Path\n{sd_path}")
 
-        # Read manifest validation_method and prepend method-specific instructions
+        # Determine validation method hint for allowed_tools.
+        # Check per-AC method tags first, then fall back to manifest.
         prd_ref = attrs.get("prd_ref", data.get("graph_attrs", {}).get("prd_ref", ""))
         self._validation_method_hint = None  # Store for allowed_tools decision
+
+        # Per-AC method detection: if any AC has [browser-check] or [api-call], set hint
+        if acceptance:
+            _ac_methods = {ac["method"] for ac in self._parse_acceptance_criteria(acceptance) if ac["method"]}
+            if "browser-check" in _ac_methods:
+                self._validation_method_hint = "browser-required"
+            elif "api-call" in _ac_methods:
+                self._validation_method_hint = "api-required"
         if prd_ref:
             # Walk up from DOT file directory to find acceptance-tests/{prd_ref}/manifest.yaml
             manifest_path = ""
@@ -2331,10 +2340,20 @@ class PipelineRunner:
             clean_env["PROJECT_TARGET_DIR"] = effective_dir
             # Apply LLM config env vars (api_key, base_url) from resolved profile
             clean_env.update(llm_config.to_env_dict())
-            # Base tools for validation; extend for browser-required PRDs
-            validation_tools = ["Read", "Write", "Bash", "Grep", "Glob", "ToolSearch", "Skill"]
-            if getattr(self, "_validation_method_hint", None) == "browser-required":
+            # Validator tools: base + code nav + memory. Chrome tools added for browser-required.
+            validation_tools = [
+                # Base
+                "Read", "Write", "Bash", "Grep", "Glob", "ToolSearch", "Skill",
+                "WebFetch", "WebSearch", "TodoWrite",
+                # Serena: code navigation for verifying implementation
+                *self._SERENA_TOOLS,
+                # Hindsight: recall patterns from prior validations
+                *self._HINDSIGHT_TOOLS,
+            ]
+            _hint = getattr(self, "_validation_method_hint", None)
+            if _hint == "browser-required":
                 validation_tools.extend([
+                    # Chrome DevTools for direct browser validation
                     "mcp__claude-in-chrome__navigate",
                     "mcp__claude-in-chrome__read_page",
                     "mcp__claude-in-chrome__find",
@@ -2345,6 +2364,9 @@ class PipelineRunner:
                     "mcp__claude-in-chrome__tabs_context_mcp",
                     "mcp__claude-in-chrome__tabs_create_mcp",
                 ])
+            elif _hint == "api-required":
+                # API validation primarily uses Bash (curl/httpx) which is already included
+                pass
             options = claude_code_sdk.ClaudeCodeOptions(  # type: ignore[attr-defined]
                 system_prompt=self._build_system_prompt("validation-test-agent"),
                 allowed_tools=validation_tools,
