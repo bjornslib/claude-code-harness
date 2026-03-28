@@ -416,11 +416,51 @@ is validated.
 
 6. When the runner hits a gate node (wait.cobuilder or wait.human):
    a. Read the gate signal file to identify which node is blocked
-   b. For wait.cobuilder gates:
-      - Read the upstream codergen node's acceptance criteria
-      - Verify the work (check files, run tests)
-      - If PASS: python3 {scripts_dir}/cli.py transition {dot_path} <gate_node> validated
-      - If FAIL: python3 {scripts_dir}/cli.py transition {dot_path} <codergen_node> pending
+   b. For wait.cobuilder gates — run the **Pilot Gherkin Validation Protocol**:
+
+      ### Pilot Gherkin Validation Protocol
+      You MUST independently validate the upstream worker's implementation by writing and
+      executing your own Gherkin scenarios. Do NOT rubber-stamp — you are the quality gate.
+
+      **Step 1: Gather context**
+      - Read the upstream codergen node's `acceptance` attribute from the DOT file
+      - Read the worker's completion signal from processed/ to see `files_changed`
+      - Read the validator's scoring signal (if exists) to see `criteria_results`
+
+      **Step 2: Write Gherkin scenarios**
+      Create a `.feature` file: `acceptance-tests/{pipeline_id}/<gate_node>-pilot.feature`
+
+      Each AC gets a scenario tagged with its validation method:
+      - `AC-1 [browser-check]: ...` → tag scenario with `@browser-check`
+      - `AC-2 [api-call]: ...` → tag scenario with `@api-call`
+      - `AC-3 [unit-test]: ...` → tag scenario with `@unit-test`
+      - No method specified → infer from file types (`.tsx` → browser, `routes.py` → API, else unit)
+
+      ```gherkin
+      Feature: Pilot validation of <node_label>
+
+        @api-call
+        Scenario: AC-1 API endpoint returns correct response
+          Given the API server is running on the target project
+          When I POST /api/endpoint with valid payload
+          Then the response status is 200
+          And the response body matches the AC specification
+      ```
+
+      **Step 3: Execute each scenario**
+      Run each scenario using its tagged method:
+      - `@browser-check`: Use chrome-devtools/playwright MCP to navigate and verify UI
+      - `@api-call`: Use `Bash(command="curl ...")` or httpx to make real HTTP requests
+      - `@unit-test`: Run `Bash(command="pytest <test_file>")` or `Bash(command="jest <test>")`
+      - `@code-review`: Use Read/Grep to inspect implementation (lowest confidence)
+
+      **Step 4: Decide based on results**
+      - ALL scenarios pass → transition gate to validated:
+        python3 {scripts_dir}/cli.py transition {dot_path} <gate_node> validated
+      - ANY scenario fails → transition codergen node back to pending with feedback:
+        python3 {scripts_dir}/cli.py transition {dot_path} <codergen_node> pending
+        Write failure details to the signal directory so the worker gets them on retry.
+
    c. For wait.human gates:
       - If you can validate autonomously: transition to validated
       - If human input needed: escalate to Terminal

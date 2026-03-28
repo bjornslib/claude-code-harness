@@ -1334,6 +1334,49 @@ class PipelineRunner:
             return ""
         return "\n".join(lines)
 
+    @staticmethod
+    def _parse_acceptance_criteria(acceptance: str) -> list[dict]:
+        """Parse acceptance criteria text into structured entries with optional validation methods.
+
+        Supports two formats:
+        1. Structured: ``AC-1 [browser-check]: Login form renders``
+           The ``[method]`` tag is optional. Valid methods: browser-check, api-call, unit-test, code-review.
+        2. Plain text: falls back to a single AC with no method specified.
+
+        Returns:
+            List of dicts with keys: ``id``, ``text``, ``method`` (or None).
+        """
+        import re
+        if not acceptance:
+            return []
+
+        # Pattern: AC-<id> [optional-method]: description
+        # Also matches: AC-<id>: description (no method tag)
+        pattern = re.compile(
+            r"^(AC-\S+)\s*(?:\[(\w[\w-]*)\])?\s*:\s*(.+)$",
+            re.MULTILINE,
+        )
+        matches = pattern.findall(acceptance)
+        if matches:
+            valid_methods = {"browser-check", "api-call", "unit-test", "code-review"}
+            return [
+                {
+                    "id": m[0],
+                    "method": m[1] if m[1] in valid_methods else None,
+                    "text": m[2].strip(),
+                }
+                for m in matches
+            ]
+
+        # Fallback: treat each non-empty line as an AC, or the whole string as one
+        lines = [ln.strip() for ln in acceptance.strip().splitlines() if ln.strip()]
+        if len(lines) <= 1:
+            return [{"id": "AC-1", "method": None, "text": acceptance.strip()}]
+        return [
+            {"id": f"AC-{i+1}", "method": None, "text": ln}
+            for i, ln in enumerate(lines)
+        ]
+
     # ------------------------------------------------------------------
     # Node dispatch
     # ------------------------------------------------------------------
@@ -1990,30 +2033,50 @@ class PipelineRunner:
         ]
 
         if acceptance:
+            # Parse structured ACs (with optional per-AC validation methods)
+            parsed_acs = self._parse_acceptance_criteria(acceptance)
+
+            # Build a structured AC table showing method per criterion
+            ac_table_lines = ["| AC | Validation Method | Criterion |",
+                              "|-----|-------------------|-----------|"]
+            for ac in parsed_acs:
+                method = ac["method"] or "infer"
+                ac_table_lines.append(f"| {ac['id']} | `@{method}` | {ac['text']} |")
+
             lines.append(
                 f"\n## Acceptance Criteria\n{acceptance}\n\n"
+                f"### Per-AC Validation Methods\n"
+                + "\n".join(ac_table_lines) + "\n\n"
+                f"Methods: `@browser-check` (navigate UI via MCP), `@api-call` (HTTP requests), "
+                f"`@unit-test` (run test suite), `@code-review` (read code — cap score at 7), "
+                f"`@infer` (you choose based on what's testable).\n\n"
                 f"## Step 1: Write Gherkin Tests\n"
-                f"Before scoring, write a `.feature` file for this node's acceptance criteria.\n"
-                f"Save it to: `acceptance-tests/{self.pipeline_id}/{target_node_id}.feature`\n\n"
-                f"Tag each scenario with its verification method:\n"
-                f"- `@unit-test` — Run relevant test suite (`pytest`, `jest`)\n"
-                f"- `@browser-check` — Navigate UI via chrome-devtools/playwright MCP\n"
-                f"- `@api-call` — Make HTTP requests to verify endpoints\n"
-                f"- `@code-review` — Read the code (lowest confidence — cap score at 7)\n\n"
-                f"Example:\n```gherkin\nFeature: {label}\n\n"
-                f"  @api-call\n  Scenario: AC-1 User can authenticate\n"
-                f"    Given the API server is running\n"
-                f"    When I POST /api/auth/login with valid credentials\n"
-                f"    Then the response status is 200\n"
-                f"    And the response contains a JWT token\n\n"
-                f"  @unit-test\n  Scenario: AC-2 Token expiry\n"
-                f"    Given a JWT token is generated\n"
-                f"    Then it expires after 1 hour\n```\n\n"
+                f"Write a `.feature` file with one scenario per AC. Use the method from the table above.\n"
+                f"Save to: `acceptance-tests/{self.pipeline_id}/{target_node_id}.feature`\n\n"
+                f"```gherkin\nFeature: {label}\n"
+            )
+            # Generate skeleton Gherkin from parsed ACs
+            for ac in parsed_acs:
+                tag = ac["method"] or "infer"
+                lines.append(
+                    f"\n  @{tag}\n  Scenario: {ac['id']} {ac['text']}\n"
+                    f"    Given <precondition>\n"
+                    f"    When <action>\n"
+                    f"    Then <expected result>"
+                )
+            lines.append(
+                f"\n```\n\n"
+                f"Fill in the Given/When/Then steps with concrete, testable assertions.\n\n"
                 f"## Step 2: Execute Each Scenario\n"
                 f"Run each Gherkin scenario using its tagged method. Record pass/fail per scenario.\n"
+                f"- `@browser-check`: Use chrome-devtools/playwright MCP tools\n"
+                f"- `@api-call`: Use curl/httpx to make real HTTP requests\n"
+                f"- `@unit-test`: Run `pytest`/`jest` and check results\n"
+                f"- `@code-review`: Read the actual source code (cap score at 7)\n"
                 f"Do NOT skip execution — a scenario scored without running it caps at 7.\n\n"
                 f"## Step 3: Score Based on Results\n"
-                f"Score based on actual execution results from Step 2."
+                f"Score based on actual execution results from Step 2. "
+                f"Each AC in `criteria_results` MUST reference its validation method used."
             )
         else:
             lines.append("\n## Acceptance Criteria\n(none specified — check for reasonable implementation)")
