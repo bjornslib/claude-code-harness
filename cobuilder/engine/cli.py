@@ -23,6 +23,7 @@ Usage:
     python3 cli.py gardener [--execute] [--report] [--json]
     python3 cli.py install-hooks
     python3 cli.py run <file.dot> [--execute] [--channel <name>] [--json]
+    python3 cli.py watch <events.jsonl|file.dot> [--filter=node.*] [--since=5] [--no-follow]
     python3 cli.py guardian status|list|verify-chain|audit [...]
     python3 cli.py agents list|show|mark-crashed|mark-terminated [...]
     python3 cli.py merge-queue list|enqueue|process [...]
@@ -63,6 +64,7 @@ def main() -> None:
         print("  gardener      Run doc-gardener remediation (delegates to doc-gardener)")
         print("  install-hooks Install pre-push git hook for doc-gardener")
         print("  run           Run the production pipeline runner agent")
+        print("  watch         Stream pipeline events in real-time (tail -f for events)")
         print("  guardian      CoBuilder read-only monitor for pipeline runner state")
         print("  agents        Inspect and manage agent identity records")
         print("  merge-queue   Manage the sequential merge queue (list/enqueue/process)")
@@ -124,6 +126,9 @@ def main() -> None:
     elif command == "run":
         from cobuilder.engine.pipeline_runner import main as pipeline_runner_main
         pipeline_runner_main()
+    elif command == "watch":
+        from cobuilder.engine.events.cli_stream import main as watch_main
+        watch_main()
     elif command == "guardian":
         from cobuilder.engine.guardian_hooks import main as guardian_main
         guardian_main()
