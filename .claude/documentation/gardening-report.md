@@ -1,6 +1,6 @@
 # Harness Documentation Gardening Report
 
-**Generated**: 2026-03-28T01:44:25
+**Generated**: 2026-03-28T02:02:39
 **Target**: `/home/user/cobuilder-harness/.claude`
 **Mode**: EXECUTE (fixes applied)
 
