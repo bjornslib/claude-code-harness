@@ -82,9 +82,10 @@ _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 # ---------------------------------------------------------------------------
 # Pilot allowed_tools (Epic 3: Expand Tools)
 # ---------------------------------------------------------------------------
-# Pilot is a coordinator AND quality gate. It needs:
-# - Write: for Gherkin .feature files during gate validation (NOT for source code)
-# - Bash/Read/Glob/Grep: investigation and test execution
+# Pilot is a coordinator AND quality gate with FULL file access.
+# It needs all tools to act as an autonomous goal-pursuing agent:
+# - Write/Edit: for Gherkin .feature files, reports, manifest generation, SD patches
+# - Bash/Read/Glob/Grep: investigation, test execution, service management
 # - ToolSearch/Skill/LSP: deferred MCP loading, skill invocation
 # - Serena: code navigation for validation inspection
 # - Hindsight: learning from prior pipeline runs
@@ -93,9 +94,9 @@ _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 # - WebFetch/WebSearch: external verification
 # - TodoWrite: tracking validation progress across multiple gates
 _GUARDIAN_TOOLS: list[str] = [
-    # Base tools
-    "Bash", "Read", "Write", "Glob", "Grep", "ToolSearch", "Skill", "LSP",
-    "TodoWrite", "WebFetch", "WebSearch",
+    # Base tools — full file access
+    "Bash", "Read", "Write", "Edit", "MultiEdit", "Glob", "Grep",
+    "ToolSearch", "Skill", "LSP", "TodoWrite", "WebFetch", "WebSearch",
     # Serena: code navigation for validation inspection
     "mcp__serena__activate_project",
     "mcp__serena__check_onboarding_performed",
