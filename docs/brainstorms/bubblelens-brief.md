@@ -1,5 +1,10 @@
 ---
 title: "Brainstorm Brief: BubbleLens - Filter Bubble Analyzer"
+description: "Brainstorm brief for BubbleLens initiative - Filter bubble analyzer for YouTube"
+version: "1.0.0"
+last-updated: 2026-03-26
+status: active
+type: research
 date: 2026-03-26
 participants: Bjorn Schliebitz (Human) + Claude (AI)
 initiative_id: INIT-BUBBLELENS-001

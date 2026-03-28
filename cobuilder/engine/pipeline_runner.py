@@ -136,9 +136,60 @@ except ImportError:
 try:
     import claude_code_sdk  # type: ignore[import]
     _SDK_AVAILABLE = True
+
+    # ---------------------------------------------------------------------------
+    # SDK timeout patch: increase initialize timeout from 60s to configurable value.
+    # The default 60s is insufficient when multiple workers initialize concurrently
+    # (each worker starts 12 MCP servers, competing for the same system resources).
+    # See: claude_code_sdk._internal.query.Query._send_control_request
+    # ---------------------------------------------------------------------------
+    _SDK_INIT_TIMEOUT = float(os.environ.get("PIPELINE_SDK_INIT_TIMEOUT", "120"))
+    try:
+        import claude_code_sdk._internal.query as _sdk_query  # type: ignore[import]
+        _original_send_control_request = _sdk_query.Query._send_control_request
+
+        async def _patched_send_control_request(self: object, request: dict) -> dict:
+            """Patched _send_control_request with configurable timeout."""
+            import anyio as _anyio
+            if not self.is_streaming_mode:  # type: ignore[attr-defined]
+                raise Exception("Control requests require streaming mode")
+            self._request_counter += 1  # type: ignore[attr-defined]
+            request_id = f"req_{self._request_counter}_{os.urandom(4).hex()}"  # type: ignore[attr-defined]
+            event = _anyio.Event()
+            self.pending_control_responses[request_id] = event  # type: ignore[attr-defined]
+            import json as _json
+            control_request = {"type": "control_request", "request_id": request_id, "request": request}
+            await self.transport.write(_json.dumps(control_request) + "\n")  # type: ignore[attr-defined]
+            try:
+                with _anyio.fail_after(_SDK_INIT_TIMEOUT):
+                    await event.wait()
+                result = self.pending_control_results.pop(request_id)  # type: ignore[attr-defined]
+                self.pending_control_responses.pop(request_id, None)  # type: ignore[attr-defined]
+                if isinstance(result, Exception):
+                    raise result
+                response_data = result.get("response", {})
+                return response_data if isinstance(response_data, dict) else {}
+            except TimeoutError as e:
+                self.pending_control_responses.pop(request_id, None)  # type: ignore[attr-defined]
+                self.pending_control_results.pop(request_id, None)  # type: ignore[attr-defined]
+                raise Exception(f"Control request timeout: {request.get('subtype')}") from e
+
+        _sdk_query.Query._send_control_request = _patched_send_control_request  # type: ignore[assignment]
+        logging.getLogger("cobuilder.engine").info("[sdk] Patched SDK init timeout: %.0fs (was 60s)", _SDK_INIT_TIMEOUT)
+    except Exception:
+        logging.getLogger("cobuilder.engine").warning("[sdk] Failed to patch SDK init timeout — using default 60s")
+
 except ImportError:
     claude_code_sdk = None  # type: ignore[assignment]
     _SDK_AVAILABLE = False
+
+# ---------------------------------------------------------------------------
+# CLI config file lock: prevents concurrent .claude.json corruption when
+# multiple SDK workers initialize simultaneously.  Each worker reads/writes
+# ~/.claude.json on startup; without locking, concurrent writes corrupt JSON.
+# ---------------------------------------------------------------------------
+import fcntl
+_CLI_CONFIG_LOCK = Path.home() / ".claude.json.lock"
 
 # ---------------------------------------------------------------------------
 # Logfire instrumentation (optional — graceful no-op if not installed)
@@ -529,6 +580,13 @@ class PipelineRunner:
         # Recorded at dispatch time so _verify_worker_output can detect whether
         # files were actually modified (not just exist on disk).
         self._dispatch_mtimes: dict[str, dict[str, int]] = {}
+
+        # SDK concurrency limiter: prevents too many workers initializing at once.
+        # Each worker starts 12 MCP servers; more than 3 concurrent inits causes
+        # "Control request timeout: initialize" errors (60s timeout exceeded).
+        _max_parallel = int(os.environ.get("PIPELINE_MAX_PARALLEL_WORKERS", "3"))
+        self._init_semaphore = threading.Semaphore(_max_parallel)
+        log.info("[runner] Max parallel SDK workers: %d", _max_parallel)
 
         # Orphan resume counts: node_id -> int (for exponential backoff)
         self.orphan_resume_counts: dict[str, int] = {}
@@ -1429,7 +1487,31 @@ class PipelineRunner:
         All worker dispatch goes through AgentSDK exclusively.
         This method runs in a background thread. On completion it writes a
         signal file to {signal_dir}/{node_id}.json and sets _wake_event.
+
+        Concurrency control:
+        - _init_semaphore limits how many workers can be active at once
+        - flock on ~/.claude.json.lock prevents concurrent CLI config corruption
+        - 3s stagger delay after flock release lets CLI finish init
         """
+        # Acquire semaphore (blocks if too many workers are already running)
+        self._init_semaphore.acquire()
+        log.info("[sdk] Semaphore acquired for %s (%d/%d slots)",
+                 node_id, self._init_semaphore._value,  # noqa: SLF001
+                 int(os.environ.get("PIPELINE_MAX_PARALLEL_WORKERS", "3")))
+
+        # Stagger CLI startup with file lock to prevent .claude.json corruption
+        _STAGGER_DELAY = float(os.environ.get("PIPELINE_INIT_STAGGER_SECONDS", "3"))
+        try:
+            with open(_CLI_CONFIG_LOCK, "w") as lf:
+                fcntl.flock(lf, fcntl.LOCK_EX)
+                log.info("[sdk] flock acquired for %s — CLI init protected", node_id)
+                # Hold lock briefly while CLI starts (reads .claude.json)
+                import time as _time
+                _time.sleep(_STAGGER_DELAY)
+                fcntl.flock(lf, fcntl.LOCK_UN)
+        except OSError:
+            log.warning("[sdk] flock failed for %s — proceeding without lock", node_id)
+
         effective_dir = target_dir or self._get_target_dir()
 
         # Resolve LLM config using 5-layer resolution (Epic 1)
@@ -1523,6 +1605,9 @@ class PipelineRunner:
         finally:
             if _span:
                 _span.__exit__(None, None, None)
+            # Release semaphore so another queued worker can start
+            self._init_semaphore.release()
+            log.info("[sdk] Semaphore released for %s", node_id)
 
     # ------------------------------------------------------------------
     # Handler-specific allowed_tools

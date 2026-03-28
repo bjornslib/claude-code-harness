@@ -6,7 +6,8 @@ digraph "bubblelens-sd-refine" {
         rankdir="TB"
         pipeline_id="bubblelens-sd-refine-001"
         prd_ref="PRD-BUBBLELENS-001"
-        target_dir="/home/user/cobuilder-harness"
+        cobuilder_root="/Users/theb/Documents/Windsurf/cobuilder-harness/.claude/worktrees/bubblelens-pilot"
+        target_dir="/Users/theb/Documents/Windsurf/cobuilder-harness/.claude/worktrees/bubblelens-pilot"
     ];
 
     node [fontname="Helvetica" fontsize=11 style=filled];
@@ -17,8 +18,10 @@ digraph "bubblelens-sd-refine" {
         shape=Mdiamond
         label="START"
         handler="start"
-        status="pending"
-        fillcolor=palegreen
+        status="validated"
+        fillcolor="lightgreen"
+    
+        style="filled"
     ];
 
     // ═══════════════════════════════════════════════════════════════════
@@ -33,12 +36,14 @@ digraph "bubblelens-sd-refine" {
         worker_type="researcher"
         llm_profile="anthropic-smart"
         prd_ref="PRD-BUBBLELENS-P1-001"
-        solution_design="docs/sds/SD-BUBBLELENS-001-epic1-scaffolding.md"
+        solution_design="/Users/theb/Documents/Windsurf/cobuilder-harness/.claude/worktrees/bubblelens-pilot/docs/sds/SD-BUBBLELENS-001-epic1-scaffolding.md"
         frameworks="Next.js,Prisma,Neon PostgreSQL,Upstash Redis,Upstash QStash,Vercel"
         research_queries="Next.js 14 App Router best practices 2026;Neon serverless PostgreSQL connection pooling Prisma;Upstash Redis rate limiting patterns;Vercel deployment environment branching"
         downstream_node="refine_epic1"
         status="pending"
-        fillcolor=lightcyan
+        fillcolor="lightyellow"
+    
+        style="filled"
     ];
 
     research_epic2 [
@@ -48,12 +53,14 @@ digraph "bubblelens-sd-refine" {
         worker_type="researcher"
         llm_profile="anthropic-smart"
         prd_ref="PRD-BUBBLELENS-P1-001"
-        solution_design="docs/sds/SD-BUBBLELENS-001-epic2-chrome-extension.md"
+        solution_design="/Users/theb/Documents/Windsurf/cobuilder-harness/.claude/worktrees/bubblelens-pilot/docs/sds/SD-BUBBLELENS-001-epic2-chrome-extension.md"
         frameworks="Chrome Extensions Manifest V3,Webpack"
         research_queries="Manifest V3 service worker lifecycle 2026;YouTube DOM structure ytd-rich-item-renderer current selectors;chrome.storage.local offline queue patterns;Content script message passing best practices"
         downstream_node="refine_epic2"
         status="pending"
-        fillcolor=lightcyan
+        fillcolor="lightyellow"
+    
+        style="filled"
     ];
 
     research_epic3 [
@@ -63,12 +70,14 @@ digraph "bubblelens-sd-refine" {
         worker_type="researcher"
         llm_profile="anthropic-smart"
         prd_ref="PRD-BUBBLELENS-P1-001"
-        solution_design="docs/sds/SD-BUBBLELENS-001-epic4-feed-ingestion.md"
+        solution_design="/Users/theb/Documents/Windsurf/cobuilder-harness/.claude/worktrees/bubblelens-pilot/docs/sds/SD-BUBBLELENS-001-epic4-feed-ingestion.md"
         frameworks="Next.js API Routes,Zod,Prisma,Upstash Redis"
         research_queries="Next.js Route Handler validation with Zod best practices;Prisma transaction patterns for upsert;Upstash Redis sliding window rate limiting;CORS configuration for Chrome extensions"
         downstream_node="refine_epic3"
         status="pending"
-        fillcolor=lightcyan
+        fillcolor="lightyellow"
+    
+        style="filled"
     ];
 
     research_epic4 [
@@ -78,12 +87,14 @@ digraph "bubblelens-sd-refine" {
         worker_type="researcher"
         llm_profile="anthropic-smart"
         prd_ref="PRD-BUBBLELENS-P1-001"
-        solution_design="docs/sds/SD-BUBBLELENS-001-epic4-survey.md"
+        solution_design="/Users/theb/Documents/Windsurf/cobuilder-harness/.claude/worktrees/bubblelens-pilot/docs/sds/SD-BUBBLELENS-001-epic4-survey.md"
         frameworks="Chrome Extensions Manifest V3,Zod,Prisma"
         research_queries="Chrome extension popup inline form UX patterns;chrome.storage state machine patterns;Zod optional field validation;Prisma upsert with optional fields"
         downstream_node="refine_epic4"
         status="pending"
-        fillcolor=lightcyan
+        fillcolor="lightyellow"
+    
+        style="filled"
     ];
 
     research_epic5 [
@@ -93,12 +104,14 @@ digraph "bubblelens-sd-refine" {
         worker_type="researcher"
         llm_profile="anthropic-smart"
         prd_ref="PRD-BUBBLELENS-P2-001"
-        solution_design="docs/sds/SD-BUBBLELENS-001-epic5-metadata-enrichment.md"
+        solution_design="/Users/theb/Documents/Windsurf/cobuilder-harness/.claude/worktrees/bubblelens-pilot/docs/sds/SD-BUBBLELENS-001-epic5-metadata-enrichment.md"
         frameworks="YouTube Data API v3,Upstash QStash,Prisma"
         research_queries="YouTube Data API v3 videos.list quota optimization 2026;QStash cron job patterns for batch processing;YouTube API quota management best practices;Batch video metadata fetching with error recovery"
         downstream_node="refine_epic5"
         status="pending"
-        fillcolor=lightcyan
+        fillcolor="lightyellow"
+    
+        style="filled"
     ];
 
     research_epic6 [
@@ -108,12 +121,14 @@ digraph "bubblelens-sd-refine" {
         worker_type="researcher"
         llm_profile="anthropic-smart"
         prd_ref="PRD-BUBBLELENS-P2-001"
-        solution_design="docs/sds/SD-BUBBLELENS-001-epic6-classification.md"
+        solution_design="/Users/theb/Documents/Windsurf/cobuilder-harness/.claude/worktrees/bubblelens-pilot/docs/sds/SD-BUBBLELENS-001-epic6-classification.md"
         frameworks="Anthropic Claude API,Prisma"
         research_queries="Claude Haiku structured output for content classification;Political content classification taxonomy best practices;LLM batch classification pipeline patterns;Channel-level classification aggregation caching"
         downstream_node="refine_epic6"
         status="pending"
-        fillcolor=lightcyan
+        fillcolor="lightyellow"
+    
+        style="filled"
     ];
 
     research_epic7 [
@@ -123,12 +138,14 @@ digraph "bubblelens-sd-refine" {
         worker_type="researcher"
         llm_profile="anthropic-smart"
         prd_ref="PRD-BUBBLELENS-P2-001"
-        solution_design="docs/sds/SD-BUBBLELENS-001-epic7-persona-engine.md"
+        solution_design="/Users/theb/Documents/Windsurf/cobuilder-harness/.claude/worktrees/bubblelens-pilot/docs/sds/SD-BUBBLELENS-001-epic7-persona-engine.md"
         frameworks="Prisma,Upstash Redis,Next.js"
         research_queries="Dynamic SQL construction with Prisma for persona matching;Feed aggregation algorithm frequency-recency ranking;Redis caching patterns for computed results;Demographic profile matching with fuzzy attribute tolerance"
         downstream_node="refine_epic7"
         status="pending"
-        fillcolor=lightcyan
+        fillcolor="lightyellow"
+    
+        style="filled"
     ];
 
     // ═══════════════════════════════════════════════════════════════════
@@ -143,8 +160,8 @@ digraph "bubblelens-sd-refine" {
         worker_type="solution-architect"
         llm_profile="anthropic-smart"
         prd_ref="PRD-BUBBLELENS-P1-001"
-        solution_design="docs/sds/SD-BUBBLELENS-001-epic1-scaffolding.md"
-        evidence_path=".claude/evidence/research_epic1/research-findings.json"
+        solution_design="/Users/theb/Documents/Windsurf/cobuilder-harness/.claude/worktrees/bubblelens-pilot/docs/sds/SD-BUBBLELENS-001-epic1-scaffolding.md"
+        evidence_path="/Users/theb/Documents/Windsurf/cobuilder-harness/.claude/worktrees/bubblelens-pilot/.claude/evidence/research_epic1/research-findings.json"
         prompt="Refine the scaffolding SD using research findings. Focus on: Prisma schema correctness, Neon connection pooling config, QStash job patterns, CI pipeline steps. Ensure the simplified 3-field DemographicProfile schema is consistent with Epic 4 survey SD."
         acceptance="SD updated with latest framework patterns; Prisma schema validated; no stale API references"
         status="pending"
@@ -158,8 +175,8 @@ digraph "bubblelens-sd-refine" {
         worker_type="solution-architect"
         llm_profile="anthropic-smart"
         prd_ref="PRD-BUBBLELENS-P1-001"
-        solution_design="docs/sds/SD-BUBBLELENS-001-epic2-chrome-extension.md"
-        evidence_path=".claude/evidence/research_epic2/research-findings.json"
+        solution_design="/Users/theb/Documents/Windsurf/cobuilder-harness/.claude/worktrees/bubblelens-pilot/docs/sds/SD-BUBBLELENS-001-epic2-chrome-extension.md"
+        evidence_path="/Users/theb/Documents/Windsurf/cobuilder-harness/.claude/worktrees/bubblelens-pilot/.claude/evidence/research_epic2/research-findings.json"
         prompt="Refine the Chrome extension SD using research findings. Focus on: Manifest V3 service worker constraints, YouTube DOM selector accuracy, offline queue reliability, anonymous UUID generation. Verify selectors against current YouTube DOM structure."
         acceptance="SD uses current MV3 APIs; selectors validated; offline sync pattern is robust"
         status="pending"
@@ -173,8 +190,8 @@ digraph "bubblelens-sd-refine" {
         worker_type="solution-architect"
         llm_profile="anthropic-smart"
         prd_ref="PRD-BUBBLELENS-P1-001"
-        solution_design="docs/sds/SD-BUBBLELENS-001-epic4-feed-ingestion.md"
-        evidence_path=".claude/evidence/research_epic3/research-findings.json"
+        solution_design="/Users/theb/Documents/Windsurf/cobuilder-harness/.claude/worktrees/bubblelens-pilot/docs/sds/SD-BUBBLELENS-001-epic4-feed-ingestion.md"
+        evidence_path="/Users/theb/Documents/Windsurf/cobuilder-harness/.claude/worktrees/bubblelens-pilot/.claude/evidence/research_epic3/research-findings.json"
         prompt="Refine the feed ingestion SD using research findings. Focus on: Zod schema completeness, Prisma transaction for browser upsert + feed creation, rate limiting configuration, CORS for extension origins, error response format consistency."
         acceptance="SD has production-ready API design; Zod schemas match Prisma models; rate limiting config is correct"
         status="pending"
@@ -188,8 +205,8 @@ digraph "bubblelens-sd-refine" {
         worker_type="solution-architect"
         llm_profile="anthropic-smart"
         prd_ref="PRD-BUBBLELENS-P1-001"
-        solution_design="docs/sds/SD-BUBBLELENS-001-epic4-survey.md"
-        evidence_path=".claude/evidence/research_epic4/research-findings.json"
+        solution_design="/Users/theb/Documents/Windsurf/cobuilder-harness/.claude/worktrees/bubblelens-pilot/docs/sds/SD-BUBBLELENS-001-epic4-survey.md"
+        evidence_path="/Users/theb/Documents/Windsurf/cobuilder-harness/.claude/worktrees/bubblelens-pilot/.claude/evidence/research_epic4/research-findings.json"
         prompt="Refine the demographic survey SD using research findings. Focus on: survey state machine completeness, chrome.storage patterns, API route validation, upsert logic, privacy note accuracy. Ensure genderOrientation combined field options are inclusive and well-reasoned."
         acceptance="SD has complete state machine; API matches Prisma schema; privacy claims are accurate"
         status="pending"
@@ -203,8 +220,8 @@ digraph "bubblelens-sd-refine" {
         worker_type="solution-architect"
         llm_profile="anthropic-smart"
         prd_ref="PRD-BUBBLELENS-P2-001"
-        solution_design="docs/sds/SD-BUBBLELENS-001-epic5-metadata-enrichment.md"
-        evidence_path=".claude/evidence/research_epic5/research-findings.json"
+        solution_design="/Users/theb/Documents/Windsurf/cobuilder-harness/.claude/worktrees/bubblelens-pilot/docs/sds/SD-BUBBLELENS-001-epic5-metadata-enrichment.md"
+        evidence_path="/Users/theb/Documents/Windsurf/cobuilder-harness/.claude/worktrees/bubblelens-pilot/.claude/evidence/research_epic5/research-findings.json"
         prompt="Refine the metadata enrichment SD using research findings. Focus on: YouTube API v3 quota math accuracy, batch size optimization, QStash cron reliability, error recovery patterns, deduplication efficiency. Verify API response field mappings."
         acceptance="SD has correct quota calculations; batch processing is efficient; error handling is comprehensive"
         status="pending"
@@ -218,8 +235,8 @@ digraph "bubblelens-sd-refine" {
         worker_type="solution-architect"
         llm_profile="anthropic-smart"
         prd_ref="PRD-BUBBLELENS-P2-001"
-        solution_design="docs/sds/SD-BUBBLELENS-001-epic6-classification.md"
-        evidence_path=".claude/evidence/research_epic6/research-findings.json"
+        solution_design="/Users/theb/Documents/Windsurf/cobuilder-harness/.claude/worktrees/bubblelens-pilot/docs/sds/SD-BUBBLELENS-001-epic6-classification.md"
+        evidence_path="/Users/theb/Documents/Windsurf/cobuilder-harness/.claude/worktrees/bubblelens-pilot/.claude/evidence/research_epic6/research-findings.json"
         prompt="Refine the classification SD using research findings. Focus on: Claude API structured output patterns, classification prompt engineering, topic taxonomy completeness, channel cache strategy, accuracy validation methodology. Ensure political leaning scale aligns with survey (1-5)."
         acceptance="SD has validated classification prompts; taxonomy is comprehensive; accuracy testing plan is concrete"
         status="pending"
@@ -233,8 +250,8 @@ digraph "bubblelens-sd-refine" {
         worker_type="solution-architect"
         llm_profile="anthropic-smart"
         prd_ref="PRD-BUBBLELENS-P2-001"
-        solution_design="docs/sds/SD-BUBBLELENS-001-epic7-persona-engine.md"
-        evidence_path=".claude/evidence/research_epic7/research-findings.json"
+        solution_design="/Users/theb/Documents/Windsurf/cobuilder-harness/.claude/worktrees/bubblelens-pilot/docs/sds/SD-BUBBLELENS-001-epic7-persona-engine.md"
+        evidence_path="/Users/theb/Documents/Windsurf/cobuilder-harness/.claude/worktrees/bubblelens-pilot/.claude/evidence/research_epic7/research-findings.json"
         prompt="Refine the persona engine SD using research findings. Focus on: dynamic Prisma query construction, feed aggregation SQL performance, frequency-recency ranking algorithm, Redis caching strategy, comparison engine accuracy. Ensure persona attributes match simplified 3-field model (politicalLeaning, genderOrientation, ageRange). Verify matching query uses both real + seeded profiles."
         acceptance="SD has optimized SQL queries; caching strategy validated; attribute model consistent with survey"
         status="pending"
@@ -242,8 +259,19 @@ digraph "bubblelens-sd-refine" {
     ];
 
     // ═══════════════════════════════════════════════════════════════════
-    // HUMAN REVIEW GATE
+    // VALIDATION GATES
     // ═══════════════════════════════════════════════════════════════════
+
+    cobuilder_gate [
+        shape=hexagon
+        label="CoBuilder Validation\nCross-SD Consistency"
+        handler="wait.cobuilder"
+        status="pending"
+        fillcolor=plum
+        gate_type="contract"
+        summary_ref="/Users/theb/Documents/Windsurf/cobuilder-harness/.claude/worktrees/bubblelens-pilot/docs/prds/PRD-BUBBLELENS-001.md"
+        bead_id="BUBBLELENS-SD-REFINE"
+    ];
 
     review_gate [
         shape=hexagon
@@ -251,6 +279,8 @@ digraph "bubblelens-sd-refine" {
         handler="wait.human"
         status="pending"
         fillcolor=lightsalmon
+        gate="business"
+        mode="business"
         prompt="Review all 7 refined solution design documents in docs/sds/. Verify cross-document consistency (shared schema, API contracts, data flow). Approve to finalize or reject with feedback."
     ];
 
@@ -285,15 +315,16 @@ digraph "bubblelens-sd-refine" {
     research_epic6 -> refine_epic6 [label="findings ready"];
     research_epic7 -> refine_epic7 [label="findings ready"];
 
-    // Fan-in: all refine nodes → human review gate
-    refine_epic1 -> review_gate [label="refined"];
-    refine_epic2 -> review_gate [label="refined"];
-    refine_epic3 -> review_gate [label="refined"];
-    refine_epic4 -> review_gate [label="refined"];
-    refine_epic5 -> review_gate [label="refined"];
-    refine_epic6 -> review_gate [label="refined"];
-    refine_epic7 -> review_gate [label="refined"];
+    // Fan-in: all refine nodes → cobuilder validation gate
+    refine_epic1 -> cobuilder_gate [label="refined"];
+    refine_epic2 -> cobuilder_gate [label="refined"];
+    refine_epic3 -> cobuilder_gate [label="refined"];
+    refine_epic4 -> cobuilder_gate [label="refined"];
+    refine_epic5 -> cobuilder_gate [label="refined"];
+    refine_epic6 -> cobuilder_gate [label="refined"];
+    refine_epic7 -> cobuilder_gate [label="refined"];
 
-    // Gate → exit
+    // Validation chain: cobuilder → human review → exit
+    cobuilder_gate -> review_gate [label="validated"];
     review_gate -> complete [label="approved"];
 }
