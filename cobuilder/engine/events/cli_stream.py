@@ -33,6 +33,8 @@ _ANSI = {
     "bold": "\033[1m",
     "reset": "\033[0m",
     "magenta": "\033[35m",
+    "blue": "\033[34m",
+    "white": "\033[97m",
 }
 
 # Map event type patterns to colors
@@ -50,6 +52,10 @@ _COLOR_RULES: list[tuple[str, str]] = [
     ("context.updated", "dim"),
     ("validation.started", "magenta"),
     ("validation.completed", "green"),
+    ("agent.message", "white"),
+    ("agent.thinking", "dim"),
+    ("agent.tool_call", "blue"),
+    ("agent.tool_result", "dim"),
 ]
 
 
@@ -161,6 +167,47 @@ def _data_summary(event_type: str, data: dict) -> str:
             parts.append(f"{len(errors)} errors")
         if warnings:
             parts.append(f"{len(warnings)} warnings")
+
+    elif event_type == "agent.message":
+        role = data.get("agent_role", "?")
+        turn = data.get("turn", 0)
+        parts.append(f"[{role}]")
+        parts.append(f"turn={turn}")
+        preview = data.get("text_preview", "")
+        if preview:
+            # Show first line, truncated
+            first_line = preview.split("\n")[0][:120]
+            parts.append(first_line)
+
+    elif event_type == "agent.thinking":
+        role = data.get("agent_role", "?")
+        turn = data.get("turn", 0)
+        length = data.get("thinking_length", 0)
+        parts.append(f"[{role}]")
+        parts.append(f"turn={turn}")
+        parts.append(f"{length} chars")
+
+    elif event_type == "agent.tool_call":
+        role = data.get("agent_role", "?")
+        tool = data.get("tool_name", "?")
+        turn = data.get("turn", 0)
+        parts.append(f"[{role}]")
+        parts.append(f"turn={turn}")
+        parts.append(tool)
+        preview = data.get("input_preview", "")
+        if preview:
+            parts.append(preview[:100])
+
+    elif event_type == "agent.tool_result":
+        role = data.get("agent_role", "?")
+        turn = data.get("turn", 0)
+        is_err = data.get("is_error", False)
+        length = data.get("content_length", 0)
+        parts.append(f"[{role}]")
+        parts.append(f"turn={turn}")
+        if is_err:
+            parts.append("ERROR")
+        parts.append(f"{length} chars")
 
     return "  ".join(parts)
 
