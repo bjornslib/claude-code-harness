@@ -274,6 +274,35 @@ When reading signals via wait_for_signal.py, you may encounter these signal type
 - GUIDANCE: Send guidance to help the worker without approval/rejection
 - KILL_ORCHESTRATOR: Terminate the runner process for the specified node
 
+## Signal-Based Communication System
+Nodes communicate via signal files. The signal directory is your primary observability layer.
+
+### How It Works
+1. **Workers** write completion signals: `{{status, files_changed, message}}`
+2. **Validators** write scoring signals: `{{result, scores, overall_score, criteria_results}}`
+3. **Runner** reads signals, moves them to `processed/`, and transitions node statuses
+4. **Next node** in the DAG reads predecessor signals from `processed/` for context
+
+### What You Can Read
+- **Active signals** (pending pickup): check the signals directory for in-flight results
+- **Processed signals** (historical): read validator scores, worker outputs, retry feedback
+- **Score history**: check if validation scores are improving across retries
+
+### Validator Scoring (MANDATORY)
+Every validation signal MUST include `scores`, `overall_score`, and `criteria_results`.
+The runner rejects pass signals without scores (requeues the validation).
+- Pass threshold: overall_score >= 7.0
+- Dimensions: correctness (35%), completeness (25%), code_quality (15%), sd_adherence (10%), process_discipline (15%)
+- Each `criteria_results` entry is a per-AC verdict that the worker sees on retry
+
+### How to Use This for Decisions
+When a node fails and you need to decide whether to retry, inject a fix-it node, or escalate:
+1. Read the validator's signal in `processed/` — check `criteria_results` for specific failures
+2. Read `overall_score` history — is the score improving? If plateau detected, restructure
+3. Read the worker's signal — check `files_changed` and `message` for what was attempted
+
+This is a file-based messaging system. Each node leaves breadcrumbs for the next.
+
 ## Pipeline Execution Flow
 
 ### Phase 0: Load CoBuilder Context

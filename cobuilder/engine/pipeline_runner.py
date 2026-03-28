@@ -1213,6 +1213,128 @@ class PipelineRunner:
         return "\n".join(completed_nodes)
 
     # ------------------------------------------------------------------
+    # Signal history + graph neighborhood (inter-node communication)
+    # ------------------------------------------------------------------
+
+    def _build_signal_history(self, node_id: str) -> str:
+        """Scan processed signals for a node and return a human-readable summary.
+
+        This gives workers/validators full visibility into what happened on
+        prior attempts: scores, feedback, files changed, and timing.
+        """
+        processed_dir = os.path.join(self.signal_dir, "processed")
+        if not os.path.isdir(processed_dir):
+            return ""
+
+        signals: list[tuple[str, dict]] = []
+        for fname in sorted(os.listdir(processed_dir)):
+            if node_id not in fname or not fname.endswith(".json"):
+                continue
+            try:
+                with open(os.path.join(processed_dir, fname)) as fh:
+                    sig = json.load(fh)
+                signals.append((fname, sig))
+            except (OSError, json.JSONDecodeError):
+                continue
+
+        if not signals:
+            return ""
+
+        lines = []
+        for fname, sig in signals:
+            # Determine signal type: worker completion or validator result
+            result = sig.get("result")  # validator signals have "result"
+            status = sig.get("status")  # worker signals have "status"
+
+            if result:
+                # Validator signal
+                overall = sig.get("overall_score", "?")
+                reason = sig.get("reason", "")
+                guidance = sig.get("guidance", "")
+                scores = sig.get("scores", {})
+                criteria = sig.get("criteria_results", [])
+
+                score_str = ", ".join(f"{k}:{v}" for k, v in scores.items()) if scores else "none"
+                lines.append(f"- **Validator** [{fname}]: result={result}, overall_score={overall}")
+                if score_str != "none":
+                    lines.append(f"  Scores: {score_str}")
+                if criteria:
+                    for cr in criteria:
+                        icon = "PASS" if cr.get("status") == "pass" else "FAIL"
+                        detail = cr.get("reason", cr.get("evidence", ""))
+                        lines.append(f"  [{icon}] {cr.get('criterion_id', '?')}: {detail}")
+                if reason:
+                    lines.append(f"  Reason: {reason}")
+                if guidance:
+                    lines.append(f"  Guidance: {guidance}")
+            elif status:
+                # Worker completion signal
+                message = sig.get("message", "")
+                files = sig.get("files_changed", [])
+                lines.append(f"- **Worker** [{fname}]: status={status}")
+                if message:
+                    lines.append(f"  Message: {message}")
+                if files:
+                    lines.append(f"  Files: {', '.join(files[:10])}")
+            else:
+                lines.append(f"- **Signal** [{fname}]: {json.dumps(sig)[:200]}")
+
+        return "\n".join(lines)
+
+    def _build_graph_neighborhood(self, node_id: str, data: dict) -> str:
+        """Build a view of the node's direct predecessors and successors in the DAG.
+
+        Shows each neighbor's id, label, handler, status, and signal file path
+        so agents can read predecessor outputs and know who consumes their work.
+        """
+        edges = data.get("edges", [])
+        nodes_by_id = {n["id"]: n for n in data.get("nodes", [])}
+
+        pred_ids = []
+        succ_ids = []
+        for edge in edges:
+            if edge["dst"] == node_id:
+                pred_ids.append(edge["src"])
+            if edge["src"] == node_id:
+                succ_ids.append(edge["dst"])
+
+        def _describe_node(nid: str) -> str:
+            node = nodes_by_id.get(nid)
+            if not node:
+                return f"- {nid} (unknown)"
+            attrs = node["attrs"]
+            label = attrs.get("label", nid).replace("\\n", " ")
+            handler = attrs.get("handler", "?")
+            status = attrs.get("status", "pending")
+            signal_path = os.path.join(self.signal_dir, f"{nid}.json")
+            processed_glob = os.path.join(self.signal_dir, "processed", f"*{nid}*")
+            return (
+                f"- **{label}** (id=`{nid}`, handler={handler}, status={status})\n"
+                f"  Signal: `{signal_path}` | Processed: `{processed_glob}`"
+            )
+
+        lines = []
+        if pred_ids:
+            lines.append("### Predecessors (completed before you)")
+            for pid in pred_ids:
+                lines.append(_describe_node(pid))
+            lines.append(
+                "\nRead predecessor signals in `processed/` to understand what was built before you."
+            )
+        if succ_ids:
+            lines.append("\n### Successors (will run after you)")
+            for sid in succ_ids:
+                lines.append(_describe_node(sid))
+            lines.append(
+                "\nYour successors will read YOUR signal. Include detailed `files_changed` and "
+                "`message` so they know what you did."
+            )
+
+        if not lines:
+            return ""
+        return "\n".join(lines)
+
+    # ------------------------------------------------------------------
     # Node dispatch
     # ------------------------------------------------------------------
 
@@ -1916,6 +2038,29 @@ class PipelineRunner:
             lines.append("\nRead these files to verify the implementation.")
         else:
             lines.append("\n## Files Changed\n(not reported — search the codebase to find relevant changes)")
+
+        # Graph neighborhood: show what nodes feed into this validation and what follows
+        neighborhood = self._build_graph_neighborhood(target_node_id, data)
+        if neighborhood:
+            lines.append(f"\n## Pipeline Graph (this node's neighbors)\n{neighborhood}")
+
+        # Signal history: show all prior signals for the target node being validated
+        signal_history = self._build_signal_history(target_node_id)
+        if signal_history:
+            lines.append(
+                f"\n## Signal History (prior attempts for {target_node_id})\n"
+                f"Previous worker and validator signals for this node:\n\n"
+                f"{signal_history}\n\n"
+                f"Use this history to calibrate: are scores improving? Is the worker addressing feedback?"
+            )
+
+        # Signal directories for the validator
+        lines.append(
+            f"\n## Signal Directories\n"
+            f"- **Active signals**: `{self.signal_dir}/`\n"
+            f"- **Processed signals**: `{os.path.join(self.signal_dir, 'processed')}/`\n"
+            f"- **Read predecessor outputs**: `Glob(pattern=\"{os.path.join(self.signal_dir, 'processed')}/*\")`"
+        )
 
         # Inline SD if available - use same multi-candidate strategy as _build_worker_prompt
         if sd_path:
@@ -3029,26 +3174,37 @@ class PipelineRunner:
             "Investigate the topic and document findings. Do NOT modify source code.\n\n"
             "### How to Work\n"
             "1. Read the Solution Design to understand what to research.\n"
-            "2. Use WebSearch, WebFetch, and Read to gather information.\n"
-            "3. Write findings to a NEW markdown file in the evidence directory.\n\n"
+            "2. **Check predecessor signals** — read processed signal files from nodes that ran before you.\n"
+            "   They contain context about what's already been discovered or built.\n"
+            "3. Use WebSearch, WebFetch, and Read to gather information.\n"
+            "4. Write findings to a NEW markdown file in the evidence directory.\n\n"
             "### MCP Tools (Anthropic models only)\n"
             "Load research tools via ToolSearch before use:\n"
             "- `ToolSearch(query=\"context7\")` — framework/library documentation\n"
             "- `ToolSearch(query=\"perplexity\")` — web research\n"
             "- `ToolSearch(query=\"hindsight\")` — recall prior findings\n\n"
+            "### Signal Communication\n"
+            "Your signal is read by successor nodes (refine, codergen). Include:\n"
+            "- `files_changed`: paths to research docs you wrote\n"
+            "- `message`: key findings summary so successors know what you discovered\n\n"
             "Done when: Research doc written with findings. Signal written with doc path."
         ),
         "refine": (
             "## Your Role: Refinement\n"
             "Merge research findings into the Solution Design document.\n\n"
             "### How to Work\n"
-            "1. Read predecessor signal files to find research doc paths.\n"
+            "1. **Read predecessor signal files** in the processed signals directory to find research doc paths.\n"
+            "   The Pipeline Graph section below shows exactly where to find them.\n"
             "2. Read the research docs and the current SD.\n"
             "3. Edit the SD to incorporate findings as first-class content (not annotations).\n\n"
             "### MCP Tools (Anthropic models only)\n"
             "Load tools via ToolSearch before use:\n"
             "- `ToolSearch(query=\"hindsight\")` — reflect before editing, retain after\n"
             "- `ToolSearch(query=\"perplexity\")` — reason through conflicting findings\n\n"
+            "### Signal Communication\n"
+            "Your signal is read by successor codergen nodes. Include:\n"
+            "- `files_changed`: the SD file path you updated\n"
+            "- `message`: what sections changed and key decisions made\n\n"
             "Done when: SD updated with research findings integrated. No annotations remain."
         ),
         "acceptance-test-writer": (
@@ -3056,10 +3212,15 @@ class PipelineRunner:
             "Create Gherkin acceptance test scenarios from PRD acceptance criteria.\n\n"
             "### How to Work\n"
             "1. Read the PRD and acceptance criteria carefully.\n"
-            "2. Explore the codebase structure (Glob/Read) to understand what exists.\n"
-            "3. Write .feature files with Given/When/Then. Tests should be blind (don't peek at implementation).\n\n"
+            "2. **Check predecessor signals** — read processed signal files to understand what's been built.\n"
+            "3. Explore the codebase structure (Glob/Read) to understand what exists.\n"
+            "4. Write .feature files with Given/When/Then. Tests should be blind (don't peek at implementation).\n\n"
             "### MCP Tools (Anthropic models only)\n"
             "Load code navigation: `ToolSearch(query=\"serena\")`\n\n"
+            "### Signal Communication\n"
+            "Your signal is read by validation nodes. Include:\n"
+            "- `files_changed`: paths to .feature files you wrote\n"
+            "- `message`: summary of coverage (which ACs have scenarios)\n\n"
             "Done when: Feature files written covering all PRD acceptance criteria."
         ),
     }
@@ -3144,6 +3305,20 @@ class PipelineRunner:
         if progress_lines:
             lines.append(f"\n## Pipeline Progress (completed before you)\n{progress_lines}")
 
+        # Graph neighborhood: show direct predecessors and successors with signal paths
+        neighborhood = self._build_graph_neighborhood(nid, data)
+        if neighborhood:
+            lines.append(f"\n## Pipeline Graph (your neighbors)\n{neighborhood}")
+
+        # Signal history: inject all prior signals for this node (worker + validator)
+        signal_history = self._build_signal_history(nid)
+        if signal_history:
+            lines.append(
+                f"\n## Signal History (prior attempts for this node)\n"
+                f"The runner has recorded these signals from previous attempts:\n\n"
+                f"{signal_history}"
+            )
+
         # Inject failure guidance if this is a requeued node
         # Persisted file is authoritative (written at requeue time, survives restarts).
         # In-memory dict is fallback for same-process retries before file is written.
@@ -3176,23 +3351,14 @@ class PipelineRunner:
             f"For modifying existing source code files, ALWAYS use Edit (not Write)."
         )
 
-        # Signal directory awareness — let workers inspect validator outputs and peer signals
+        # Signal directory awareness — compact reference (details are in Graph Neighborhood above)
         processed_dir = os.path.join(self.signal_dir, "processed")
         lines.append(
-            f"\n## Signal File Locations\n"
-            f"All pipeline signal files live in these directories:\n\n"
-            f"- **Active signals**: `{self.signal_dir}/`\n"
-            f"  Workers and validators write results here. The runner picks them up.\n"
-            f"- **Processed signals**: `{processed_dir}/`\n"
-            f"  After the runner reads a signal, it moves it here. Contains historical results.\n\n"
-            f"### Validator Output Files\n"
-            f"If this is a **retry** (your previous attempt was rejected), the validator's\n"
-            f"scoring signal is in the processed directory. Read it for detailed feedback:\n"
-            f"```\n"
-            f"Glob(pattern=\"{processed_dir}/*{nid}*\")\n"
-            f"```\n"
-            f"Each validator signal contains `scores`, `overall_score`, and `criteria_results`\n"
-            f"with per-AC pass/fail verdicts. Use these to target your fixes precisely."
+            f"\n## Signal Directories\n"
+            f"- **Active signals**: `{self.signal_dir}/` (runner watches this)\n"
+            f"- **Processed signals**: `{processed_dir}/` (historical — read predecessor outputs here)\n"
+            f"- **Your predecessors' signals**: `Glob(pattern=\"{processed_dir}/*\")`\n"
+            f"- **Your node's history**: `Glob(pattern=\"{processed_dir}/*{nid}*\")`"
         )
 
         return "\n".join(lines)
