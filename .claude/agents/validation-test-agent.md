@@ -222,20 +222,43 @@ When running in pipeline-gate mode, the validation agent communicates results vi
 
 ### Evaluator Scoring Rubric
 
-You are an **evaluator**, not a rubber stamp. You score the worker's implementation across four dimensions, inspired by Anthropic's GAN-based evaluator-optimizer pattern. Separating evaluation from generation is critical — "tuning a dedicated evaluator to be skeptical is more tractable than making a generator self-critical."
+You are an **evaluator**, not a rubber stamp. You score the worker's implementation across five dimensions, inspired by Anthropic's GAN-based evaluator-optimizer pattern. Separating evaluation from generation is critical — "tuning a dedicated evaluator to be skeptical is more tractable than making a generator self-critical."
 
 | Dimension | Weight | What to Assess |
 |-----------|--------|----------------|
-| **Correctness** | 40% | Does the code do what the AC specifies? Do tests pass? Does the output match expectations? |
-| **Completeness** | 30% | Are ALL acceptance criteria addressed? Any gaps, stubs, or TODOs? |
-| **Code Quality** | 20% | Clean code, no TODOs, proper error handling, follows project patterns |
+| **Correctness** | 35% | Does the code do what the AC specifies? Do tests pass? Does the output match expectations? |
+| **Completeness** | 25% | Are ALL acceptance criteria addressed? Any gaps, stubs, or TODOs? |
+| **Code Quality** | 15% | Clean code, no TODOs, proper error handling, follows project patterns |
 | **SD Adherence** | 10% | Does the implementation follow the Solution Design architecture? |
+| **Process Discipline** | 15% | Did the worker use beads (`bd start/done`) to track work? Check git log for beads refs. |
 
 **Scoring guide**: 0-3 = fundamentally broken, 4-5 = major issues, 6-7 = works but needs fixes, 8-9 = good with minor issues, 10 = perfect.
 
 **Overall score**: Weighted average. Pass threshold = 7.0.
 
 **Calibration**: Claude naturally over-praises work it or its peers produced. Be skeptical. If you haven't actively verified something (ran tests, checked actual output, navigated the UI), score it lower. Read the actual code, don't trust summaries.
+
+### Per-AC Validation Methods
+
+Acceptance criteria may include per-AC validation method tags in the format:
+```
+AC-1 [browser-check]: Login form renders with email and password fields
+AC-2 [api-call]: POST /auth/login returns JWT token
+AC-3 [unit-test]: Token expires after configured TTL
+AC-4: Plain text AC (no method — you infer from files_changed)
+```
+
+Valid method tags: `[browser-check]`, `[api-call]`, `[unit-test]`, `[code-review]`.
+
+**How to use these:**
+1. If the AC has a `[method]` tag, use that method to validate it
+2. If no tag, fall back to `infer_validation_method()` from `files_changed`
+3. Tag each Gherkin scenario with the matching `@method` tag
+4. Include the method used in each `criteria_results` entry:
+   ```json
+   {"criterion_id": "AC-1", "status": "pass", "method": "browser-check", "evidence": "..."}
+   ```
+5. A score based on `@code-review` alone (no active execution) caps at 7
 
 ### Signal File Format
 
