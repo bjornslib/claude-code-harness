@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from typing import Any, Literal
 
 # ---------------------------------------------------------------------------
-# Event type alias — exactly 14 string literals
+# Event type alias — 18 string literals (14 pipeline + 4 agent message)
 # ---------------------------------------------------------------------------
 
 EventType = Literal[
@@ -29,6 +29,10 @@ EventType = Literal[
     "loop.detected",
     "validation.started",
     "validation.completed",
+    "agent.message",
+    "agent.thinking",
+    "agent.tool_call",
+    "agent.tool_result",
 ]
 
 # Frozenset used for runtime membership checks without importing typing internals.
@@ -47,6 +51,10 @@ _ALL_EVENT_TYPES: frozenset[str] = frozenset([
     "loop.detected",
     "validation.started",
     "validation.completed",
+    "agent.message",
+    "agent.thinking",
+    "agent.tool_call",
+    "agent.tool_result",
 ])
 
 
@@ -58,7 +66,7 @@ _ALL_EVENT_TYPES: frozenset[str] = frozenset([
 class PipelineEvent:
     """An immutable record of a single lifecycle event in a pipeline run.
 
-    ``type`` is one of the 14 canonical event type strings defined in
+    ``type`` is one of the 18 canonical event type strings defined in
     ``EventType``.  ``data`` carries event-type-specific payload fields.
     ``sequence`` is a process-global monotonic counter assigned by
     ``EventBuilder._build()`` — it is NOT reset between pipeline runs in the
@@ -96,7 +104,7 @@ class SpanConfig:
 
 
 # ---------------------------------------------------------------------------
-# EventBuilder — centralised factory for all 14 event types
+# EventBuilder — centralised factory for all 18 event types
 # ---------------------------------------------------------------------------
 
 class EventBuilder:
@@ -429,5 +437,105 @@ class EventBuilder:
                 "errors": errors,
                 "warnings": warnings,
                 "passed": passed,
+            },
+        )
+
+    # ------------------------------------------------------------------
+    # Agent message events
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def agent_message(
+        cls,
+        pipeline_id: str,
+        node_id: str | None,
+        agent_role: str,
+        turn: int,
+        text: str,
+        text_length: int = 0,
+    ) -> PipelineEvent:
+        """Emit when an agent produces a text response."""
+        return cls._build(
+            "agent.message",
+            pipeline_id,
+            node_id,
+            {
+                "agent_role": agent_role,
+                "turn": turn,
+                "text_preview": text[:300],
+                "text_length": text_length or len(text),
+            },
+        )
+
+    @classmethod
+    def agent_thinking(
+        cls,
+        pipeline_id: str,
+        node_id: str | None,
+        agent_role: str,
+        turn: int,
+        thinking: str,
+        thinking_length: int = 0,
+    ) -> PipelineEvent:
+        """Emit when an agent produces extended thinking."""
+        return cls._build(
+            "agent.thinking",
+            pipeline_id,
+            node_id,
+            {
+                "agent_role": agent_role,
+                "turn": turn,
+                "thinking_preview": thinking[:200],
+                "thinking_length": thinking_length or len(thinking),
+            },
+        )
+
+    @classmethod
+    def agent_tool_call(
+        cls,
+        pipeline_id: str,
+        node_id: str | None,
+        agent_role: str,
+        turn: int,
+        tool_name: str,
+        tool_use_id: str = "",
+        input_preview: str = "",
+    ) -> PipelineEvent:
+        """Emit when an agent invokes a tool."""
+        return cls._build(
+            "agent.tool_call",
+            pipeline_id,
+            node_id,
+            {
+                "agent_role": agent_role,
+                "turn": turn,
+                "tool_name": tool_name,
+                "tool_use_id": tool_use_id,
+                "input_preview": input_preview[:500],
+            },
+        )
+
+    @classmethod
+    def agent_tool_result(
+        cls,
+        pipeline_id: str,
+        node_id: str | None,
+        agent_role: str,
+        turn: int,
+        tool_use_id: str = "",
+        is_error: bool = False,
+        content_length: int = 0,
+    ) -> PipelineEvent:
+        """Emit when a tool returns a result to an agent."""
+        return cls._build(
+            "agent.tool_result",
+            pipeline_id,
+            node_id,
+            {
+                "agent_role": agent_role,
+                "turn": turn,
+                "tool_use_id": tool_use_id,
+                "is_error": is_error,
+                "content_length": content_length,
             },
         )

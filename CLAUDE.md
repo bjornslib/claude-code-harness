@@ -30,7 +30,8 @@ Zero-LLM-cost state machine that turns DOT graph pipelines into working software
 
 | Subdirectory | Purpose |
 |---|---|
-| `engine/` | Core runner (`pipeline_runner.py`), node handlers, signal protocol, checkpoint system, CLI |
+| `engine/` | Core runner (`pipeline_runner.py`), pilot agent (`guardian.py`), node handlers, signal protocol, checkpoint system, CLI. Pilot is an autonomous goal-pursuing agent: SD fidelity monitoring, cross-node integration, Gherkin E2E, manifest auto-generation. See `docs/sds/SD-PILOT-AUTONOMY-001.md`. |
+| `engine/events/` | Pipeline event bus: 18 event types (pipeline lifecycle + agent messages), JSONL/Logfire/SignalBridge backends, CLI streaming via `cli.py watch`. |
 | `engine/handlers/` | Node implementations: `codergen` (LLM work), `research` (Context7+Perplexity), `refine` (SD rewriting), `wait_human` (gates), `manager_loop` (sub-pipelines) |
 | `engine/providers.yaml` | Named LLM profiles (anthropic-fast/smart/opus, alibaba-glm5/qwen3) |
 | `repomap/` | **ZeroRepo** — codebase intelligence via graph construction and embeddings for context-aware agent guidance |
@@ -136,6 +137,60 @@ Active DOT files, checkpoint snapshots, signal directories, and validation evide
 ### `.cobuilder/templates/` — Template Library
 
 Jinja2 DOT templates for pipeline instantiation.
+
+### `tools/` — Go CLI Utilities
+
+| Tool | Purpose |
+|------|---------|
+| `tmux-nav/` | Interactive tmux session navigator (Bubble Tea TUI). `tmux-nav` to launch. |
+| `pipeline-watch/` | Real-time pipeline event viewer (Bubble Tea TUI). Lists running pipelines, streams events with color-coded display. `pipeline-watch` to launch, or `pipeline-watch tail <path>` for raw streaming. |
+
+## Pipeline Observability
+
+### Event Bus (18 event types)
+
+Every pipeline run emits structured events to 3 backends simultaneously:
+
+| Backend | File | Purpose |
+|---------|------|---------|
+| **JSONL** | `{run_dir}/pipeline-events.jsonl` | Append-only log, tailed by CLI/TUI tools |
+| **Logfire** | Logfire spans | Distributed tracing with `service.name = 'cobuilder-pipeline-runner'` |
+| **SignalBridge** | Signal files | Translates critical events to guardian signal protocol |
+
+**Pipeline lifecycle events** (14): `pipeline.started/completed/failed/resumed`, `node.started/completed/failed`, `edge.selected`, `checkpoint.saved`, `context.updated`, `retry.triggered`, `loop.detected`, `validation.started/completed`
+
+**Agent message events** (4): `agent.message`, `agent.thinking`, `agent.tool_call`, `agent.tool_result` — emitted by guardian (pilot) and session_runner (worker) alongside Logfire spans. Carry `agent_role` (guardian/runner), `turn`, and preview data.
+
+### CLI Event Streaming
+
+```bash
+# Follow a running pipeline (tail -f mode, Ctrl+C for summary)
+python3 cobuilder/engine/cli.py watch <pipeline-events.jsonl>
+
+# Pass a .dot file — resolves JSONL automatically
+python3 cobuilder/engine/cli.py watch <pipeline.dot>
+
+# Filter to agent activity only
+python3 cobuilder/engine/cli.py watch events.jsonl --filter "agent.*"
+
+# Only failures and retries
+python3 cobuilder/engine/cli.py watch events.jsonl --filter "*.failed"
+
+# Last 10 minutes, no follow
+python3 cobuilder/engine/cli.py watch events.jsonl --since 10 --no-follow
+```
+
+### TUI Pipeline Viewer
+
+```bash
+# Interactive TUI — lists pipelines, streams events
+cd tools/pipeline-watch && go run .
+
+# Or after building:
+pipeline-watch              # TUI mode
+pipeline-watch list         # List discovered pipelines
+pipeline-watch tail <path>  # Stream events from a specific JSONL file
+```
 
 ## Key Patterns
 

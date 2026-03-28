@@ -6,14 +6,21 @@ This file provides guidance for Claude Code sessions working within the `cobuild
 
 CoBuilder is the **pipeline execution engine** for multi-agent orchestration. It runs DOT-defined directed acyclic graph pipelines where each node dispatches an AgentSDK worker. The runner itself has zero LLM cost — all intelligence lives in the workers it dispatches.
 
-**3-layer hierarchy:**
+**4-layer hierarchy:**
 ```
-CoBuilder (Opus LLM)           — strategic planning, Gherkin E2E validation
+CoBuilder (Opus LLM)           — strategic planning, PRD authorship
+    |
+    Pilot (guardian.py)        — AUTONOMOUS goal-pursuing agent:
+    |                            SD fidelity monitoring, Gherkin validation,
+    |                            cross-node integration, pipeline E2E
     |
     pipeline_runner.py         — Python state machine, $0, <1s graph ops
+    |                            Scoring enforcement, context injection
         |
         Workers                — AgentSDK: codergen, research, refine, validation
 ```
+
+See `docs/sds/SD-PILOT-AUTONOMY-001.md` for the full pilot autonomy design.
 
 ## Module Map
 
@@ -22,7 +29,7 @@ CoBuilder (Opus LLM)           — strategic planning, Gherkin E2E validation
 | Module | Purpose |
 |--------|---------|
 | `pipeline_runner.py` | Main DOT pipeline state machine. Parses DOT, dispatches AgentSDK workers, watches signal files via watchdog, writes checkpoints, transitions node states. Zero LLM intelligence. |
-| `guardian.py` | Layers 0/1 bridge. Launches Pilot agent processes via `ClaudeSDKClient` (`--dot` single or `--multi` parallel). Key components: `_GUARDIAN_TOOLS` (Bash/Read/Glob/Grep/Serena/Hindsight — no Write/Edit), `_create_guardian_stop_hook()` (blocks Pilot exit when non-terminal nodes remain, safety valve at 3 blocks), `build_options()` (sets `permission_mode="bypassPermissions"`, strips CLAUDECODE/CLAUDE_SESSION_ID/CLAUDE_OUTPUT_STYLE from env, sets PIPELINE_SIGNAL_DIR/PROJECT_TARGET_DIR), `_run_agent()` (ClaudeSDKClient.connect + query + receive_response pattern). |
+| `guardian.py` | Layers 0/1 bridge. Launches Pilot agent processes via `ClaudeSDKClient` (`--dot` single or `--multi` parallel). Key components: `_GUARDIAN_TOOLS` (full file access: Bash/Read/Write/Edit/Glob/Grep/Serena/Hindsight/Chrome/Perplexity/Context7), `_create_guardian_stop_hook()` (blocks Pilot exit when non-terminal nodes remain, safety valve at 3 blocks), `build_options()` (sets `permission_mode="bypassPermissions"`, strips CLAUDECODE/CLAUDE_SESSION_ID/CLAUDE_OUTPUT_STYLE from env, sets PIPELINE_SIGNAL_DIR/PROJECT_TARGET_DIR), `_run_agent()` (ClaudeSDKClient.connect + query + receive_response pattern). |
 | `session_runner.py` | Layer 2 monitoring runner. Monitors an orchestrator tmux session and communicates status via signal files. Supports both `--spawn` (fire-and-forget) and direct monitoring modes. |
 | `cli.py` | Attractor CLI with full subcommand interface: `parse`, `validate`, `status`, `transition`, `checkpoint`, `generate`, `annotate`, `dashboard`, `node`, `edge`, `run`, `guardian`, `agents`, `merge-queue`. |
 | `generate.py` | Generates Attractor-compatible `pipeline.dot` from beads task data. Reads `bd list --json` or a `--beads-json` file. |
@@ -93,16 +100,41 @@ Worker result format (written to `.pipelines/pipelines/signals/{pipeline_id}/{no
 }
 ```
 
-Validation result format:
+Validation result format (MANDATORY: `scores`, `overall_score`, `criteria_results` — runner rejects passes without them):
 ```json
 {
   "result": "pass" | "fail" | "requeue",
   "reason": "Explanation",
+  "scores": {"correctness": 9, "completeness": 8, "code_quality": 8, "sd_adherence": 9, "process_discipline": 8},
+  "overall_score": 8.5,
+  "criteria_results": [
+    {"criterion_id": "AC-1", "status": "pass", "method": "api-call", "evidence": "..."},
+    {"criterion_id": "AC-2", "status": "fail", "method": "browser-check", "reason": "..."}
+  ],
   "requeue_target": "node_id_to_reset"
 }
 ```
 
-On `requeue`: runner sets `requeue_target` back to `pending` mechanically.
+On `requeue`: runner sets `requeue_target` back to `pending` with structured feedback.
+
+### 1b. Signal-Based Communication System
+
+Nodes communicate via the signal directory:
+- **Active**: `{signal_dir}/{node_id}.json` — runner watches, picks up, applies
+- **Processed**: `{signal_dir}/processed/{timestamp}-{node_id}.json` — historical, nodes read for context
+- **Score history**: `{signal_dir}/_score_history.json` — trends across retries
+
+The runner injects signal history, graph neighborhood, SD fidelity, and cross-node integration context into every worker and validator prompt. See `_build_signal_history()`, `_build_graph_neighborhood()`, `_build_sd_fidelity_context()`, `_build_cross_node_context()`.
+
+### 1c. Per-AC Validation Methods
+
+Acceptance criteria support inline method tags:
+```
+AC-1 [browser-check]: Login form renders
+AC-2 [api-call]: POST /auth/login returns JWT
+AC-3 [unit-test]: Token TTL is configurable
+```
+Parsed by `_parse_acceptance_criteria()`. Validator prompt generates per-AC Gherkin with matching `@method` tags.
 
 ### 2. Status Chain
 

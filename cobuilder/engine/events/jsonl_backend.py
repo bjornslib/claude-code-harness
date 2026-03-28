@@ -17,9 +17,33 @@ import logging
 import os
 from typing import IO
 
-from cobuilder.engine.events.types import PipelineEvent
+from cobuilder.engine.events.types import EventBuilder, PipelineEvent
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Synchronous one-shot writer for agent message events
+# ---------------------------------------------------------------------------
+
+def write_event_jsonl(jsonl_path: str, event: PipelineEvent) -> None:
+    """Append a single PipelineEvent as a JSON line to the given JSONL file.
+
+    Synchronous, fire-and-forget.  Used by guardian.py and session_runner.py
+    to inject agent message events into the same JSONL stream that the runner
+    writes to via JSONLEmitter.  Opens in append mode per call — no persistent
+    file handle.  Failures are logged and swallowed.
+    """
+    try:
+        os.makedirs(os.path.dirname(os.path.abspath(jsonl_path)), exist_ok=True)
+        record = dataclasses.asdict(event)
+        record["timestamp"] = event.timestamp.isoformat()
+        line = json.dumps(record, ensure_ascii=False)
+        with open(jsonl_path, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+            f.flush()
+    except Exception as exc:
+        logger.warning("write_event_jsonl: failed to write to %s: %s", jsonl_path, exc)
 
 
 class JSONLEmitter:

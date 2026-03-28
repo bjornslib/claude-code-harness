@@ -300,6 +300,17 @@ For each feature extracted in G1, classify the `validation_method` based on PRD 
 3. Only use `code-analysis` when the feature can be fully validated by reading source files
 4. When in doubt, default to `hybrid`
 
+**Per-AC method tags (for DOT node acceptance attributes):**
+
+When writing acceptance criteria that will be used in DOT pipeline nodes, use the per-AC method tag format:
+```
+AC-1 [browser-check]: Login form renders with email and password fields
+AC-2 [api-call]: POST /auth/login returns JWT token
+AC-3 [unit-test]: Token expires after configured TTL
+AC-4 [code-review]: Error messages follow i18n pattern
+```
+Valid tags: `[browser-check]`, `[api-call]`, `[unit-test]`, `[code-review]`. The pipeline runner parses these tags and generates per-AC Gherkin scenarios with matching `@method` tags. Tag each Gherkin scenario with the corresponding `@browser-check`, `@api-call`, `@unit-test`, or `@code-review`.
+
 **Step G2: Write Gherkin Scenarios with Confidence Scoring Guides**
 For each feature, write one or more Gherkin scenarios. Each scenario MUST include:
 - `Given` / `When` / `Then` clauses
