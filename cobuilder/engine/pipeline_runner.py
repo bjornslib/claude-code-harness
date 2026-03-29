@@ -2154,11 +2154,30 @@ class PipelineRunner:
         "mcp__hindsight__recall",
     ]
 
+    # Chrome DevTools: browser-based validation (UI Gherkin scenarios)
+    _CHROME_DEVTOOLS_TOOLS: list[str] = [
+        "mcp__chrome-devtools__navigate_page",
+        "mcp__chrome-devtools__take_screenshot",
+        "mcp__chrome-devtools__take_snapshot",
+        "mcp__chrome-devtools__evaluate_script",
+        "mcp__chrome-devtools__click",
+        "mcp__chrome-devtools__fill",
+        "mcp__chrome-devtools__fill_form",
+        "mcp__chrome-devtools__list_pages",
+        "mcp__chrome-devtools__select_page",
+        "mcp__chrome-devtools__new_page",
+        "mcp__chrome-devtools__hover",
+        "mcp__chrome-devtools__wait_for",
+        "mcp__chrome-devtools__list_console_messages",
+        "mcp__chrome-devtools__list_network_requests",
+    ]
+
     # Per-handler tool sets (additive on top of _BASE_TOOLS)
     _HANDLER_EXTRA_TOOLS: dict[str, list[str]] = {
         "codergen": [
-            # Implementation workers: code nav only, no research tools
+            # Implementation workers: code nav + browser validation tools
             *_SERENA_TOOLS,
+            *_CHROME_DEVTOOLS_TOOLS,
         ],
         "research": [
             # Research workers: docs + web research + memory + code nav (read-only)
@@ -2624,10 +2643,11 @@ class PipelineRunner:
                         self._validation_method_hint = "browser-required"
                         lines.insert(0,
                             "MANDATORY: This PRD has browser-required features. "
-                            "You MUST use Claude in Chrome (mcp__claude-in-chrome__*) tools to validate UI. "
+                            "You MUST use Chrome DevTools MCP (mcp__chrome-devtools__*) tools to validate UI. "
                             "Static code analysis alone (Read/Grep) = automatic 0.0 score. "
-                            "Required tool sequence: tabs_context_mcp -> navigate -> read_page -> screenshot -> interact. "
-                            "If the frontend is not running, report 'BLOCKED: frontend not running' — do NOT fall back to code analysis.\n"
+                            "Required tool sequence: list_pages -> navigate_page -> take_snapshot -> evaluate_script -> take_screenshot. "
+                            "Start the frontend first (npm run dev) if not running, then navigate and verify DOM. "
+                            "If Chrome is not reachable, report 'BLOCKED: Chrome not reachable' — do NOT fall back to code analysis.\n"
                         )
                     elif "api-required" in methods:
                         self._validation_method_hint = "api-required"
@@ -2664,7 +2684,9 @@ class PipelineRunner:
         lines.append(
             f"\n## Write Your Result\n"
             f"Write your validation result to: {signal_file_path}\n\n"
-            f"You MUST include `scores`, `overall_score`, and `criteria_results` in every signal.\n\n"
+            f"⚠️ FORBIDDEN: Writing a signal with ONLY `result` and `reason`. "
+            f"The runner will REJECT any signal missing `scores`, `overall_score`, or `criteria_results` "
+            f"and force you to redo the entire validation. Save yourself the retry — include ALL fields.\n\n"
             f"PASS example (overall >= 7.0):\n"
             f'```\nWrite(file_path="{signal_file_path}", content=\'{{"result": "pass", "reason": "All criteria met", '
             f'"scores": {{"correctness": 9, "completeness": 8, "code_quality": 8, "sd_adherence": 9, "process_discipline": 8}}, '
@@ -2783,18 +2805,7 @@ class PipelineRunner:
             ]
             _hint = getattr(self, "_validation_method_hint", None)
             if _hint == "browser-required":
-                validation_tools.extend([
-                    # Chrome DevTools for direct browser validation
-                    "mcp__claude-in-chrome__navigate",
-                    "mcp__claude-in-chrome__read_page",
-                    "mcp__claude-in-chrome__find",
-                    "mcp__claude-in-chrome__get_page_text",
-                    "mcp__claude-in-chrome__computer",
-                    "mcp__claude-in-chrome__javascript_tool",
-                    "mcp__claude-in-chrome__form_input",
-                    "mcp__claude-in-chrome__tabs_context_mcp",
-                    "mcp__claude-in-chrome__tabs_create_mcp",
-                ])
+                validation_tools.extend(self._CHROME_DEVTOOLS_TOOLS)
             elif _hint == "api-required":
                 # API validation primarily uses Bash (curl/httpx) which is already included
                 pass
@@ -2901,6 +2912,11 @@ class PipelineRunner:
 
         for fname in sorted(os.listdir(self.signal_dir)):
             if not fname.endswith(".json"):
+                continue
+
+            # Skip internal sidecar files (e.g. _score_history.json) —
+            # these are NOT node signals and must not be fed to _apply_signal().
+            if fname.startswith("_"):
                 continue
 
             # Determine the node_id from the filename.
@@ -3084,6 +3100,28 @@ class PipelineRunner:
                         "Requeuing to validator.",
                         node_id,
                     )
+                    # Write a rejection breadcrumb so the re-dispatched validator
+                    # sees WHY its predecessor was bounced (via signal history).
+                    rejection_signal = {
+                        "result": "rejected",
+                        "reason": (
+                            "PREVIOUS VALIDATION REJECTED: Your signal was missing "
+                            "scores, overall_score, and/or criteria_results. "
+                            "The runner requires ALL three fields in every signal. "
+                            "You wrote result+reason only — that is not enough. "
+                            "Include the full scoring rubric in your next signal."
+                        ),
+                    }
+                    self._write_signal(node_id, rejection_signal, signal_kind="validation")
+                    # Move it to processed/ so it shows up in signal history
+                    rejection_fname = f"{node_id}-validation.json"
+                    rejection_src = os.path.join(self.signal_dir, rejection_fname)
+                    if os.path.exists(rejection_src):
+                        processed_dir = os.path.join(self.signal_dir, "processed")
+                        os.makedirs(processed_dir, exist_ok=True)
+                        ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+                        os.rename(rejection_src, os.path.join(processed_dir, f"{ts}-{rejection_fname}"))
+
                     # Requeue the validation: reset to impl_complete so the
                     # dispatch loop re-triggers validation with the same prompt.
                     self._force_status(node_id, "impl_complete")
