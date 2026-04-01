@@ -1,0 +1,35 @@
+prd_id: PRD-DIGITAL-CURATOR-001
+title: "Digital Curator - Claude.ai Annotation Chrome Extension"
+version: "1.0.0"
+created: 2026-04-01
+accept: 0.75
+investigate: 0.50
+
+features:
+  - id: F1-EXTENSION-INFRASTRUCTURE
+    name: "Extension Infrastructure & Loading"
+    weight: 0.15
+    validation_method: browser-required
+    description: "Extension installs, content script injects on claude.ai, side panel opens"
+    test_file: "f1-extension-infrastructure.feature"
+
+  - id: F2-TEXT-SELECTION-HIGHLIGHTING
+    name: "Text Selection & Highlighting"
+    weight: 0.25
+    validation_method: browser-required
+    description: "Text selection in Claude responses creates anchored highlights with coral overlay"
+    test_file: "f2-text-selection-highlighting.feature"
+
+  - id: F3-COMMENT-SIDEBAR
+    name: "Comment Popover & Annotation Sidebar"
+    weight: 0.30
+    validation_method: browser-required
+    description: "Inline comment editor, sidebar annotation cards with CRUD, message passing"
+    test_file: "f3-comment-sidebar.feature"
+
+  - id: F4-SUBMIT-TO-CHAT
+    name: "Submit Comments to Chat Input"
+    weight: 0.30
+    validation_method: browser-required
+    description: "Format and inject all annotations into Claude's chat input area"
+    test_file: "f4-submit-to-chat.feature"
