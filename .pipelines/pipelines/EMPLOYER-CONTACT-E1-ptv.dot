@@ -5,7 +5,7 @@
 
 digraph "PRD-EMPLOYER-CONTACT-001-E1-research-agent" {
     graph [
-        label="Planner-TDD-Validator: Employer Contact Research Agent (DSPy)"
+        label="Planner-TDD-Validator: Employer Contact Research Agent (DSPy + Perplexity + Web Search)"
         labelloc="t"
         fontsize=16
         rankdir="TB"
@@ -45,9 +45,9 @@ digraph "PRD-EMPLOYER-CONTACT-001-E1-research-agent" {
         solution_design="/Users/theb/Documents/Windsurf/cobuilder-harness/docs/prds/employer-contact-search/PRD-EMPLOYER-CONTACT-001.md"
         prd_ref="PRD-EMPLOYER-CONTACT-001"
         llm_profile="alibaba-glm5"
-        research_queries="codebase structure for Employer Contact Research Agent (DSPy), existing patterns, database schema, API endpoints, test infrastructure"
+        research_queries="codebase structure for Employer Contact Research Agent (DSPy + Perplexity + Web Search), existing patterns, database schema, API endpoints, test infrastructure"
         downstream_node="research_domain"
-        prompt="PLANNER PHASE: Research the target codebase at /Users/theb/Documents/Windsurf/zenagent for epic E1-research-agent: Employer Contact Research Agent (DSPy). (1) Read the BS at /Users/theb/Documents/Windsurf/cobuilder-harness/docs/prds/employer-contact-search/PRD-EMPLOYER-CONTACT-001.md — understand the epic scope and acceptance criteria. (2) Explore the codebase: find existing modules, patterns, database models, and test infrastructure relevant to this epic. (3) Identify integration points, dependencies, and constraints. (4) Document: file paths, function signatures, schema definitions, and test patterns that the TS must address. Write structured findings to evidence JSON."
+        prompt="PLANNER PHASE: Research the target codebase at /Users/theb/Documents/Windsurf/zenagent for epic E1-research-agent: Employer Contact Research Agent. MANDATORY: Invoke Skill('dspy-development') before any DSPy design decisions. (1) Read the BS at /Users/theb/Documents/Windsurf/cobuilder-harness/docs/prds/employer-contact-search/PRD-EMPLOYER-CONTACT-001.md — focus on Section 5 (Research Agent Specification). (2) Explore the zenagent codebase: find existing DSPy modules, Perplexity integrations, PydanticAI agents, database models (especially university_contacts pattern). (3) Identify: existing employer_contacts table or similar, Supabase connection patterns, background_tasks integration. (4) Document: file paths, existing DSPy patterns, Perplexity API usage, database schema. Write structured findings to evidence JSON."
     ];
 
     research_domain [
@@ -59,9 +59,9 @@ digraph "PRD-EMPLOYER-CONTACT-001-E1-research-agent" {
         solution_design="/Users/theb/Documents/Windsurf/cobuilder-harness/docs/prds/employer-contact-search/PRD-EMPLOYER-CONTACT-001.md"
         prd_ref="PRD-EMPLOYER-CONTACT-001"
         llm_profile="alibaba-glm5"
-        research_queries="domain patterns for Employer Contact Research Agent (DSPy), framework best practices, library APIs, similar implementations"
+        research_queries="domain patterns for Employer Contact Research Agent (DSPy + Perplexity + Web Search), framework best practices, library APIs, similar implementations"
         downstream_node="write_ts"
-        prompt="PLANNER PHASE: Research domain patterns for epic E1-research-agent: Employer Contact Research Agent (DSPy). (1) Based on codebase findings, research framework best practices (use Context7 for library docs). (2) Research similar implementations via Perplexity. (3) Identify testing patterns appropriate for this domain (unit tests). (4) Document: recommended approach, library APIs to use, test strategy, edge cases. Write findings to evidence JSON."
+        prompt="PLANNER PHASE: Research domain patterns for the employer contact research agent. MANDATORY: Invoke Skill('dspy-development') and Skill('research-first'). (1) Use Context7 to research DSPy module patterns (Signatures, Modules, Optimizers) and Perplexity Deep Research API. (2) Research via Perplexity: how to build an employer contact finder using Perplexity API + web search (not just Perplexity alone). (3) Research contact classification patterns: general vs named_poc, confidence scoring algorithms. (4) Identify testing patterns: how to test DSPy modules (mock vs real API), how to test web search results, how to test contact deduplication. (5) Document: DSPy module design, Perplexity + web search combo approach, confidence scoring formula, test fixtures. Write findings to evidence JSON."
     ];
 
     write_ts [
@@ -76,7 +76,7 @@ digraph "PRD-EMPLOYER-CONTACT-001-E1-research-agent" {
         prd_ref="PRD-EMPLOYER-CONTACT-001"
         llm_profile="alibaba-glm5"
         acceptance="TS covers: module design, API contracts, data model changes, file-by-file implementation plan, test strategy, acceptance criteria mapping"
-        prompt="PLANNER PHASE: Write a Technical Spec at /Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md for epic E1-research-agent: Employer Contact Research Agent (DSPy). Use the BS (/Users/theb/Documents/Windsurf/cobuilder-harness/docs/prds/employer-contact-search/PRD-EMPLOYER-CONTACT-001.md) and both research evidence files. The TS must include: (1) Module design with file paths and function signatures. (2) API contracts (request/response schemas). (3) Data model changes (new tables, columns, migrations). (4) File-by-file implementation plan (ordered by dependency). (5) Test strategy: which tests to write, what they cover, expected failures in RED phase. (6) Acceptance criteria from BS mapped to specific test cases. This TS will be used by a TDD test engineer to write failing tests FIRST, then by an implementation worker to make them pass."
+        prompt="PLANNER PHASE: Write a Technical Spec at /Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md. MANDATORY: Invoke Skill('dspy-development'). Use the BS and both research evidence files. The TS must include: (1) DSPy Module design: EmployerContactResearcher(dspy.Module) with Signatures for search, classify, score, deduplicate. (2) Dual-source research: Perplexity Deep Research API for in-depth employer analysis + web search (Brave/Google) for supplementary contacts. NOT Perplexity alone. (3) Data model: employer_contacts table (per PRD Section 7.1), Supabase integration. (4) Contact classification logic: general vs named_poc rules, confidence scoring formula. (5) File-by-file plan: where in zenagent each module goes. (6) Test strategy: unit tests for classification, scoring, dedup, prioritisation. Expected RED failures. (7) Acceptance criteria from BS Section 5 mapped to test cases. This TS drives the TDD cycle."
     ];
 
     // ── Planner gate: Guardian reviews TS quality ──
@@ -125,9 +125,9 @@ digraph "PRD-EMPLOYER-CONTACT-001-E1-research-agent" {
         worker_type="tdd-test-engineer"
         sd_path="/Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md"
         prd_ref="PRD-EMPLOYER-CONTACT-001"
-        llm_profile="alibaba-glm5"
+        llm_profile="anthropic-sonnet46"
         acceptance="Tests written, ALL tests FAIL (red), tests cover every TS acceptance criterion, test command runs without import errors"
-        prompt="RED PHASE (TDD): Read the Technical Spec at /Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md. Write unit tests that define the contract for epic E1-research-agent: Employer Contact Research Agent (DSPy). RULES: (1) Every acceptance criterion from the TS MUST have at least one test. (2) Tests MUST fail — the implementation does not exist yet. (3) Tests should be well-structured, covering happy path, edge cases, and error handling. (4) Run 'pytest tests/ -v' — verify all tests FAIL (not error/import-fail, but FAIL because assertions don't hold). (5) If using browser tests: write Playwright/Chrome DevTools specs. If using unit tests: write pytest/Jest tests. Report the test file paths and failure count in your signal."
+        prompt="RED PHASE (TDD): MANDATORY: Invoke Skill('dspy-development') and Skill('test-driven-development'). Read the TS at /Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md. Write pytest tests for the DSPy employer contact research agent. RULES: (1) Every BS acceptance criterion MUST have at least one test. (2) Tests MUST fail — the DSPy modules don't exist yet. (3) Test categories: (a) contact classification (general vs named_poc), (b) confidence scoring (source reliability weighting), (c) contact deduplication (phone/email matching), (d) contact prioritisation (PRD Section 5.2 priority tiers), (e) integration: Perplexity API mock + web search mock → full pipeline. (4) Use pytest fixtures with mock Perplexity/web search responses. (5) Run 'pytest tests/ -v' — verify ALL tests FAIL. Report test file paths and failure count."
     ];
 
     // ── Red gate: verify tests actually fail ──
@@ -157,9 +157,9 @@ digraph "PRD-EMPLOYER-CONTACT-001-E1-research-agent" {
         worker_type="backend-solutions-engineer"
         sd_path="/Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md"
         prd_ref="PRD-EMPLOYER-CONTACT-001"
-        llm_profile="alibaba-glm5"
+        llm_profile="anthropic-sonnet46"
         acceptance="ALL tests pass (green), implementation follows TS architecture, no test modifications allowed"
-        prompt="GREEN PHASE (TDD): Read the Technical Spec at /Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md and the failing tests from the RED phase. Implement epic E1-research-agent: Employer Contact Research Agent (DSPy). RULES: (1) Do NOT modify any test files — tests define the contract. (2) Write the minimal implementation to make ALL tests pass. (3) Follow the TS architecture exactly (file paths, function signatures, data models). (4) Run 'pytest tests/ -v' — verify ALL tests PASS. (5) If a test seems wrong, document why in your signal but do NOT change it. Report implementation file paths and test results in your signal."
+        prompt="GREEN PHASE (TDD): MANDATORY: Invoke Skill('dspy-development') and Skill('research-first') for current DSPy and Perplexity API patterns. Read the TS and failing tests. Implement the DSPy employer contact research agent. RULES: (1) Do NOT modify test files. (2) Implement: EmployerContactResearcher(dspy.Module) with dual-source research (Perplexity Deep Research API + web search via Brave/Google). (3) Implement contact classification, confidence scoring, deduplication, and prioritisation per TS. (4) Implement employer_contacts Supabase storage. (5) Follow TS architecture exactly. (6) Run 'pytest tests/ -v' — ALL tests must PASS. (7) If a test seems wrong, document why but do NOT change it."
     ];
 
     // ── Green gate: verify tests actually pass ──
@@ -190,9 +190,9 @@ digraph "PRD-EMPLOYER-CONTACT-001-E1-research-agent" {
         worker_type="validation-test-agent"
         sd_path="/Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md"
         prd_ref="PRD-EMPLOYER-CONTACT-001"
-        llm_profile="alibaba-glm5"
+        llm_profile="anthropic-sonnet46"
         acceptance="Validation score >= 0.70, all BS acceptance criteria checked, all TS contracts verified, implementation matches both specs"
-        prompt="VALIDATOR PHASE: Independently verify epic E1-research-agent: Employer Contact Research Agent (DSPy). You have NOT seen any worker output — you are an independent auditor. (1) Read the BS at /Users/theb/Documents/Windsurf/cobuilder-harness/docs/prds/employer-contact-search/PRD-EMPLOYER-CONTACT-001.md — extract acceptance criteria. (2) Read the TS at /Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md — extract technical contracts. (3) Read the implementation files. (4) Run 'pytest tests/ -v' yourself — verify tests pass. (5) Score each BS acceptance criterion 0.0-1.0. (6) Score each TS contract 0.0-1.0. (7) Check for: missing error handling, security issues, missing edge cases, documentation gaps. (8) Write a validation report with per-criterion scores and overall verdict. ACCEPT threshold: 0.70."
+        prompt="VALIDATOR PHASE: MANDATORY: Invoke Skill('dspy-development') to understand DSPy patterns before reviewing. You are an independent auditor — you have NOT seen worker output. (1) Read BS Section 5 (Research Agent Spec) — extract acceptance criteria: exhaustive contact list, classification, confidence scoring, source attribution. (2) Read TS — extract technical contracts: DSPy module signatures, Perplexity + web search dual-source, Supabase storage. (3) Read implementation: verify DSPy modules exist and match TS signatures. (4) Run 'pytest tests/ -v' yourself. (5) Score each BS criterion 0.0-1.0: (a) Does research produce contacts from multiple sources? (b) Are contacts classified correctly? (c) Is confidence scoring reasonable? (d) Is deduplication working? (e) Is prioritisation per PRD Section 5.2? (6) Check: error handling for API failures, rate limiting, empty results. (7) ACCEPT threshold: 0.70."
     ];
 
     // ── Final validation gate ──
