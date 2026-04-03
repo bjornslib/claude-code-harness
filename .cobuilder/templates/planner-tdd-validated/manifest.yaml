@@ -1,0 +1,104 @@
+template:
+  name: planner-tdd-validated
+  version: "1.0"
+  description: >
+    Anthropic-recommended Planner→Worker→Validator pattern with TDD.
+    Phase 1: Planner reads BS, researches codebase, produces TS for one epic.
+    Phase 2: Red — TDD test engineer writes failing tests against TS.
+    Phase 3: Green — Implementation worker makes tests pass.
+    Phase 4: Validator checks results against both BS and TS.
+    Each phase has a guardian gate. Human reviews after validation.
+  topology: sequential-gated
+  min_nodes: 11
+  max_nodes: 15
+
+parameters:
+  prd_ref:
+    type: string
+    required: true
+    description: "PRD identifier (e.g., PRD-EMPLOYER-CONTACT-001)"
+
+  bs_path:
+    type: string
+    required: true
+    description: "Absolute path to the Business Spec (PRD) document"
+
+  epic_id:
+    type: string
+    required: true
+    description: "Epic identifier within the BS being implemented"
+
+  epic_label:
+    type: string
+    required: true
+    description: "Human-readable label for the epic"
+
+  sd_output_path:
+    type: string
+    required: true
+    description: "Absolute path where the TS (Solution Design) will be written"
+
+  worker_type:
+    type: string
+    required: true
+    description: "Agent type for implementation (e.g., backend-solutions-engineer)"
+
+  test_worker_type:
+    type: string
+    default: "tdd-test-engineer"
+    description: "Agent type for writing failing tests"
+
+  validator_worker_type:
+    type: string
+    default: "validation-test-agent"
+    description: "Agent type for independent validation"
+
+  bead_id_planner:
+    type: string
+    required: true
+    description: "Bead ID for the planning task"
+
+  bead_id_impl:
+    type: string
+    required: true
+    description: "Bead ID for the implementation task"
+
+  llm_profile:
+    type: string
+    default: "alibaba-glm5"
+    description: "LLM profile for all nodes (override per-node with llm_profile_* params)"
+
+  llm_profile_planner:
+    type: string
+    default: ""
+    description: "Override LLM profile for planner nodes (research + refine)"
+
+  llm_profile_test:
+    type: string
+    default: ""
+    description: "Override LLM profile for test writing"
+
+  llm_profile_impl:
+    type: string
+    default: ""
+    description: "Override LLM profile for implementation"
+
+  test_type:
+    type: string
+    default: "unit"
+    description: "Test type: unit, browser, or both"
+
+  test_command:
+    type: string
+    default: "pytest tests/ -v"
+    description: "Command to run tests"
+
+  cobuilder_root:
+    type: string
+    required: true
+    description: "Absolute path to cobuilder harness root"
+
+  target_dir:
+    type: string
+    required: true
+    description: "Absolute path to target working directory (worktree)"

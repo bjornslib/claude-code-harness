@@ -1,0 +1,267 @@
+// Generated from template: planner-tdd-validated v1.0
+// PRD: PRD-EMPLOYER-CONTACT-001 | Epic: E1-research-agent
+// Pattern: Planner → Red (TDD) → Green (Impl) → Validator
+// Follows Anthropic's recommended Planner-Worker-Validator architecture
+
+digraph "PRD-EMPLOYER-CONTACT-001-E1-research-agent" {
+    graph [
+        label="Planner-TDD-Validator: Employer Contact Research Agent (DSPy)"
+        labelloc="t"
+        fontsize=16
+        rankdir="TB"
+        pipeline_id="PRD-EMPLOYER-CONTACT-001-E1-research-agent-ptv"
+        prd_ref="PRD-EMPLOYER-CONTACT-001"
+        cobuilder_root="/Users/theb/Documents/Windsurf/cobuilder-harness"
+        target_dir="/Users/theb/Documents/Windsurf/zenagent"
+        _template="planner-tdd-validated"
+        _template_version="1.0"
+    ];
+
+    node [fontname="Helvetica" fontsize=11 style=filled];
+    edge [fontname="Helvetica" fontsize=9 arrowhead=vee];
+
+    // ════════════════════════════════════════════════════════════
+    // START
+    // ════════════════════════════════════════════════════════════
+    start [
+        label="START\nPRD-EMPLOYER-CONTACT-001"
+        handler="start"
+        shape=Mdiamond
+        fillcolor=green
+        status=pending
+    ];
+
+    // ════════════════════════════════════════════════════════════
+    // PHASE 1: PLANNER — Research BS, produce TS for this epic
+    //   Reads the Business Spec, researches the codebase and
+    //   domain patterns, then writes a Technical Spec for the epic.
+    // ════════════════════════════════════════════════════════════
+    research_codebase [
+        label="Research: Codebase Analysis"
+        handler="research"
+        shape=tab
+        fillcolor=lightcyan
+        status=pending
+        solution_design="/Users/theb/Documents/Windsurf/cobuilder-harness/docs/prds/employer-contact-search/PRD-EMPLOYER-CONTACT-001.md"
+        prd_ref="PRD-EMPLOYER-CONTACT-001"
+        llm_profile="alibaba-glm5"
+        research_queries="codebase structure for Employer Contact Research Agent (DSPy), existing patterns, database schema, API endpoints, test infrastructure"
+        downstream_node="research_domain"
+        prompt="PLANNER PHASE: Research the target codebase at /Users/theb/Documents/Windsurf/zenagent for epic E1-research-agent: Employer Contact Research Agent (DSPy). (1) Read the BS at /Users/theb/Documents/Windsurf/cobuilder-harness/docs/prds/employer-contact-search/PRD-EMPLOYER-CONTACT-001.md — understand the epic scope and acceptance criteria. (2) Explore the codebase: find existing modules, patterns, database models, and test infrastructure relevant to this epic. (3) Identify integration points, dependencies, and constraints. (4) Document: file paths, function signatures, schema definitions, and test patterns that the TS must address. Write structured findings to evidence JSON."
+    ];
+
+    research_domain [
+        label="Research: Domain Patterns"
+        handler="research"
+        shape=tab
+        fillcolor=lightcyan
+        status=pending
+        solution_design="/Users/theb/Documents/Windsurf/cobuilder-harness/docs/prds/employer-contact-search/PRD-EMPLOYER-CONTACT-001.md"
+        prd_ref="PRD-EMPLOYER-CONTACT-001"
+        llm_profile="alibaba-glm5"
+        research_queries="domain patterns for Employer Contact Research Agent (DSPy), framework best practices, library APIs, similar implementations"
+        downstream_node="write_ts"
+        prompt="PLANNER PHASE: Research domain patterns for epic E1-research-agent: Employer Contact Research Agent (DSPy). (1) Based on codebase findings, research framework best practices (use Context7 for library docs). (2) Research similar implementations via Perplexity. (3) Identify testing patterns appropriate for this domain (unit tests). (4) Document: recommended approach, library APIs to use, test strategy, edge cases. Write findings to evidence JSON."
+    ];
+
+    write_ts [
+        label="Planner: Write Technical Spec"
+        handler="codergen"
+        shape=box
+        fillcolor=lightyellow
+        status=pending
+        bead_id="PLACEHOLDER-PLANNER"
+        worker_type="solution-design-architect"
+        sd_path="/Users/theb/Documents/Windsurf/cobuilder-harness/docs/prds/employer-contact-search/PRD-EMPLOYER-CONTACT-001.md"
+        prd_ref="PRD-EMPLOYER-CONTACT-001"
+        llm_profile="alibaba-glm5"
+        acceptance="TS covers: module design, API contracts, data model changes, file-by-file implementation plan, test strategy, acceptance criteria mapping"
+        prompt="PLANNER PHASE: Write a Technical Spec at /Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md for epic E1-research-agent: Employer Contact Research Agent (DSPy). Use the BS (/Users/theb/Documents/Windsurf/cobuilder-harness/docs/prds/employer-contact-search/PRD-EMPLOYER-CONTACT-001.md) and both research evidence files. The TS must include: (1) Module design with file paths and function signatures. (2) API contracts (request/response schemas). (3) Data model changes (new tables, columns, migrations). (4) File-by-file implementation plan (ordered by dependency). (5) Test strategy: which tests to write, what they cover, expected failures in RED phase. (6) Acceptance criteria from BS mapped to specific test cases. This TS will be used by a TDD test engineer to write failing tests FIRST, then by an implementation worker to make them pass."
+    ];
+
+    // ── Planner gate: Guardian reviews TS quality ──
+    gate_planner [
+        label="TS Quality Gate"
+        handler="wait.cobuilder"
+        shape=hexagon
+        fillcolor=purple
+        status=pending
+        gate_type="e2e"
+        summary_ref="/Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md"
+        bead_id="PLACEHOLDER-PLANNER"
+    ];
+
+    review_planner [
+        label="Human Reviews TS"
+        handler="wait.human"
+        shape=hexagon
+        fillcolor=red
+        status=pending
+        gate="technical"
+        mode="technical"
+    ];
+
+    decide_planner [
+        label="TS Approved?"
+        handler="conditional"
+        shape=diamond
+        fillcolor=lightyellow
+        status=pending
+    ];
+
+    // ════════════════════════════════════════════════════════════
+    // PHASE 2: RED — Write failing tests against the TS
+    //   TDD test engineer reads the TS, writes tests that MUST
+    //   FAIL because the implementation doesn't exist yet.
+    //   Tests define the contract; implementation fills it.
+    // ════════════════════════════════════════════════════════════
+    red_tests [
+        label="RED: Write Failing Tests"
+        handler="codergen"
+        shape=box
+        fillcolor="#ffcccc"
+        status=pending
+        bead_id="PLACEHOLDER-IMPL"
+        worker_type="tdd-test-engineer"
+        sd_path="/Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md"
+        prd_ref="PRD-EMPLOYER-CONTACT-001"
+        llm_profile="alibaba-glm5"
+        acceptance="Tests written, ALL tests FAIL (red), tests cover every TS acceptance criterion, test command runs without import errors"
+        prompt="RED PHASE (TDD): Read the Technical Spec at /Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md. Write unit tests that define the contract for epic E1-research-agent: Employer Contact Research Agent (DSPy). RULES: (1) Every acceptance criterion from the TS MUST have at least one test. (2) Tests MUST fail — the implementation does not exist yet. (3) Tests should be well-structured, covering happy path, edge cases, and error handling. (4) Run 'pytest tests/ -v' — verify all tests FAIL (not error/import-fail, but FAIL because assertions don't hold). (5) If using browser tests: write Playwright/Chrome DevTools specs. If using unit tests: write pytest/Jest tests. Report the test file paths and failure count in your signal."
+    ];
+
+    // ── Red gate: verify tests actually fail ──
+    gate_red [
+        label="Red Verification Gate"
+        handler="wait.cobuilder"
+        shape=hexagon
+        fillcolor=purple
+        status=pending
+        gate_type="unit"
+        summary_ref="/Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md"
+        bead_id="PLACEHOLDER-IMPL"
+    ];
+
+    // ════════════════════════════════════════════════════════════
+    // PHASE 3: GREEN — Implement to make tests pass
+    //   Implementation worker reads the TS and the failing tests,
+    //   then writes the minimal code to make all tests pass.
+    // ════════════════════════════════════════════════════════════
+    green_impl [
+        label="GREEN: Implement to Pass"
+        handler="codergen"
+        shape=box
+        fillcolor="#ccffcc"
+        status=pending
+        bead_id="PLACEHOLDER-IMPL"
+        worker_type="backend-solutions-engineer"
+        sd_path="/Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md"
+        prd_ref="PRD-EMPLOYER-CONTACT-001"
+        llm_profile="alibaba-glm5"
+        acceptance="ALL tests pass (green), implementation follows TS architecture, no test modifications allowed"
+        prompt="GREEN PHASE (TDD): Read the Technical Spec at /Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md and the failing tests from the RED phase. Implement epic E1-research-agent: Employer Contact Research Agent (DSPy). RULES: (1) Do NOT modify any test files — tests define the contract. (2) Write the minimal implementation to make ALL tests pass. (3) Follow the TS architecture exactly (file paths, function signatures, data models). (4) Run 'pytest tests/ -v' — verify ALL tests PASS. (5) If a test seems wrong, document why in your signal but do NOT change it. Report implementation file paths and test results in your signal."
+    ];
+
+    // ── Green gate: verify tests actually pass ──
+    gate_green [
+        label="Green Verification Gate"
+        handler="wait.cobuilder"
+        shape=hexagon
+        fillcolor=purple
+        status=pending
+        gate_type="unit"
+        summary_ref="/Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md"
+        bead_id="PLACEHOLDER-IMPL"
+    ];
+
+    // ════════════════════════════════════════════════════════════
+    // PHASE 4: VALIDATOR — Independent check against BS + TS
+    //   Validator reads the BS, TS, and implementation.
+    //   Scores against acceptance criteria from BOTH documents.
+    //   Does NOT trust the worker's self-report.
+    // ════════════════════════════════════════════════════════════
+    validate [
+        label="Validator: BS + TS Check"
+        handler="codergen"
+        shape=box
+        fillcolor="#ccccff"
+        status=pending
+        bead_id="PLACEHOLDER-IMPL"
+        worker_type="validation-test-agent"
+        sd_path="/Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md"
+        prd_ref="PRD-EMPLOYER-CONTACT-001"
+        llm_profile="alibaba-glm5"
+        acceptance="Validation score >= 0.70, all BS acceptance criteria checked, all TS contracts verified, implementation matches both specs"
+        prompt="VALIDATOR PHASE: Independently verify epic E1-research-agent: Employer Contact Research Agent (DSPy). You have NOT seen any worker output — you are an independent auditor. (1) Read the BS at /Users/theb/Documents/Windsurf/cobuilder-harness/docs/prds/employer-contact-search/PRD-EMPLOYER-CONTACT-001.md — extract acceptance criteria. (2) Read the TS at /Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md — extract technical contracts. (3) Read the implementation files. (4) Run 'pytest tests/ -v' yourself — verify tests pass. (5) Score each BS acceptance criterion 0.0-1.0. (6) Score each TS contract 0.0-1.0. (7) Check for: missing error handling, security issues, missing edge cases, documentation gaps. (8) Write a validation report with per-criterion scores and overall verdict. ACCEPT threshold: 0.70."
+    ];
+
+    // ── Final validation gate ──
+    gate_validate [
+        label="Validation Gate"
+        handler="wait.cobuilder"
+        shape=hexagon
+        fillcolor=purple
+        status=pending
+        gate_type="e2e"
+        summary_ref="/Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md"
+        bead_id="PLACEHOLDER-IMPL"
+    ];
+
+    review_final [
+        label="Human Final Review"
+        handler="wait.human"
+        shape=hexagon
+        fillcolor=red
+        status=pending
+        gate="e2e"
+        mode="technical"
+    ];
+
+    decide_final [
+        label="Epic Complete?"
+        handler="conditional"
+        shape=diamond
+        fillcolor=lightyellow
+        status=pending
+    ];
+
+    // ════════════════════════════════════════════════════════════
+    // EXIT
+    // ════════════════════════════════════════════════════════════
+    pipeline_exit [
+        label="Complete"
+        handler="exit"
+        shape=Msquare
+        fillcolor=darkgreen
+        status=pending
+    ];
+
+    // ════════════════════════════════════════════════════════════
+    // EDGES
+    // ════════════════════════════════════════════════════════════
+
+    // Phase 1: Planner
+    start -> research_codebase [label="begin"];
+    research_codebase -> research_domain [label="codebase_mapped"];
+    research_domain -> write_ts [label="domain_researched"];
+    write_ts -> gate_planner [label="ts_written"];
+    gate_planner -> review_planner [label="guardian_ok"];
+    review_planner -> decide_planner [label="human_reviewed"];
+    decide_planner -> red_tests [condition="pass" label="ts_approved"];
+    decide_planner -> write_ts [condition="fail" label="rework_ts"];
+
+    // Phase 2: Red (failing tests)
+    red_tests -> gate_red [label="tests_written"];
+    gate_red -> green_impl [label="tests_fail_confirmed"];
+
+    // Phase 3: Green (implementation)
+    green_impl -> gate_green [label="impl_done"];
+    gate_green -> validate [label="tests_pass_confirmed"];
+
+    // Phase 4: Validator
+    validate -> gate_validate [label="validation_done"];
+    gate_validate -> review_final [label="guardian_ok"];
+    review_final -> decide_final [label="human_reviewed"];
+    decide_final -> pipeline_exit [condition="pass" label="epic_complete"];
+    decide_final -> green_impl [condition="fail" label="rework_impl"];
+}
