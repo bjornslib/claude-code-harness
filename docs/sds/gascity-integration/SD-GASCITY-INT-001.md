@@ -1,7 +1,7 @@
 ---
 title: "GasCity Integration — Technical Spec for CoBuilder Pipeline Resilience"
 description: "Technical specification for integrating GasCity's pull-based work allocation and health patrol with CoBuilder's deterministic DAG pipeline execution"
-version: "1.0.0"
+version: "1.1.0"
 last-updated: 2026-04-03
 status: active
 type: sd
@@ -15,11 +15,20 @@ prd_id: PRD-GASCITY-INT-001
 
 ## Implementation Status
 
-Technical Spec complete (v1.0.0). Based on three prior research passes:
+Technical Spec v1.1.0 — Research-validated architecture. Based on three spike research passes:
 
-- `docs/research/gascity-integration-research-20260403.md` — deep source analysis of GasCity SDK primitives, CoBuilder dispatch path
-- `docs/prds/gascity-integration/PRD-GASCITY-INT-001.md` — refined business requirements (v1.1.0)
-- `docs/research/gascity-prototype-design-20260403.md` — concrete implementation blueprints, critical discoveries (gc binary clash, bd metadata API)
+- `.pipelines/pipelines/evidence/GASCITY-INT-001-spike/gascity-bootstrap-swarm-research.md` — pool-based work allocation, subprocess provider, drain protocol
+- `.pipelines/pipelines/evidence/GASCITY-INT-001-spike/gascity-controller-convergence-research.md` — 9-step convergence algorithm, reconciliation paths, health patrol internals
+- `.pipelines/pipelines/evidence/GASCITY-INT-001-spike/gascity-metadata-formula-research.md` — bead metadata namespaces, molecule system, wisp lifecycle
+
+**Key research findings integrated:**
+- Convergence uses 9-step HandleWispClosed algorithm with idempotency keys for crash recovery
+- Active index provides O(active) tick performance (in-memory map of active convergence beads)
+- Reconciliation repairs 5 interrupted state paths on controller startup
+- Health patrol implements Erlang/OTP supervision with sliding-window crash loop quarantine
+- SHA-256 drift detection with env var allow-list to prevent spurious restarts
+- gc.* and convergence.* metadata namespaces control runtime behavior
+- Drain acknowledgment (`gc runtime drain-ack`) required for pool worker termination
 
 ---
 
@@ -115,6 +124,198 @@ All code invoking `gc` must resolve the binary path explicitly (see `gascity_bri
 ### 2.3 `dispatch_worker.py` — No Extraction Required
 
 Research found: `build_worker_prompt()` does not exist as a standalone function in `dispatch_worker.py`. Prompt construction is inlined in `_dispatch_via_sdk()`. Pool dispatch handles prompt storage independently via `pool_dispatch._write_prompt_file()`. No changes to `dispatch_worker.py` required.
+
+---
+
+## 2.1 GasCity Convergence Engine (Research Findings)
+
+The convergence engine (`internal/convergence/handler.go`) implements iterative goal pursuit via a 9-step state machine. Understanding this is critical for CoBuilder's crash recovery integration.
+
+### 9-Step HandleWispClosed Algorithm
+
+| Step | Name | Purpose |
+|------|------|---------|
+| 1 | Guard check | If `state=terminated`, close bead and skip |
+| 2 | Dedup check | Compare wisp iteration to `last_processed_wisp`; skip if already processed |
+| 3 | Derive iteration | Count closed child wisps to determine current iteration |
+| 4 | Gate evaluation | Run condition/hybrid gate; store result in metadata |
+| 5 | Persist gate outcome | Write `gate_outcome`, `gate_stdout`, `gate_stderr`, `gate_duration_ms` |
+| 6 | Record iteration note | Audit trail (informational) |
+| 7 | Prepare outcome | Determine: iterate, terminal (approved/no_convergence), or waiting_manual |
+| 8 | Emit event | `ConvergenceIteration` with full payload |
+| 9 | Commit point | Write state changes; `last_processed_wisp` LAST (dedup marker) |
+
+**Idempotency Key Format**: `converge:<bead-id>:iter:<N>` ensures exactly-once processing even across crashes.
+
+**Write Ordering Contract**: `last_processed_wisp` is written LAST. If a crash occurs mid-transaction, recovery re-processes the wisp.
+
+### Active Index for O(active) Performance
+
+The convergence store adapter maintains an in-memory index:
+
+```go
+type convergenceStoreAdapter struct {
+    store              beads.Store
+    activeIndex        map[string]string // bead ID → target agent
+}
+```
+
+This enables O(active) tick performance instead of O(all beads) — critical for high-bead-count deployments.
+
+### Reconciliation Paths (Startup Recovery)
+
+When the controller restarts after a crash, the Reconciler repairs interrupted states:
+
+| Path | State | Condition | Action |
+|------|-------|-----------|--------|
+| 1a | Missing/empty | No state field | Adopt existing wisp or pour first wisp |
+| 1b | `creating` | Interrupted creation | Terminate partial bead |
+| 2 | `terminated` (not closed) | Terminal transition incomplete | Complete terminal transition |
+| 3A | `waiting_manual` + terminal_reason | Stop requested but incomplete | Complete terminal transition |
+| 3B | `waiting_manual` + waiting_reason | Genuine hold | Re-emit waiting event, repair `last_processed_wisp` |
+| 3C | `waiting_manual` + neither | Orphaned state | Set default waiting_reason |
+| 4A | `active` + terminal_reason | Stop while active | Complete terminal transition |
+| 4B | `active` + closed wisp | Wisp closed but not processed | Replay `HandleWispClosed` |
+| 4B | `active` + open wisp | Wisp still running | No action |
+| 4B | `active` + no wisp | Missing active_wisp | Derive iteration and pour/adopt next wisp |
+
+**Integration implication**: CoBuilder pool dispatch beads should use idempotency keys to ensure exactly-once claiming across controller restarts.
+
+---
+
+## 2.2 Health Patrol Architecture (Research Findings)
+
+GasCity's health patrol implements Erlang/OTP-style supervision within the controller loop.
+
+### Crash Loop Quarantine
+
+```go
+type memoryCrashTracker struct {
+    maxRestarts   int              // default: 5
+    restartWindow time.Duration    // default: 1h
+    starts        map[string][]time.Time  // session → recent start timestamps
+}
+```
+
+**Key behaviors**:
+- **In-memory only** — lost on controller restart (intentional, matches Erlang/OTP)
+- **Sliding window pruning** on every `recordStart()` and `isQuarantined()` call
+- **Quarantine auto-expires** when all timestamps age past `restart_window`
+
+### SHA-256 Config Drift Detection
+
+Two-tier fingerprinting prevents spurious restarts:
+
+| Fingerprint Type | Change Triggers | Action |
+|-----------------|-----------------|--------|
+| `CoreFingerprint` | Command, allow-listed env vars, Nudge, PreStart | Drain + restart |
+| `LiveFingerprint` | SessionLive fields only | Re-apply without restart |
+
+**Env Allow-List**: ~50 `GC_*` vars are excluded from fingerprint to prevent restarts on ephemeral values (ports, sessions, etc.).
+
+### Idle Timeout Monitoring
+
+- Queries `runtime.Provider.GetLastActivity()` on each tick
+- Returns `true` if no I/O activity within per-agent `idle_timeout`
+- Provider returns zero time if activity tracking unsupported → silently disabled
+
+**Integration implication**: CoBuilder pool worker prompts should generate I/O activity (e.g., logging) during long operations to avoid idle kills.
+
+---
+
+## 2.3 Bead Metadata Namespaces (Research Findings)
+
+GasCity uses namespaced metadata keys for runtime control. CoBuilder integration should respect these conventions.
+
+### gc.* Namespace (Runtime Control)
+
+| Key | Purpose | Set By |
+|-----|---------|--------|
+| `gc.root_bead_id` | Workflow root ID for graph-first formulas | Instantiate |
+| `gc.idempotency_key` | Dedup key for exactly-once creation | Attach/PourWisp |
+| `gc.control_epoch` | Optimistic concurrency for attach | Attach |
+| `gc.routed_to` | Pool routing target (agent template name) | Work sling |
+
+### convergence.* Namespace (State Machine)
+
+| Key | Purpose | Values |
+|-----|---------|--------|
+| `convergence.state` | State machine state | `creating`, `active`, `waiting_manual`, `terminated` |
+| `convergence.iteration` | Current iteration number | Integer (string encoded) |
+| `convergence.active_wisp` | Current active wisp ID | Bead ID |
+| `convergence.gate_outcome` | Gate evaluation result | `pass`, `fail`, `timeout`, `error` |
+
+### Labels vs Metadata
+
+| Aspect | Labels | Metadata |
+|--------|--------|----------|
+| Type | `[]string` (slice) | `map[string]string` (key-value) |
+| Query | `bd list --label=X` | `bd get {id}` then read metadata |
+| Indexing | Indexed for fast lookup | No indexing |
+| Use case | Pool routing, categorization | Runtime state, control flags |
+
+**Integration decision**: CoBuilder uses labels for pool routing (`pool:codergen-worker`) and notes field (not metadata) for runtime data (signal_dir, node_id, prompt_file). This avoids conflicts with GasCity's internal metadata namespaces.
+
+---
+
+## 2.4 Integration Patterns (Research-Derived)
+
+### Socket-Based `gc poke` for Low-Latency Dispatch
+
+GasCity's default reconciliation tick is 30s. For responsive pool dispatch, CoBuilder calls `gc poke` after bead creation to trigger immediate reconcile. The poke command writes to the controller's Unix socket (`.gc/controller.sock`), signaling it to run a reconciliation pass immediately.
+
+**Implementation in pool_dispatch.py**:
+```python
+# After bd create succeeds:
+if gascity_bridge is not None:
+    gascity_bridge.poke()  # Triggers immediate reconcile
+```
+
+### Idempotency Keys for Crash Recovery
+
+Pool dispatch beads should use idempotency keys to ensure exactly-once claiming across controller restarts. The format follows GasCity's convention:
+
+```
+pool-dispatch:{pipeline_id}:{node_id}
+```
+
+**Implementation consideration**: Store idempotency key in bead metadata under `gc.idempotency_key`. GasCity's `PourWisp` checks for existing beads with matching keys before creating new ones.
+
+### Nil-Guard Tracker Pattern
+
+Health patrol uses nil-guard pattern for optional tracking:
+
+```go
+// From cmd/gc/controller.go
+if cr.idleTracker != nil {
+    if cr.idleTracker.checkIdle(sessionName, now) {
+        // handle idle
+    }
+}
+```
+
+**CoBuilder application**: Optional features (e.g., event bridging) should use similar nil-guard pattern to allow graceful degradation when components are unavailable.
+
+### Single-Instance via flock
+
+GasCity enforces single-controller via `flock(LOCK_EX|LOCK_NB)` on `.gc/controller.lock`. Second `gc start` fails immediately. CoBuilder's `start_controller()` should handle this gracefully by checking `is_healthy()` first.
+
+### Reconciliation on Startup
+
+When the controller restarts, it runs reconciliation to repair interrupted convergence states. Pool dispatch beads with `status=open` will be re-discovered by pool agents via normal work claiming lifecycle. No special handling required in CoBuilder.
+
+### Key Invariants (from GasCity Architecture)
+
+From `engdocs/architecture/health-patrol.md`:
+
+1. **Single controller**: `flock(LOCK_EX|LOCK_NB)` on `.gc/controller.lock`
+2. **Reconciliation is idempotent**: Same config + same running set → no side effects
+3. **Crash tracking is bounded**: O(max_restarts × num_agents) memory
+4. **Quarantine auto-expires**: Sliding window ensures eventual retry
+5. **Crash tracking resets on controller restart**: Intentional (Erlang/OTP parallel)
+6. **Config drift uses content hashing**: Not timestamps, deterministic SHA-256
+7. **No PID files for liveness**: Unix socket ping + process tree inspection
+8. **No role names in Go code**: All behavior from config (ZFC principle)
 
 ---
 
@@ -681,6 +882,18 @@ You are a CoBuilder pipeline worker dispatched via GasCity pool.
 - Agent: {{.Agent}}
 - Bead: {{.Bead.ID}}
 
+## Step 0: Crash Recovery Check (GUPP Principle)
+
+**If you find work on your hook, YOU RUN IT.** The hook having work IS the assignment.
+
+First, check if you have in-progress work from a previous session (crash recovery):
+
+```bash
+bd list --assignee={{.Agent}} --status=in_progress
+```
+
+If this returns a bead ID, claim it and skip to Step 1 with that bead ID instead of {{.Bead.ID}}.
+
 ## Step 1: Parse Your Metadata
 
 Run this to extract task details from the bead notes:
@@ -705,9 +918,9 @@ cat "$PROMPT_FILE"
 
 Execute the task described in `$PROMPT_FILE`. Follow all instructions in that file exactly.
 
-## Step 3: Completion Protocol — BOTH REQUIRED
+## Step 3: Completion Protocol — ALL THREE REQUIRED
 
-When your task is done, perform BOTH of these in order:
+When your task is done, perform ALL THREE of these in order:
 
 **1. Write CoBuilder signal (FIRST)**:
 
@@ -727,7 +940,16 @@ EOF
 bd close {{.Bead.ID}}
 ```
 
-Both are required. The signal file drives pipeline graph state. The bead close enables GasCity pool lifecycle management.
+**3. Drain acknowledgment (THIRD)**:
+
+```bash
+gc runtime drain-ack
+```
+
+All three are required:
+- Signal file drives CoBuilder pipeline graph state transitions
+- Bead close enables GasCity pool lifecycle management and auto-close of attached wisps
+- Drain-ack signals the controller that the worker is done and can be terminated (allows pool scaling down)
 
 ## If No Bead Available
 
@@ -747,11 +969,17 @@ Tails .gc/events.jsonl and republishes health events as agent.message
 events with agent_role="gascity". Runs as a daemon thread alongside
 the pipeline runner.
 
+GasCity Event Types (from internal/events/events.go):
+  Session Events: session.woke, session.stopped, session.crashed, session.draining,
+                  session.quarantined, session.idle_killed
+  Bead Events: bead.created, bead.closed, bead.updated
+  Controller Events: controller.started, controller.stopped
+
 Event type mapping (GasCity → CoBuilder agent.message payload):
-  agent.started    → {"gc_type": "agent.started", "agent": "codergen-worker/1"}
-  agent.crashed    → {"gc_type": "agent.crashed",  "agent": "...", "reason": "..."}
-  agent.quarantined → {"gc_type": "agent.quarantined", ...}
-  pool.scaled_up   → {"gc_type": "pool.scaled_up", "pool": "codergen-worker"}
+  session.woke       → {"gc_type": "session.woke", "session": "codergen-worker/1"}
+  session.crashed    → {"gc_type": "session.crashed", "session": "...", "reason": "..."}
+  session.quarantined → {"gc_type": "session.quarantined", ...}
+  session.idle_killed → {"gc_type": "session.idle_killed", ...}
 """
 from __future__ import annotations
 
@@ -1218,7 +1446,7 @@ cd workspace/gascity && make build && make install
 | AC-2.1 dispatch_mode check | Unit: `test_pipeline_runner_pool_dispatch.py` | Mock bridge + verify create_pool_bead called |
 | AC-2.2 Bead labels + metadata | Unit: `test_pool_dispatch.py` | Assert bd create args |
 | AC-2.3 Pool claiming | Integration | bd ready query returns unclaimed bead |
-| AC-2.4 Dual completion | Integration | Both signal file AND bead closed |
+| AC-2.4 Dual completion | Integration | Signal file written AND bead closed AND drain-ack run |
 | AC-2.5 Signal detection unchanged | Unit (existing pipeline_runner tests) | _process_signals unchanged |
 | AC-2.6 SDK fallback | Unit: `test_pipeline_runner_pool_dispatch.py` | is_healthy=False → SDK path |
 | AC-2.7 gc poke after creation | Unit: `test_pool_dispatch.py` | bridge.poke() called |
@@ -1309,9 +1537,10 @@ The prototype validates end-to-end viability for a single pipeline node through 
 
 ## 13. References
 
-- GasCity source: `workspace/gascity/` (local clone, MIT license)
-- Integration research: `docs/research/gascity-integration-research-20260403.md`
-- Prototype design research: `docs/research/gascity-prototype-design-20260403.md`
+- GasCity source: `github.com/gastownhall/gascity` (MIT license)
+- Pool dispatch research: `.pipelines/pipelines/evidence/GASCITY-INT-001-spike/gascity-bootstrap-swarm-research.md`
+- Controller/convergence research: `.pipelines/pipelines/evidence/GASCITY-INT-001-spike/gascity-controller-convergence-research.md`
+- Bead metadata research: `.pipelines/pipelines/evidence/GASCITY-INT-001-spike/gascity-metadata-formula-research.md`
 - Business requirements: `docs/prds/gascity-integration/PRD-GASCITY-INT-001.md`
 - Pipeline runner (integration target): `cobuilder/engine/pipeline_runner.py` line 2008 (`_dispatch_agent_sdk`)
 - Event bus types: `cobuilder/engine/events/types.py`
