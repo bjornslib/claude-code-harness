@@ -590,7 +590,44 @@ The LiveKit voice agent gains:
 
 ---
 
-## 13. Dependencies
+## 13. Architecture Pattern
+
+### Clean Architecture (Feature-First)
+
+The implementation MUST follow the Clean Architecture layer structure defined in `docs/AGENCHECK_CLEANUP.md` § "Layer Structure (Target Architecture)" — domain → service_layer → adapters → entrypoints.
+
+**Key decision**: Each domain gets its own self-contained directory rather than shared horizontal layer directories. This matches the 6 existing self-contained domains (aura/, user_chat/, eddy_validate/, etc.).
+
+The employer contact research agent lives in its own feature directory:
+
+```
+agencheck/
+└── employer_research/
+    ├── __init__.py
+    ├── router.py          # entrypoint — FastAPI routes / Prefect task entry
+    ├── service.py          # service_layer — orchestrates research pipeline
+    ├── repository.py       # adapters — Supabase employer_contacts CRUD
+    ├── domain.py           # domain — EmployerContact, ContactType, ConfidenceScore models
+    ├── researcher.py       # adapters — DSPy module (Perplexity + web search)
+    ├── classifier.py       # domain — contact classification logic
+    └── tests/
+        ├── test_classifier.py
+        ├── test_researcher.py
+        ├── test_service.py
+        └── conftest.py     # fixtures with mock Perplexity/web search responses
+```
+
+**Layer rules**:
+- **domain** (`domain.py`, `classifier.py`): Pure Python, no framework imports, no I/O. Pydantic models, classification logic, scoring formulas.
+- **service_layer** (`service.py`): Orchestrates the research pipeline. Calls adapters, applies domain logic, returns results. No direct API/DB calls.
+- **adapters** (`repository.py`, `researcher.py`): External integrations (Supabase, Perplexity API, web search). Implement interfaces defined by service layer.
+- **entrypoints** (`router.py`): FastAPI routes or Prefect task wrappers. Thin — delegates to service layer immediately.
+
+Dependencies flow inward: entrypoints → service_layer → domain ← adapters.
+
+---
+
+## 14. Dependencies
 
 | Dependency | Status | Notes |
 |------------|--------|-------|
