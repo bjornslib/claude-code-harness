@@ -1,0 +1,205 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 820" font-family="system-ui, -apple-system, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-auto">
+      <path d="M 0 0 L 10 3.5 L 0 7 z" fill="#555"/>
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-auto">
+      <path d="M 0 0 L 10 3.5 L 0 7 z" fill="#2563eb"/>
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-auto">
+      <path d="M 0 0 L 10 3.5 L 0 7 z" fill="#16a34a"/>
+    </marker>
+    <marker id="arrow-orange" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-auto">
+      <path d="M 0 0 L 10 3.5 L 0 7 z" fill="#ea580c"/>
+    </marker>
+    <filter id="shadow" x="-2%" y="-2%" width="104%" height="104%">
+      <feDropShadow dx="1" dy="2" stdDeviation="2" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1100" height="820" fill="#f8fafc" rx="8"/>
+
+  <!-- Title -->
+  <text x="550" y="36" text-anchor="middle" font-size="18" font-weight="700" fill="#0f172a">GasCity + CoBuilder: Integrated Architecture</text>
+  <text x="550" y="56" text-anchor="middle" font-size="12" fill="#64748b">GasCity is the outer orchestration layer; CoBuilder adds deterministic DAG dispatch</text>
+
+  <!-- ============================================ -->
+  <!-- GASCITY CITY (outermost container)           -->
+  <!-- ============================================ -->
+  <rect x="30" y="75" width="1040" height="720" rx="12" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-dasharray="8,4"/>
+  <rect x="30" y="75" width="200" height="28" rx="6" fill="#2563eb"/>
+  <text x="130" y="94" text-anchor="middle" font-size="13" font-weight="600" fill="white">GasCity City</text>
+  <text x="240" y="94" font-size="11" fill="#2563eb" font-style="italic">~/cobuilder-city/</text>
+
+  <!-- City-level components -->
+  <!-- Controller -->
+  <rect x="60" y="120" width="220" height="110" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="170" y="142" text-anchor="middle" font-size="13" font-weight="600" fill="#1e40af">GC Controller</text>
+  <text x="170" y="160" text-anchor="middle" font-size="10" fill="#3b82f6">gc start  ·  30s reconcile</text>
+  <line x1="80" y1="170" x2="260" y2="170" stroke="#bfdbfe" stroke-width="1"/>
+  <text x="70" y="186" font-size="9" fill="#475569">Responsibilities:</text>
+  <text x="78" y="200" font-size="9" fill="#475569">· Agent lifecycle (start/stop/scale)</text>
+  <text x="78" y="213" font-size="9" fill="#475569">· Health patrol + crash recovery</text>
+  <text x="78" y="226" font-size="9" fill="#475569">· Pool scaling via scale_check</text>
+
+  <!-- Event Bus -->
+  <rect x="300" y="120" width="180" height="60" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="390" y="142" text-anchor="middle" font-size="13" font-weight="600" fill="#1e40af">Event Bus</text>
+  <text x="390" y="158" text-anchor="middle" font-size="10" fill="#3b82f6">.gc/events.jsonl</text>
+  <text x="390" y="172" text-anchor="middle" font-size="9" fill="#64748b">append-only pub/sub</text>
+
+  <!-- Bead Store -->
+  <rect x="500" y="120" width="180" height="60" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="590" y="142" text-anchor="middle" font-size="13" font-weight="600" fill="#1e40af">Bead Store (bd)</text>
+  <text x="590" y="158" text-anchor="middle" font-size="10" fill="#3b82f6">CRUD · Labels · Query</text>
+  <text x="590" y="172" text-anchor="middle" font-size="9" fill="#64748b">shared by both systems</text>
+
+  <!-- city.toml -->
+  <rect x="700" y="120" width="160" height="60" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="780" y="142" text-anchor="middle" font-size="13" font-weight="600" fill="#1e40af">city.toml</text>
+  <text x="780" y="158" text-anchor="middle" font-size="10" fill="#3b82f6">agents · rigs · packs</text>
+  <text x="780" y="172" text-anchor="middle" font-size="9" fill="#64748b">progressive activation</text>
+
+  <!-- Prompt Templates -->
+  <rect x="880" y="120" width="170" height="60" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="965" y="142" text-anchor="middle" font-size="13" font-weight="600" fill="#1e40af">Prompt Templates</text>
+  <text x="965" y="158" text-anchor="middle" font-size="10" fill="#3b82f6">packs/*/prompts/*.tmpl</text>
+  <text x="965" y="172" text-anchor="middle" font-size="9" fill="#64748b">role = config, not code</text>
+
+  <!-- ============================================ -->
+  <!-- RIG (project directory)                      -->
+  <!-- ============================================ -->
+  <rect x="60" y="250" width="990" height="530" rx="10" fill="none" stroke="#16a34a" stroke-width="2" stroke-dasharray="6,3"/>
+  <rect x="60" y="250" width="260" height="26" rx="6" fill="#16a34a"/>
+  <text x="190" y="268" text-anchor="middle" font-size="12" font-weight="600" fill="white">Rig: target-project/</text>
+  <text x="330" y="268" font-size="10" fill="#16a34a" font-style="italic">gc rig add /path/to/target</text>
+
+  <!-- ============================================ -->
+  <!-- COBUILDER DOT ENGINE (inside the rig)        -->
+  <!-- ============================================ -->
+  <rect x="90" y="295" width="540" height="220" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="2" filter="url(#shadow)"/>
+  <rect x="90" y="295" width="340" height="26" rx="6" fill="#d97706"/>
+  <text x="260" y="313" text-anchor="middle" font-size="12" font-weight="600" fill="white">CoBuilder DOT Pipeline Engine</text>
+
+  <!-- DOT Graph -->
+  <rect x="110" y="335" width="200" height="80" rx="6" fill="white" stroke="#f59e0b" stroke-width="1"/>
+  <text x="210" y="355" text-anchor="middle" font-size="11" font-weight="600" fill="#92400e">DOT Pipeline Graph</text>
+  <text x="210" y="372" text-anchor="middle" font-size="9" fill="#78716c">Deterministic DAG ordering</text>
+  <text x="210" y="386" text-anchor="middle" font-size="9" fill="#78716c">research → refine → codergen</text>
+  <text x="210" y="400" text-anchor="middle" font-size="9" fill="#78716c">→ wait.cobuilder → wait.human</text>
+
+  <!-- Pipeline Runner -->
+  <rect x="330" y="335" width="180" height="80" rx="6" fill="white" stroke="#f59e0b" stroke-width="1"/>
+  <text x="420" y="355" text-anchor="middle" font-size="11" font-weight="600" fill="#92400e">pipeline_runner.py</text>
+  <text x="420" y="372" text-anchor="middle" font-size="9" fill="#78716c">Graph traversal + gates</text>
+  <text x="420" y="386" text-anchor="middle" font-size="9" fill="#78716c">Checkpoint / resume</text>
+  <text x="420" y="400" text-anchor="middle" font-size="9" fill="#78716c">Signal file processing</text>
+
+  <!-- Dispatch Decision -->
+  <polygon points="310,460 380,435 450,460 380,485" fill="#fff7ed" stroke="#ea580c" stroke-width="1.5"/>
+  <text x="380" y="458" text-anchor="middle" font-size="9" font-weight="600" fill="#9a3412">dispatch</text>
+  <text x="380" y="470" text-anchor="middle" font-size="9" font-weight="600" fill="#9a3412">mode?</text>
+
+  <!-- Arrow from runner to dispatch -->
+  <line x1="420" y1="415" x2="400" y2="435" stroke="#ea580c" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+
+  <!-- gc sling path (left) -->
+  <text x="280" y="453" font-size="9" font-weight="600" fill="#16a34a">"pool"</text>
+  <line x1="310" y1="460" x2="200" y2="500" stroke="#16a34a" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+
+  <!-- SDK direct path (right) -->
+  <text x="460" y="453" font-size="9" font-weight="600" fill="#6b7280">"sdk"</text>
+  <line x1="450" y1="460" x2="540" y2="500" stroke="#6b7280" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- gc sling / bd create -->
+  <rect x="110" y="500" width="200" height="60" rx="6" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="210" y="520" text-anchor="middle" font-size="11" font-weight="600" fill="#166534">gc sling / bd create</text>
+  <text x="210" y="536" text-anchor="middle" font-size="9" fill="#15803d">Create bead with pool labels</text>
+  <text x="210" y="550" text-anchor="middle" font-size="9" fill="#15803d">gc poke → immediate reconcile</text>
+
+  <!-- SDK Direct -->
+  <rect x="460" y="500" width="160" height="50" rx="6" fill="#f3f4f6" stroke="#9ca3af" stroke-width="1" filter="url(#shadow)"/>
+  <text x="540" y="520" text-anchor="middle" font-size="11" font-weight="600" fill="#374151">SDK Direct</text>
+  <text x="540" y="536" text-anchor="middle" font-size="9" fill="#6b7280">Fallback (existing path)</text>
+
+  <!-- ============================================ -->
+  <!-- POOL AGENTS (managed by GC Controller)       -->
+  <!-- ============================================ -->
+  <rect x="660" y="295" width="370" height="220" rx="8" fill="#f0fdf4" stroke="#16a34a" stroke-width="2" filter="url(#shadow)"/>
+  <rect x="660" y="295" width="280" height="26" rx="6" fill="#16a34a"/>
+  <text x="800" y="313" text-anchor="middle" font-size="12" font-weight="600" fill="white">Pool Agents (GC-managed)</text>
+
+  <!-- Agent boxes -->
+  <rect x="680" y="335" width="155" height="75" rx="6" fill="white" stroke="#86efac" stroke-width="1"/>
+  <text x="757" y="355" text-anchor="middle" font-size="10" font-weight="600" fill="#166534">codergen-worker</text>
+  <text x="757" y="370" text-anchor="middle" font-size="9" fill="#4ade80">claude subprocess</text>
+  <text x="757" y="385" text-anchor="middle" font-size="9" fill="#64748b">work_query: bd ready</text>
+  <text x="757" y="400" text-anchor="middle" font-size="9" fill="#64748b">  --label=pool:codergen</text>
+
+  <rect x="855" y="335" width="155" height="75" rx="6" fill="white" stroke="#86efac" stroke-width="1"/>
+  <text x="932" y="355" text-anchor="middle" font-size="10" font-weight="600" fill="#166534">research-worker</text>
+  <text x="932" y="370" text-anchor="middle" font-size="9" fill="#4ade80">claude subprocess</text>
+  <text x="932" y="385" text-anchor="middle" font-size="9" fill="#64748b">work_query: bd ready</text>
+  <text x="932" y="400" text-anchor="middle" font-size="9" fill="#64748b">  --label=pool:research</text>
+
+  <!-- Dual Protocol -->
+  <rect x="700" y="430" width="300" height="70" rx="6" fill="#fefce8" stroke="#ca8a04" stroke-width="1"/>
+  <text x="850" y="450" text-anchor="middle" font-size="10" font-weight="600" fill="#854d0e">Dual-Protocol Completion</text>
+  <text x="850" y="466" text-anchor="middle" font-size="9" fill="#a16207">1. Write signal file → pipeline_runner</text>
+  <text x="850" y="480" text-anchor="middle" font-size="9" fill="#a16207">2. bd close → GC pool reclaim</text>
+  <text x="850" y="494" text-anchor="middle" font-size="9" fill="#92400e" font-weight="600">Both required. Neither alone is sufficient.</text>
+
+  <!-- ============================================ -->
+  <!-- SIGNAL + BEAD FLOW arrows                    -->
+  <!-- ============================================ -->
+
+  <!-- gc sling to pool agents -->
+  <path d="M 310 530 Q 500 580 680 400" fill="none" stroke="#16a34a" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#arrow-green)"/>
+  <text x="490" y="575" font-size="9" fill="#16a34a" font-weight="600">bead with pool label</text>
+  <text x="490" y="587" font-size="9" fill="#16a34a">→ controller reconcile → agent claims</text>
+
+  <!-- Signal file return -->
+  <path d="M 700 480 Q 580 540 530 500" fill="none" stroke="#ea580c" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrow-orange)"/>
+  <text x="590" y="530" font-size="8" fill="#ea580c">signal file</text>
+
+  <!-- Controller to Pool Agents -->
+  <line x1="280" y1="195" x2="680" y2="340" stroke="#2563eb" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrow-blue)"/>
+  <text x="480" y="252" font-size="9" fill="#2563eb" font-weight="600">health patrol · scale · restart</text>
+
+  <!-- ============================================ -->
+  <!-- RESPONSIBILITY LEGEND                        -->
+  <!-- ============================================ -->
+  <rect x="90" y="580" width="940" height="185" rx="8" fill="white" stroke="#e2e8f0" stroke-width="1" filter="url(#shadow)"/>
+  <text x="560" y="602" text-anchor="middle" font-size="13" font-weight="700" fill="#0f172a">Responsibility Map</text>
+
+  <!-- GasCity column -->
+  <rect x="110" y="615" width="280" height="140" rx="6" fill="#eff6ff"/>
+  <text x="250" y="635" text-anchor="middle" font-size="12" font-weight="600" fill="#1e40af">GasCity Owns</text>
+  <text x="120" y="655" font-size="10" fill="#334155">City lifecycle (init, start, stop)</text>
+  <text x="120" y="672" font-size="10" fill="#334155">Rig management (add, hooks)</text>
+  <text x="120" y="689" font-size="10" fill="#334155">Agent lifecycle (spawn, kill, scale)</text>
+  <text x="120" y="706" font-size="10" fill="#334155">Health patrol + crash recovery</text>
+  <text x="120" y="723" font-size="10" fill="#334155">Pool scaling (scale_check)</text>
+  <text x="120" y="740" font-size="10" fill="#334155">Bead store + event bus</text>
+
+  <!-- CoBuilder column -->
+  <rect x="410" y="615" width="280" height="140" rx="6" fill="#fff7ed"/>
+  <text x="550" y="635" text-anchor="middle" font-size="12" font-weight="600" fill="#92400e">CoBuilder Owns</text>
+  <text x="420" y="655" font-size="10" fill="#334155">DOT graph ordering (DAG)</text>
+  <text x="420" y="672" font-size="10" fill="#334155">Quality gates (wait.cobuilder)</text>
+  <text x="420" y="689" font-size="10" fill="#334155">Checkpoint / resume</text>
+  <text x="420" y="706" font-size="10" fill="#334155">Blind acceptance testing</text>
+  <text x="420" y="723" font-size="10" fill="#334155">Signal file protocol</text>
+  <text x="420" y="740" font-size="10" fill="#334155">Pipeline observability (18 events)</text>
+
+  <!-- Shared column -->
+  <rect x="710" y="615" width="300" height="140" rx="6" fill="#f0fdf4"/>
+  <text x="860" y="635" text-anchor="middle" font-size="12" font-weight="600" fill="#166534">Shared / Integration Surface</text>
+  <text x="720" y="655" font-size="10" fill="#334155">Beads (bd) — work unit primitive</text>
+  <text x="720" y="672" font-size="10" fill="#334155">gc sling — route beads to pools</text>
+  <text x="720" y="689" font-size="10" fill="#334155">Dual-protocol completion</text>
+  <text x="720" y="706" font-size="10" fill="#334155">Prompt templates (pack-based)</text>
+  <text x="720" y="723" font-size="10" fill="#334155">city.toml agent definitions</text>
+  <text x="720" y="740" font-size="10" fill="#334155">Event bridging (GC → CoBuilder)</text>
+</svg>
