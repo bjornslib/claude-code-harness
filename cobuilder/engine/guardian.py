@@ -129,16 +129,25 @@ _GUARDIAN_TOOLS: list[str] = [
     "mcp__perplexity__perplexity_reason",
     "mcp__perplexity__perplexity_research",
     "mcp__perplexity__perplexity_search",
-    # Claude-in-Chrome: browser-based validation (UI Gherkin scenarios)
-    "mcp__claude-in-chrome__navigate",
-    "mcp__claude-in-chrome__read_page",
-    "mcp__claude-in-chrome__find",
-    "mcp__claude-in-chrome__get_page_text",
-    "mcp__claude-in-chrome__computer",
-    "mcp__claude-in-chrome__javascript_tool",
-    "mcp__claude-in-chrome__form_input",
-    "mcp__claude-in-chrome__tabs_context_mcp",
-    "mcp__claude-in-chrome__tabs_create_mcp",
+    # Chrome DevTools MCP: browser-based validation (UI Gherkin scenarios)
+    # Available via project-level MCP config — works in SDK sessions (unlike claude-in-chrome)
+    "mcp__chrome-devtools__navigate_page",
+    "mcp__chrome-devtools__take_screenshot",
+    "mcp__chrome-devtools__take_snapshot",
+    "mcp__chrome-devtools__evaluate_script",
+    "mcp__chrome-devtools__click",
+    "mcp__chrome-devtools__fill",
+    "mcp__chrome-devtools__fill_form",
+    "mcp__chrome-devtools__list_pages",
+    "mcp__chrome-devtools__select_page",
+    "mcp__chrome-devtools__new_page",
+    "mcp__chrome-devtools__close_page",
+    "mcp__chrome-devtools__hover",
+    "mcp__chrome-devtools__press_key",
+    "mcp__chrome-devtools__type_text",
+    "mcp__chrome-devtools__wait_for",
+    "mcp__chrome-devtools__list_console_messages",
+    "mcp__chrome-devtools__list_network_requests",
 ]
 # When running in an impl repo without .logfire/, logfire.configure()
 # triggers an interactive prompt that crashes non-interactive contexts.
@@ -184,6 +193,7 @@ def build_system_prompt(
     max_retries: int,
     target_dir: str = "",
     max_cycles: int = 3,
+    event_driven: bool = False,
 ) -> str:
     """Return the system prompt that instructs the Pilot agent how to run the pipeline.
 
@@ -195,13 +205,15 @@ def build_system_prompt(
         max_retries: Maximum retries allowed per node before escalation.
         target_dir: Target implementation repo directory.
         max_cycles: Maximum full research→validate cycles before forced exit (default: 3).
+        event_driven: If True, append event-driven mode instructions that override
+            the polling behavior in Phase 2.
 
     Returns:
         Formatted system prompt string.
     """
     target_dir_line = f"- Target directory: {target_dir}"
-    target_dir_flag = f" --target-dir {target_dir}"
-    return f"""\
+    target_dir_flag = f" --target-dir {target_dir}"  # noqa: F841
+    base_prompt = f"""\
 You are the Pilot agent (Layer 1) in a 4-layer pipeline execution system.
 
 Your role: Drive pipeline execution autonomously by reading the DOT graph, spawning
@@ -458,16 +470,49 @@ is validated.
    b. For wait.cobuilder gates — run the **Pilot Gherkin Validation Protocol**:
 
       ### Pilot Gherkin Validation Protocol
-      You MUST independently validate the upstream worker's implementation by writing and
-      executing your own Gherkin scenarios. Do NOT rubber-stamp — you are the quality gate.
+      You MUST independently validate the upstream worker's implementation. Do NOT rubber-stamp
+      — you are the quality gate. Code analysis alone is NOT sufficient for UI features.
+
+      CRITICAL RULE: If a feature has validation_method=browser-required, you MUST call
+      mcp__chrome-devtools__* tools (navigate_page, evaluate_script, take_screenshot, click, wait_for).
+      If you validate a browser-required feature using ONLY code reading or npm run build,
+      the validation is INVALID and you MUST NOT pass the gate. Score it 0.0 instead.
+      Browser validation is NON-NEGOTIABLE for UI features — there are no fallbacks.
+
+      **Step 0: Check for pre-existing acceptance tests (ALWAYS DO THIS FIRST)**
+      - Read the gate node's `prompt` attribute for the PRD/SD reference
+      - Check if `acceptance-tests/<prd_ref>/` exists in the harness repo (cobuilder_root)
+      - If it exists, read `acceptance-tests/<prd_ref>/manifest.yaml` for:
+        - Feature list with `validation_method` per feature
+        - Scoring thresholds (accept/investigate/reject)
+      - If `acceptance-tests/<prd_ref>/executable-tests/` exists:
+        - These are EXECUTABLE browser test specs — YAML files that map Gherkin scenarios
+          to mcp__chrome-devtools__* tool calls with assertions
+        - You MUST execute these using mcp__chrome-devtools__* tools — NOT just read them
+        - Read `executable-tests/config.yaml` for base_url and test data
+        - For EACH test in each YAML file:
+          1. Call mcp__chrome-devtools__navigate_page to load the page
+          2. Call mcp__chrome-devtools__evaluate_script to run each JS assertion
+          3. Call mcp__chrome-devtools__take_screenshot for evidence
+          4. Record PASS/FAIL per assertion
+        - If Chrome is not reachable, score ALL browser-required features as BLOCKED (0.0)
+          and report the blocker — do NOT fall back to code analysis
 
       **Step 1: Gather context**
       - Read the upstream codergen node's `acceptance` attribute from the DOT file
       - Read the worker's completion signal from processed/ to see `files_changed`
       - Read the validator's scoring signal (if exists) to see `criteria_results`
 
-      **Step 2: Write Gherkin scenarios**
-      Create a `.feature` file: `acceptance-tests/{pipeline_id}/<gate_node>-pilot.feature`
+      **Step 2: Determine validation method per feature**
+      Check `validation_method` in the manifest (or infer from file types):
+      - `browser-required` → You MUST use mcp__chrome-devtools__* tools to load the page
+        and verify DOM structure, CSS classes, layout, and visual elements
+      - `api-required` → You MUST make real HTTP requests (curl/httpx)
+      - `code-analysis` → Read source files and verify logic
+      - `hybrid` → Mix of methods as appropriate
+
+      If executable-tests/ exist, use them. Otherwise write your own Gherkin:
+      Create a `.feature` file: `acceptance-tests/{{pipeline_id}}/<gate_node>-pilot.feature`
 
       Each AC gets a scenario tagged with its validation method:
       - `AC-1 [browser-check]: ...` → tag scenario with `@browser-check`
@@ -488,10 +533,11 @@ is validated.
 
       **Step 3: Execute each scenario**
       Run each scenario using its tagged method:
-      - `@browser-check`: Use chrome-devtools/playwright MCP to navigate and verify UI
+      - `@browser-check`: Use mcp__chrome-devtools__navigate_page, evaluate_script,
+        take_screenshot, click, wait_for to load pages and verify UI
       - `@api-call`: Use `Bash(command="curl ...")` or httpx to make real HTTP requests
       - `@unit-test`: Run `Bash(command="pytest <test_file>")` or `Bash(command="jest <test>")`
-      - `@code-review`: Use Read/Grep to inspect implementation (lowest confidence)
+      - `@code-review`: Use Read/Grep to inspect implementation (LOWEST confidence — avoid for UI)
 
       **Step 4: Decide based on results**
       - ALL scenarios pass → transition gate to validated:
@@ -725,12 +771,71 @@ When a PLAN node needs to generate a child implementation pipeline:
 - If the PRD requirements aren't achievable as written, escalate with a specific proposal
 """
 
+    if not event_driven:
+        return base_prompt
+
+    # In event-driven mode, append override instructions that replace the polling loop.
+    event_driven_section = f"""
+
+## EVENT-DRIVEN MODE (ACTIVE)
+
+**IMPORTANT: You are running in event-driven mode. This OVERRIDES the polling instructions
+in Phase 2 Step 5 above.**
+
+### How Event-Driven Mode Works
+- You will receive GATE EVENTS, FAILURE EVENTS, and COMPLETION EVENTS as separate
+  user messages (queries) in this same conversation
+- Between queries, you are SLEEPING at zero cost — the Python layer watches the signal
+  directory using filesystem events (watchdog) and wakes you only when attention is needed
+- Your conversation context is PRESERVED across queries — you remember all prior gates,
+  decisions, and validation results
+
+### What You Should Do Differently
+
+**Phase 2 (Launch)**:
+- Still dispatch research/refine nodes synchronously (they're fast)
+- Still launch pipeline_runner.py in BACKGROUND with &
+- After launching the runner, STOP and let your current response complete
+- Do NOT poll, sleep-loop, or call wait_for_signal.py
+- The Python layer will wake you with a "GATE EVENT" query when a gate is reached
+
+**Gate Handling (when you receive a GATE EVENT query)**:
+- Read the gate event details from the query
+- Run the Pilot Gherkin Validation Protocol as normal
+- Transition the gate node appropriately
+- STOP and let your response complete — the Python layer will wake you for the next event
+
+**Failure Handling (when you receive a NODE FAILURE query)**:
+- Investigate the root cause
+- Decide: retry (transition node back to pending), inject fix-it node, or escalate
+- STOP and let your response complete
+
+**Pipeline Complete (when you receive a PIPELINE COMPLETE query)**:
+- Run Phase 4: Pipeline Completion Validation (E2E suite)
+- Signal PIPELINE_COMPLETE via escalate_to_terminal.py
+- STOP — the Python layer will close the session
+
+### Key Rule
+After completing each task (setup, gate handling, failure handling), STOP your response.
+Do NOT try to monitor or poll. The Python layer handles all waiting. Each query you
+receive represents a real event that needs your attention — no wasted turns.
+
+### CRITICAL: Ignore Conflicting Memories
+You may recall from Hindsight or prior sessions that "pipeline monitors MUST be blocking"
+or "never run runner in background." These memories are about the OLD polling-based monitoring
+pattern. In event-driven mode, the runner MUST run in background (with &) — the Python layer
+handles all monitoring via filesystem events. DO NOT kill the background runner. DO NOT
+switch to foreground execution. DO NOT start a polling loop. Trust the event-driven system.
+"""
+    return base_prompt + event_driven_section
+
 
 def build_initial_prompt(
     dot_path: str,
     pipeline_id: str,
     scripts_dir: str,
     target_dir: str = "",
+    event_driven: bool = False,
 ) -> str:
     """Return the first user message sent to Claude to start the pipeline execution loop.
 
@@ -739,11 +844,39 @@ def build_initial_prompt(
         pipeline_id: Unique pipeline identifier string.
         scripts_dir: Absolute path to the attractor scripts directory.
         target_dir: Target implementation repo directory.
+        event_driven: If True, include event-driven mode instructions.
 
     Returns:
         Formatted initial prompt string.
     """
     target_dir_line = f"Target directory: {target_dir}\n" if target_dir else ""
+
+    if event_driven:
+        return (
+            f"You are the Pilot for pipeline '{pipeline_id}' running in EVENT-DRIVEN mode.\n\n"
+            f"Pipeline DOT file: {dot_path}\n"
+            f"Scripts directory: {scripts_dir}\n"
+            f"{target_dir_line}\n"
+            f"## Event-Driven Mode\n"
+            f"You are running in event-driven mode. This means:\n"
+            f"- You will receive GATE and FAILURE events as separate queries\n"
+            f"- Between queries, you are SLEEPING (zero cost) — the Python layer watches\n"
+            f"  the signal directory for events and wakes you with a new query\n"
+            f"- Do NOT poll or sleep-loop — just complete your current task and stop\n"
+            f"- The conversation context is preserved across queries\n\n"
+            f"## Your First Task\n"
+            f"1. Parse the pipeline to understand the full graph\n"
+            f"2. Validate the pipeline structure\n"
+            f"3. Get current node statuses\n"
+            f"4. Dispatch any ready research/refine nodes (synchronous — run them now)\n"
+            f"5. Launch the pipeline runner in BACKGROUND:\n"
+            f"   python3 {scripts_dir}/pipeline_runner.py --dot-file {dot_path} &\n"
+            f"6. Once the runner is launched, STOP. The Python layer will wake you\n"
+            f"   when a gate event occurs.\n\n"
+            f"If the pipeline is already partially complete (some nodes are already validated),\n"
+            f"skip those nodes and continue from the current state.\n"
+        )
+
     return (
         f"You are the Pilot for pipeline '{pipeline_id}'.\n\n"
         f"Pipeline DOT file: {dot_path}\n"
@@ -992,6 +1125,10 @@ Examples:
                         help=f"Max retries per node before escalating (default: {DEFAULT_MAX_RETRIES})")
     parser.add_argument("--dry-run", action="store_true", dest="dry_run",
                         help="Log configuration without invoking the SDK (for testing)")
+    parser.add_argument("--event-driven", action="store_true", dest="event_driven",
+                        help="Use event-driven multi-query mode: Pilot sleeps between "
+                             "gates (zero LLM cost) and wakes on filesystem events. "
+                             "Default: continuous single-conversation mode.")
 
     ns = parser.parse_args(argv)
 
@@ -1174,6 +1311,269 @@ async def _run_agent(
 
 
 # ---------------------------------------------------------------------------
+# Event-driven agent runner (multi-query pattern)
+# ---------------------------------------------------------------------------
+
+
+async def _run_agent_event_driven(
+    initial_prompt: str,
+    options: Any,
+    *,
+    pipeline_id: str = "",
+    signals_dir: str = "",
+    dot_path: str = "",
+    gate_timeout: float = DEFAULT_SIGNAL_TIMEOUT,
+) -> None:
+    """Run the Pilot in event-driven mode using multi-query on one SDK session.
+
+    Instead of the Pilot polling in a bash sleep loop (burning LLM turns on
+    "nothing happened yet"), this function:
+
+    1. Sends the initial prompt — Pilot parses DOT, dispatches research/refine,
+       launches pipeline_runner.py in background
+    2. Blocks on filesystem events via gate_watch.async_watch() — ZERO LLM cost
+    3. When an event occurs (gate, failure, completion), sends a new query to the
+       SAME conversation — Pilot handles the event with full prior context
+    4. Repeats until pipeline completes, fails terminally, or max retries exhausted
+
+    The conversation context is preserved across queries — the Pilot remembers
+    all prior gates, decisions, and validation results.
+
+    Args:
+        initial_prompt: First user message to start pipeline execution.
+        options: Configured ClaudeCodeOptions instance.
+        pipeline_id: Pipeline identifier for event correlation.
+        signals_dir: Signal directory to watch for gate/failure events.
+        dot_path: DOT file path for pipeline completion detection.
+        gate_timeout: Max seconds to wait per gate watch cycle.
+    """
+    import time as _time
+
+    from claude_code_sdk import (
+        ClaudeSDKClient,
+        AssistantMessage,
+        UserMessage,
+        ResultMessage,
+        TextBlock,
+        ThinkingBlock,
+        ToolUseBlock,
+        ToolResultBlock,
+    )
+    from cobuilder.engine.gate_watch import async_watch
+
+    turn_count = 0
+    tool_call_count = 0
+    query_count = 0
+    start_time = _time.time()
+    max_queries = 50  # safety limit — each query handles one event
+
+    # Resolve JSONL path for event writing
+    _jsonl_path = ""
+    if _EVENTS_AVAILABLE and _write_event and signals_dir:
+        _jsonl_path = os.path.join(signals_dir, "pipeline-events.jsonl")
+
+    def _emit(event: Any) -> None:
+        if _jsonl_path and _write_event:
+            try:
+                _write_event(_jsonl_path, event)
+            except Exception:
+                pass
+
+    async def _consume_response(client: ClaudeSDKClient) -> ResultMessage | None:
+        """Consume all messages from receive_response(), logging them."""
+        nonlocal turn_count, tool_call_count
+        result_msg = None
+        async for message in client.receive_response():
+            if isinstance(message, AssistantMessage):
+                turn_count += 1
+                for block in message.content:
+                    if isinstance(block, TextBlock):
+                        text_preview = block.text[:300] if block.text else ""
+                        logfire.info("guardian.assistant_text", turn=turn_count,
+                                     text_length=len(block.text) if block.text else 0,
+                                     text_preview=text_preview)
+                        if _EvB and pipeline_id:
+                            _emit(_EvB.agent_message(
+                                pipeline_id=pipeline_id, node_id=None,
+                                agent_role="guardian", turn=turn_count,
+                                text=block.text or ""))
+                        print(f"[Pilot] {block.text}", flush=True)
+                    elif isinstance(block, ToolUseBlock):
+                        tool_call_count += 1
+                        input_preview = json.dumps(block.input)[:500]
+                        logfire.info("guardian.tool_use", tool_name=block.name,
+                                     tool_use_id=block.id,
+                                     tool_input_preview=input_preview,
+                                     turn=turn_count, tool_call_number=tool_call_count)
+                        if _EvB and pipeline_id:
+                            _emit(_EvB.agent_tool_call(
+                                pipeline_id=pipeline_id, node_id=None,
+                                agent_role="guardian", turn=turn_count,
+                                tool_name=block.name, tool_use_id=block.id,
+                                input_preview=input_preview))
+                        print(f"[Pilot tool] {block.name}: {input_preview[:200]}", flush=True)
+                    elif isinstance(block, ThinkingBlock):
+                        logfire.info("guardian.thinking", turn=turn_count,
+                                     thinking_length=len(block.thinking) if block.thinking else 0,
+                                     thinking_preview=(block.thinking or "")[:200])
+                        if _EvB and pipeline_id:
+                            _emit(_EvB.agent_thinking(
+                                pipeline_id=pipeline_id, node_id=None,
+                                agent_role="guardian", turn=turn_count,
+                                thinking=block.thinking or ""))
+            elif isinstance(message, UserMessage):
+                if isinstance(message.content, list):
+                    for block in message.content:
+                        if isinstance(block, ToolResultBlock):
+                            content_preview = ""
+                            content_length = 0
+                            if isinstance(block.content, str):
+                                content_preview = block.content[:500]
+                                content_length = len(block.content)
+                            elif isinstance(block.content, list):
+                                content_preview = json.dumps(block.content)[:500]
+                                content_length = len(json.dumps(block.content))
+                            logfire.info("guardian.tool_result",
+                                         tool_use_id=block.tool_use_id,
+                                         is_error=block.is_error or False,
+                                         content_length=content_length,
+                                         content_preview=content_preview,
+                                         turn=turn_count)
+                            if _EvB and pipeline_id:
+                                _emit(_EvB.agent_tool_result(
+                                    pipeline_id=pipeline_id, node_id=None,
+                                    agent_role="guardian", turn=turn_count,
+                                    tool_use_id=block.tool_use_id,
+                                    is_error=block.is_error or False,
+                                    content_length=content_length))
+            elif isinstance(message, ResultMessage):
+                elapsed = _time.time() - start_time
+                logfire.info("guardian.result",
+                             session_id=message.session_id,
+                             is_error=message.is_error,
+                             num_turns=message.num_turns,
+                             duration_ms=message.duration_ms,
+                             duration_api_ms=message.duration_api_ms,
+                             total_cost_usd=message.total_cost_usd,
+                             usage=message.usage,
+                             result_preview=(message.result or "")[:300],
+                             wall_time_seconds=round(elapsed, 2),
+                             total_tool_calls=tool_call_count)
+                print(f"[Pilot query #{query_count}] turns={message.num_turns} cost=${message.total_cost_usd} tools={tool_call_count}", flush=True)
+                result_msg = message
+        return result_msg
+
+    with logfire.span("guardian.run_agent_event_driven", pipeline_id=pipeline_id):
+        async with ClaudeSDKClient(options=options) as client:
+            await client.connect()
+
+            # --- Query 1: Initial setup (parse, validate, dispatch, launch runner) ---
+            query_count += 1
+            logfire.info("guardian.query_initial", query=query_count)
+            print(f"\n[Gate Watch] Query #{query_count}: Initial pipeline setup", flush=True)
+            await client.query(initial_prompt)
+            await _consume_response(client)
+
+            # --- Event loop: block on filesystem events, wake Pilot per event ---
+            while query_count < max_queries:
+                logfire.info("guardian.gate_watch_start", query=query_count,
+                             signal_dir=signals_dir, dot_path=dot_path)
+                print(f"\n[Gate Watch] Sleeping on filesystem events (timeout={gate_timeout}s)...", flush=True)
+
+                event = await async_watch(
+                    signal_dir=signals_dir,
+                    dot_path=dot_path,
+                    timeout=gate_timeout,
+                )
+
+                event_type = event.get("event", "unknown")
+                logfire.info("guardian.gate_watch_wake", event_type=event_type,
+                             event=event, query=query_count)
+                print(f"[Gate Watch] Woke up: {event_type} — {json.dumps(event, indent=2)[:500]}", flush=True)
+
+                # Handle based on event type
+                if event_type == "pipeline_complete":
+                    query_count += 1
+                    logfire.info("guardian.query_completion", query=query_count)
+                    print(f"\n[Gate Watch] Query #{query_count}: Pipeline complete — running E2E validation", flush=True)
+                    await client.query(
+                        f"PIPELINE COMPLETE. All nodes have reached terminal states.\n\n"
+                        f"Event details:\n{json.dumps(event, indent=2)}\n\n"
+                        f"Run Phase 4: Pipeline Completion Validation (E2E suite, cross-node integration, "
+                        f"PRD coverage). Then signal PIPELINE_COMPLETE via escalate_to_terminal.py."
+                    )
+                    await _consume_response(client)
+                    break  # Pipeline done — exit event loop
+
+                elif event_type == "gate":
+                    query_count += 1
+                    gate_type = event.get("gate_type", "unknown")
+                    node_id = event.get("node_id", "unknown")
+                    logfire.info("guardian.query_gate", query=query_count,
+                                 gate_type=gate_type, node_id=node_id)
+                    print(f"\n[Gate Watch] Query #{query_count}: Gate {gate_type} on {node_id}", flush=True)
+                    await client.query(
+                        f"GATE EVENT: A pipeline gate requires your attention.\n\n"
+                        f"Gate type: {gate_type}\n"
+                        f"Node ID: {node_id}\n"
+                        f"Epic ID: {event.get('epic_id', 'N/A')}\n"
+                        f"Timestamp: {event.get('timestamp', 'N/A')}\n\n"
+                        f"Handle this gate according to the protocol:\n"
+                        f"- For wait.cobuilder: Run the Pilot Gherkin Validation Protocol\n"
+                        f"- For wait.human: Evaluate if you can validate autonomously, "
+                        f"otherwise escalate to Terminal\n\n"
+                        f"After handling, transition the gate node appropriately and "
+                        f"the runner will continue automatically."
+                    )
+                    await _consume_response(client)
+
+                elif event_type == "failure":
+                    query_count += 1
+                    node_id = event.get("node_id", "unknown")
+                    logfire.info("guardian.query_failure", query=query_count, node_id=node_id)
+                    print(f"\n[Gate Watch] Query #{query_count}: Failure on {node_id}", flush=True)
+                    await client.query(
+                        f"NODE FAILURE: A pipeline node has failed.\n\n"
+                        f"Node ID: {node_id}\n"
+                        f"Signal type: {event.get('signal_type', 'UNKNOWN')}\n"
+                        f"Message: {event.get('message', 'No details')}\n\n"
+                        f"Investigate the root cause. Options:\n"
+                        f"1. Fix the issue and transition the node back to pending for retry\n"
+                        f"2. Inject a fix-it node into the pipeline\n"
+                        f"3. Escalate to Terminal if the failure cannot be resolved\n\n"
+                        f"Check the signal file and runner logs for details."
+                    )
+                    await _consume_response(client)
+
+                elif event_type == "timeout":
+                    query_count += 1
+                    logfire.info("guardian.query_timeout", query=query_count)
+                    print(f"\n[Gate Watch] Query #{query_count}: Watch timeout — checking status", flush=True)
+                    await client.query(
+                        f"WATCH TIMEOUT: No gate events detected for {event.get('elapsed_seconds', gate_timeout)}s.\n\n"
+                        f"Check the pipeline status to determine if:\n"
+                        f"1. The runner is still alive and making progress\n"
+                        f"2. A node is stuck without signaling\n"
+                        f"3. The pipeline needs intervention\n\n"
+                        f"Use: python3 {{scripts_dir}}/cli.py status {{dot_path}} --json"
+                    )
+                    await _consume_response(client)
+
+                else:
+                    # Unknown event — log and continue watching
+                    logfire.warning("guardian.unknown_event", event=event)
+                    print(f"[Gate Watch] Unknown event type: {event_type}. Continuing watch.", flush=True)
+
+            total_elapsed = _time.time() - start_time
+            logfire.info("guardian.event_driven_complete",
+                         total_queries=query_count,
+                         total_turns=turn_count,
+                         total_tool_calls=tool_call_count,
+                         total_elapsed_seconds=round(total_elapsed, 2))
+            print(f"\n[Pilot event-driven] Complete: queries={query_count} turns={turn_count} tools={tool_call_count} elapsed={round(total_elapsed)}s", flush=True)
+
+
+# ---------------------------------------------------------------------------
 # Core public API (launch/monitor functions)
 # ---------------------------------------------------------------------------
 
@@ -1190,6 +1590,7 @@ async def _launch_guardian_async(
     signals_dir: Optional[str] = None,
     dry_run: bool = False,
     target_dir: str = "",
+    event_driven: bool = False,
 ) -> dict[str, Any]:
     """Async implementation of launch_guardian().
 
@@ -1204,6 +1605,9 @@ async def _launch_guardian_async(
         signals_dir: Override signals directory path.
         dry_run: If True, return config dict without invoking SDK.
         target_dir: Target implementation repo directory.
+        event_driven: If True, use multi-query event-driven mode instead of
+            single continuous conversation. The Pilot sleeps between gates
+            (zero LLM cost) and wakes on filesystem events.
 
     Returns:
         Dict with status and pipeline metadata.
@@ -1218,6 +1622,7 @@ async def _launch_guardian_async(
             signal_timeout=signal_timeout,
             max_retries=max_retries,
             target_dir=target_dir,
+            event_driven=event_driven,
         )
 
         initial_prompt = build_initial_prompt(
@@ -1225,6 +1630,7 @@ async def _launch_guardian_async(
             pipeline_id=pipeline_id,
             scripts_dir=scripts_dir,
             target_dir=target_dir,
+            event_driven=event_driven,
         )
 
         config: dict[str, Any] = {
@@ -1246,8 +1652,14 @@ async def _launch_guardian_async(
         if dry_run:
             return config
 
-        # Create the Pilot stop hook that checks pipeline completion
-        hooks = _create_guardian_stop_hook(dot_path, pipeline_id)
+        # In event-driven mode, don't use the stop hook — the Python event loop
+        # controls when the Pilot stops between queries. The stop hook would prevent
+        # the Pilot from finishing its turn (so gate_watch can take over), because
+        # it blocks exit when non-terminal nodes remain.
+        if event_driven:
+            hooks = {}
+        else:
+            hooks = _create_guardian_stop_hook(dot_path, pipeline_id)
 
         options = build_options(
             system_prompt=system_prompt,
@@ -1260,16 +1672,27 @@ async def _launch_guardian_async(
         )
 
     try:
-        await _run_agent(
-            initial_prompt,
-            options,
-            pipeline_id=pipeline_id,
-            signals_dir=signals_dir or "",
-        )
+        if event_driven:
+            await _run_agent_event_driven(
+                initial_prompt,
+                options,
+                pipeline_id=pipeline_id,
+                signals_dir=signals_dir or "",
+                dot_path=dot_path,
+                gate_timeout=signal_timeout,
+            )
+        else:
+            await _run_agent(
+                initial_prompt,
+                options,
+                pipeline_id=pipeline_id,
+                signals_dir=signals_dir or "",
+            )
         return {
             "status": "ok",
             "pipeline_id": pipeline_id,
             "dot_path": dot_path,
+            "mode": "event_driven" if event_driven else "continuous",
         }
     except Exception as exc:
         return {
@@ -1561,6 +1984,7 @@ def launch_lifecycle(
     model: str = DEFAULT_MODEL,
     max_turns: int = DEFAULT_MAX_TURNS,
     dry_run: bool = False,
+    event_driven: bool = False,
 ) -> dict | None:
     """Launch a self-driving lifecycle pipeline from a PRD path.
 
@@ -1660,6 +2084,7 @@ def launch_lifecycle(
         model=model,
         max_turns=max_turns,
         target_dir=target_dir,
+        event_driven=event_driven,
     )
 
 
@@ -1726,6 +2151,7 @@ def main(argv: list[str] | None = None) -> None:
             model=args.model,
             max_turns=args.max_turns,
             dry_run=args.dry_run,
+            event_driven=args.event_driven,
         )
         if args.dry_run:
             print(json.dumps(result, indent=2))
@@ -1761,6 +2187,7 @@ def main(argv: list[str] | None = None) -> None:
             signal_timeout=args.signal_timeout,
             max_retries=args.max_retries,
             target_dir=target_dir,
+            event_driven=args.event_driven,
         )
 
         initial_prompt = build_initial_prompt(
@@ -1784,6 +2211,7 @@ def main(argv: list[str] | None = None) -> None:
             "signals_dir": args.signals_dir,
             "target_dir": target_dir,
             "scripts_dir": scripts_dir,
+            "event_driven": args.event_driven,
             "system_prompt_length": len(system_prompt),
             "initial_prompt_length": len(initial_prompt),
         }
@@ -1815,6 +2243,7 @@ def main(argv: list[str] | None = None) -> None:
             max_retries=args.max_retries,
             signals_dir=args.signals_dir,
             target_dir=target_dir,
+            event_driven=args.event_driven,
         )
         print(json.dumps(result, indent=2))
 

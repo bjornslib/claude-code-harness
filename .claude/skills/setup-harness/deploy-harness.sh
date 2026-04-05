@@ -24,6 +24,7 @@ TARGETS_FILE="$SCRIPT_DIR/targets.json"
 
 DRY_RUN=false
 INCLUDE_MCP=false
+FULL_DEPLOY=false
 TARGET_PATH=""
 TARGET_NAME=""
 LIST_TARGETS=false
@@ -57,6 +58,7 @@ ${BOLD}OPTIONS${NC}
     --list             List all configured targets
     --dry-run          Preview rsync without executing
     --include-mcp      Also copy .mcp.json to target(s)
+    --full             Deploy full harness infrastructure (cobuilder/, tools/, etc.)
     --help             Show this help message
 
 ${BOLD}EXAMPLES${NC}
@@ -65,6 +67,7 @@ ${BOLD}EXAMPLES${NC}
     deploy-harness.sh --name my-project           # Deploy to named target
     deploy-harness.sh --dry-run                            # Preview all deployments
     deploy-harness.sh --target ~/proj --include-mcp        # Deploy with .mcp.json
+    deploy-harness.sh --full --target ~/proj              # Full infrastructure deploy
 
 ${BOLD}CONFIG${NC}
     Targets file: $TARGETS_FILE
@@ -88,6 +91,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --dry-run)
             DRY_RUN=true
+            shift
+            ;;
+        --full)
+            FULL_DEPLOY=true
             shift
             ;;
         --include-mcp)
@@ -240,6 +247,8 @@ deploy_to_target() {
         --exclude='/completion-state/' \
         --exclude='/progress/*' \
         --exclude='/worker-assignments/*' \
+        --exclude='/worktrees/*' \
+        --exclude='/attractor/signals/*' \
         --exclude='/logs/' \
         --exclude='*.log' \
         --exclude='.DS_Store' \
@@ -294,6 +303,12 @@ deploy_to_target() {
 
     mkdir -p "$target_dir/.claude/worker-assignments"
     touch "$target_dir/.claude/worker-assignments/.gitkeep"
+
+    mkdir -p "$target_dir/.claude/worktrees"
+    touch "$target_dir/.claude/worktrees/.gitkeep"
+
+    mkdir -p "$target_dir/.claude/attractor/signals"
+    touch "$target_dir/.claude/attractor/signals/.gitkeep"
 
     ok "Created runtime directories with .gitkeep files"
 
@@ -373,12 +388,118 @@ GITIGNORE_ENTRIES
     [ -d "$target_dir/.claude/output-styles" ] && ok "output-styles/" || warn "output-styles/ missing"
     [ -d "$target_dir/.claude/scripts" ]       && ok "scripts/"       || warn "scripts/ missing"
 
+    # ── Full harness deployment (when --full flag is set) ──
+    if [ "$FULL_DEPLOY" = true ]; then
+        deploy_full_harness "$target_dir"
+    fi
+
     # Count files deployed
     local file_count
     file_count=$(find "$target_dir/.claude" -type f | wc -l | tr -d ' ')
     ok "Deployed $file_count files to $target_dir/.claude/"
 
+    if [ "$FULL_DEPLOY" = true ]; then
+        local total_count
+        total_count=$(find "$target_dir/.claude" "$target_dir/cobuilder" -type f 2>/dev/null | wc -l | tr -d ' ')
+        ok "Full deploy: $total_count total files across .claude/ + cobuilder/ + tools/"
+    fi
+
     echo ""
+}
+
+# ─── Full Harness Deploy ────────────────────────────────────────────────────
+
+deploy_full_harness() {
+    local target_dir="$1"
+
+    echo ""
+    echo -e "${BOLD}── Full harness deployment ──${NC}"
+
+    local rsync_extra=""
+    if [ "$DRY_RUN" = true ]; then
+        rsync_extra="--dry-run"
+    fi
+
+    # ── cobuilder/ (pipeline engine) ──
+    info "Syncing cobuilder/ engine..."
+    rsync -av --delete $rsync_extra \
+        --exclude='__pycache__/' \
+        --exclude='*.pyc' \
+        --exclude='.env' \
+        --exclude='engine/.env' \
+        "$HARNESS_SOURCE/cobuilder/" "$target_dir/cobuilder/"
+    ok "Copied cobuilder/ pipeline engine"
+
+    # ── .cobuilder/templates/ and .cobuilder/examples/ ──
+    info "Syncing .cobuilder/templates/ and .cobuilder/examples/..."
+    mkdir -p "$target_dir/.cobuilder"
+    if [ -d "$HARNESS_SOURCE/.cobuilder/templates" ]; then
+        rsync -av $rsync_extra \
+            "$HARNESS_SOURCE/.cobuilder/templates/" "$target_dir/.cobuilder/templates/"
+        ok "Copied .cobuilder/templates/"
+    fi
+    if [ -d "$HARNESS_SOURCE/.cobuilder/examples" ]; then
+        rsync -av $rsync_extra \
+            "$HARNESS_SOURCE/.cobuilder/examples/" "$target_dir/.cobuilder/examples/"
+        ok "Copied .cobuilder/examples/"
+    fi
+
+    # ── tools/ (Go CLI utilities) ──
+    if [ -d "$HARNESS_SOURCE/tools" ]; then
+        info "Syncing tools/..."
+        rsync -av --delete $rsync_extra \
+            --exclude='*/tmux-nav/tmux-nav' \
+            --exclude='*/pipeline-watch/pipeline-watch' \
+            "$HARNESS_SOURCE/tools/" "$target_dir/tools/"
+        ok "Copied tools/ (tmux-nav, pipeline-watch)"
+    fi
+
+    # ── src/ (zerorepo etc.) ──
+    if [ -d "$HARNESS_SOURCE/src" ]; then
+        info "Syncing src/..."
+        rsync -av --delete $rsync_extra \
+            --exclude='__pycache__/' \
+            --exclude='*.pyc' \
+            "$HARNESS_SOURCE/src/" "$target_dir/src/"
+        ok "Copied src/"
+    fi
+
+    # ── utils/ ──
+    if [ -d "$HARNESS_SOURCE/utils" ]; then
+        info "Syncing utils/..."
+        rsync -av --delete $rsync_extra \
+            --exclude='__pycache__/' \
+            --exclude='*.pyc' \
+            "$HARNESS_SOURCE/utils/" "$target_dir/utils/"
+        ok "Copied utils/"
+    fi
+
+    # ── .repomap/ config (not baselines) ──
+    if [ -d "$HARNESS_SOURCE/.repomap" ]; then
+        info "Syncing .repomap/ config..."
+        mkdir -p "$target_dir/.repomap/baselines"
+        if [ -f "$HARNESS_SOURCE/.repomap/config.yaml" ]; then
+            cp "$HARNESS_SOURCE/.repomap/config.yaml" "$target_dir/.repomap/config.yaml"
+        fi
+        if [ -d "$HARNESS_SOURCE/.repomap/manifests" ]; then
+            rsync -av $rsync_extra \
+                "$HARNESS_SOURCE/.repomap/manifests/" "$target_dir/.repomap/manifests/"
+        fi
+        touch "$target_dir/.repomap/baselines/.gitkeep"
+        ok "Copied .repomap/ config"
+    fi
+
+    # ── Create empty placeholder dirs for project-specific content ──
+    if [ "$DRY_RUN" = false ]; then
+        mkdir -p "$target_dir/docs/prds" "$target_dir/docs/sds" "$target_dir/docs/research"
+        touch "$target_dir/docs/prds/.gitkeep" "$target_dir/docs/sds/.gitkeep" "$target_dir/docs/research/.gitkeep"
+        mkdir -p "$target_dir/acceptance-tests"
+        touch "$target_dir/acceptance-tests/.gitkeep"
+        ok "Created empty project-specific placeholder dirs"
+    fi
+
+    echo ""
+    ok "Full harness deployment complete"
 }
 
 # ─── Main ─────────────────────────────────────────────────────────────────────

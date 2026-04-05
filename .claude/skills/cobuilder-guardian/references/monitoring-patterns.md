@@ -8,15 +8,74 @@ grade: authoritative
 
 # Monitoring Patterns Reference
 
-Commands, signal detection, intervention protocols, and red flags for continuous monitoring of pipeline execution. **Haiku blocking monitor is the default pattern.** Signal file polling and tmux monitoring are available as fallbacks.
+Commands, signal detection, intervention protocols, and red flags for continuous monitoring of pipeline execution.
+
+**Recommended monitoring approaches (in priority order):**
+
+1. **Event-Driven Pilot** (`guardian.py --event-driven`) — for lifecycle pipelines
+2. **gate_watch.py** — for CoBuilder-managed pipelines
+3. **Haiku blocking monitor** — legacy fallback
 
 ---
 
-## 0. Haiku Blocking Monitor (DEFAULT — Use This)
+## 0. Event-Driven Pilot (RECOMMENDED for lifecycle pipelines)
+
+The Pilot (`guardian.py`) runs in event-driven mode using a multi-query SDK pattern. Between gates, the Python layer blocks on filesystem events via `gate_watch.py` + `watchdog` — **zero LLM cost while idle**. When a `.gate-wait` marker appears, the Python layer sends a new query to the same Pilot conversation with the event details.
+
+**This is the recommended pattern for lifecycle pipelines.** The Pilot keeps conversational context across gates, wakes in <1s on filesystem events, and never wastes turns on polling.
+
+### Launch Pattern
+
+```bash
+python3 cobuilder/engine/guardian.py \
+  --dot <pipeline.dot> \
+  --pipeline-id <id> \
+  --target-dir <dir> \
+  --event-driven
+```
+
+### How It Works
+
+1. First query: Pilot parses DOT, validates, dispatches research/refine, launches `pipeline_runner.py &`
+2. Python layer calls `gate_watch.async_watch()` — blocks on filesystem events (zero cost)
+3. `.gate-wait` marker appears → Python sends: `"GATE EVENT: wait.cobuilder on node X"`
+4. Pilot validates, transitions gate, stops
+5. Python blocks again → repeat until `pipeline_complete` event
+6. Final query: Pilot runs E2E validation, signals completion
+
+### Benefits over Haiku Monitor
+
+| Metric | Haiku Monitor | Event-Driven Pilot |
+|--------|--------------|-------------------|
+| Idle cost | Haiku tokens per poll | Zero |
+| Gate detection | Up to 30s | <1s |
+| Context continuity | None (separate agent) | Full (same conversation) |
+| Turn budget pressure | N/A (separate) | Minimal (turns only on real work) |
+
+---
+
+## 0.5. gate_watch.py (for CoBuilder-managed pipelines)
+
+When CoBuilder dispatches a pipeline directly (not via the Pilot), use `gate_watch.py` to block until attention is needed:
+
+```bash
+python3 cobuilder/engine/gate_watch.py \
+  --signal-dir <signal_dir> \
+  --dot-file <pipeline.dot> \
+  --timeout 3600
+```
+
+Returns structured JSON: `{"event": "gate"|"failure"|"pipeline_complete"|"timeout", ...}`
+
+Uses `watchdog` for instant filesystem-event wake. Falls back to 2s polling if watchdog unavailable.
+
+---
+
+## 1. Haiku Blocking Monitor (LEGACY fallback)
 
 The Guardian (Opus interactive session) spawns a **blocking** Haiku sub-agent that polls DOT pipeline status and signal files. The monitor COMPLETES when the Guardian's attention is needed, waking the Guardian at exactly the right time.
 
-**This is the default monitoring pattern.** Do NOT manually sleep-poll. The Haiku monitor is more efficient and responsive.
+**Use this only when event-driven approaches are unavailable.** The Haiku monitor is less efficient (burns tokens on polling) and lacks conversational context across gates.
 
 ### Launch Pattern
 
@@ -63,6 +122,60 @@ Guardian → launch monitor (blocking) → monitor watches DOT
                                         monitor COMPLETES with report
 Guardian ← handle report ← (re-launch monitor if work remains)
 ```
+
+### Gate-Handling Monitor (Autonomous)
+
+When the Guardian delegates gate handling to the monitor, the monitor can autonomously approve gates and force transitions. This avoids the "runner dies at hr gate" problem where the runner exits because nobody processes the wait.human signal in time.
+
+```python
+Agent(
+    name="pipeline-gate-handler",
+    description="Monitor pipeline and handle gates",
+    model="haiku",
+    run_in_background=False,
+    prompt=f"""Monitor pipeline at {dot_file} for maximum 10 minutes.
+    Signal directory: {signal_dir}
+
+    You are ALSO responsible for HANDLING gates, not just reporting them.
+
+    When a wait.cobuilder gate becomes active:
+    1. Write: echo '{{"result":"pass","reason":"Auto-approved by monitor"}}' > {signal_dir}/{{gate_node}}.json
+
+    When a wait.human gate becomes active:
+    1. Write: echo '{{"result":"pass","reason":"Auto-approved"}}' > {signal_dir}/{{hr_node}}.json
+    2. Wait 15 seconds, check if node is stuck at impl_complete
+    3. If stuck, force: python3 cobuilder/engine/cli.py transition {dot_file} {{hr_node}} validated
+       then: python3 cobuilder/engine/cli.py transition {dot_file} {{hr_node}} accepted
+
+    When the runner dies:
+    1. Force any stuck hr node through transitions
+    2. Clear stale signals: rm -f {signal_dir}/*.json
+    3. Relaunch: python3 cobuilder/engine/pipeline_runner.py --dot-file {dot_file} --resume &
+
+    COMPLETE when: all nodes terminal, permanent failure, or 10 minutes elapsed.
+    """
+)
+```
+
+**When to use gate-handling monitors**: During TDD pipelines with many sequential RED→GREEN→gate cycles. The runner consistently dies at wait.human gates because it can't process the signal before its poll interval expires. The autonomous gate handler prevents this.
+
+**When NOT to use**: When gates require genuine human review (e.g., first-time architecture decisions, PRD approval). In those cases, use the report-only monitor and let the Guardian handle gates.
+
+### Anti-Pattern: Sleep-and-Check
+
+**Never do this:**
+```python
+sleep 600  # Wait 10 minutes
+check_status()  # Finally look
+```
+
+**Why it's wrong:**
+- Wastes 10 minutes even if the gate fires after 30 seconds
+- Burns context turns on no-op status checks
+- Runner may die during the sleep with nobody to relaunch it
+- Gates go unhandled for the full sleep duration
+
+**Always use** the Haiku blocking monitor instead. It wakes the Guardian (or handles gates autonomously) the moment something happens.
 
 ### Why This Pattern
 

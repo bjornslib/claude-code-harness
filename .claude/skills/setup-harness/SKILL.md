@@ -25,6 +25,19 @@ Deploys harness files from the source to target project(s) using `deploy-harness
 4. Installs git hooks (doc-gardener pre-push)
 5. Optionally copies `.mcp.json`
 
+### Full Mode (`--full`)
+
+When `--full` is specified, additionally deploys the complete CoBuilder infrastructure:
+- `cobuilder/` — Full pipeline engine (excluding `.env`, `__pycache__/`)
+- `.cobuilder/templates/` + `.cobuilder/examples/` — Pipeline templates
+- `tools/` — Go CLI utilities (tmux-nav, pipeline-watch)
+- `src/` — zerorepo and supporting packages
+- `utils/` — Development utilities
+- `.repomap/` — Config and manifests (not baseline JSONs)
+- Empty placeholder dirs for `docs/prds/`, `docs/sds/`, `docs/research/`, `acceptance-tests/`
+
+**Not copied** (even with `--full`): Root files (`CLAUDE.md`, `pyproject.toml`, `.gitignore`), `tests/`, `.beads/`, `.pipelines/`, `workspace/`, screenshots, `.git/`.
+
 ## Why Copy Instead of Symlink?
 
 - **Version Control**: `.claude/` becomes part of your repo
@@ -72,6 +85,11 @@ deployment lifecycle: source validation, rsync with exclusions, runtime director
 **Include .mcp.json:**
 ```bash
 .claude/skills/setup-harness/deploy-harness.sh --target ~/proj --include-mcp
+```
+
+**Full infrastructure deploy (cobuilder engine, tools, templates):**
+```bash
+.claude/skills/setup-harness/deploy-harness.sh --full --target ~/proj --include-mcp
 ```
 
 ### Targets Configuration

@@ -21,6 +21,8 @@ Launch commands:
 - Worker: `Task(subagent_type="...", team_name="...", name="...")`
 - Pipeline: `python3 cobuilder/engine/pipeline_runner.py --dot-file <path.dot>`
 - Pipeline (resume): `python3 cobuilder/engine/pipeline_runner.py --dot-file <path.dot> --resume`
+- Pilot (event-driven): `python3 cobuilder/engine/guardian.py --dot <path.dot> --pipeline-id <id> --target-dir <dir> --event-driven`
+- Gate watcher: `python3 cobuilder/engine/gate_watch.py --signal-dir <dir> --dot-file <path.dot>`
 
 ## Directory Index
 
@@ -30,7 +32,7 @@ Zero-LLM-cost state machine that turns DOT graph pipelines into working software
 
 | Subdirectory | Purpose |
 |---|---|
-| `engine/` | Core runner (`pipeline_runner.py`), pilot agent (`guardian.py`), node handlers, signal protocol, checkpoint system, CLI. Pilot is an autonomous goal-pursuing agent: SD fidelity monitoring, cross-node integration, Gherkin E2E, manifest auto-generation. See `docs/sds/SD-PILOT-AUTONOMY-001.md`. |
+| `engine/` | Core runner (`pipeline_runner.py`), pilot agent (`guardian.py`), gate watcher (`gate_watch.py`), node handlers, signal protocol, checkpoint system, CLI. Pilot is an autonomous goal-pursuing agent with event-driven wake (`--event-driven`): sleeps between gates at zero LLM cost, wakes on filesystem events. See `docs/sds/SD-PILOT-AUTONOMY-001.md`. |
 | `engine/events/` | Pipeline event bus: 18 event types (pipeline lifecycle + agent messages), JSONL/Logfire/SignalBridge backends, CLI streaming via `cli.py watch`. |
 | `engine/handlers/` | Node implementations: `codergen` (LLM work), `research` (Context7+Perplexity), `refine` (SD rewriting), `wait_human` (gates), `manager_loop` (sub-pipelines) |
 | `engine/providers.yaml` | Named LLM profiles (anthropic-fast/smart/opus, alibaba-glm5/qwen3) |
@@ -212,6 +214,31 @@ pipeline-watch tail <path>  # Stream events from a specific JSONL file
 
 - All task closures go through `validation-test-agent` — direct `bd close` is blocked
 - Writing NEW tests → `tdd-test-engineer`; checking existing work → `validation-test-agent`
+
+### Acceptance Testing Process
+
+Blind acceptance tests live in `acceptance-tests/PRD-{ID}/` or `acceptance-tests/SD-{ID}/` — **never** in the implementation repo. Workers cannot see the rubric.
+
+Each test suite has:
+- `manifest.yaml` — Feature weights, thresholds, and **`validation_method` per feature**
+- `*.feature` — Gherkin scenarios with confidence scoring guides (rubric, not executable)
+- `executable-tests/` — **Browser automation test specs** (YAML mapping Gherkin to `mcp__chrome-devtools__*` tool calls)
+
+**Validation methods** (set per feature in `manifest.yaml`):
+
+| Value | How to Validate | Tools |
+|---|---|---|
+| `browser-required` | Load the page and verify DOM/CSS/layout | `mcp__chrome-devtools__navigate_page`, `evaluate_script`, `take_screenshot`, `click` |
+| `api-required` | Make real HTTP requests | `curl`, `httpx` |
+| `code-analysis` | Read source files only | `Read`, `Grep`, Serena |
+| `hybrid` | Mix of methods | Any combination |
+
+**Pilot validation gate protocol**: When the pilot (`guardian.py`) reaches a `wait.cobuilder` gate, it MUST:
+1. Check `acceptance-tests/` for pre-existing test suites (manifest + executable specs)
+2. If `executable-tests/` exist with `browser-required` features: **run them using Chrome MCP tools**
+3. If no executable tests exist: write and execute its own Gherkin scenarios per the `@method` tags
+4. Score each scenario 0.0-1.0 using the confidence scoring guide
+5. Pass the gate only if overall weighted score meets the `accept` threshold
 
 ## Core Systems
 

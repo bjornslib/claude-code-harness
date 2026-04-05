@@ -568,7 +568,7 @@ The **Pilot** is CoBuilder operating in fully autonomous mode via the `cobuilder
 - CoBuilder auto-selects a high-priority initiative from `bd ready`
 - User provides a Business Spec and says "implement this"
 
-**How to launch:**
+**How to launch (event-driven — RECOMMENDED):**
 
 ```bash
 # 1. Instantiate the cobuilder-lifecycle template
@@ -582,11 +582,26 @@ python3 cobuilder/templates/instantiator.py cobuilder-lifecycle \
 # 2. Validate the pipeline
 cobuilder pipeline validate .pipelines/pipelines/INIT-XXX-001-lifecycle.dot
 
-# 3. Launch the runner
-python3 cobuilder/engine/pipeline_runner.py --dot-file .pipelines/pipelines/INIT-XXX-001-lifecycle.dot &
-
-# 4. Spawn blocking Haiku monitor (see Pipeline Execution below)
+# 3. Launch the Pilot in event-driven mode
+#    The Pilot sleeps between gates (zero LLM cost) and wakes on filesystem events.
+#    It launches pipeline_runner.py internally as its first action.
+python3 cobuilder/engine/guardian.py \
+  --dot .pipelines/pipelines/INIT-XXX-001-lifecycle.dot \
+  --pipeline-id INIT-XXX-001 \
+  --target-dir /path/to/target/repo \
+  --event-driven
 ```
+
+**How `--event-driven` works:**
+- The Pilot runs as a single persistent conversation via `ClaudeSDKClient`
+- First query: Pilot parses DOT, dispatches research/refine, launches `pipeline_runner.py &`
+- Python layer blocks on filesystem events (`gate_watch.py` + `watchdog`) — **zero LLM cost**
+- When a `.gate-wait` marker appears, Python sends a new query: "GATE EVENT: wait.cobuilder on node X"
+- Pilot handles the gate (Gherkin validation, transition) with full conversational context
+- Python blocks again until the next event
+- Repeat until pipeline completes
+
+**Without `--event-driven`** (legacy mode): The Pilot runs as a single continuous conversation and polls for gates in a bash sleep loop, consuming LLM turns on "nothing happened yet."
 
 **Lifecycle stages** (each with paired wait.cobuilder + wait.human gates):
 
@@ -608,56 +623,72 @@ START → RESEARCH → REFINE → [validate] → [review] → PLAN → [validate
 
 **Rule**: Use `pipeline_runner.py --dot-file` unless the user explicitly asks for tmux mode.
 
-```bash
-# Step 1: Launch the runner (runs in background — CoBuilder continues)
-python3 .claude/scripts/attractor/pipeline_runner.py --dot-file <path.dot> &
+**Two monitoring approaches** (choose based on context):
 
-# Step 2: IMMEDIATELY spawn cyclic Haiku monitor (blocking, 10-min max)
+#### Approach 1: Event-Driven Pilot (RECOMMENDED for lifecycle pipelines)
+
+Use `guardian.py --event-driven` when running a full lifecycle pipeline. The Pilot agent
+launches the runner internally and handles gates autonomously. See "Pilot Mode" above.
+
+```bash
+python3 cobuilder/engine/guardian.py \
+  --dot <path.dot> --pipeline-id <id> --target-dir <dir> --event-driven
+```
+
+The Pilot sleeps between gates at zero LLM cost. No Haiku monitor needed.
+
+#### Approach 2: CoBuilder-Managed Pipeline (for non-lifecycle pipelines)
+
+When CoBuilder dispatches a pipeline directly (not via the Pilot), use `gate_watch.py`
+to block until attention is needed:
+
+```bash
+# Step 1: Launch the runner in background
+python3 cobuilder/engine/pipeline_runner.py --dot-file <path.dot> &
+
+# Step 2: Block until a gate, failure, or completion event
+python3 cobuilder/engine/gate_watch.py \
+  --signal-dir <signal_dir> \
+  --dot-file <path.dot> \
+  --timeout 3600
+```
+
+`gate_watch.py` uses `watchdog` filesystem events (with polling fallback) and returns
+structured JSON describing what happened:
+
+```json
+{"event": "gate", "gate_type": "wait.cobuilder", "node_id": "validate_auth", ...}
+{"event": "failure", "node_id": "impl_auth", "signal_type": "ORCHESTRATOR_CRASHED", ...}
+{"event": "pipeline_complete", "summary": {...}}
+{"event": "timeout", "elapsed_seconds": 3600}
+```
+
+After handling the event, re-run `gate_watch.py` to wait for the next one.
+
+#### Approach 3: Cyclic Haiku Monitor (LEGACY — fallback only)
+
+Use only when `gate_watch.py` is unavailable or for debugging:
+
+```bash
+# Launch runner in background, then spawn blocking Haiku monitor
 Task(
     subagent_type="general-purpose",
     model="haiku",
-    run_in_background=False,  # BLOCKING monitor (not background) - CoBuilder waits for result
+    run_in_background=False,
     prompt="""Monitor DOT pipeline at <path.dot> for maximum 10 minutes.
-    Signal dir: <signal_dir>
-    Poll interval: 30 seconds. Stall threshold: 5 minutes.
-    MAX_DURATION: 10 minutes - return status regardless after 10 min
-
-    COMPLETE (wake CoBuilder) when ANY of:
-    - A node reaches 'failed' → report which node, error message
-    - No DOT mtime change for >5min → report last known state
-    - All nodes reach terminal state → report final statuses
-    - A .gate-wait marker appears in signal dir → report gate type and node_id
-      (wait.cobuilder = CoBuilder must run validation)
-      (wait.human = CoBuilder must use AskUserQuestion to consult user)
-    - 10 minutes have elapsed → report current state and continue cycling
-
-    On FAIL states: Check if runner redispatched (retry_count < 3, node reset to pending).
-    If runner correctly redispatched, note it but do NOT complete — keep monitoring.
-    Only complete on permanent failures (retry exhausted).
-
+    Signal dir: <signal_dir>. Poll interval: 30s. Stall threshold: 5 min.
+    COMPLETE when: gate-wait marker, node failure, all terminal, or 10 min elapsed.
     Do NOT attempt fixes. Report observations only."""
 )
 ```
 
-### After Monitor Wakes CoBuilder (Cyclic Pattern)
-
-1. Read monitor report
-2. **If `wait.cobuilder` gate**: Run Gherkin E2E → write signal file → relaunch monitor
-3. **If `wait.human` gate**: Use `AskUserQuestion` to consult user → write signal file → relaunch monitor
-4. **If node failed permanently**: Investigate root cause → decide to fix or abandon
-5. **If all nodes terminal**: Pipeline complete → proceed to final validation
-6. **If stall**: Check runner process is alive → investigate → relaunch monitor
-7. **If 10 minutes elapsed**: Evaluate progress → continue monitoring or take action → relaunch monitor
-
-**Cyclic Pattern**: After each **blocking** monitor completes (either due to event or 10-minute timeout), CoBuilder evaluates the status report and immediately relaunches a new **blocking** monitor to continue watching the pipeline. This creates a continuous monitoring cycle with predictable wake-up intervals. Each cycle has a maximum duration of 10 minutes, ensuring CoBuilder remains responsive.
-
 ### Responding to Gates
 
-When a gate is detected (via `.gate-wait` marker):
+When a gate is detected (via `.gate-wait` marker or `gate_watch.py` event):
 
 **`wait.cobuilder`** — CoBuilder runs Gherkin E2E:
 ```python
-# Pass: write signal and relaunch monitor
+# Pass: write signal file (runner picks it up automatically)
 Write(file_path="{signal_dir}/{node_id}.json",
       content='{"result": "pass", "reason": "E2E tests passed"}')
 # Requeue: send guidance back to impl node
@@ -674,7 +705,10 @@ AskUserQuestion(questions=[{
 # Then write signal based on user's answer
 ```
 
-After handling any gate: **relaunch the Haiku monitor** to continue watching.
+After handling any gate:
+- **Event-driven Pilot**: The Pilot's response completes; Python layer auto-watches for next event
+- **CoBuilder-managed**: Re-run `gate_watch.py` to wait for the next event
+- **Legacy Haiku**: Relaunch the Haiku monitor to continue watching
 
 ### Manual / Inspect Mode (cobuilder CLI)
 

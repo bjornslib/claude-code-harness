@@ -7,6 +7,11 @@
       "description": "Hindsight local fork"
     },
     {
+      "name": "cobuilder-agencheck",
+      "path": "~/Documents/Windsurf/cobuilder-agencheck/",
+      "description": "CoBuilder harness for agencheck project"
+    },
+    {
       "name": "my-second-project",
       "path": "~/projects/my-second-project",
       "description": "Example second application repo"
