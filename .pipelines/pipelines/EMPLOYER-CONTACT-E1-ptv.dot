@@ -12,7 +12,7 @@ digraph "PRD-EMPLOYER-CONTACT-001-E1-research-agent" {
         pipeline_id="PRD-EMPLOYER-CONTACT-001-E1-research-agent-ptv"
         prd_ref="PRD-EMPLOYER-CONTACT-001"
         cobuilder_root="/Users/theb/Documents/Windsurf/cobuilder-harness"
-        target_dir="/Users/theb/Documents/Windsurf/zenagent"
+        target_dir="/Users/theb/Documents/Windsurf/zenagent-employer-contact"
         _template="planner-tdd-validated"
         _template_version="1.0"
     ];
@@ -27,8 +27,8 @@ digraph "PRD-EMPLOYER-CONTACT-001-E1-research-agent" {
         label="START\nPRD-EMPLOYER-CONTACT-001"
         handler="start"
         shape=Mdiamond
-        fillcolor=green
-        status=pending
+        fillcolor="lightgreen"
+        status="validated"
     ];
 
     // ════════════════════════════════════════════════════════════
@@ -40,25 +40,25 @@ digraph "PRD-EMPLOYER-CONTACT-001-E1-research-agent" {
         label="Research: Codebase Analysis"
         handler="research"
         shape=tab
-        fillcolor=lightcyan
-        status=pending
+        fillcolor="palegreen"
+        status="accepted"
         solution_design="/Users/theb/Documents/Windsurf/cobuilder-harness/docs/prds/employer-contact-search/PRD-EMPLOYER-CONTACT-001.md"
         prd_ref="PRD-EMPLOYER-CONTACT-001"
-        llm_profile="alibaba-glm5"
+        llm_profile="anthropic-opus"
         research_queries="codebase structure for Employer Contact Research Agent (DSPy + Perplexity + Web Search), existing patterns, database schema, API endpoints, test infrastructure"
         downstream_node="research_domain"
-        prompt="PLANNER PHASE: Research the target codebase at /Users/theb/Documents/Windsurf/zenagent for epic E1-research-agent: Employer Contact Research Agent. MANDATORY: Invoke Skill('dspy-development') before any DSPy design decisions. (1) Read the BS at /Users/theb/Documents/Windsurf/cobuilder-harness/docs/prds/employer-contact-search/PRD-EMPLOYER-CONTACT-001.md — focus on Section 5 (Research Agent Specification). (2) Explore the zenagent codebase: find existing DSPy modules, Perplexity integrations, PydanticAI agents, database models (especially university_contacts pattern). (3) Identify: existing employer_contacts table or similar, Supabase connection patterns, background_tasks integration. (4) Document: file paths, existing DSPy patterns, Perplexity API usage, database schema. Write structured findings to evidence JSON."
+        prompt="PLANNER PHASE: Research the target codebase at /Users/theb/Documents/Windsurf/zenagent-employer-contact for epic E1-research-agent: Employer Contact Research Agent. MANDATORY: Invoke Skill('dspy-development') before any DSPy design decisions. (1) Read the BS at /Users/theb/Documents/Windsurf/cobuilder-harness/docs/prds/employer-contact-search/PRD-EMPLOYER-CONTACT-001.md — focus on Section 5 (Research Agent Specification). (2) Explore the zenagent codebase: find existing DSPy modules, Perplexity integrations, PydanticAI agents, database models (especially university_contacts pattern). (3) Identify: existing employer_contacts table or similar, Supabase connection patterns, background_tasks integration. (4) Document: file paths, existing DSPy patterns, Perplexity API usage, database schema. Write structured findings to evidence JSON."
     ];
 
     research_domain [
         label="Research: Domain Patterns"
         handler="research"
         shape=tab
-        fillcolor=lightcyan
-        status=pending
+        fillcolor="palegreen"
+        status="accepted"
         solution_design="/Users/theb/Documents/Windsurf/cobuilder-harness/docs/prds/employer-contact-search/PRD-EMPLOYER-CONTACT-001.md"
         prd_ref="PRD-EMPLOYER-CONTACT-001"
-        llm_profile="alibaba-glm5"
+        llm_profile="anthropic-opus"
         research_queries="domain patterns for Employer Contact Research Agent (DSPy + Perplexity + Web Search), framework best practices, library APIs, similar implementations"
         downstream_node="write_ts"
         prompt="PLANNER PHASE: Research domain patterns for the employer contact research agent. MANDATORY: Invoke Skill('dspy-development') and Skill('research-first'). (1) Use Context7 to research DSPy module patterns (Signatures, Modules, Optimizers) and Perplexity Deep Research API. (2) Research via Perplexity: how to build an employer contact finder using Perplexity API + web search (not just Perplexity alone). (3) Research contact classification patterns: general vs named_poc, confidence scoring algorithms. (4) Identify testing patterns: how to test DSPy modules (mock vs real API), how to test web search results, how to test contact deduplication. (5) Document: DSPy module design, Perplexity + web search combo approach, confidence scoring formula, test fixtures. Write findings to evidence JSON."
@@ -68,13 +68,13 @@ digraph "PRD-EMPLOYER-CONTACT-001-E1-research-agent" {
         label="Planner: Write Technical Spec"
         handler="codergen"
         shape=box
-        fillcolor=lightyellow
-        status=pending
-        bead_id="PLACEHOLDER-PLANNER"
+        fillcolor="palegreen"
+        status="accepted"
+        bead_id="claude-harness-setup-n9sa"
         worker_type="solution-design-architect"
         sd_path="/Users/theb/Documents/Windsurf/cobuilder-harness/docs/prds/employer-contact-search/PRD-EMPLOYER-CONTACT-001.md"
         prd_ref="PRD-EMPLOYER-CONTACT-001"
-        llm_profile="alibaba-glm5"
+        llm_profile="anthropic-opus"
         acceptance="TS covers: module design, API contracts, data model changes, file-by-file implementation plan, test strategy, acceptance criteria mapping"
         prompt="PLANNER PHASE: Write a Technical Spec at /Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md. MANDATORY: Invoke Skill('dspy-development'). Use the BS and both research evidence files. CRITICAL: Follow Clean Architecture (feature-first) from BS Section 13 and docs/AGENCHECK_CLEANUP.md. The employer_research/ directory must have: domain.py (models, no I/O), classifier.py (pure logic), service.py (orchestration), repository.py (Supabase adapter), researcher.py (DSPy/Perplexity/web search adapter), router.py (entrypoint). Dependencies flow inward: entrypoints → service_layer → domain ← adapters. The TS must include: (1) DSPy Module design: EmployerContactResearcher(dspy.Module) in researcher.py with Signatures for search, classify, score, deduplicate. (2) Dual-source research: Perplexity Deep Research API + web search (Brave/Google). NOT Perplexity alone. (3) Data model: employer_contacts table (BS Section 7.1), Supabase in repository.py. (4) Classification + scoring in domain layer (no API deps). (5) File-by-file plan matching the feature-first structure. (6) Test strategy per layer. (7) BS Section 5 acceptance criteria mapped to tests."
     ];
@@ -84,19 +84,19 @@ digraph "PRD-EMPLOYER-CONTACT-001-E1-research-agent" {
         label="TS Quality Gate"
         handler="wait.cobuilder"
         shape=hexagon
-        fillcolor=purple
-        status=pending
+        fillcolor="palegreen"
+        status="accepted"
         gate_type="e2e"
         summary_ref="/Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md"
-        bead_id="PLACEHOLDER-PLANNER"
+        bead_id="claude-harness-setup-n9sa"
     ];
 
     review_planner [
         label="Human Reviews TS"
         handler="wait.human"
         shape=hexagon
-        fillcolor=red
-        status=pending
+        fillcolor="palegreen"
+        status="accepted"
         gate="technical"
         mode="technical"
     ];
@@ -105,8 +105,8 @@ digraph "PRD-EMPLOYER-CONTACT-001-E1-research-agent" {
         label="TS Approved?"
         handler="conditional"
         shape=diamond
-        fillcolor=lightyellow
-        status=pending
+        fillcolor="lightgreen"
+        status="validated"
     ];
 
     // ════════════════════════════════════════════════════════════
@@ -119,9 +119,9 @@ digraph "PRD-EMPLOYER-CONTACT-001-E1-research-agent" {
         label="RED: Write Failing Tests"
         handler="codergen"
         shape=box
-        fillcolor="#ffcccc"
-        status=pending
-        bead_id="PLACEHOLDER-IMPL"
+        fillcolor="palegreen"
+        status="accepted"
+        bead_id="claude-harness-setup-8ry9"
         worker_type="tdd-test-engineer"
         sd_path="/Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md"
         prd_ref="PRD-EMPLOYER-CONTACT-001"
@@ -135,11 +135,11 @@ digraph "PRD-EMPLOYER-CONTACT-001-E1-research-agent" {
         label="Red Verification Gate"
         handler="wait.cobuilder"
         shape=hexagon
-        fillcolor=purple
-        status=pending
+        fillcolor="palegreen"
+        status="accepted"
         gate_type="unit"
         summary_ref="/Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md"
-        bead_id="PLACEHOLDER-IMPL"
+        bead_id="claude-harness-setup-8ry9"
     ];
 
     // ════════════════════════════════════════════════════════════
@@ -151,9 +151,9 @@ digraph "PRD-EMPLOYER-CONTACT-001-E1-research-agent" {
         label="GREEN: Implement to Pass"
         handler="codergen"
         shape=box
-        fillcolor="#ccffcc"
-        status=pending
-        bead_id="PLACEHOLDER-IMPL"
+        fillcolor="palegreen"
+        status="accepted"
+        bead_id="claude-harness-setup-8ry9"
         worker_type="backend-solutions-engineer"
         sd_path="/Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md"
         prd_ref="PRD-EMPLOYER-CONTACT-001"
@@ -167,11 +167,11 @@ digraph "PRD-EMPLOYER-CONTACT-001-E1-research-agent" {
         label="Green Verification Gate"
         handler="wait.cobuilder"
         shape=hexagon
-        fillcolor=purple
-        status=pending
+        fillcolor="palegreen"
+        status="accepted"
         gate_type="unit"
         summary_ref="/Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md"
-        bead_id="PLACEHOLDER-IMPL"
+        bead_id="claude-harness-setup-8ry9"
     ];
 
     // ════════════════════════════════════════════════════════════
@@ -184,9 +184,9 @@ digraph "PRD-EMPLOYER-CONTACT-001-E1-research-agent" {
         label="Validator: BS + TS Check"
         handler="codergen"
         shape=box
-        fillcolor="#ccccff"
-        status=pending
-        bead_id="PLACEHOLDER-IMPL"
+        fillcolor="palegreen"
+        status="accepted"
+        bead_id="claude-harness-setup-8ry9"
         worker_type="validation-test-agent"
         sd_path="/Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md"
         prd_ref="PRD-EMPLOYER-CONTACT-001"
@@ -200,19 +200,19 @@ digraph "PRD-EMPLOYER-CONTACT-001-E1-research-agent" {
         label="Validation Gate"
         handler="wait.cobuilder"
         shape=hexagon
-        fillcolor=purple
-        status=pending
+        fillcolor="palegreen"
+        status="accepted"
         gate_type="e2e"
         summary_ref="/Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md"
-        bead_id="PLACEHOLDER-IMPL"
+        bead_id="claude-harness-setup-8ry9"
     ];
 
     review_final [
         label="Human Final Review"
         handler="wait.human"
         shape=hexagon
-        fillcolor=red
-        status=pending
+        fillcolor="palegreen"
+        status="accepted"
         gate="e2e"
         mode="technical"
     ];
@@ -221,8 +221,200 @@ digraph "PRD-EMPLOYER-CONTACT-001-E1-research-agent" {
         label="Epic Complete?"
         handler="conditional"
         shape=diamond
-        fillcolor=lightyellow
-        status=pending
+        fillcolor="lightgreen"
+        status="validated"
+    ];
+
+    // ════════════════════════════════════════════════════════════
+    // PHASE 5: FIX-IT — Close validation gaps (GAP 2 + GAP 3)
+    //   GAP 2: CallResultStatus enum values (background_task_helpers.py)
+    //   GAP 3: Router endpoints (employer_research/router.py)
+    //   Follows RED → GREEN → VALIDATE pattern
+    // ════════════════════════════════════════════════════════════
+    fix_red [
+        label="FIX RED: Write Gap Tests"
+        handler="codergen"
+        shape=box
+        fillcolor="palegreen"
+        status="accepted"
+        bead_id="claude-harness-setup-mpv0"
+        worker_type="tdd-test-engineer"
+        sd_path="/Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md"
+        prd_ref="PRD-EMPLOYER-CONTACT-001"
+        llm_profile="anthropic-sonnet46"
+        acceptance="Tests written for GAP 2 (enum values) and GAP 3 (router endpoints), ALL tests FAIL"
+        prompt="FIX-IT RED PHASE: Write failing tests for 2 validation gaps. MANDATORY: Invoke Skill('dspy-development'). Read the TS at /Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md. GAP 2: utils/background_task_helpers.py needs 4 new CallResultStatus enum values: CONTACTS_DISCOVERED, ALTERNATE_CONTACT_RECEIVED, CONTACT_VALIDATED, COMPLETED_DISCREPANCIES. Write tests that import these values and verify they exist. GAP 3: employer_research/router.py endpoints are NotImplementedError stubs. Write tests for: (a) POST /api/v1/employer-research/{case_id} returns EmployerResearchResult, (b) Prefect task wrapper calls service correctly. Tests MUST FAIL because the implementations don't exist yet. Run pytest to confirm failures."
+    ];
+
+    fix_gate_red [
+        label="Fix Red Gate"
+        handler="wait.cobuilder"
+        shape=hexagon
+        fillcolor="palegreen"
+        status="accepted"
+        gate_type="unit"
+        bead_id="claude-harness-setup-mpv0"
+    ];
+
+    fix_green [
+        label="FIX GREEN: Implement Gaps"
+        handler="codergen"
+        shape=box
+        fillcolor="palegreen"
+        status="accepted"
+        bead_id="claude-harness-setup-mpv0"
+        worker_type="backend-solutions-engineer"
+        sd_path="/Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md"
+        prd_ref="PRD-EMPLOYER-CONTACT-001"
+        llm_profile="anthropic-sonnet46"
+        acceptance="ALL fix tests pass, enum values added, router endpoints implemented"
+        prompt="FIX-IT GREEN PHASE: Implement 2 validation gaps. MANDATORY: Invoke Skill('dspy-development'). GAP 2: Add 4 new CallResultStatus enum values to utils/background_task_helpers.py: CONTACTS_DISCOVERED, ALTERNATE_CONTACT_RECEIVED, CONTACT_VALIDATED, COMPLETED_DISCREPANCIES. GAP 3: Implement router.py endpoints — (a) POST /api/v1/employer-research/{case_id}: load case context, extract employer info, delegate to EmployerResearchService, return EmployerResearchResult. (b) Prefect task wrapper: accept case_id + employer params, create service instance, call research_employer_contacts, return dict. Do NOT modify existing passing tests. Run ALL tests to confirm everything passes."
+    ];
+
+    fix_gate_green [
+        label="Fix Green Gate"
+        handler="wait.cobuilder"
+        shape=hexagon
+        fillcolor="palegreen"
+        status="accepted"
+        gate_type="unit"
+        bead_id="claude-harness-setup-mpv0"
+    ];
+
+    fix_validate [
+        label="FIX Validator"
+        handler="codergen"
+        shape=box
+        fillcolor="palegreen"
+        status="accepted"
+        bead_id="claude-harness-setup-mpv0"
+        worker_type="validation-test-agent"
+        sd_path="/Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md"
+        prd_ref="PRD-EMPLOYER-CONTACT-001"
+        llm_profile="anthropic-sonnet46"
+        acceptance="All gap criteria now pass, overall score >= 0.80"
+        prompt="FIX-IT VALIDATOR: Independently verify that GAP 2 and GAP 3 are closed. (1) Check utils/background_task_helpers.py has CONTACTS_DISCOVERED, ALTERNATE_CONTACT_RECEIVED, CONTACT_VALIDATED, COMPLETED_DISCREPANCIES in CallResultStatus. (2) Check router.py endpoints are implemented (not NotImplementedError). (3) Run ALL tests. (4) Score: if both gaps closed and all tests pass, score >= 0.80."
+    ];
+
+    fix_gate_validate [
+        label="Fix Validation Gate"
+        handler="wait.cobuilder"
+        shape=hexagon
+        fillcolor="palegreen"
+        status="accepted"
+        gate_type="e2e"
+        bead_id="claude-harness-setup-mpv0"
+    ];
+
+    fix_review [
+        label="Fix Human Review"
+        handler="wait.human"
+        shape=hexagon
+        fillcolor="palegreen"
+        status="accepted"
+        gate="e2e"
+        mode="technical"
+    ];
+
+    // ════════════════════════════════════════════════════════════
+    // PHASE 6: FIX RESEARCHER — Rewrite as DSPy ReAct agent
+    //   Current researcher.py uses raw aiohttp + regex extraction.
+    //   Must be rewritten as dspy.ReAct with Perplexity + web search tools.
+    //   Sonnet for RED/GREEN, Opus for VALIDATE.
+    // ════════════════════════════════════════════════════════════
+    rsch_red [
+        label="RSCH RED: ReAct Tests"
+        handler="codergen"
+        shape=box
+        fillcolor="palegreen"
+        status="accepted"
+        bead_id="claude-harness-setup-te43"
+        worker_type="tdd-test-engineer"
+        sd_path="/Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md"
+        prd_ref="PRD-EMPLOYER-CONTACT-001"
+        llm_profile="anthropic-sonnet46"
+        acceptance="Tests written for DSPy ReAct researcher, ALL tests FAIL because current researcher.py uses raw aiohttp not DSPy"
+        prompt="RESEARCHER FIX RED PHASE: MANDATORY: Invoke Skill('dspy-development') to learn current DSPy 3.1+ ReAct patterns. The current employer_research/researcher.py uses raw aiohttp + regex to call Perplexity API. It must be rewritten as a dspy.ReAct agent with tool-use. Write FAILING tests that verify: (1) researcher.py imports dspy and uses dspy.ReAct (not raw aiohttp), (2) ReAct agent has Perplexity search tool and web search tool registered, (3) Agent produces structured RawDiscoveredContact output via DSPy Signatures (not regex extraction), (4) Agent formulates targeted queries (e.g. 'HR contact for Kresta Blinds QLD') not one generic prompt, (5) Agent follows up on leads (if switchboard found, searches for direct HR number), (6) Confidence scoring is embedded in the search step (source reliability from URL classification). Tests MUST FAIL against current implementation. Keep existing test fixtures for mock API responses. Run pytest to confirm failures."
+    ];
+
+    rsch_gate_red [
+        label="RSCH Red Gate"
+        handler="wait.cobuilder"
+        shape=hexagon
+        fillcolor="palegreen"
+        status="accepted"
+        gate_type="unit"
+        bead_id="claude-harness-setup-te43"
+    ];
+
+    rsch_green [
+        label="RSCH GREEN: Implement ReAct"
+        handler="codergen"
+        shape=box
+        fillcolor="palegreen"
+        status="accepted"
+        bead_id="claude-harness-setup-te43"
+        worker_type="backend-solutions-engineer"
+        sd_path="/Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md"
+        prd_ref="PRD-EMPLOYER-CONTACT-001"
+        llm_profile="anthropic-sonnet46"
+        acceptance="ALL tests pass, researcher.py uses dspy.ReAct with Perplexity + web search tools, structured output via DSPy Signatures"
+        prompt="RESEARCHER FIX GREEN PHASE: MANDATORY: Invoke Skill('dspy-development') for current DSPy 3.1+ ReAct and tool patterns. Rewrite employer_research/researcher.py as a DSPy ReAct agent. REQUIREMENTS: (1) Create a dspy.ReAct module (EmployerContactResearcherModule) with two tools: perplexity_search (calls Perplexity API with sonar-reasoning-pro) and web_search (uses Brave/Google for follow-up queries). (2) Define DSPy Signatures: EmployerResearchSignature with input fields (employer_name, country, city, website_url, known_contacts) and output fields (List[RawDiscoveredContact]). (3) The ReAct agent should formulate multiple targeted queries: first a general search, then follow-up searches for specific departments (HR, Payroll). (4) Contact extraction via dspy.TypedPredictor — the LM extracts structured fields, NOT regex. (5) Confidence scoring embedded: each contact gets confidence from source URL classification + completeness. (6) Keep the existing CustomerProvidedContact, RawDiscoveredContact, PerplexityResearchResult models — only change the researcher class internals. (7) The .research() async method signature must remain compatible. (8) Configure DSPy LM from environment (OPENROUTER_API_KEY or ANTHROPIC_API_KEY). Run ALL tests to confirm pass."
+    
+        style="filled"
+    ];
+
+    rsch_gate_green [
+        label="RSCH Green Gate"
+        handler="wait.cobuilder"
+        shape=hexagon
+        fillcolor="palegreen"
+        status="accepted"
+        gate_type="unit"
+        bead_id="claude-harness-setup-te43"
+    
+        style="filled"
+    ];
+
+    rsch_validate [
+        label="RSCH Validator (Opus)"
+        handler="codergen"
+        shape=box
+        fillcolor="palegreen"
+        status="accepted"
+        bead_id="claude-harness-setup-te43"
+        worker_type="validation-test-agent"
+        sd_path="/Users/theb/Documents/Windsurf/cobuilder-harness/docs/sds/employer-contact-search/SD-EMPLOYER-CONTACT-E1.md"
+        prd_ref="PRD-EMPLOYER-CONTACT-001"
+        llm_profile="anthropic-opus"
+        acceptance="Researcher uses DSPy ReAct with tools, produces structured output, all tests pass, live E2E returns contacts with names/emails/phones"
+        prompt="RESEARCHER VALIDATOR (Opus): You are an independent auditor. MANDATORY: Invoke Skill('dspy-development'). (1) Read employer_research/researcher.py — verify it uses dspy.ReAct with registered tools (Perplexity + web search). (2) Verify DSPy Signatures define structured I/O (not regex extraction). (3) Verify the ReAct agent formulates multiple targeted queries. (4) Run ALL tests. (5) Run a LIVE E2E test: configure DSPy LM with OPENROUTER_API_KEY from .env, search for 'Kresta Blinds' with country='AUS', verify result contains contacts with at least one email or phone. (6) Score: DSPy usage (0-1), structured extraction (0-1), multi-query (0-1), test pass rate (0-1), live E2E (0-1). ACCEPT threshold: 0.70."
+    
+        style="filled"
+    ];
+
+    rsch_gate_validate [
+        label="RSCH Validation Gate"
+        handler="wait.cobuilder"
+        shape=hexagon
+        fillcolor="palegreen"
+        status="accepted"
+        gate_type="e2e"
+        bead_id="claude-harness-setup-te43"
+    
+        style="filled"
+    ];
+
+    rsch_review [
+        label="RSCH Human Review"
+        handler="wait.human"
+        shape=hexagon
+        fillcolor="palegreen"
+        status="accepted"
+        gate="e2e"
+        mode="technical"
+    
+        style="filled"
     ];
 
     // ════════════════════════════════════════════════════════════
@@ -232,8 +424,10 @@ digraph "PRD-EMPLOYER-CONTACT-001-E1-research-agent" {
         label="Complete"
         handler="exit"
         shape=Msquare
-        fillcolor=darkgreen
-        status=pending
+        fillcolor="palegreen"
+        status="accepted"
+    
+        style="filled"
     ];
 
     // ════════════════════════════════════════════════════════════
@@ -262,6 +456,24 @@ digraph "PRD-EMPLOYER-CONTACT-001-E1-research-agent" {
     validate -> gate_validate [label="validation_done"];
     gate_validate -> review_final [label="guardian_ok"];
     review_final -> decide_final [label="human_reviewed"];
-    decide_final -> pipeline_exit [condition="pass" label="epic_complete"];
+    decide_final -> fix_red [condition="pass" label="gaps_to_fix"];
     decide_final -> green_impl [condition="fail" label="rework_impl"];
+
+    // Phase 5: Fix-it (close validation gaps)
+    fix_red -> fix_gate_red [label="fix_tests_written"];
+    fix_gate_red -> fix_green [label="fix_tests_fail_confirmed"];
+    fix_green -> fix_gate_green [label="fix_impl_done"];
+    fix_gate_green -> fix_validate [label="fix_tests_pass"];
+    fix_validate -> fix_gate_validate [label="fix_validated"];
+    fix_gate_validate -> fix_review [label="guardian_ok"];
+    fix_review -> rsch_red [label="researcher_fix_needed"];
+
+    // Phase 6: Researcher fix (DSPy ReAct)
+    rsch_red -> rsch_gate_red [label="react_tests_written"];
+    rsch_gate_red -> rsch_green [label="react_tests_fail_confirmed"];
+    rsch_green -> rsch_gate_green [label="react_impl_done"];
+    rsch_gate_green -> rsch_validate [label="react_tests_pass"];
+    rsch_validate -> rsch_gate_validate [label="react_validated"];
+    rsch_gate_validate -> rsch_review [label="guardian_ok"];
+    rsch_review -> pipeline_exit [label="researcher_approved"];
 }

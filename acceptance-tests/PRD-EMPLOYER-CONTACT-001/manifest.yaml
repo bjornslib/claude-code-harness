@@ -1,0 +1,74 @@
+prd_id: PRD-EMPLOYER-CONTACT-001
+epic: E1 - Research Agent
+version: "1.0.0"
+created: 2026-04-04
+accept_threshold: 0.70
+investigate_threshold: 0.50
+
+features:
+  - name: "Employer Contact Research (Perplexity API)"
+    weight: 0.25
+    validation_method: api-required
+    file: s1_researcher.feature
+
+  - name: "Contact Deduplication (DSPy ChainOfThought)"
+    weight: 0.15
+    validation_method: code-analysis
+    file: s2_deduplicator.feature
+
+  - name: "Contact Classification + Prioritisation (DSPy Predict)"
+    weight: 0.20
+    validation_method: code-analysis
+    file: s3_classifier.feature
+
+  - name: "Service Pipeline Orchestration"
+    weight: 0.15
+    validation_method: code-analysis
+    file: s4_service.feature
+
+  - name: "Data Model Integration (existing contacts.py)"
+    weight: 0.10
+    validation_method: code-analysis
+    file: s5_data_model.feature
+
+  - name: "End-to-End Live Test (Real Employers)"
+    weight: 0.15
+    validation_method: api-required
+    file: s6_e2e_live.feature
+
+test_data:
+  employers:
+    - name: "Kresta Blinds"
+      phone: "07 3358 5342"
+      address: "2/55 Musgrave RD Coopers Plains"
+      country: AUS
+      email: "bciqldservice@khl.com.au"
+      manager: "Samantha Bradshaw"
+
+    - name: "Vanguard Investments Australia"
+      phone: "1800018753"
+      address: "L13/130 Lonsdale Street"
+      country: AUS
+      email: "alana.zielinski@vanguard.com.au"
+      manager: "Adam Mariani"
+
+    - name: "Premier Proline Pty Ltd"
+      phone: "0883471700"
+      address: "68 Audley Street, Woodville North SA 5012"
+      country: AUS
+      email: "sarah.harris@hydroil.com.au"
+      manager: "Jaime Macdonald"
+
+    - name: "SICE ANZ"
+      phone: "0382566900"
+      address: "7/627 Chapel St, South Yarra"
+      country: AUS
+      email: "Alex.Xu@sice.com.au"
+      manager: "Alex Xu"
+
+    - name: "Medatech Australia"
+      phone: "0393297355"
+      address: "UL40, 1341 Dandenong Road, Chadstone"
+      country: AUS
+      email: "sales@medatech.com.au"
+      manager: "David Linke"

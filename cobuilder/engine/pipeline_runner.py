@@ -135,11 +135,18 @@ except ImportError:
 # ---------------------------------------------------------------------------
 
 try:
-    import claude_code_sdk  # type: ignore[import]
+    import claude_agent_sdk as claude_code_sdk  # type: ignore[import]
+    # claude_agent_sdk renamed ClaudeCodeOptions → ClaudeAgentOptions.
+    # Patch the alias so all existing call-sites (claude_code_sdk.ClaudeCodeOptions) work.
+    claude_code_sdk.ClaudeCodeOptions = claude_code_sdk.ClaudeAgentOptions  # type: ignore[attr-defined]
     _SDK_AVAILABLE = True
 except ImportError:
-    claude_code_sdk = None  # type: ignore[assignment]
-    _SDK_AVAILABLE = False
+    try:
+        import claude_code_sdk  # type: ignore[import]
+        _SDK_AVAILABLE = True
+    except ImportError:
+        claude_code_sdk = None  # type: ignore[assignment]
+        _SDK_AVAILABLE = False
 
 # ---------------------------------------------------------------------------
 # Logfire instrumentation (optional — graceful no-op if not installed)
@@ -438,7 +445,10 @@ def _create_signal_stop_hook(signal_dir: str, node_id: str) -> dict:
         }
 
     try:
-        from claude_code_sdk.types import HookMatcher
+        try:
+            from claude_agent_sdk.types import HookMatcher
+        except ImportError:
+            from claude_code_sdk.types import HookMatcher  # type: ignore[no-redef]
         return {"Stop": [HookMatcher(hooks=[_check_signal])]}
     except ImportError:
         log.warning("[hooks] claude_code_sdk.types not available — signal stop hook disabled")
@@ -2264,6 +2274,8 @@ class PipelineRunner:
                 cwd=effective_dir,
                 env=clean_env,
                 hooks=_create_signal_stop_hook(self.signal_dir, node_id),
+                setting_sources=["user", "project"],
+                add_dirs=[self._get_cobuilder_root()],
             )
             messages = []
             result_text = ""
@@ -2671,12 +2683,12 @@ class PipelineRunner:
             f"| **Completeness** | 25% | Are ALL acceptance criteria addressed? Any gaps? |\n"
             f"| **Code Quality** | 15% | Clean code, no TODOs, proper error handling, follows project patterns |\n"
             f"| **SD Adherence** | 10% | Does the implementation follow the Solution Design architecture? |\n"
-            f"| **Process Discipline** | 15% | Did the worker use beads (`bd start/done`) to track work? Check git log for beads refs in commit messages. |\n\n"
+            f"| **Test Coverage** | 15% | Are there unit tests for new code? Do they pass? Is coverage adequate (>80%)? Run `npm test` or `pytest` to verify. |\n\n"
             f"**Scoring guide**: 0-3 = fundamentally broken, 4-5 = major issues, 6-7 = works but needs fixes, 8-9 = good with minor issues, 10 = perfect.\n"
             f"**Pass threshold**: Overall weighted score >= 7.0\n\n"
-            f"**Process Discipline check**: Run `bd list --json` and check the task was started/completed. "
-            f"Check `git log --oneline -5` for beads task references in commit messages. "
-            f"If the worker skipped beads entirely, score process_discipline at 0.\n\n"
+            f"**Test Coverage check**: Run the project's test command and verify tests pass. "
+            f"Check that new modules have corresponding test files. "
+            f"If the worker wrote no tests at all, score test_coverage at 0.\n\n"
             f"Calibration: Claude naturally over-praises its own work. Be skeptical. "
             f"If something looks correct but you haven't verified it (ran tests, checked actual output), score it lower.\n"
         )
@@ -2689,7 +2701,7 @@ class PipelineRunner:
             f"and force you to redo the entire validation. Save yourself the retry — include ALL fields.\n\n"
             f"PASS example (overall >= 7.0):\n"
             f'```\nWrite(file_path="{signal_file_path}", content=\'{{"result": "pass", "reason": "All criteria met", '
-            f'"scores": {{"correctness": 9, "completeness": 8, "code_quality": 8, "sd_adherence": 9, "process_discipline": 8}}, '
+            f'"scores": {{"correctness": 9, "completeness": 8, "code_quality": 8, "sd_adherence": 9, "test_coverage": 8}}, '
             f'"overall_score": 8.5, '
             f'"criteria_results": [{{"criterion_id": "AC-1", "status": "pass", "evidence": "test X passes"}}, '
             f'{{"criterion_id": "AC-2", "status": "pass", "evidence": "verified via browser"}}]}}\')\n```\n\n'
@@ -2697,7 +2709,7 @@ class PipelineRunner:
             f'```\nWrite(file_path="{signal_file_path}", content=\'{{"result": "requeue", '
             f'"requeue_target": "{target_node_id}", '
             f'"reason": "AC-2 fails: login form missing validation", '
-            f'"scores": {{"correctness": 5, "completeness": 4, "code_quality": 7, "sd_adherence": 8, "process_discipline": 6}}, '
+            f'"scores": {{"correctness": 5, "completeness": 4, "code_quality": 7, "sd_adherence": 8, "test_coverage": 6}}, '
             f'"overall_score": 5.4, '
             f'"criteria_results": [{{"criterion_id": "AC-1", "status": "pass", "evidence": "renders correctly"}}, '
             f'{{"criterion_id": "AC-2", "status": "fail", "reason": "Form submits without email validation"}}], '
@@ -2705,7 +2717,7 @@ class PipelineRunner:
             f"FAIL example (fundamental design flaw, not fixable by retry):\n"
             f'```\nWrite(file_path="{signal_file_path}", content=\'{{"result": "fail", '
             f'"reason": "Architecture incompatible with AC requirements", '
-            f'"scores": {{"correctness": 2, "completeness": 1, "code_quality": 3, "sd_adherence": 1, "process_discipline": 0}}, '
+            f'"scores": {{"correctness": 2, "completeness": 1, "code_quality": 3, "sd_adherence": 1, "test_coverage": 0}}, '
             f'"overall_score": 1.8, '
             f'"criteria_results": [{{"criterion_id": "AC-1", "status": "fail", "reason": "Wrong framework used"}}]}}\')\n```\n\n'
             f"**IMPORTANT**: Be SPECIFIC in `criteria_results`. Each failed AC is a bug report the worker must fix. "
@@ -2818,6 +2830,8 @@ class PipelineRunner:
                 max_turns=100,
                 env=clean_env,
                 hooks=_create_signal_stop_hook(self.signal_dir, node_id),
+                setting_sources=["user", "project"],
+                add_dirs=[self._get_cobuilder_root()],
             )
             messages = []
             _first_msg_logged = False
@@ -3112,7 +3126,7 @@ class PipelineRunner:
                             "Include the full scoring rubric in your next signal."
                         ),
                     }
-                    self._write_signal(node_id, rejection_signal, signal_kind="validation")
+                    self._write_node_signal(node_id, rejection_signal, signal_kind="validation")
                     # Move it to processed/ so it shows up in signal history
                     rejection_fname = f"{node_id}-validation.json"
                     rejection_src = os.path.join(self.signal_dir, rejection_fname)
