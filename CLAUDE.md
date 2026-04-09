@@ -4,280 +4,94 @@ Claude Code harness for multi-agent AI orchestration. Contains configuration, sk
 
 ## Agent Hierarchy
 
-```
-CoBuilder (cccb)               → Strategic planning, business validation
-  Pilot (cobuilder-lifecycle)    → Autonomous research→refine→plan→execute→validate loop
-  Orchestrator (launchorchestrator) → Feature coordination, worker delegation
-    Workers (Agent Teams)         → Implementation, testing, focused execution
-```
+| Level | Name | Launch | Purpose |
+|-------|------|--------|---------|
+| 1 | CoBuilder | `cccb` | Strategic planning, business validation |
+| 1.5 | Pilot | `cobuilder-lifecycle` template | Autonomous research-to-validate loop |
+| 2 | Orchestrator | `launchorchestrator [epic]` | Feature coordination, worker delegation |
+| 3 | Workers | `Task(subagent_type="...", team_name="...")` | Implementation, testing, focused execution |
+| -- | Pipeline | `python3 cobuilder/engine/pipeline_runner.py --dot-file <path>` | Zero-LLM-cost DAG state machine |
 
-**Key Principle**: Higher levels coordinate; lower levels implement.
+Additional commands:
+- Resume pipeline: `pipeline_runner.py --dot-file <path> --resume`
+- Event-driven pilot: `python3 cobuilder/engine/guardian.py --dot <path> --pipeline-id <id> --target-dir <dir> --event-driven`
+- Gate watcher: `python3 cobuilder/engine/gate_watch.py --signal-dir <dir> --dot-file <path>`
 
-**Pilot mode**: CoBuilder running a `cobuilder-lifecycle` pipeline — the autonomous PRD-to-implementation loop. Not a separate entity; a mode of CoBuilder. Say "launch the pilot" to trigger it. Template: `.cobuilder/templates/cobuilder-lifecycle/`.
-
-Launch commands:
-- CoBuilder: `cccb`
-- Orchestrator: `launchorchestrator [epic-name]`
-- Worker: `Task(subagent_type="...", team_name="...", name="...")`
-- Pipeline: `python3 cobuilder/engine/pipeline_runner.py --dot-file <path.dot>`
-- Pipeline (resume): `python3 cobuilder/engine/pipeline_runner.py --dot-file <path.dot> --resume`
-- Pilot (event-driven): `python3 cobuilder/engine/guardian.py --dot <path.dot> --pipeline-id <id> --target-dir <dir> --event-driven`
-- Gate watcher: `python3 cobuilder/engine/gate_watch.py --signal-dir <dir> --dot-file <path.dot>`
+**Key Principle**: Higher levels coordinate; lower levels implement. Orchestrators NEVER Edit/Write — they delegate to workers.
 
 ## Directory Index
 
-### `cobuilder/` — Pipeline Execution Engine
-
-Zero-LLM-cost state machine that turns DOT graph pipelines into working software. Parses directed acyclic graphs, dispatches AgentSDK workers, watches signal files, and transitions nodes through states. All intelligence lives in the workers it spawns.
-
-| Subdirectory | Purpose |
-|---|---|
-| `engine/` | Core runner (`pipeline_runner.py`), pilot agent (`guardian.py`), gate watcher (`gate_watch.py`), node handlers, signal protocol, checkpoint system, CLI. Pilot is an autonomous goal-pursuing agent with event-driven wake (`--event-driven`): sleeps between gates at zero LLM cost, wakes on filesystem events. See `docs/sds/SD-PILOT-AUTONOMY-001.md`. |
-| `engine/events/` | Pipeline event bus: 18 event types (pipeline lifecycle + agent messages), JSONL/Logfire/SignalBridge backends, CLI streaming via `cli.py watch`. |
-| `engine/handlers/` | Node implementations: `codergen` (LLM work), `research` (Context7+Perplexity), `refine` (SD rewriting), `wait_human` (gates), `manager_loop` (sub-pipelines) |
-| `engine/providers.yaml` | Named LLM profiles (anthropic-fast/smart/opus, alibaba-glm5/qwen3) |
-| `repomap/` | **ZeroRepo** — codebase intelligence via graph construction and embeddings for context-aware agent guidance |
-| `templates/` | Jinja2 DOT pipeline templates: `sequential-validated`, `hub-spoke`, `cobuilder-lifecycle` |
-
-### `.claude/` — Harness Configuration
-
-| Subdirectory | Purpose |
-|---|---|
-| `output-styles/` | Auto-loaded agent behaviors: `cobuilder-guardian.md` (Level 1), `orchestrator.md` (Level 2) |
-| `skills/` | 40+ explicitly invoked skills. Key: `cobuilder-guardian/`, `orchestrator-multiagent/`, `mcp-skills/` (MCP wrappers with 90%+ context savings) |
-| `hooks/` | Lifecycle handlers: session-start detection, delegation reminders, stop-gate validation, pre-compact memory flush |
-| `scripts/` | CLI utilities including `completion-state/` (cs-* session tracking), `doc-gardener/` (documentation linter) |
-| `tests/` | Hook and workflow tests: `pytest .claude/tests/` |
-
-### `docs/` — Project Documentation
-
-| Subdirectory | Purpose |
-|---|---|
-| `prds/` | Product Requirement Documents (Business Specs) |
-| `sds/` | Solution Design documents (Technical Specs) |
-
-## Documentation Standards
-
-All markdown in `.claude/` and `docs/` must follow standards enforced by **doc-gardener** (`.claude/scripts/doc-gardener/lint.py`). The linter supports target-specific schemas controlled via config files.
-
-### Frontmatter Requirements
-
-**`.claude/` files** (minimal schema):
-
-```yaml
----
-title: "Human-Readable Title"           # REQUIRED
-status: active                          # REQUIRED - active | draft | archived | deprecated
-type: skill                             # Recommended - skill | agent | output-style | hook | command | guide | architecture | reference | config
-last_verified: 2026-02-19              # Recommended - YYYY-MM-DD
-grade: authoritative                    # Recommended - authoritative | reference | archive | draft
----
-```
-
-**`docs/` files** (extended schema):
-
-```yaml
----
-title: "Human-Readable Title"           # REQUIRED
-description: "One-line purpose summary"  # REQUIRED - non-empty, max 200 chars
-version: "1.0.0"                        # REQUIRED - semver N.N.N
-last-updated: 2026-03-15               # REQUIRED - YYYY-MM-DD
-status: active                          # REQUIRED - active | draft | archived | deprecated
-type: prd                               # REQUIRED - prd | sd | epic | specification | research | guide | reference | architecture
-grade: authoritative                    # Recommended
-prd_id: PRD-XXX-NNN                    # CONDITIONAL - required for PRDs
----
-```
-
-### Lint Categories
-
-| Category | What It Checks | Auto-fixable |
-|----------|---------------|-------------|
-| **frontmatter** | Missing block or invalid field values | Yes |
-| **crosslinks** | Relative markdown links resolve to real files | No |
-| **naming** | kebab-case dirs, UPPER-CASE top-level docs, Doc-ID prefixed files | No |
-| **staleness** | `last_verified` > 90 days (warning), > 60 days for authoritative (info) | Yes (downgrades grade) |
-| **grades-sync** | Frontmatter `grade` matches `quality-grades.json` | Yes |
-| **implementation-status** | PRD/SD/Epic/Spec docs must have `## Implementation Status` section | Yes |
-| **misplaced-document** | PRD/SD content outside `docs/` is flagged | No |
-
-### Naming Conventions
-
-| Item | Pattern | Examples |
-|------|---------|---------|
-| Directories | `kebab-case` | `orchestrator-multiagent/` |
-| Doc-ID dirs | `PREFIX-Name` | `SD-DOC-GARDENER-002/` |
-| Top-level docs | `UPPER-CASE.md` | `CLAUDE.md`, `SKILL.md`, `README.md` |
-| Regular files | `kebab-case.md` | `decision-time-guidance.md` |
-| Doc-ID files | `PREFIX-name.md` | `PRD-DOC-GARDENER-002.md` |
-
-### Quality Grades
-
-| Grade | Meaning | Trust Level |
-|-------|---------|-------------|
-| `authoritative` | Source of truth, actively maintained | High |
-| `reference` | Useful context, periodically reviewed | Medium |
-| `archive` | Historical record, not maintained | Low |
-| `draft` | Work in progress, unverified | Unverified |
-
-### Doc-Gardener Commands
-
-```bash
-python3 .claude/scripts/doc-gardener/lint.py                    # Lint .claude/
-python3 .claude/scripts/doc-gardener/lint.py --target docs/     # Lint docs/
-python3 .claude/scripts/doc-gardener/gardener.py --execute      # Auto-fix + report
-python3 .claude/scripts/doc-gardener/lint.py --json             # Machine-readable
-DOC_GARDENER_SKIP=1 git push                                    # Emergency bypass
-```
-
-Config files: `.claude/scripts/doc-gardener/docs-gardener.config.json`, `.claude/scripts/doc-gardener/quality-grades.json`.
-
-### `.pipelines/` — Runtime Pipeline State (git-ignored)
-
-Active DOT files, checkpoint snapshots, signal directories, and validation evidence.
-
-### `.cobuilder/templates/` — Template Library
-
-Jinja2 DOT templates for pipeline instantiation.
-
-### `tools/` — Go CLI Utilities
-
-| Tool | Purpose |
-|------|---------|
-| `tmux-nav/` | Interactive tmux session navigator (Bubble Tea TUI). `tmux-nav` to launch. |
-| `pipeline-watch/` | Real-time pipeline event viewer (Bubble Tea TUI). Lists running pipelines, streams events with color-coded display. `pipeline-watch` to launch, or `pipeline-watch tail <path>` for raw streaming. |
-
-## Pipeline Observability
-
-### Event Bus (18 event types)
-
-Every pipeline run emits structured events to 3 backends simultaneously:
-
-| Backend | File | Purpose |
-|---------|------|---------|
-| **JSONL** | `{run_dir}/pipeline-events.jsonl` | Append-only log, tailed by CLI/TUI tools |
-| **Logfire** | Logfire spans | Distributed tracing with `service.name = 'cobuilder-pipeline-runner'` |
-| **SignalBridge** | Signal files | Translates critical events to guardian signal protocol |
-
-**Pipeline lifecycle events** (14): `pipeline.started/completed/failed/resumed`, `node.started/completed/failed`, `edge.selected`, `checkpoint.saved`, `context.updated`, `retry.triggered`, `loop.detected`, `validation.started/completed`
-
-**Agent message events** (4): `agent.message`, `agent.thinking`, `agent.tool_call`, `agent.tool_result` — emitted by guardian (pilot) and session_runner (worker) alongside Logfire spans. Carry `agent_role` (guardian/runner), `turn`, and preview data.
-
-### CLI Event Streaming
-
-```bash
-# Follow a running pipeline (tail -f mode, Ctrl+C for summary)
-python3 cobuilder/engine/cli.py watch <pipeline-events.jsonl>
-
-# Pass a .dot file — resolves JSONL automatically
-python3 cobuilder/engine/cli.py watch <pipeline.dot>
-
-# Filter to agent activity only
-python3 cobuilder/engine/cli.py watch events.jsonl --filter "agent.*"
-
-# Only failures and retries
-python3 cobuilder/engine/cli.py watch events.jsonl --filter "*.failed"
-
-# Last 10 minutes, no follow
-python3 cobuilder/engine/cli.py watch events.jsonl --since 10 --no-follow
-```
-
-### TUI Pipeline Viewer
-
-```bash
-# Interactive TUI — lists pipelines, streams events
-cd tools/pipeline-watch && go run .
-
-# Or after building:
-pipeline-watch              # TUI mode
-pipeline-watch list         # List discovered pipelines
-pipeline-watch tail <path>  # Stream events from a specific JSONL file
-```
+| Directory | Purpose | Deeper Docs |
+|-----------|---------|-------------|
+| `cobuilder/engine/` | Pipeline runner, handlers, CLI, checkpoint, signal protocol, event bus | [`cobuilder/CLAUDE.md`](cobuilder/CLAUDE.md) |
+| `cobuilder/repomap/` | ZeroRepo — codebase intelligence via graph + embeddings | [`cobuilder/CLAUDE.md`](cobuilder/CLAUDE.md) |
+| `.cobuilder/templates/` | Jinja2 DOT pipeline templates (6 templates) | [`.cobuilder/templates/CLAUDE.md`](.cobuilder/templates/CLAUDE.md) |
+| `.claude/output-styles/` | Auto-loaded agent behaviors (cobuilder-guardian, orchestrator) | |
+| `.claude/skills/` | 40+ explicitly invoked skills | See Critical Skills below |
+| `.claude/hooks/` | Lifecycle handlers (session-start, delegation, stop-gate, pre-compact) | |
+| `.claude/scripts/` | CLI utilities: `completion-state/` (cs-*), `doc-gardener/` (lint) | |
+| `.claude/agents/` | Agent-specific instructions | [`.claude/agents/CLAUDE.md`](.claude/agents/CLAUDE.md) |
+| `docs/prds/` | Business Specs (PRDs) | |
+| `docs/sds/` | Technical Specs (Solution Designs) | |
+| `tools/` | Go CLI: `tmux-nav` (TUI navigator), `pipeline-watch` (event viewer) | |
+| `.pipelines/` | Runtime pipeline state — DOT files, checkpoints, signals (git-ignored) | |
 
 ## Key Patterns
 
-### Investigation vs Implementation Boundary
+- **Investigation vs Implementation**: Orchestrators Read/Grep/Glob to investigate. ALL code changes delegated to workers via Agent Teams.
+- **Agent selection by directory**: `*/frontend/*` -> `frontend-dev-expert` | `*/agent/*` or backend -> `backend-solutions-engineer` | test files -> `tdd-test-engineer` | design docs -> `solution-architect`
+- **Validation**: All task closures go through `validation-test-agent` — direct `bd close` is blocked. Writing NEW tests -> `tdd-test-engineer`; checking existing work -> `validation-test-agent`.
+- **Acceptance tests**: Blind tests live in `acceptance-tests/PRD-{ID}/`, never in the implementation repo. Workers cannot see the rubric.
 
-- **Orchestrators** (Level 2): Read/Grep/Glob to investigate. NEVER Edit/Write. Delegate all implementation to workers.
-- **Workers** (Level 3): Implement features, run tests, report completion.
+## Critical Skills
 
-### Agent Selection by Directory
+| Skill | Invoke | When to Use |
+|-------|--------|-------------|
+| `cobuilder-guardian` | `Skill("cobuilder-guardian")` | Independent validation of orchestrator work |
+| `research-first` | `Skill("research-first")` | Structured research before implementation |
+| `acceptance-test-writer` | `Skill("acceptance-test-writer")` | Generate blind Gherkin tests from BS |
+| `acceptance-test-runner` | `Skill("acceptance-test-runner")` | Execute stored acceptance tests |
+| `completion-promise` | `Skill("completion-promise")` | Track session promises (cs-* CLI) |
+| `worktree-manager-skill` | `Skill("worktree-manager-skill")` | Manage git worktrees for isolation |
+| `railway-deploy` | `Skill("railway-deploy")` | Deploy to Railway |
+| `mcp-skills/*` | See `.claude/skills/mcp-skills/SKILL.md` | MCP server wrappers (90%+ context savings) |
 
-| Directory Pattern | Agent |
-|---|---|
-| `*/frontend/*` | `frontend-dev-expert` |
-| `*/agent/*` or backend | `backend-solutions-engineer` |
-| Test files (`*.test.*`, `*.spec.*`) | `tdd-test-engineer` |
-| Solution design docs | `solution-architect` |
+## Testing
 
-### Validation Rules
+```bash
+pytest .claude/tests/hooks/              # Hook tests
+pytest .claude/tests/completion-state/   # Completion state tests
+pytest tests/engine/ -v                  # Pipeline engine tests
+pytest cobuilder/engine/conditions/tests/ -v  # Conditions integration tests
+```
 
-- All task closures go through `validation-test-agent` — direct `bd close` is blocked
-- Writing NEW tests → `tdd-test-engineer`; checking existing work → `validation-test-agent`
+## Documentation Standards
 
-### Acceptance Testing Process
+All markdown in `.claude/` and `docs/` must include YAML frontmatter and follow naming conventions enforced by doc-gardener. Run `python3 .claude/scripts/doc-gardener/lint.py` to check, or `python3 .claude/scripts/doc-gardener/gardener.py --execute` to auto-fix. Config: `.claude/scripts/doc-gardener/docs-gardener.config.json`. Emergency bypass: `DOC_GARDENER_SKIP=1 git push`.
 
-Blind acceptance tests live in `acceptance-tests/PRD-{ID}/` or `acceptance-tests/SD-{ID}/` — **never** in the implementation repo. Workers cannot see the rubric.
+## Pipeline Observability
 
-Each test suite has:
-- `manifest.yaml` — Feature weights, thresholds, and **`validation_method` per feature**
-- `*.feature` — Gherkin scenarios with confidence scoring guides (rubric, not executable)
-- `executable-tests/` — **Browser automation test specs** (YAML mapping Gherkin to `mcp__chrome-devtools__*` tool calls)
+Every pipeline emits structured events (18 types) to JSONL, Logfire, and SignalBridge backends simultaneously. Stream events with:
 
-**Validation methods** (set per feature in `manifest.yaml`):
+```bash
+python3 cobuilder/engine/cli.py watch <pipeline.dot>          # Follow pipeline events
+python3 cobuilder/engine/cli.py watch events.jsonl --filter "agent.*"  # Agent activity only
+pipeline-watch                                                  # TUI viewer (Go, in tools/)
+```
 
-| Value | How to Validate | Tools |
-|---|---|---|
-| `browser-required` | Load the page and verify DOM/CSS/layout | `mcp__chrome-devtools__navigate_page`, `evaluate_script`, `take_screenshot`, `click` |
-| `api-required` | Make real HTTP requests | `curl`, `httpx` |
-| `code-analysis` | Read source files only | `Read`, `Grep`, Serena |
-| `hybrid` | Mix of methods | Any combination |
-
-**Pilot validation gate protocol**: When the pilot (`guardian.py`) reaches a `wait.cobuilder` gate, it MUST:
-1. Check `acceptance-tests/` for pre-existing test suites (manifest + executable specs)
-2. If `executable-tests/` exist with `browser-required` features: **run them using Chrome MCP tools**
-3. If no executable tests exist: write and execute its own Gherkin scenarios per the `@method` tags
-4. Score each scenario 0.0-1.0 using the confidence scoring guide
-5. Pass the gate only if overall weighted score meets the `accept` threshold
+Full details in [`cobuilder/CLAUDE.md`](cobuilder/CLAUDE.md).
 
 ## Core Systems
 
-### Output Styles vs Skills
-
-| Mechanism | Load Guarantee | Use For |
-|---|---|---|
-| **Output Styles** | 100% (auto-loaded) | Critical patterns, mandatory protocols |
-| **Skills** | ~85% (explicit invoke) | Reference material, detailed guides |
-
-Output styles load automatically at session start. Skills require `Skill("skill-name")` invocation.
-
-### Task Master Integration
-
-Task decomposition and tracking: `/project:tm/init/quick`, `/project:tm/parse-prd <file>`, `/project:tm/next`, `/project:tm/list`, `/project:tm/set-status/to-done <id>`, `/project:tm/expand <id>`. See `.claude/TM_COMMANDS_GUIDE.md` for full reference.
-
-### MCP Servers
-
-Configured in `.mcp.json`: sequential-thinking, task-master-ai, context7, perplexity (4 tools), brave-search, serena, hindsight (localhost:8888), beads. MCP skill wrappers in `.claude/skills/mcp-skills/` reduce context by 90%+.
-
-### Hooks System
-
-Lifecycle event handlers in `.claude/settings.json`:
-
-| Hook | Purpose |
-|---|---|
-| `SessionStart` | Detect orchestrator mode, load MCP skills |
-| `UserPromptSubmit` | Remind orchestrator of delegation rules |
-| `Stop` | Validate completion before session ends |
-| `PreCompact` | Flush Hindsight memory before compression |
-
-### Enabled Plugins
-
-Configured in `.claude/settings.json`: beads, frontend-design, code-review, double-shot-latte.
+- **Output Styles** (auto-loaded, 100% reliable) vs **Skills** (~85%, explicit `Skill()` invoke). Output styles for critical patterns; skills for reference material.
+- **Task Master**: `/project:tm/init/quick`, `/project:tm/parse-prd <file>`, `/project:tm/next`, `/project:tm/list`. Full guide: `.claude/TM_COMMANDS_GUIDE.md`.
+- **MCP Servers** (`.mcp.json`): sequential-thinking, task-master-ai, context7, perplexity, brave-search, serena, hindsight, beads. Wrappers: `.claude/skills/mcp-skills/`.
+- **Hooks** (`settings.json`): SessionStart (mode detection), UserPromptSubmit (delegation reminder), Stop (completion validation), PreCompact (memory flush).
 
 ## Environment Variables
 
 | Variable | Purpose |
-|---|---|
+|----------|---------|
 | `CLAUDE_SESSION_ID` | Unique session identifier |
 | `CLAUDE_OUTPUT_STYLE` | Active output style |
 | `ANTHROPIC_API_KEY` | API authentication |
@@ -285,15 +99,9 @@ Configured in `.claude/settings.json`: beads, frontend-design, code-review, doub
 | `PIPELINE_SIGNAL_DIR` | Override signal file directory |
 | `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` | Enable native Agent Teams (`1`) |
 
-## Testing
-
-```bash
-pytest .claude/tests/hooks/           # Hook tests
-pytest .claude/tests/completion-state/ # Completion state tests
-```
-
 ## Important Notes
 
 - **API Keys**: `.mcp.json` contains API keys for development only. Never commit to production.
-- **Orchestrator Delegation Rules**: Investigation is allowed; implementation is forbidden. Always delegate code changes to workers.
-- **Documentation**: See Documentation Standards section above.
+- **Orchestrator Rules**: Investigation allowed; implementation forbidden. Always delegate code changes to workers.
+- **Beads**: Default task tracker. `bd ready` for available work, `bd create` before coding, `bd sync` at session end.
+- **Hindsight**: Must call `mcp__hindsight__retain` before session end — enforced by stop hook.
