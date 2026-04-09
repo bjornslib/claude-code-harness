@@ -1,0 +1,168 @@
+template:
+  name: tdd-conditional-ci
+  version: "1.0"
+  description: >
+    TDD pipeline with CI-driven conditional test routing.
+    Phase 1: Planner reads BS, produces TS.
+    Phase 2: RED — TDD test engineer writes failing tests.
+    Phase 3: GREEN — Implementation worker makes tests pass.
+    Phase 4: CI analysis tool node outputs JSON; conditional diamond
+    routes to unit tests OR browser tests (or both via fan-out).
+    Phase 5: Validator checks results against BS + TS.
+    Showcases: parse_json_output, N-way conditional routing, working_dir.
+  topology: sequential-gated
+  min_nodes: 16
+  max_nodes: 22
+
+parameters:
+  prd_ref:
+    type: string
+    required: true
+    description: "PRD identifier (e.g., PRD-AUTH-001)"
+
+  bs_path:
+    type: string
+    required: true
+    description: "Absolute path to the Business Spec (PRD) document"
+
+  epic_id:
+    type: string
+    required: true
+    description: "Epic identifier within the BS being implemented"
+
+  epic_label:
+    type: string
+    required: true
+    description: "Human-readable label for the epic"
+
+  sd_output_path:
+    type: string
+    required: true
+    description: "Absolute path where the TS (Solution Design) will be written"
+
+  worker_type:
+    type: string
+    required: true
+    description: "Agent type for implementation (e.g., backend-solutions-engineer)"
+
+  test_worker_type:
+    type: string
+    default: "tdd-test-engineer"
+    description: "Agent type for writing failing tests"
+
+  validator_worker_type:
+    type: string
+    default: "validation-test-agent"
+    description: "Agent type for independent validation"
+
+  bead_id_planner:
+    type: string
+    required: true
+    description: "Bead ID for the planning task"
+
+  bead_id_impl:
+    type: string
+    required: true
+    description: "Bead ID for the implementation task"
+
+  ci_script:
+    type: string
+    default: "./scripts/determine-test-type.sh"
+    description: "CI analysis script that outputs JSON with 'test_type' and optional 'coverage' fields"
+
+  unit_test_command:
+    type: string
+    default: "pytest tests/ -v"
+    description: "Command to run unit tests"
+
+  browser_test_command:
+    type: string
+    default: "npx playwright test"
+    description: "Command to run browser/E2E tests"
+
+  llm_profile:
+    type: string
+    default: "alibaba-glm5"
+    description: "Default LLM profile for all nodes"
+
+  llm_profile_planner:
+    type: string
+    default: ""
+    description: "Override LLM profile for planner nodes"
+
+  llm_profile_test:
+    type: string
+    default: ""
+    description: "Override LLM profile for test writing"
+
+  llm_profile_impl:
+    type: string
+    default: ""
+    description: "Override LLM profile for implementation"
+
+  cobuilder_root:
+    type: string
+    required: true
+    description: "Absolute path to cobuilder harness root"
+
+  target_dir:
+    type: string
+    required: true
+    description: "Absolute path to target working directory (worktree)"
+
+defaults:
+  llm_profile: "anthropic-smart"
+  handler_defaults:
+    research:
+      llm_profile: "anthropic-fast"
+    codergen:
+      llm_profile: "anthropic-smart"
+
+constraints:
+  tdd_node_transitions:
+    description: "Allowed status transitions for TDD codergen nodes"
+    type: node_state_machine
+    applies_to:
+      shape: box
+      handler: codergen
+    states: [pending, active, impl_complete, validated, failed]
+    transitions:
+      - {from: pending, to: active}
+      - {from: active, to: impl_complete}
+      - {from: active, to: failed}
+      - {from: impl_complete, to: validated}
+      - {from: impl_complete, to: failed}
+      - {from: failed, to: active}
+    initial: pending
+    terminal: [validated, failed]
+
+  validation_gate_transitions:
+    description: "Allowed status transitions for validation gates"
+    type: node_state_machine
+    applies_to:
+      shape: hexagon
+    states: [pending, active, passed, failed]
+    transitions:
+      - {from: pending, to: active}
+      - {from: active, to: passed}
+      - {from: active, to: failed}
+      - {from: failed, to: active}
+    initial: pending
+    terminal: [passed, failed]
+
+  require_validation_before_exit:
+    description: "No codergen node may reach exit without passing a validation gate"
+    type: path_constraint
+    rule:
+      from_shape: box
+      must_pass_through:
+        - hexagon
+      before_reaching:
+        - Msquare
+
+  bounded_retries:
+    description: "Edges targeting already-visited nodes must be bounded"
+    type: loop_constraint
+    rule:
+      max_per_node_visits: 4
+      max_pipeline_visits: 60

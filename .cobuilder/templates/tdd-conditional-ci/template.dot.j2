@@ -1,0 +1,352 @@
+// Generated from template: tdd-conditional-ci v1.0
+// PRD: {{ prd_ref }} | Epic: {{ epic_id }}
+// Pattern: Planner → Red → Green → CI Analysis → Conditional Route (unit / browser) → Validator
+// Showcases: parse_json_output, N-way conditional routing, working_dir
+
+digraph "{{ prd_ref }}-{{ epic_id }}-tdd-ci" {
+    graph [
+        label="TDD + Conditional CI: {{ epic_label }}"
+        labelloc="t"
+        fontsize=16
+        rankdir="TB"
+        pipeline_id="{{ prd_ref }}-{{ epic_id }}-tdd-ci"
+        prd_ref="{{ prd_ref }}"
+        cobuilder_root="{{ cobuilder_root }}"
+        target_dir="{{ target_dir }}"
+        _template="tdd-conditional-ci"
+        _template_version="1.0"
+    ];
+
+    node [fontname="Helvetica" fontsize=11 style=filled];
+    edge [fontname="Helvetica" fontsize=9 arrowhead=vee];
+
+    // ════════════════════════════════════════════════════════════
+    // START
+    // ════════════════════════════════════════════════════════════
+    start [
+        label="START\n{{ prd_ref }}"
+        handler="start"
+        shape=Mdiamond
+        fillcolor=green
+        status=pending
+    ];
+
+    // ════════════════════════════════════════════════════════════
+    // PHASE 1: PLANNER — Research + produce TS
+    // ════════════════════════════════════════════════════════════
+    research_codebase [
+        label="Research: Codebase"
+        handler="research"
+        shape=tab
+        fillcolor=lightcyan
+        status=pending
+        solution_design="{{ bs_path }}"
+        prd_ref="{{ prd_ref }}"
+        llm_profile="{{ llm_profile_planner or llm_profile }}"
+        research_queries="codebase structure, existing test patterns, CI/CD setup, browser test infrastructure"
+        downstream_node="write_ts"
+        prompt="PLANNER: Research the target codebase at {{ target_dir }} for epic {{ epic_id }}: {{ epic_label }}. (1) Read BS at {{ bs_path }}. (2) Explore codebase: modules, test infrastructure, CI configuration. (3) Identify whether this epic needs unit tests, browser tests, or both. (4) Document findings to evidence JSON."
+    ];
+
+    write_ts [
+        label="Planner: Write TS"
+        handler="codergen"
+        shape=box
+        fillcolor=lightyellow
+        status=pending
+        bead_id="{{ bead_id_planner }}"
+        worker_type="solution-design-architect"
+        sd_path="{{ bs_path }}"
+        prd_ref="{{ prd_ref }}"
+        llm_profile="{{ llm_profile_planner or llm_profile }}"
+        acceptance="TS covers: module design, API contracts, test strategy (unit + browser), file-by-file implementation plan"
+        prompt="PLANNER: Write a Technical Spec at {{ sd_output_path }} for epic {{ epic_id }}: {{ epic_label }}. Use BS ({{ bs_path }}) and research evidence. The TS must include: (1) Module design with file paths. (2) API contracts. (3) Test strategy: explicitly define which acceptance criteria need unit tests vs browser tests. (4) File-by-file implementation plan. (5) CI analysis script expectations (what JSON keys it should output)."
+    ];
+
+    gate_planner [
+        label="TS Quality Gate"
+        handler="wait.cobuilder"
+        shape=hexagon
+        fillcolor=purple
+        status=pending
+        gate_type="e2e"
+        summary_ref="{{ sd_output_path }}"
+        bead_id="{{ bead_id_planner }}"
+    ];
+
+    review_planner [
+        label="Human Reviews TS"
+        handler="wait.human"
+        shape=hexagon
+        fillcolor=red
+        status=pending
+        gate="technical"
+        mode="technical"
+    ];
+
+    decide_planner [
+        label="TS Approved?"
+        handler="conditional"
+        shape=diamond
+        fillcolor=lightyellow
+        status=pending
+    ];
+
+    // ════════════════════════════════════════════════════════════
+    // PHASE 2: RED — Write failing tests
+    // ════════════════════════════════════════════════════════════
+    red_tests [
+        label="RED: Write Failing Tests"
+        handler="codergen"
+        shape=box
+        fillcolor="#ffcccc"
+        status=pending
+        bead_id="{{ bead_id_impl }}"
+        worker_type="{{ test_worker_type }}"
+        sd_path="{{ sd_output_path }}"
+        prd_ref="{{ prd_ref }}"
+        llm_profile="{{ llm_profile_test or llm_profile }}"
+        acceptance="Tests written, ALL tests FAIL (red), tests cover every TS acceptance criterion"
+        prompt="RED PHASE (TDD): Read TS at {{ sd_output_path }}. Write BOTH unit tests and browser tests as specified in the TS test strategy. RULES: (1) Every acceptance criterion must have at least one test. (2) Tests MUST fail — implementation does not exist yet. (3) Unit tests go in tests/unit/. Browser tests go in tests/browser/. (4) Verify all tests fail (not import-error, but assertion failures)."
+    ];
+
+    gate_red [
+        label="Red Verification"
+        handler="wait.cobuilder"
+        shape=hexagon
+        fillcolor=purple
+        status=pending
+        gate_type="unit"
+        summary_ref="{{ sd_output_path }}"
+        bead_id="{{ bead_id_impl }}"
+    ];
+
+    // ════════════════════════════════════════════════════════════
+    // PHASE 3: GREEN — Implement to make tests pass
+    // ════════════════════════════════════════════════════════════
+    green_impl [
+        label="GREEN: Implement"
+        handler="codergen"
+        shape=box
+        fillcolor="#ccffcc"
+        status=pending
+        bead_id="{{ bead_id_impl }}"
+        worker_type="{{ worker_type }}"
+        sd_path="{{ sd_output_path }}"
+        prd_ref="{{ prd_ref }}"
+        llm_profile="{{ llm_profile_impl or llm_profile }}"
+        acceptance="ALL tests pass (green), implementation follows TS, no test modifications"
+        prompt="GREEN PHASE (TDD): Read TS at {{ sd_output_path }} and the failing tests. Implement epic {{ epic_id }}: {{ epic_label }}. RULES: (1) Do NOT modify test files. (2) Write minimal code to make ALL tests pass. (3) Follow TS architecture. (4) Run both unit and browser tests — all must pass."
+    ];
+
+    gate_green [
+        label="Green Verification"
+        handler="wait.cobuilder"
+        shape=hexagon
+        fillcolor=purple
+        status=pending
+        gate_type="unit"
+        summary_ref="{{ sd_output_path }}"
+        bead_id="{{ bead_id_impl }}"
+    ];
+
+    // ════════════════════════════════════════════════════════════
+    // PHASE 4: CI ANALYSIS + CONDITIONAL ROUTING
+    //   Tool node runs CI analysis script in the target repo.
+    //   Script outputs JSON: {"test_type": "unit|browser|both", "coverage": N}
+    //   Conditional diamond routes to the appropriate test runner.
+    // ════════════════════════════════════════════════════════════
+    run_ci [
+        label="CI Analysis"
+        handler="tool"
+        shape=parallelogram
+        fillcolor=orange
+        status=pending
+        tool_command="{{ ci_script }}"
+        parse_json_output="true"
+        working_dir="target_dir"
+    ];
+
+    route_tests [
+        label="Route by\nTest Type"
+        handler="conditional"
+        shape=diamond
+        fillcolor=lightyellow
+        status=pending
+    ];
+
+    // --- Unit test branch ---
+    run_unit_tests [
+        label="Unit Tests"
+        handler="tool"
+        shape=parallelogram
+        fillcolor=lightyellow
+        status=pending
+        tool_command="{{ unit_test_command }}"
+        working_dir="target_dir"
+    ];
+
+    // --- Browser test branch ---
+    run_browser_tests [
+        label="Browser Tests"
+        handler="tool"
+        shape=parallelogram
+        fillcolor=lightyellow
+        status=pending
+        tool_command="{{ browser_test_command }}"
+        working_dir="target_dir"
+    ];
+
+    // --- Both tests branch (fan-out) ---
+    run_both_unit [
+        label="Unit Tests\n(full suite)"
+        handler="tool"
+        shape=parallelogram
+        fillcolor=lightyellow
+        status=pending
+        tool_command="{{ unit_test_command }}"
+        working_dir="target_dir"
+    ];
+
+    run_both_browser [
+        label="Browser Tests\n(full suite)"
+        handler="tool"
+        shape=parallelogram
+        fillcolor=lightyellow
+        status=pending
+        tool_command="{{ browser_test_command }}"
+        working_dir="target_dir"
+    ];
+
+    fan_in_both [
+        label="Join:\nBoth Test Suites"
+        handler="fan_in"
+        shape=tripleoctagon
+        fillcolor=lightyellow
+        status=pending
+    ];
+
+    // ════════════════════════════════════════════════════════════
+    // PHASE 5: VALIDATOR — Independent check
+    // ════════════════════════════════════════════════════════════
+    validate [
+        label="Validator: BS + TS"
+        handler="codergen"
+        shape=box
+        fillcolor="#ccccff"
+        status=pending
+        bead_id="{{ bead_id_impl }}"
+        worker_type="{{ validator_worker_type }}"
+        sd_path="{{ sd_output_path }}"
+        prd_ref="{{ prd_ref }}"
+        llm_profile="{{ llm_profile_impl or llm_profile }}"
+        acceptance="Validation score >= 0.70, all BS criteria checked, all TS contracts verified"
+        prompt="VALIDATOR: Independently verify epic {{ epic_id }}: {{ epic_label }}. (1) Read BS at {{ bs_path }}. (2) Read TS at {{ sd_output_path }}. (3) Read implementation. (4) Run tests yourself. (5) Score each BS criterion 0.0-1.0. (6) Check for missing error handling, security issues, edge cases. (7) Write validation report. ACCEPT threshold: 0.70."
+    ];
+
+    gate_validate [
+        label="Validation Gate"
+        handler="wait.cobuilder"
+        shape=hexagon
+        fillcolor=purple
+        status=pending
+        gate_type="e2e"
+        summary_ref="{{ sd_output_path }}"
+        bead_id="{{ bead_id_impl }}"
+    ];
+
+    review_final [
+        label="Human Final Review"
+        handler="wait.human"
+        shape=hexagon
+        fillcolor=red
+        status=pending
+        gate="e2e"
+        mode="technical"
+    ];
+
+    decide_final [
+        label="Epic Complete?"
+        handler="conditional"
+        shape=diamond
+        fillcolor=lightyellow
+        status=pending
+    ];
+
+    // ════════════════════════════════════════════════════════════
+    // EXIT
+    // ════════════════════════════════════════════════════════════
+    pipeline_exit [
+        label="Complete"
+        handler="exit"
+        shape=Msquare
+        fillcolor=darkgreen
+        status=pending
+    ];
+
+    // ════════════════════════════════════════════════════════════
+    // EDGES
+    // ════════════════════════════════════════════════════════════
+
+    // Phase 1: Planner
+    start -> research_codebase [label="begin"];
+    research_codebase -> write_ts [label="codebase_mapped"];
+    write_ts -> gate_planner [label="ts_written"];
+    gate_planner -> review_planner [label="guardian_ok"];
+    review_planner -> decide_planner [label="human_reviewed"];
+    decide_planner -> red_tests [condition="pass" label="ts_approved"];
+    decide_planner -> write_ts [condition="fail" label="rework_ts"];
+
+    // Phase 2: Red
+    red_tests -> gate_red [label="tests_written"];
+    gate_red -> green_impl [label="tests_fail_confirmed"];
+
+    // Phase 3: Green
+    green_impl -> gate_green [label="impl_done"];
+    gate_green -> run_ci [label="tests_pass_confirmed"];
+
+    // Phase 4: CI analysis + conditional routing
+    run_ci -> route_tests [label="ci_analyzed"];
+
+    // N-way conditional: route by $run_ci.test_type
+    route_tests -> run_unit_tests [
+        condition="$run_ci.test_type = \"unit\""
+        label="unit only"
+        color=blue
+    ];
+    route_tests -> run_browser_tests [
+        condition="$run_ci.test_type = \"browser\""
+        label="browser only"
+        color=purple
+    ];
+    route_tests -> run_both_unit [
+        condition="$run_ci.test_type = \"both\""
+        label="both"
+        color=darkgreen
+    ];
+    route_tests -> run_unit_tests [
+        condition="true"
+        label="fallback"
+        color=gray
+        style=dashed
+    ];
+
+    // Unit-only branch → validator
+    run_unit_tests -> validate [label="tests_complete"];
+
+    // Browser-only branch → validator
+    run_browser_tests -> validate [label="tests_complete"];
+
+    // Both branch: parallel unit + browser → fan-in → validator
+    run_both_unit -> fan_in_both [label="unit_done"];
+    run_both_browser -> fan_in_both [label="browser_done"];
+    run_both_unit -> run_both_browser [style=invis]; // layout hint
+    fan_in_both -> validate [label="all_tests_done"];
+
+    // Phase 5: Validation
+    validate -> gate_validate [label="validation_done"];
+    gate_validate -> review_final [label="guardian_ok"];
+    review_final -> decide_final [label="human_reviewed"];
+    decide_final -> pipeline_exit [condition="pass" label="epic_complete"];
+    decide_final -> green_impl [condition="fail" label="rework_impl"];
+}
