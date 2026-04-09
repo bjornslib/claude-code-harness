@@ -250,3 +250,116 @@ class TestDiamondNWayValidation:
         )
         violations = DiamondNWayBranching().check(graph)
         assert violations == []
+
+
+# ---------------------------------------------------------------------------
+# 1.5 — ToolHandler working_dir attribute
+# ---------------------------------------------------------------------------
+
+class TestToolWorkingDir:
+
+    def test_tool_working_dir_default_uses_run_dir(self):
+        """Default (no working_dir attr) → cwd is request.run_dir."""
+        node = _make_tool_node("check_node", command="echo hi")
+        request = _make_handler_request(node, run_dir="/my/run/dir")
+
+        with patch("subprocess.run", return_value=_fake_subprocess_result("ok")) as mock_run:
+            import asyncio
+            outcome = asyncio.get_event_loop().run_until_complete(
+                ToolHandler().execute(request)
+            )
+
+        assert outcome.status == OutcomeStatus.SUCCESS
+        # subprocess.run should have been called with cwd=/my/run/dir
+        mock_run.assert_called_once()
+        assert mock_run.call_args.kwargs.get("cwd") == "/my/run/dir"
+
+    def test_tool_working_dir_explicit_run_dir(self):
+        """working_dir='run_dir' explicitly → same as default, uses request.run_dir."""
+        node = _make_tool_node("check_node", command="echo hi", working_dir="run_dir")
+        request = _make_handler_request(node, run_dir="/my/run/dir")
+
+        with patch("subprocess.run", return_value=_fake_subprocess_result("ok")) as mock_run:
+            import asyncio
+            outcome = asyncio.get_event_loop().run_until_complete(
+                ToolHandler().execute(request)
+            )
+
+        assert outcome.status == OutcomeStatus.SUCCESS
+        mock_run.assert_called_once()
+        assert mock_run.call_args.kwargs.get("cwd") == "/my/run/dir"
+
+    def test_tool_working_dir_target_dir_from_graph(self):
+        """working_dir='target_dir' with $graph in context → uses graph target_dir."""
+        from cobuilder.engine.context import PipelineContext
+        from cobuilder.engine.handlers.base import HandlerRequest
+        from cobuilder.engine.graph import Graph
+
+        node = _make_tool_node("deploy", command="make deploy", working_dir="target_dir")
+
+        # Create a mock graph with target_dir in attrs
+        graph = Graph(name="test", attrs={"target_dir": "/impl/repo"})
+        ctx = PipelineContext({"$graph": graph})
+        request = HandlerRequest(node=node, context=ctx, run_dir="/my/run/dir")
+
+        with patch("subprocess.run", return_value=_fake_subprocess_result("deployed")) as mock_run:
+            import asyncio
+            outcome = asyncio.get_event_loop().run_until_complete(
+                ToolHandler().execute(request)
+            )
+
+        assert outcome.status == OutcomeStatus.SUCCESS
+        mock_run.assert_called_once()
+        assert mock_run.call_args.kwargs.get("cwd") == "/impl/repo"
+
+    def test_tool_working_dir_target_dir_from_context_key(self):
+        """working_dir='target_dir' with $target_dir in context (no $graph) → uses context key."""
+        from cobuilder.engine.context import PipelineContext
+        from cobuilder.engine.handlers.base import HandlerRequest
+
+        node = _make_tool_node("deploy", command="make deploy", working_dir="target_dir")
+
+        ctx = PipelineContext({"$target_dir": "/fallback/repo"})
+        request = HandlerRequest(node=node, context=ctx, run_dir="/my/run/dir")
+
+        with patch("subprocess.run", return_value=_fake_subprocess_result("deployed")) as mock_run:
+            import asyncio
+            outcome = asyncio.get_event_loop().run_until_complete(
+                ToolHandler().execute(request)
+            )
+
+        assert outcome.status == OutcomeStatus.SUCCESS
+        mock_run.assert_called_once()
+        assert mock_run.call_args.kwargs.get("cwd") == "/fallback/repo"
+
+    def test_tool_working_dir_target_dir_fallback_to_run_dir(self):
+        """working_dir='target_dir' but no target_dir anywhere → falls back to run_dir with warning."""
+        node = _make_tool_node("deploy", command="make deploy", working_dir="target_dir")
+        request = _make_handler_request(node, run_dir="/my/run/dir")
+
+        with patch("subprocess.run", return_value=_fake_subprocess_result("ok")) as mock_run:
+            import asyncio
+            outcome = asyncio.get_event_loop().run_until_complete(
+                ToolHandler().execute(request)
+            )
+
+        assert outcome.status == OutcomeStatus.SUCCESS
+        mock_run.assert_called_once()
+        # Falls back to run_dir when target_dir is not available
+        assert mock_run.call_args.kwargs.get("cwd") == "/my/run/dir"
+
+    def test_tool_working_dir_invalid_value_defaults_to_run_dir(self):
+        """Invalid working_dir value → Node property normalizes to 'run_dir'."""
+        node = _make_tool_node("check_node", command="echo hi", working_dir="bogus")
+        assert node.working_dir == "run_dir"  # Node property normalizes
+        request = _make_handler_request(node, run_dir="/my/run/dir")
+
+        with patch("subprocess.run", return_value=_fake_subprocess_result("ok")) as mock_run:
+            import asyncio
+            outcome = asyncio.get_event_loop().run_until_complete(
+                ToolHandler().execute(request)
+            )
+
+        assert outcome.status == OutcomeStatus.SUCCESS
+        mock_run.assert_called_once()
+        assert mock_run.call_args.kwargs.get("cwd") == "/my/run/dir"

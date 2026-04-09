@@ -65,7 +65,7 @@ Each handler receives a `HandlerRequest` (node definition + context) and returns
 | `planner.py` | `tab`, `note` | `planner` | Unified handler for planning-type nodes: research (`tab`), refine (`note`), and generic plan nodes. Configurable tool sets via `.cobuilder/tool-sets.yaml`. Renders prompts via `PromptRenderer`. Infers tool set from shape when `tool_set` attribute is absent (`tab`→research, `note`→refine). |
 | `manager_loop.py` | `house` | `manager_loop` | Recursive sub-pipeline management. `spawn_pipeline` mode spawns child `pipeline_runner.py` subprocess and monitors it. Detects `GATE_WAIT_COBUILDER` and `GATE_WAIT_HUMAN` signals from child. Bounded by `PIPELINE_MAX_MANAGER_DEPTH` (default 5). |
 | `wait_human.py` | `hexagon` | `wait.human` | Human gate. Polls for `INPUT_RESPONSE` signal and returns `WAITING` (no signal yet), `SUCCESS` (approve), or `FAILURE` (reject). Respects `PIPELINE_HUMAN_GATE_TIMEOUT` env var (default: indefinite). |
-| `tool.py` | `parallelogram` | `tool` | Shell command execution via `subprocess.run(shell=True)` in `run_dir`. Captures stdout/stderr/exit_code into context. When `parse_json_output="true"`, parses JSON stdout and stores each key as `${node_id}.{key}`. Timeout: `PIPELINE_TOOL_TIMEOUT` env var (default 300s). |
+| `tool.py` | `parallelogram` | `tool` | Shell command execution via `subprocess.run(shell=True)`. Runs in `run_dir` by default; set `working_dir="target_dir"` to execute in the implementation repository instead. Captures stdout/stderr/exit_code into context. When `parse_json_output="true"`, parses JSON stdout and stores each key as `${node_id}.{key}`. Timeout: `PIPELINE_TOOL_TIMEOUT` env var (default 300s). |
 | `conditional.py` | `diamond` | `conditional` | No-op routing node. Does not execute work itself — EdgeSelector handles all routing based on outgoing edge conditions. |
 | `close.py` | `octagon` | `close` | Pipeline completion node. Handles programmatic epic closure (push, PR creation). |
 | `parallel.py` | `component` | `parallel` | Fan-out parallel dispatch. |
@@ -500,6 +500,7 @@ Node attributes:
 - `solution_design` — path to SD file (inlined into worker prompt)
 - `tool_command` — shell command to execute (tool nodes only)
 - `parse_json_output` — `"true"` to parse JSON stdout into individual context keys (tool nodes)
+- `working_dir` — `"run_dir"` (default) or `"target_dir"` to execute in the implementation repository (tool nodes)
 - `bead_id` — associated beads issue ID
 
 ## Logfire Observability

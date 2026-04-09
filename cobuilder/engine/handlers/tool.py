@@ -1,7 +1,8 @@
 """ToolHandler — handles parallelogram (shell tool) nodes.
 
-Executes ``node.tool_command`` via ``subprocess.run(shell=True)`` in the
-pipeline run directory with a configurable timeout.
+Executes ``node.tool_command`` via ``subprocess.run(shell=True)`` with a
+configurable timeout.  By default runs in the pipeline run directory; set
+``working_dir="target_dir"`` to run in the implementation repository instead.
 
 AC-F12:
 - Executes ``node.tool_command`` via ``subprocess.run(shell=True)`` in ``run_dir``.
@@ -24,6 +25,7 @@ import logging
 import os
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from cobuilder.engine.exceptions import HandlerError
 from cobuilder.engine.handlers.base import Handler, HandlerRequest
@@ -80,8 +82,9 @@ class ToolHandler:
                 metadata={"command": "", "exit_code": 0},
             )
 
-        # Run in the pipeline run directory if available
-        cwd = request.run_dir if request.run_dir else None
+        # Resolve working directory: "target_dir" runs in the impl repo,
+        # "run_dir" (default) runs in the pipeline state directory.
+        cwd = self._resolve_cwd(node, request)
 
         # Use asyncio to avoid blocking the event loop during subprocess.run
         outcome = await asyncio.to_thread(
@@ -92,6 +95,33 @@ class ToolHandler:
             parse_json_output=node.parse_json_output,
         )
         return outcome
+
+    def _resolve_cwd(self, node: Any, request: HandlerRequest) -> str | None:
+        """Resolve the working directory for command execution.
+
+        ``working_dir="target_dir"`` on the node runs the command in the
+        graph-level ``target_dir`` (the implementation repository).
+        Default (``"run_dir"``) uses the pipeline run directory.
+        """
+        mode = node.working_dir  # "run_dir" or "target_dir"
+        if mode == "target_dir":
+            # Graph-level target_dir is available in context or graph attrs
+            graph = request.context.get("$graph") if request.context else None
+            if graph is not None:
+                td = getattr(graph, "attrs", {}).get("target_dir", "")
+                if td:
+                    return td
+            # Fallback: check context directly
+            if request.context:
+                td = request.context.get("$target_dir", "")
+                if td:
+                    return td
+            logger.warning(
+                "ToolHandler '%s': working_dir='target_dir' but no target_dir found; "
+                "falling back to run_dir",
+                node.id,
+            )
+        return request.run_dir if request.run_dir else None
 
     def _run_command(
         self,

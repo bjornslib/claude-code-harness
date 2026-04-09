@@ -262,7 +262,7 @@ run_tests [label="Run Tests"
 ```
 
 **Required**: `label`, `handler`, `tool_command`
-**Optional**: `timeout`, `parse_json_output`
+**Optional**: `timeout`, `parse_json_output`, `working_dir`
 
 #### Full Attribute Reference
 
@@ -273,6 +273,7 @@ run_tests [label="Run Tests"
 | `tool_command` | yes | Shell command string passed to `subprocess.run(shell=True)` |
 | `timeout` | no | Seconds before timeout (default: `PIPELINE_TOOL_TIMEOUT` env var or 300s) |
 | `parse_json_output` | no | Set to `"true"` to parse JSON stdout and store each key individually in context |
+| `working_dir` | no | `"run_dir"` (default) or `"target_dir"` to execute in the implementation repository |
 
 #### Context Keys Produced
 
@@ -289,6 +290,7 @@ ${node_id}.<key>      — individual JSON fields (only when parse_json_output="t
 - Environment setup or data validation before implementation nodes
 - Conditional routing: output JSON → downstream `conditional` node branches on the values
 - Pipeline validation or linting steps
+- Running commands in the implementation repo (set `working_dir="target_dir"`): linting, build checks, test suites
 
 #### Conditional Routing Pattern (tool → diamond → N-way branch)
 

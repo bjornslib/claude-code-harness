@@ -271,6 +271,17 @@ class Node:
         return str(self.attrs.get("parse_json_output", "false")).lower() == "true"
 
     @property
+    def working_dir(self) -> str:
+        """Working directory mode for tool nodes: ``"run_dir"`` (default) or ``"target_dir"``.
+
+        When ``"target_dir"``, the ToolHandler executes the command in the
+        graph-level ``target_dir`` (the implementation repository) rather than
+        the pipeline run directory.  Any other value falls back to ``"run_dir"``.
+        """
+        value = self.attrs.get("working_dir", "run_dir").strip().lower()
+        return value if value in ("run_dir", "target_dir") else "run_dir"
+
+    @property
     def prompt_template(self) -> str:
         """Jinja2 template name for this node's prompt.  Empty string if not set.
 
