@@ -62,17 +62,18 @@ Each handler receives a `HandlerRequest` (node definition + context) and returns
 | Module | Shape | Handler | Purpose |
 |--------|-------|---------|---------|
 | `codergen.py` | `box` | `codergen` | LLM/orchestrator node. Dispatches via tmux (`spawn_orchestrator`) or AgentSDK (`sdk` strategy). Polls signal files for completion. Default timeout 3600s. |
+| `planner.py` | `tab`, `note` | `planner` | Unified handler for planning-type nodes: research (`tab`), refine (`note`), and generic plan nodes. Configurable tool sets via `.cobuilder/tool-sets.yaml`. Renders prompts via `PromptRenderer`. Infers tool set from shape when `tool_set` attribute is absent (`tab`→research, `note`→refine). |
 | `manager_loop.py` | `house` | `manager_loop` | Recursive sub-pipeline management. `spawn_pipeline` mode spawns child `pipeline_runner.py` subprocess and monitors it. Detects `GATE_WAIT_COBUILDER` and `GATE_WAIT_HUMAN` signals from child. Bounded by `PIPELINE_MAX_MANAGER_DEPTH` (default 5). |
-| `wait_human.py` | `diamond` | `wait.human` | Human gate. Writes `GATE_WAIT_HUMAN` signal and blocks until `GATE_RESPONSE` from parent. |
+| `wait_human.py` | `hexagon` | `wait.human` | Human gate. Polls for `INPUT_RESPONSE` signal and returns `WAITING` (no signal yet), `SUCCESS` (approve), or `FAILURE` (reject). Respects `PIPELINE_HUMAN_GATE_TIMEOUT` env var (default: indefinite). |
+| `tool.py` | `parallelogram` | `tool` | Shell command execution via `subprocess.run(shell=True)` in `run_dir`. Captures stdout/stderr/exit_code into context. When `parse_json_output="true"`, parses JSON stdout and stores each key as `${node_id}.{key}`. Timeout: `PIPELINE_TOOL_TIMEOUT` env var (default 300s). |
+| `conditional.py` | `diamond` | `conditional` | No-op routing node. Does not execute work itself — EdgeSelector handles all routing based on outgoing edge conditions. |
+| `close.py` | `octagon` | `close` | Pipeline completion node. Handles programmatic epic closure (push, PR creation). |
+| `parallel.py` | `component` | `parallel` | Fan-out parallel dispatch. |
+| `fan_in.py` | `tripleoctagon` | `fan_in` | Merge parallel branches. |
+| `start.py` | `Mdiamond` | `start` | Pipeline entry node. |
+| `exit.py` | `Msquare` | `exit` | Early exit node. |
 | `base.py` | — | — | `Handler` ABC and `HandlerRequest` dataclass. |
-| `close.py` | — | `close` | Pipeline completion node. |
-| `conditional.py` | — | `conditional` | Conditional branching node. |
-| `exit.py` | — | `exit` | Early exit node. |
-| `fan_in.py` | — | `fan_in` | Merge parallel branches. |
-| `parallel.py` | — | `parallel` | Fan-out parallel dispatch. |
-| `start.py` | — | `start` | Pipeline entry node. |
-| `tool.py` | — | `tool` | Generic tool execution node. |
-| `registry.py` | — | — | Handler registry — maps node shapes/handler attributes to handler classes. |
+| `registry.py` | — | — | Handler registry — maps node shapes/handler attributes to handler classes. `HandlerRegistry.default()` wires all 12 standard shapes. |
 
 ### templates/ — Template System
 
@@ -85,6 +86,226 @@ Each handler receives a `HandlerRequest` (node definition + context) and returns
 ### repomap/ — Codebase Intelligence
 
 Provides context injection for workers by building a semantic map of the codebase. Includes CLI, codegen, context filtering, evaluation, graph construction, LLM integration, ontology, RPG enrichment, sandbox, selection, Serena integration, spec parsing, and vector database modules.
+
+## Conditions Package
+
+The `engine/conditions/` sub-package provides the full expression language for edge routing.
+
+### Syntax
+
+| Construct | Examples |
+|-----------|---------|
+| Variable reference | `$node_id.field`, `$retry_count` |
+| Dot-path access | `$run_ci.type`, `$node_visits.impl_auth` |
+| Equality | `$status = "success"`, `$exit_code = 0` |
+| Inequality | `$status != "failed"` |
+| Ordering | `$retry_count < 3`, `$score >= 0.8` |
+| Logical AND | `$a = "x" && $b = "y"` |
+| Logical OR | `$a = "x" \|\| $b = "y"` |
+| Negation | `!$flag` |
+| Grouping | `($a = "x" \|\| $b = "y") && $c != "z"` |
+| Boolean literals | `true`, `false` |
+| Simple routing labels | `pass`, `fail`, `partial`, `success`, `error` |
+
+### Variable Storage Convention
+
+Variables are stored **with** the `$` prefix in the pipeline context:
+
+```
+context["$run_ci.type"] = "unit"
+context["$retry_count"] = 2
+context["$node_visits.impl_auth"] = 3
+```
+
+Access in conditions: `$run_ci.type = "unit"` or `$retry_count < 3`.
+
+### Type Coercion
+
+- **int ↔ float**: int is promoted to float
+- **str ↔ number** (equality/ordering): string is parsed as number; raises `ConditionTypeError` if not numeric
+- **bool + ordering operator** (`<`, `>`, `<=`, `>=`): raises `ConditionTypeError` — booleans only support `=` and `!=`
+- **str ↔ str**: lexicographic comparison, no coercion
+
+### Short-Circuit Evaluation
+
+- `A && B`: if A is false, B is not evaluated
+- `A || B`: if A is true, B is not evaluated
+
+### Public API
+
+```python
+from cobuilder.engine.conditions import evaluate_condition, validate_condition_syntax
+
+# Evaluate a condition
+result = evaluate_condition("$retry_count < 3", context)  # → bool
+
+# Validate syntax only (no evaluation)
+errors, warnings = validate_condition_syntax("$bad = ")
+```
+
+---
+
+## Edge Selection
+
+`EdgeSelector` in `engine/edge_selector.py` implements a 5-step algorithm (highest priority first):
+
+1. **Condition match** — evaluate each outgoing edge's `condition` against current pipeline context; first True edge wins
+2. **Preferred label match** — if outcome has `preferred_label`, match edge with that `label`
+3. **Suggested next node** — if outcome has `suggested_next`, match edge whose `target` equals it
+4. **Weight-based selection** — pick the edge with the highest numeric `weight` attribute
+5. **Default** — first unlabeled/unconditioned edge; or the first outgoing edge if all are labeled
+
+The selector takes a snapshot of the pipeline context before evaluation so conditions see a stable view even in async execution.
+
+---
+
+## Conditional Routing Pattern
+
+`conditional` (`diamond`) nodes are no-op — they do no work and write no output. All routing intelligence is in the edge conditions evaluated by `EdgeSelector`.
+
+### N-Way Branch via Tool Output
+
+A `tool` node can output structured JSON; a downstream `conditional` node routes based on those values:
+
+```dot
+run_ci [
+    shape=parallelogram
+    handler="tool"
+    label="Run CI"
+    tool_command="./scripts/ci.sh"
+    parse_json_output="true"
+    status=pending
+];
+
+route [
+    shape=diamond
+    handler="conditional"
+    label="Route by test type"
+    status=pending
+];
+
+unit_tests [shape=box handler="codergen" ...];
+browser_tests [shape=box handler="codergen" ...];
+
+run_ci -> route;
+route -> unit_tests    [condition="$run_ci.type = \"unit\""    label="unit"];
+route -> browser_tests [condition="$run_ci.type = \"browser\"" label="browser"];
+```
+
+The CI script writes `{"type": "unit"}` or `{"type": "browser"}` to stdout. With `parse_json_output="true"`, the runner stores `$run_ci.type` in the pipeline context. The `conditional` node then routes to the matching branch.
+
+---
+
+## Prompt Templatization
+
+Nodes support Jinja2 prompt templates via `PromptRenderer` (in `engine/prompt_renderer.py`).
+
+### Attributes
+
+| Attribute | Description |
+|-----------|-------------|
+| `prompt_template` | Template name — loads `.cobuilder/prompts/<name>.j2` |
+| `prompt_vars` | JSON dict string of extra variables available as `vars.*` in the template |
+| `prompt` | Literal fallback when no template is configured or template fails to render |
+
+### Resolution Order
+
+1. `prompt_template` → render `.cobuilder/prompts/<name>.j2` with template variables
+2. `prompt` → return literal string
+3. `""` (empty string)
+
+### Template Variables
+
+Inside `.j2` files, the following variables are available:
+
+```jinja2
+{{ node_id }}          {# node ID string #}
+{{ label }}            {# node label #}
+{{ node.* }}           {# all node attributes via dot access #}
+{{ context.* }}        {# pipeline context snapshot #}
+{{ vars.* }}           {# extra vars from node's prompt_vars JSON #}
+{{ timestamp }}        {# current UTC ISO-8601 timestamp #}
+{{ run_dir }}          {# pipeline run directory path #}
+{# All node.attrs keys are also injected as top-level variables #}
+```
+
+### Example
+
+```dot
+research_node [
+    shape=tab
+    handler="research"
+    label="Research Auth Patterns"
+    prompt_template="research-auth"
+    prompt_vars="{\"focus\": \"OAuth2 PKCE\"}"
+    status=pending
+]
+```
+
+Template `.cobuilder/prompts/research-auth.j2`:
+```jinja2
+Research {{ vars.focus }} for {{ node_id }}.
+Context: prd_ref={{ prd_ref }}, timestamp={{ timestamp }}.
+```
+
+---
+
+## PlannerHandler
+
+`PlannerHandler` (`engine/handlers/planner.py`) is the unified handler for `tab` (research), `note` (refine), and generic plan nodes. It replaced the previous pattern where these shapes were aliases to `CodergenHandler`.
+
+### How It Works
+
+1. Resolves the allowed tool set via 4-layer precedence (see Tool Sets below)
+2. Renders the prompt via `PromptRenderer` (falls back to `node.prompt` if no template)
+3. Dispatches via `claude_code_sdk.query()` with `allowed_tools` set to the resolved tool set
+4. Writes evidence JSON to `{run_dir}/nodes/{node_id}/evidence.json`
+
+### Node Attributes
+
+| Attribute | Description |
+|-----------|-------------|
+| `tool_set` | Named tool set from `.cobuilder/tool-sets.yaml` (optional — inferred from shape if absent) |
+| `prompt_template` | Jinja2 template name for prompt rendering |
+| `prompt_vars` | JSON dict string of extra template variables |
+| `prompt` | Literal prompt fallback |
+| `system_prompt` | Custom system prompt (optional — defaults to generic planning prompt) |
+
+---
+
+## Tool Sets
+
+Tool sets define the allowed Claude Code tools for `PlannerHandler` nodes. They are configured in `.cobuilder/tool-sets.yaml`.
+
+### YAML Format
+
+```yaml
+my-set:
+  description: "Human-readable description of what this set is for"
+  tools:
+    - Read
+    - Edit
+    - ToolSearch
+    - mcp__context7__query-docs
+```
+
+### Pre-Defined Sets
+
+| Set Name | Purpose | Key Tools |
+|----------|---------|-----------|
+| `research` | Full research: docs, web search, memory, code navigation | Bash, Read, Edit, Write, Context7, Perplexity (all), Hindsight, Serena |
+| `refine` | Editing with memory and reasoning — no web research | Read, Edit, Write, Hindsight, Perplexity reason, Serena |
+| `plan` | Read-only planning: code reading + memory + quick lookup | Read, Glob, Grep, Hindsight reflect/recall, Perplexity ask |
+| `full` | Unrestricted general-purpose | Bash, Read, Edit, Write, ToolSearch, LSP, Glob, Grep |
+
+### 4-Layer Tool Set Resolution (highest priority first)
+
+1. **Node `tool_set` attribute** — explicit named set from YAML
+2. **Shape inference** — `tab` → `research`, `note` → `refine`, other → `full`
+3. **Hardcoded fallback** — built-in copy of the YAML sets (used when YAML is missing or unreadable)
+4. **Empty** — if `yaml` is not importable and fallback is unreachable
+
+---
 
 ## Key Patterns
 
@@ -267,13 +488,18 @@ digraph pipeline {
 ```
 
 Node attributes:
-- `shape` — determines handler (`box`=codergen, `tab`=research, `note`=refine, `house`=manager_loop, `diamond`=wait gate, `Mdiamond`=start, `Msquare`=finish)
-- `handler` — explicit handler override
+- `shape` — determines handler: `box`=codergen, `tab`=planner/research, `note`=planner/refine, `house`=manager_loop, `hexagon`=wait gate, `diamond`=conditional routing (no-op), `parallelogram`=tool, `component`=parallel, `tripleoctagon`=fan_in, `octagon`=close, `Mdiamond`=start, `Msquare`=exit
+- `handler` — explicit handler override (e.g. `handler="wait.cobuilder"` vs `handler="wait.human"` both use `hexagon` shape)
 - `status` — current status (default: `pending`)
 - `llm_profile` — named profile from `providers.yaml`
-- `worker_type` — AgentSDK subagent type to dispatch
-- `prompt` — instruction for the worker
+- `worker_type` — AgentSDK subagent type to dispatch (codergen nodes only)
+- `prompt` — literal instruction for the worker (fallback when no `prompt_template`)
+- `prompt_template` — Jinja2 template name; loads `.cobuilder/prompts/<name>.j2`
+- `prompt_vars` — JSON dict string of extra variables for prompt templates
+- `tool_set` — named tool set from `.cobuilder/tool-sets.yaml` (planner nodes only)
 - `solution_design` — path to SD file (inlined into worker prompt)
+- `tool_command` — shell command to execute (tool nodes only)
+- `parse_json_output` — `"true"` to parse JSON stdout into individual context keys (tool nodes)
 - `bead_id` — associated beads issue ID
 
 ## Logfire Observability

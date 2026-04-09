@@ -9,10 +9,17 @@ AC-F12:
 - Returns ``Outcome(status=FAILURE)`` for non-zero exit codes.
 - Captures stdout/stderr into context_updates.
 - Timeout: ``PIPELINE_TOOL_TIMEOUT`` seconds (default 300s).
+
+JSON output parsing (Epic 1):
+- When ``parse_json_output="true"`` is set on a node, stdout is parsed as JSON.
+- If stdout is a valid JSON object, each key is stored as ``${node_id}.{key}``
+  in context_updates in addition to the raw ``${node_id}.stdout`` value.
+- Non-JSON stdout is silently ignored (debug-level log); raw stdout is always stored.
 """
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import subprocess
@@ -82,6 +89,7 @@ class ToolHandler:
             command=command,
             cwd=cwd,
             node_id=node.id,
+            parse_json_output=node.parse_json_output,
         )
         return outcome
 
@@ -90,8 +98,17 @@ class ToolHandler:
         command: str,
         cwd: str | None,
         node_id: str,
+        parse_json_output: bool = False,
     ) -> Outcome:
-        """Synchronous command execution (called in a thread via asyncio.to_thread)."""
+        """Synchronous command execution (called in a thread via asyncio.to_thread).
+
+        Args:
+            command:           Shell command string to run.
+            cwd:               Working directory; ``None`` inherits the runner process cwd.
+            node_id:           Node ID used to name context keys.
+            parse_json_output: When True, attempt to parse stdout as JSON and
+                               store each key individually in context_updates.
+        """
         try:
             result = subprocess.run(
                 command,
@@ -125,13 +142,22 @@ class ToolHandler:
 
         status = OutcomeStatus.SUCCESS if result.returncode == 0 else OutcomeStatus.FAILURE
 
+        context_updates: dict = {
+            f"${node_id}.exit_code": result.returncode,
+            f"${node_id}.stdout": result.stdout,
+            f"${node_id}.stderr": result.stderr,
+        }
+
+        # Optional JSON output parsing (Epic 1: structured tool output)
+        if parse_json_output:
+            parsed = self._try_parse_json(result.stdout, node_id)
+            if parsed is not None:
+                for key, value in parsed.items():
+                    context_updates[f"${node_id}.{key}"] = value
+
         return Outcome(
             status=status,
-            context_updates={
-                f"${node_id}.exit_code": result.returncode,
-                f"${node_id}.stdout": result.stdout,
-                f"${node_id}.stderr": result.stderr,
-            },
+            context_updates=context_updates,
             metadata={
                 "command": command,
                 "exit_code": result.returncode,
@@ -139,6 +165,40 @@ class ToolHandler:
                 "stderr_length": len(result.stderr),
             },
         )
+
+    @staticmethod
+    def _try_parse_json(stdout: str, node_id: str) -> dict | None:
+        """Attempt to parse *stdout* as a JSON object.
+
+        Returns a dict on success, or None if stdout is not valid JSON or not
+        a JSON object (e.g., a JSON array or scalar).  Non-JSON output is
+        logged at DEBUG level — it is not an error.
+
+        Args:
+            stdout:  Raw stdout string from the subprocess.
+            node_id: Used only for the debug log message.
+        """
+        stripped = stdout.strip()
+        if not stripped:
+            return None
+        try:
+            parsed = json.loads(stripped)
+        except json.JSONDecodeError:
+            logger.debug(
+                "ToolHandler '%s': stdout is not valid JSON; skipping key extraction",
+                node_id,
+            )
+            return None
+
+        if not isinstance(parsed, dict):
+            logger.debug(
+                "ToolHandler '%s': JSON stdout is not a dict (got %s); skipping key extraction",
+                node_id,
+                type(parsed).__name__,
+            )
+            return None
+
+        return parsed
 
 
 assert isinstance(ToolHandler(), Handler)

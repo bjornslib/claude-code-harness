@@ -260,6 +260,40 @@ class Node:
         """
         return self.attrs.get("llm_profile") or None
 
+    @property
+    def parse_json_output(self) -> bool:
+        """If True, stdout from tool_command is parsed as JSON and individual
+        keys are stored as ``${node_id}.{key}`` in context_updates.
+
+        Set ``parse_json_output="true"`` on a parallelogram node to enable.
+        Non-JSON stdout is silently ignored; the raw stdout key is always set.
+        """
+        return str(self.attrs.get("parse_json_output", "false")).lower() == "true"
+
+    @property
+    def prompt_template(self) -> str:
+        """Jinja2 template name for this node's prompt.  Empty string if not set.
+
+        When set, the PromptRenderer will load ``.cobuilder/prompts/<name>.j2``
+        and render it with node attributes, pipeline context, and prompt_vars.
+        Takes precedence over ``node.prompt`` in the resolution order.
+        """
+        return self.attrs.get("prompt_template", "")
+
+    @property
+    def prompt_vars(self) -> dict:
+        """Extra variables for Jinja2 template rendering, parsed from JSON.
+
+        The ``prompt_vars`` DOT attribute must be a JSON object string.
+        Invalid JSON silently returns an empty dict.
+        """
+        import json
+        raw = self.attrs.get("prompt_vars", "{}")
+        try:
+            return json.loads(raw)
+        except (json.JSONDecodeError, ValueError):
+            return {}
+
 
 # ---------------------------------------------------------------------------
 # Graph

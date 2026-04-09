@@ -6,6 +6,10 @@ Implements the following requirements from PRD-HARNESS-UPGRADE-001:
 - AC-5.3: worker_type registry check rejects unknown agent types
 - AC-5.4: wait.human after wait.cobuilder topology enforced
 - AC-5.5: cobuilder_root and target_dir mandatory graph attributes
+
+Epic 1 additions:
+- DiamondNWayBranching: relaxes diamond validation from strict pass/fail pair
+  to N-way conditional branching (N >= 2, all edges must have a condition).
 """
 
 from __future__ import annotations
@@ -18,6 +22,88 @@ from cobuilder.engine.validation.rules import _error, _warning
 
 if TYPE_CHECKING:
     from cobuilder.engine.graph import Graph, Node
+
+
+# ---------------------------------------------------------------------------
+# Rule 20: DiamondNWayBranching (Epic 1 — N-way conditional routing)
+# ---------------------------------------------------------------------------
+
+class DiamondNWayBranching:
+    """Diamond (conditional) nodes support N-way branching (N >= 2).
+
+    Replaces the old strict 2-edge pass/fail enforcement with:
+    - ERROR if a diamond has fewer than 2 outgoing edges (useless branch).
+    - ERROR if any outgoing edge from a diamond has an empty/missing condition
+      attribute (the condition is what distinguishes branches in N-way routing).
+    - WARNING if no outgoing edge has a catch-all condition (``condition="true"``),
+      since a non-exhaustive routing set can leave the pipeline stuck.
+
+    Diamond nodes use ``shape=diamond`` in the DOT file.
+    """
+
+    rule_id = "DiamondNWayBranching"
+    severity = Severity.ERROR
+
+    def check(self, graph: "Graph") -> "list[RuleViolation]":
+        violations: list[RuleViolation] = []
+
+        for node in graph.nodes.values():
+            if node.shape != "diamond":
+                continue
+
+            outgoing = graph.edges_from(node.id)
+
+            # ERROR: fewer than 2 outgoing edges — a branch node with 0 or 1
+            # edges is either unreachable or a pass-through (neither is valid).
+            if len(outgoing) < 2:
+                violations.append(
+                    _error(
+                        self.rule_id,
+                        f"Diamond node '{node.id}' has {len(outgoing)} outgoing edge(s); "
+                        "conditional nodes require at least 2 branches.",
+                        "Add at least 2 outgoing edges with distinct condition= attributes "
+                        f"(e.g. condition=\"pass\", condition=\"fail\") to '{node.id}'.",
+                        node_id=node.id,
+                    )
+                )
+                # No point checking edge conditions if there are too few edges.
+                continue
+
+            # ERROR: any outgoing edge missing a condition attribute.
+            for edge in outgoing:
+                if not edge.condition:
+                    violations.append(
+                        _error(
+                            self.rule_id,
+                            f"Edge '{edge.source}' → '{edge.target}' from diamond node "
+                            f"'{node.id}' has no condition= attribute. All outgoing edges "
+                            "of a diamond node must have a condition.",
+                            f"Add a condition= attribute to the edge from '{edge.source}' "
+                            f"to '{edge.target}' (e.g. condition=\"pass\" or "
+                            "condition=\"$result = \\\"success\\\"\").",
+                            edge_src=edge.source,
+                            edge_dst=edge.target,
+                        )
+                    )
+
+            # WARNING: no catch-all condition present.
+            has_catchall = any(
+                edge.condition.strip().lower() == "true" for edge in outgoing
+            )
+            if not has_catchall:
+                violations.append(
+                    _warning(
+                        self.rule_id,
+                        f"Diamond node '{node.id}' has no catch-all edge "
+                        "(condition=\"true\"). If no condition matches at runtime "
+                        "the pipeline will stall at this node.",
+                        f"Add a fallback edge from '{node.id}' with condition=\"true\" "
+                        "to handle unmatched cases (e.g. → an error/fallback node).",
+                        node_id=node.id,
+                    )
+                )
+
+        return violations
 
 
 # ---------------------------------------------------------------------------
@@ -266,7 +352,12 @@ class WaitCobuilderRequirements:
 # ---------------------------------------------------------------------------
 
 class CodergenWithoutUpstreamAT:
-    """codergen nodes should have upstream acceptance-test-writer nodes (V-15)."""
+    """codergen nodes should have upstream acceptance-test-writer worker nodes (V-15).
+
+    acceptance-test-writer is now a worker_type on codergen (box) nodes rather
+    than a standalone handler type.  This rule checks for an upstream codergen
+    node with worker_type="acceptance-test-writer".
+    """
 
     rule_id = "CodergenWithoutUpstreamAT"
     severity = Severity.WARNING
@@ -274,27 +365,28 @@ class CodergenWithoutUpstreamAT:
     def check(self, graph: Graph) -> list[RuleViolation]:
         violations = []
 
-        # Find all codergen nodes
+        # Find all codergen nodes that are NOT themselves acceptance-test-writers
         for node in graph.nodes.values():
-            if node.handler_type == "codergen":
-                # Check if there's an upstream acceptance-test-writer node
-                has_upstream_at_writer = self._has_upstream_node_with_handler(graph, node.id, "acceptance_test_writer")
+            if node.handler_type == "codergen" and node.worker_type != "acceptance-test-writer":
+                # Check if there's an upstream codergen node with worker_type="acceptance-test-writer"
+                has_upstream_at_writer = self._has_upstream_at_writer(graph, node.id)
 
                 if not has_upstream_at_writer:
                     violations.append(
                         _warning(
                             self.rule_id,
                             f"codergen node '{node.id}' has no upstream acceptance-test-writer node (V-15)",
-                            "Consider adding an acceptance-test-writer node upstream to generate acceptance tests",
+                            "Consider adding a codergen node with worker_type=\"acceptance-test-writer\" "
+                            "upstream to generate acceptance tests",
                             node_id=node.id,
                         )
                     )
 
         return violations
 
-    def _has_upstream_node_with_handler(self, graph: Graph, node_id: str, handler: str) -> bool:
-        """Check if there is an upstream node with the specified handler."""
-        visited = set()
+    def _has_upstream_at_writer(self, graph: Graph, node_id: str) -> bool:
+        """Check if there is an upstream codergen node with worker_type='acceptance-test-writer'."""
+        visited: set[str] = set()
 
         def dfs_check(current_id: str) -> bool:
             if current_id in visited:
@@ -302,8 +394,13 @@ class CodergenWithoutUpstreamAT:
             visited.add(current_id)
 
             current_node = graph.nodes.get(current_id)
-            if current_node and current_node.handler_type == handler:
-                return True
+            if current_node is not None:
+                # acceptance-test-writer is now codergen + worker_type
+                if (
+                    current_node.handler_type == "codergen"
+                    and current_node.worker_type == "acceptance-test-writer"
+                ):
+                    return True
 
             # Check all incoming edges (predecessors)
             for edge in graph.edges:
@@ -451,3 +548,68 @@ class MandatoryGraphAttrs:
             )
 
         return violations
+
+
+# ---------------------------------------------------------------------------
+# Rule: PromptTemplateExists (Epic 2 — WARNING)
+# ---------------------------------------------------------------------------
+
+class PromptTemplateExists:
+    """If a node sets ``prompt_template``, verify the ``.j2`` file exists.
+
+    This is a WARNING because the file may be added later or the prompts
+    directory may be in a non-default location.  Execution is not blocked.
+    """
+
+    rule_id = "PromptTemplateExists"
+    severity = Severity.WARNING
+
+    def check(self, graph: "Graph") -> list[RuleViolation]:
+        violations = []
+
+        # Discover the prompts directory using the same traversal as PromptRenderer
+        prompts_dir = self._find_prompts_dir()
+
+        for node in graph.nodes.values():
+            template_name = node.attrs.get("prompt_template", "").strip()
+            if not template_name:
+                continue
+
+            # Ensure .j2 suffix
+            if not template_name.endswith(".j2"):
+                template_name = f"{template_name}.j2"
+
+            if prompts_dir is None:
+                violations.append(
+                    _warning(
+                        self.rule_id,
+                        f"Node sets prompt_template='{node.attrs.get('prompt_template')}' "
+                        "but no .cobuilder/prompts/ directory was found.",
+                        "Create .cobuilder/prompts/ in the repository root and add the "
+                        f"template file '{template_name}'.",
+                        node_id=node.id,
+                    )
+                )
+            elif not (prompts_dir / template_name).exists():
+                violations.append(
+                    _warning(
+                        self.rule_id,
+                        f"Prompt template '{template_name}' referenced by node "
+                        f"'{node.id}' does not exist at {prompts_dir / template_name}.",
+                        f"Create the template file at .cobuilder/prompts/{template_name}.",
+                        node_id=node.id,
+                    )
+                )
+
+        return violations
+
+    @staticmethod
+    def _find_prompts_dir() -> "Path | None":
+        """Return the .cobuilder/prompts/ directory, or None if not found."""
+        from pathlib import Path
+        current = Path(__file__).resolve().parent
+        for parent in [current, *current.parents]:
+            candidate = parent / ".cobuilder" / "prompts"
+            if candidate.is_dir():
+                return candidate
+        return None

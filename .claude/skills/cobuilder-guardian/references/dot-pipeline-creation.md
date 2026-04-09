@@ -249,18 +249,92 @@ merge_point [label="Merge Results"
 
 ### `tool` — Shell Command Execution (`parallelogram`)
 
+Runs any shell command via `subprocess.run(shell=True)` in the pipeline run directory. Captures stdout, stderr, and exit code into the pipeline context for downstream nodes and edge conditions to read.
+
 ```dot
 run_tests [label="Run Tests"
            handler="tool"
            shape=parallelogram
            fillcolor=orange
            status=pending
-           command="pytest tests/ -v"
+           tool_command="pytest tests/ -v"
            timeout=300]
 ```
 
-**Required**: `label`, `handler`, `command`
-**Optional**: `timeout`
+**Required**: `label`, `handler`, `tool_command`
+**Optional**: `timeout`, `parse_json_output`
+
+#### Full Attribute Reference
+
+| Attribute | Required | Description |
+|-----------|----------|-------------|
+| `label` | yes | Human-readable node label |
+| `handler` | yes | Must be `"tool"` |
+| `tool_command` | yes | Shell command string passed to `subprocess.run(shell=True)` |
+| `timeout` | no | Seconds before timeout (default: `PIPELINE_TOOL_TIMEOUT` env var or 300s) |
+| `parse_json_output` | no | Set to `"true"` to parse JSON stdout and store each key individually in context |
+
+#### Context Keys Produced
+
+```
+${node_id}.exit_code  — integer exit code (0 = success, -1 = timeout)
+${node_id}.stdout     — full stdout string (ALWAYS stored)
+${node_id}.stderr     — full stderr string
+${node_id}.<key>      — individual JSON fields (only when parse_json_output="true")
+```
+
+#### Use Cases
+
+- CI/CD script execution with structured output
+- Environment setup or data validation before implementation nodes
+- Conditional routing: output JSON → downstream `conditional` node branches on the values
+- Pipeline validation or linting steps
+
+#### Conditional Routing Pattern (tool → diamond → N-way branch)
+
+```dot
+run_ci [
+    label="Run CI Script"
+    handler="tool"
+    shape=parallelogram
+    tool_command="./scripts/ci.sh"
+    parse_json_output="true"
+    status=pending
+];
+
+route [
+    label="Route by Test Type"
+    handler="conditional"
+    shape=diamond
+    status=pending
+];
+
+unit_tests [
+    label="Unit Test Suite"
+    handler="codergen"
+    shape=box
+    worker_type="tdd-test-engineer"
+    sd_path="docs/sds/SD-TESTS-001.md"
+    bead_id="BEAD-TEST-001"
+    status=pending
+];
+
+browser_tests [
+    label="Browser Test Suite"
+    handler="codergen"
+    shape=box
+    worker_type="tdd-test-engineer"
+    sd_path="docs/sds/SD-TESTS-002.md"
+    bead_id="BEAD-TEST-002"
+    status=pending
+];
+
+run_ci -> route;
+route -> unit_tests    [condition="$run_ci.type = \"unit\""    label="unit"];
+route -> browser_tests [condition="$run_ci.type = \"browser\"" label="browser"];
+```
+
+The script `ci.sh` outputs `{"type": "unit"}` or `{"type": "browser"}`. With `parse_json_output="true"`, the runner stores `$run_ci.type` in the pipeline context. The `conditional` diamond node is a no-op — `EdgeSelector` evaluates the edge conditions and routes to the matching branch.
 
 ### `manager_loop` — Recursive Sub-Pipeline (`house`)
 
@@ -296,17 +370,116 @@ close_epic [label="Close Epic"
 
 ### `acceptance-test-writer` — Gherkin Test Generation
 
-Not a separate shape — uses `component` shape with `handler="acceptance-test-writer"`.
+Not a standalone handler — `acceptance-test-writer` is a `worker_type` used on `codergen` (`box`) nodes.
 
 ```dot
 write_at [label="Write Acceptance Tests"
-          handler="acceptance-test-writer"
-          shape=component
-          status=pending
-          prd_ref="PRD-AUTH-001"]
+          handler="codergen"
+          shape=box
+          worker_type="acceptance-test-writer"
+          sd_path="docs/sds/SD-AUTH-001.md"
+          bead_id="BEAD-AT-001"
+          prd_ref="PRD-AUTH-001"
+          status=pending]
 ```
 
-**Required**: `label`, `handler`, `prd_ref`
+**Required**: `label`, `handler`, `worker_type`, `sd_path`, `bead_id`
+**Recommended**: `prd_ref`
+
+### `planner` — Research, Refine, and Plan Nodes (`tab` / `note`)
+
+`PlannerHandler` is the unified handler for planning-type nodes. It is registered for both `tab` (research) and `note` (refine) shapes. Use it for read-heavy investigation, SD refinement, or planning tasks that need constrained tool access.
+
+```dot
+research_auth [
+    label="Research Auth Patterns"
+    handler="research"
+    shape=tab
+    fillcolor=lightcyan
+    status=pending
+    solution_design="docs/sds/SD-AUTH-001.md"
+    prd_ref="PRD-AUTH-001"
+    tool_set="research"
+    prompt="Investigate OAuth2 PKCE and JWT rotation via Context7 and Perplexity"
+]
+
+refine_sd [
+    label="Refine Solution Design"
+    handler="refine"
+    shape=note
+    fillcolor=lightgreen
+    status=pending
+    solution_design="docs/sds/SD-AUTH-001.md"
+    tool_set="refine"
+    prompt_template="refine-sd"
+    prompt_vars="{\"focus_section\": \"authentication flow\"}"
+]
+```
+
+**Required**: `label`, `handler`, `solution_design` (for research/refine nodes)
+**Optional**: `tool_set`, `prompt_template`, `prompt_vars`, `prompt`, `system_prompt`
+
+#### Node Attributes
+
+| Attribute | Description |
+|-----------|-------------|
+| `tool_set` | Named tool set from `.cobuilder/tool-sets.yaml`. Inferred from shape when absent (`tab`→`research`, `note`→`refine`). |
+| `prompt_template` | Jinja2 template name — loads `.cobuilder/prompts/<name>.j2` |
+| `prompt_vars` | JSON dict string of extra variables for the template, accessible as `vars.*` |
+| `prompt` | Literal prompt fallback when no template is set or template render fails |
+| `system_prompt` | Custom system prompt string (optional — defaults to a generic planning prompt) |
+
+#### Tool Set Selection
+
+The `PlannerHandler` resolves tools in 4 layers (highest priority first):
+
+1. **Node `tool_set` attribute** — explicit named set (e.g. `tool_set="research"`)
+2. **Shape inference** — `tab` → `research`, `note` → `refine`, other → `full`
+3. **Hardcoded fallback** — built-in copy of the standard sets (used when `.cobuilder/tool-sets.yaml` is missing)
+4. **Empty** — if `yaml` is not importable and fallback is unreachable
+
+### Prompt Templatization
+
+Any node that uses `PlannerHandler` (or `CodergenHandler`) supports Jinja2 prompt templates.
+
+```dot
+my_node [
+    shape=tab
+    handler="research"
+    prompt_template="research-auth"
+    prompt_vars="{\"focus\": \"OAuth2 PKCE\", \"depth\": \"deep\"}"
+    status=pending
+]
+```
+
+Template file `.cobuilder/prompts/research-auth.j2`:
+
+```jinja2
+Research {{ vars.focus }} authentication patterns.
+Depth: {{ vars.depth }}.
+Node: {{ node_id }} | PRD: {{ prd_ref }} | Time: {{ timestamp }}
+```
+
+#### Prompt Resolution Order
+
+1. `prompt_template` → renders `.cobuilder/prompts/<name>.j2` (auto-appends `.j2` if missing)
+2. `prompt` → returned as-is
+3. `""` (empty string)
+
+On template render failure (file not found, Jinja2 error), falls back to `prompt`.
+
+#### Available Template Variables
+
+| Variable | Source |
+|----------|--------|
+| `node_id` | Node ID string |
+| `label` | Node label |
+| `node.*` | All node attributes |
+| `context.*` | Pipeline context snapshot |
+| `vars.*` | Values from `prompt_vars` JSON |
+| `timestamp` | Current UTC ISO-8601 timestamp |
+| `run_dir` | Pipeline run directory path |
+| All `node.attrs` keys | Injected as top-level variables for convenience |
 
 ---
 
@@ -337,18 +510,27 @@ check_result -> retry_path [condition="fail" label="failed"]
 
 ### Diamond Node Edge Rules
 
-Diamond (conditional) nodes must have **exactly 2 outgoing edges**: one with `condition="pass"` and one with `condition="fail"`.
+Diamond (`conditional`) nodes support **N-way branching** (N >= 2). All outgoing edges from a diamond node must have a `condition=` attribute. The `condition` value can be a simple routing label (`"pass"`, `"fail"`) or a full expression from the conditions expression language (e.g. `$run_ci.type = "unit"`).
 
 ```dot
-// CORRECT
+// CORRECT — 2-way with simple labels
 check -> success [condition="pass"]
 check -> failure [condition="fail"]
 
-// WRONG — missing conditions or wrong count
+// CORRECT — N-way with expression conditions
+route -> unit_tests    [condition="$run_ci.type = \"unit\""    label="unit"]
+route -> browser_tests [condition="$run_ci.type = \"browser\"" label="browser"]
+route -> skip          [condition="$run_ci.type = \"none\""    label="skip"]
+
+// WRONG — missing conditions on outgoing edges
 check -> success [label="yes"]
 check -> failure [label="no"]
-check -> maybe [label="partial"]
+
+// WRONG — fewer than 2 outgoing edges (useless branch)
+check -> only_one
 ```
+
+**Warning**: If no outgoing edge has a catch-all condition (e.g. `condition="true"`), the pipeline may get stuck if no condition evaluates to true. Add a fallback branch with `condition="true"` for safety.
 
 ---
 
