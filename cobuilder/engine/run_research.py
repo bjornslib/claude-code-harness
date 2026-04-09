@@ -259,6 +259,12 @@ async def _run_research(prompt: str, options: object) -> dict:
 
 def main(argv: list[str] | None = None) -> None:
     """Entry point: build prompt, run SDK, output result JSON."""
+    import warnings
+    warnings.warn(
+        "run_research.py is deprecated. Use PlannerHandler with tool_set='research' "
+        "and prompt_template='research' in DOT pipeline nodes instead.",
+        DeprecationWarning, stacklevel=1,
+    )
     args = parse_args(argv)
 
     # Parse frameworks

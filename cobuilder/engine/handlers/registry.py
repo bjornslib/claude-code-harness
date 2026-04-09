@@ -99,7 +99,8 @@ class HandlerRegistry:
         registry.register("parallelogram", ToolHandler())
         registry.register("house", ManagerLoopHandler())
         registry.register("octagon", CloseHandler())
-        # Aliases: research (tab) and refine (note) use CodergenHandler dispatch
-        registry.register("tab", CodergenHandler())
-        registry.register("note", CodergenHandler())
+        # research (tab) and refine (note) use PlannerHandler with inferred tool sets
+        from cobuilder.engine.handlers.planner import PlannerHandler
+        registry.register("tab", PlannerHandler())
+        registry.register("note", PlannerHandler())
         return registry

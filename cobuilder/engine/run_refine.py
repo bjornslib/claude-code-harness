@@ -236,6 +236,12 @@ async def _run_refine(prompt: str, options: object) -> dict:
 
 def main(argv: list[str] | None = None) -> None:
     """Entry point: build prompt, run SDK, output result JSON."""
+    import warnings
+    warnings.warn(
+        "run_refine.py is deprecated. Use PlannerHandler with tool_set='refine' "
+        "and prompt_template='refine' in DOT pipeline nodes instead.",
+        DeprecationWarning, stacklevel=1,
+    )
     args = parse_args(argv)
 
     # Resolve paths

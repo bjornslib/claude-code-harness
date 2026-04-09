@@ -663,11 +663,14 @@ class GoalGatesHaveRetry:
 # ---------------------------------------------------------------------------
 
 class LlmNodesHavePrompts:
-    """LLM-invoking nodes should have a non-empty ``prompt`` or ``label``.
+    """LLM-invoking nodes should have a non-empty ``prompt``, ``prompt_template``, or ``label``.
 
     Nodes whose shapes are in ``LLM_NODE_SHAPES`` (``box``, ``tab``) invoke
-    the LLM.  A node with neither attribute will invoke the handler with an
-    empty instruction, producing useless or confusing output.
+    the LLM.  A node with none of these attributes will invoke the handler
+    with an empty instruction, producing useless or confusing output.
+
+    ``prompt_template`` is accepted as a valid prompt source (Epic 2) — it
+    references a ``.j2`` file that PromptRenderer will load at dispatch time.
     """
 
     rule_id = "LlmNodesHavePrompts"
@@ -679,17 +682,19 @@ class LlmNodesHavePrompts:
             if node.shape not in LLM_NODE_SHAPES:
                 continue
             has_prompt = bool(node.attrs.get("prompt", "").strip())
+            has_template = bool(node.attrs.get("prompt_template", "").strip())
             has_label = bool(node.label.strip())
-            if not has_prompt and not has_label:
+            if not has_prompt and not has_template and not has_label:
                 violations.append(
                     _warning(
                         self.rule_id,
-                        f"LLM node (shape='{node.shape}') has neither 'prompt' nor "
-                        "'label' attribute. The handler will invoke the LLM with an "
-                        "empty instruction.",
-                        "Add a `prompt=` attribute describing the task for the LLM, or "
-                        "ensure the `label=` attribute is descriptive enough to serve "
-                        "as the instruction.",
+                        f"LLM node (shape='{node.shape}') has neither 'prompt', "
+                        "'prompt_template', nor 'label' attribute. The handler will "
+                        "invoke the LLM with an empty instruction.",
+                        "Add a `prompt=` attribute describing the task for the LLM, "
+                        "a `prompt_template=` referencing a .j2 file in "
+                        "`.cobuilder/prompts/`, or ensure the `label=` attribute is "
+                        "descriptive enough to serve as the instruction.",
                         node_id=node.id,
                     )
                 )

@@ -308,7 +308,9 @@ class CodergenHandler:
             )
             return await self._execute_tmux(request)
 
-        prompt = node.prompt or f"Execute task: {node.id}"
+        from cobuilder.engine.prompt_renderer import PromptRenderer
+        renderer = PromptRenderer()
+        prompt = renderer.render(node, request.context, request.run_dir) or f"Execute task: {node.id}"
         try:
             messages = []
             async for message in claude_code_sdk.query(prompt=prompt):

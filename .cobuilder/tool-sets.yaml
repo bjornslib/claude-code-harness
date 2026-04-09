@@ -1,0 +1,68 @@
+research:
+  description: "Full research capabilities: docs lookup, web search, memory, code navigation"
+  tools:
+    - Bash
+    - Read
+    - Edit
+    - Write
+    - ToolSearch
+    - LSP
+    - mcp__context7__resolve-library-id
+    - mcp__context7__query-docs
+    - mcp__perplexity__perplexity_ask
+    - mcp__perplexity__perplexity_reason
+    - mcp__perplexity__perplexity_research
+    - mcp__hindsight__reflect
+    - mcp__hindsight__retain
+    - mcp__hindsight__recall
+    - mcp__serena__activate_project
+    - mcp__serena__check_onboarding_performed
+    - mcp__serena__find_symbol
+    - mcp__serena__search_for_pattern
+    - mcp__serena__get_symbols_overview
+    - mcp__serena__find_referencing_symbols
+    - mcp__serena__find_file
+
+refine:
+  description: "Restricted editing: read/edit/write + memory + reasoning (no web research)"
+  tools:
+    - Read
+    - Edit
+    - Write
+    - ToolSearch
+    - LSP
+    - mcp__hindsight__reflect
+    - mcp__hindsight__retain
+    - mcp__hindsight__recall
+    - mcp__perplexity__perplexity_reason
+    - mcp__serena__activate_project
+    - mcp__serena__check_onboarding_performed
+    - mcp__serena__find_symbol
+    - mcp__serena__search_for_pattern
+    - mcp__serena__get_symbols_overview
+    - mcp__serena__find_referencing_symbols
+    - mcp__serena__find_file
+
+plan:
+  description: "Read-only planning: code reading + memory recall + quick web lookup"
+  tools:
+    - Read
+    - ToolSearch
+    - LSP
+    - Glob
+    - Grep
+    - mcp__hindsight__reflect
+    - mcp__hindsight__recall
+    - mcp__perplexity__perplexity_ask
+
+full:
+  description: "Unrestricted tool access for general-purpose nodes"
+  tools:
+    - Bash
+    - Read
+    - Edit
+    - Write
+    - ToolSearch
+    - LSP
+    - Glob
+    - Grep

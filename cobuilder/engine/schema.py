@@ -41,7 +41,6 @@ VALID_HANDLERS: frozenset[str] = frozenset(
         "parallel",
         "research",
         "refine",
-        "acceptance-test-writer",
     }
 )
 
@@ -58,7 +57,6 @@ HANDLER_SHAPE_MAP: dict[str, str] = {
     "parallel": "parallelogram",
     "research": "tab",
     "refine": "note",
-    "acceptance-test-writer": "component",
 }
 
 # --- Edge condition labels ---
@@ -78,7 +76,6 @@ REQUIRED_ATTRS: dict[str, list[str]] = {
     "parallel": ["label", "handler"],
     "research": ["label", "handler", "solution_design"],
     "refine": ["label", "handler", "solution_design", "evidence_path"],
-    "acceptance-test-writer": ["label", "handler", "prd_ref"],
 }
 
 # --- Recommended (advisory) attributes per handler type ---
@@ -102,6 +99,7 @@ VALID_WORKER_TYPES: frozenset[str] = frozenset(
         "solution-design-architect",
         "validation-test-agent",
         "ux-designer",
+        "acceptance-test-writer",  # demoted from handler; now codergen + worker_type
     }
 )
 

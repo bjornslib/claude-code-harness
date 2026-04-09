@@ -96,6 +96,8 @@ temp/
 .cobuilder/*
 !.cobuilder/examples/
 !.cobuilder/templates/
+!.cobuilder/prompts/
+!.cobuilder/tool-sets.yaml
 
 # Pipeline runtime state — never commit
 .pipelines/
