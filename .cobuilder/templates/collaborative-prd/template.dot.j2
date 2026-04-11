@@ -117,29 +117,41 @@ Create the state/ directory if it does not exist: mkdir -p {{ target_dir }}/stat
         prd_ref="{{ prd_ref }}"
         llm_profile="{{ llm_profile_test or llm_profile }}"
         max_retries=20
-        prompt="RED PHASE (TDD) — Write failing tests for the current epic.
+        prompt="RED PHASE (TDD) — Write failing tests for ONE epic.
 
-Step 1: Read the current epic.
+━━━ SCOPE CONTRACT ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Your job is scoped to EXACTLY ONE EPIC: the one identified in current_epic.
+You MUST NOT write tests for any epic in remaining_epics — those will be
+handled in future pipeline iterations. You MUST NOT modify or delete any
+test files that were written for epics now in completed_epics.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Step 1: Read the progress file and identify your epic.
   cat {{ target_dir }}/state/{{ prd_ref }}-progress.json
-  The 'current_epic' field tells you what to test.
+  Your epic is the value of 'current_epic'. This is the only epic you test.
 
-Step 2: Read the plan summary for context on what came before.
+Step 2: Read the plan summary to understand the integration context.
   cat {{ target_dir }}/state/{{ prd_ref }}-plan-summary.md
+  Completed epics tell you what ALREADY EXISTS. Your tests may rely on that
+  code existing, but must not re-test it. Remaining epics DO NOT EXIST YET —
+  do not write tests that assume their code is present.
 
-Step 3: Write tests that DEFINE the contract — these must FAIL because no
-implementation exists yet.
+Step 3: Write tests that DEFINE the contract for current_epic only.
   - Every item in current_epic.acceptance_criteria must have at least one test.
   - Place test files under current_epic.test_scope.
-  - Tests must fail for the RIGHT reason (assertion failure, not import error).
-  - Do NOT modify or delete any existing test files from prior epics.
+  - Tests must FAIL because the implementation does not exist yet.
+  - Failures must be assertion failures, not import errors or missing fixtures.
+  - Do NOT touch existing test files from completed_epics.
 
-Step 4: Run the test suite and confirm all NEW tests fail:
+Step 4: Run the full test suite and confirm only the NEW tests fail.
   cd {{ target_dir }} && {{ test_command }}
+  Existing tests for completed epics should still pass. New tests must fail.
 
 Step 5: Report in your signal:
-  - Which test files were written (full paths)
-  - How many tests, and confirm they all fail
-  - Any test infrastructure that needed to be set up"
+  - The epic id you wrote tests for (current_epic.id)
+  - Which test files were created (full paths)
+  - How many new tests, confirmed failing
+  - Existing test pass count (regression check)"
     ];
 
     // ════════════════════════════════════════════════════════════
@@ -158,30 +170,46 @@ Step 5: Report in your signal:
         prd_ref="{{ prd_ref }}"
         llm_profile="{{ llm_profile_impl or llm_profile }}"
         max_retries=30
-        prompt="CODEGEN PHASE — Implement the current epic.
+        prompt="CODEGEN PHASE — Implement ONE epic.
 
-Step 1: Read the current epic.
+━━━ SCOPE CONTRACT ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Your job is scoped to EXACTLY ONE EPIC: the one identified in current_epic.
+You MUST NOT implement features that belong to remaining_epics — the pipeline
+will handle those in future iterations. You MUST NOT refactor or extend code
+from completed_epics beyond the minimal changes needed to integrate this epic.
+The test files were written before this phase and define the contract —
+you MUST NOT modify any test file.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Step 1: Read the progress file and identify your epic.
   cat {{ target_dir }}/state/{{ prd_ref }}-progress.json
-  The 'current_epic' field describes what to implement.
+  Your epic is 'current_epic'. This is the only epic you implement.
 
 Step 2: Check for validator feedback from a prior attempt.
-  If {{ target_dir }}/state/{{ prd_ref }}-feedback.md exists, read it carefully.
-  This file contains specific failures and guidance you MUST address in this attempt.
+  cat {{ target_dir }}/state/{{ prd_ref }}-feedback.md   (may not exist on first attempt)
+  If the file exists, this is a RETRY. Every specific failure or gap listed
+  in the feedback MUST be addressed in this attempt. Do not repeat the same
+  mistakes. Read the 'Actionable Guidance' section carefully.
   If the file does not exist, this is your first attempt on this epic.
 
-Step 3: Implement the epic.
-  - Do NOT modify any test files — tests define the contract, not implementation.
-  - Write the minimal implementation to make all failing tests pass.
-  - Follow the file paths suggested in current_epic.files_to_create.
-  - Integrate correctly with code from completed_epics (read progress.json for context).
+Step 3: Implement current_epic only.
+  - Do NOT modify any test file — tests define the contract.
+  - Write the minimal code to make the failing tests for this epic pass.
+  - Use the file paths in current_epic.files_to_create as your guide.
+  - Integrate correctly with what completed_epics already built, but do not
+    change their implementations unless strictly required for this epic.
+  - Do not implement anything from remaining_epics even if it seems helpful.
 
-Step 4: Run the test suite and verify all tests pass.
+Step 4: Run the full test suite and verify all tests pass.
   cd {{ target_dir }} && {{ test_command }}
+  All previously passing tests must still pass (no regressions).
+  All new tests for this epic must now pass.
 
 Step 5: Report in your signal:
-  - Which files were created or modified
-  - Test results (pass count, any remaining failures)
-  - How you addressed the prior validator feedback (if any)"
+  - The epic id you implemented (current_epic.id)
+  - Which files were created or modified (full paths)
+  - Full test results (pass/fail counts)
+  - How you addressed each point in the prior validator feedback (if any)"
     ];
 
     // ════════════════════════════════════════════════════════════
@@ -202,52 +230,78 @@ Step 5: Report in your signal:
         worker_type="{{ validator_worker_type }}"
         prd_ref="{{ prd_ref }}"
         llm_profile="{{ llm_profile_validator or llm_profile }}"
-        prompt="VALIDATOR PHASE — Independently validate the current epic.
+        prompt="VALIDATOR PHASE — Independently validate ONE epic.
 
-You are an independent auditor. Do not trust the codegen worker's self-report.
+━━━ SCOPE CONTRACT ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Your job is scoped to EXACTLY ONE EPIC: the one identified in current_epic.
+Score ONLY the acceptance_criteria listed in current_epic. Do NOT penalise
+the implementation for missing features that belong to remaining_epics —
+those have not been built yet and are out of scope for this validation.
+You are an INDEPENDENT AUDITOR. Do not trust the codegen worker's self-report.
+Run everything yourself.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Step 1: Read the current epic.
+Step 1: Read the progress file and identify your epic.
   cat {{ target_dir }}/state/{{ prd_ref }}-progress.json
+  Your scope is 'current_epic' only. Note what completed_epics have already
+  built so you can verify integration is correct without re-scoring them.
 
-Step 2: Read prior feedback (tells you what this epic has already attempted).
-  cat {{ target_dir }}/state/{{ prd_ref }}-feedback.md  (may not exist on first attempt)
-  Count how many times feedback has been written — this is the attempt count.
+Step 2: Determine the attempt count.
+  cat {{ target_dir }}/state/{{ prd_ref }}-feedback.md   (may not exist on attempt 1)
+  Count the number of prior '## Validation Result' headers in the file.
+  This is the attempt number (0 if file does not exist).
 
-Step 3: Run the test suite yourself.
+Step 3: Run the full test suite independently.
   cd {{ target_dir }} && {{ test_command }}
+  Do NOT rely on codegen's claimed test results. Run it yourself.
 
-Step 4: Score each acceptance criterion from current_epic.acceptance_criteria:
-  0.0 = completely missing or wrong
-  0.5 = partially implemented
-  1.0 = fully implemented and tested
+Step 4: Score each criterion in current_epic.acceptance_criteria only.
+  For each criterion:
+    1.0 = fully implemented, test passes, evidence is clear
+    0.5 = partially implemented or test passes but implementation is fragile
+    0.0 = missing, wrong, or test fails
   Compute overall_score = average of all criterion scores.
+  A criterion is CRITICAL if it is marked as such or if its absence would
+  make the epic fundamentally non-functional.
 
-Step 5: Write a feedback file regardless of outcome.
+Step 5: Write the feedback file (always, regardless of outcome).
   Path: {{ target_dir }}/state/{{ prd_ref }}-feedback.md
-  Include:
-    ## Validation Result — <PASS|FAIL|ESCALATION>
-    Overall score: <score>
-    Attempt number: <N>
+  APPEND to the file if it already exists (preserve retry history).
 
-    ### Per-Criterion Results
-    For each criterion: status, evidence, and specific gap (if failing).
+  Required format:
+  ## Validation Result — <PASS|FAIL|ESCALATION>
+  Epic: <current_epic.id>  |  Attempt: <N>  |  Score: <overall_score>
 
-    ### Actionable Guidance for Next Attempt
-    Specific code-level instructions for the implementer (if failing).
+  ### Per-Criterion Results
+  - [PASS/FAIL/PARTIAL] <criterion text>
+    Evidence: <specific file:line or test name>
+    Gap: <what is missing or wrong, if not passing>
 
-Step 6: Determine your verdict and set your result accordingly.
+  ### Integration Check
+  - Verify the new code integrates correctly with completed_epics.
+  - Note any regressions in previously passing tests.
 
-  PASS (result='pass'):   overall_score >= 0.70 AND all critical criteria pass.
-                          Write '## Validation Result — PASS' in feedback.md.
+  ### Actionable Guidance for Next Attempt
+  (Only if FAIL or ESCALATION — be specific: file paths, function names,
+  exact behaviour that must change. Vague guidance wastes a retry.)
 
-  FAIL (result='fail'):   overall_score < 0.70 AND attempt count < 3.
-                          Write '## Validation Result — FAIL' in feedback.md.
-                          Include specific, actionable guidance.
+Step 6: Set your verdict.
 
-  ESCALATION (result='pass'):  overall_score < 0.70 AND attempt count >= 3.
-                          Write '## Validation Result — ESCALATION' in feedback.md.
-                          Explain why the epic is stuck. The replanner will move
-                          this epic to escalated_epics and continue with the next one.
+  PASS (result='pass'):
+    overall_score >= 0.70 AND no CRITICAL criterion is failing.
+    Header: '## Validation Result — PASS'
+
+  FAIL (result='fail'):
+    overall_score < 0.70 AND attempt number < 3.
+    Header: '## Validation Result — FAIL'
+    Actionable Guidance section is MANDATORY.
+
+  ESCALATION (result='pass'):
+    overall_score < 0.70 AND attempt number >= 3.
+    The implementation is stuck. Accept with reservations and unblock the pipeline.
+    Header: '## Validation Result — ESCALATION'
+    Explain precisely why the epic could not be completed. The replanner will
+    move it to escalated_epics so remaining epics can still be attempted.
 
 Output your result as 'pass' or 'fail' in your completion signal."
     ];
