@@ -1,0 +1,385 @@
+// Generated from template: collaborative-prd v1.0
+// PRD: {{ prd_ref }}
+//
+// DESIGN PHILOSOPHY
+// -----------------
+// This graph has exactly 10 nodes regardless of how many epics the PRD contains.
+// Epic sequencing is NOT encoded in the topology — it lives in state files under
+// {{ target_dir }}/state/. The decompose node writes the full plan once; each
+// subsequent iteration of the loop reads and updates that plan. The graph is the
+// mechanism; the agents and state files are the intelligence.
+//
+// LOOP STRUCTURE
+// --------------
+//   OUTER loop (per epic):  replan → check_routing → progress_route → red
+//   INNER loop (per retry): validate → val_route → codegen
+//
+// STATE FILES (all under {{ target_dir }}/state/)
+//   {{ prd_ref }}-progress.json   — {current_epic, completed_epics, escalated_epics, remaining_epics}
+//   {{ prd_ref }}-feedback.md     — validator feedback for next codegen attempt (deleted by replan)
+//   {{ prd_ref }}-routing.json    — {has_more: "true"|"false"} written by replan, read by tool node
+//   {{ prd_ref }}-plan-summary.md — append-only progress log for human review
+//
+// ROUTING CONVENTIONS
+// -------------------
+//   validate  → result="pass"      → replan   (accepted, score ≥ 0.70 OR escalation)
+//   validate  → result="fail"      → codegen  (retry; validator feedback guides next attempt)
+//   replan    → has_more="true"    → red      (next epic; red reads updated current_epic)
+//   replan    → has_more="false"   → exit     (all epics done or exhausted)
+
+digraph "{{ prd_ref }}-collab" {
+    graph [
+        label="Collaborative PRD: {{ prd_ref }}"
+        labelloc="t"
+        fontsize=16
+        rankdir="TB"
+        pipeline_id="{{ prd_ref }}-collab"
+        prd_ref="{{ prd_ref }}"
+        prd_path="{{ prd_path }}"
+        cobuilder_root="{{ cobuilder_root }}"
+        target_dir="{{ target_dir }}"
+        _template="collaborative-prd"
+        _template_version="1.0"
+    ];
+
+    node [fontname="Helvetica" fontsize=11 style=filled];
+    edge [fontname="Helvetica" fontsize=9 arrowhead=vee];
+
+    // ════════════════════════════════════════════════════════════
+    // START
+    // ════════════════════════════════════════════════════════════
+    start [
+        label="START\n{{ prd_ref }}"
+        handler="start"
+        shape=Mdiamond
+        fillcolor=green
+        status=pending
+    ];
+
+    // ════════════════════════════════════════════════════════════
+    // PHASE 1: DECOMPOSE  (runs once)
+    // Reads the PRD and produces an ordered epic plan written to
+    // the state file. All downstream nodes read from this file.
+    // Uses the research tool set (tab shape) for full file access.
+    // ════════════════════════════════════════════════════════════
+    decompose [
+        label="Decompose PRD\ninto Epic Plan"
+        handler="research"
+        shape=tab
+        fillcolor=lightcyan
+        status=pending
+        prd_ref="{{ prd_ref }}"
+        llm_profile="{{ llm_profile_planner or llm_profile }}"
+        prompt="DECOMPOSE PHASE — runs once at pipeline start.
+
+Read the PRD at {{ prd_path }} and decompose it into an ordered list of implementable epics.
+
+Rules for decomposition:
+1. Each epic must be independently testable — it should be possible to write failing tests for it before implementation exists.
+2. Order epics by dependency: foundational work (data models, auth, core APIs) before features that depend on them.
+3. Each epic should be small enough for one implementation cycle (~1 day of focused work).
+
+For each epic produce a JSON object with these fields:
+  id          — short slug (e.g. 'user-auth', 'product-api')
+  label       — human-readable name (e.g. 'User Authentication')
+  description — 2-4 sentences describing what to build
+  acceptance_criteria — list of specific, testable strings (each maps to one test)
+  test_scope  — which directories/files the tests will live in
+  files_to_create — key files expected to be created/modified
+
+Then write the plan to {{ target_dir }}/state/{{ prd_ref }}-progress.json with this structure:
+{
+  'current_epic': <first epic object>,
+  'completed_epics': [],
+  'escalated_epics': [],
+  'remaining_epics': [<all epics except the first, in order>]
+}
+
+Also write a human-readable plan summary to {{ target_dir }}/state/{{ prd_ref }}-plan-summary.md
+listing all epics in order with their acceptance criteria.
+
+Create the state/ directory if it does not exist: mkdir -p {{ target_dir }}/state"
+    ];
+
+    // ════════════════════════════════════════════════════════════
+    // PHASE 2: RED  (once per epic)
+    // Reads current_epic from the progress state file and writes
+    // failing tests for that epic. Loops back here from progress_route
+    // when the replanner selects the next epic.
+    // ════════════════════════════════════════════════════════════
+    red [
+        label="RED: Write Failing Tests\n(current epic)"
+        handler="codergen"
+        shape=box
+        fillcolor="#ffcccc"
+        status=pending
+        worker_type="{{ test_worker_type }}"
+        prd_ref="{{ prd_ref }}"
+        llm_profile="{{ llm_profile_test or llm_profile }}"
+        max_retries=20
+        prompt="RED PHASE (TDD) — Write failing tests for the current epic.
+
+Step 1: Read the current epic.
+  cat {{ target_dir }}/state/{{ prd_ref }}-progress.json
+  The 'current_epic' field tells you what to test.
+
+Step 2: Read the plan summary for context on what came before.
+  cat {{ target_dir }}/state/{{ prd_ref }}-plan-summary.md
+
+Step 3: Write tests that DEFINE the contract — these must FAIL because no
+implementation exists yet.
+  - Every item in current_epic.acceptance_criteria must have at least one test.
+  - Place test files under current_epic.test_scope.
+  - Tests must fail for the RIGHT reason (assertion failure, not import error).
+  - Do NOT modify or delete any existing test files from prior epics.
+
+Step 4: Run the test suite and confirm all NEW tests fail:
+  cd {{ target_dir }} && {{ test_command }}
+
+Step 5: Report in your signal:
+  - Which test files were written (full paths)
+  - How many tests, and confirm they all fail
+  - Any test infrastructure that needed to be set up"
+    ];
+
+    // ════════════════════════════════════════════════════════════
+    // PHASE 3a: CODEGEN  (retries within an epic)
+    // Reads current_epic from the state file. On retry, reads
+    // validator feedback from the feedback file and addresses it.
+    // max_retries is set high to accommodate multi-epic runs.
+    // ════════════════════════════════════════════════════════════
+    codegen [
+        label="Implement\n(current epic)"
+        handler="codergen"
+        shape=box
+        fillcolor="#ccffcc"
+        status=pending
+        worker_type="{{ worker_type }}"
+        prd_ref="{{ prd_ref }}"
+        llm_profile="{{ llm_profile_impl or llm_profile }}"
+        max_retries=30
+        prompt="CODEGEN PHASE — Implement the current epic.
+
+Step 1: Read the current epic.
+  cat {{ target_dir }}/state/{{ prd_ref }}-progress.json
+  The 'current_epic' field describes what to implement.
+
+Step 2: Check for validator feedback from a prior attempt.
+  If {{ target_dir }}/state/{{ prd_ref }}-feedback.md exists, read it carefully.
+  This file contains specific failures and guidance you MUST address in this attempt.
+  If the file does not exist, this is your first attempt on this epic.
+
+Step 3: Implement the epic.
+  - Do NOT modify any test files — tests define the contract, not implementation.
+  - Write the minimal implementation to make all failing tests pass.
+  - Follow the file paths suggested in current_epic.files_to_create.
+  - Integrate correctly with code from completed_epics (read progress.json for context).
+
+Step 4: Run the test suite and verify all tests pass.
+  cd {{ target_dir }} && {{ test_command }}
+
+Step 5: Report in your signal:
+  - Which files were created or modified
+  - Test results (pass count, any remaining failures)
+  - How you addressed the prior validator feedback (if any)"
+    ];
+
+    // ════════════════════════════════════════════════════════════
+    // PHASE 3b: VALIDATE  (after each codegen attempt)
+    // Independent auditor — never trusts codegen's self-report.
+    // Writes feedback.md for the next codegen retry.
+    // Sets result="pass" or result="fail" to drive routing.
+    // ESCALATION: after 3+ failed attempts, accept with reservations
+    // (result="pass") and note the escalation in the feedback file.
+    // The replanner will detect this and move to escalated_epics.
+    // ════════════════════════════════════════════════════════════
+    validate [
+        label="Validate\n(current epic)"
+        handler="codergen"
+        shape=box
+        fillcolor="#ccccff"
+        status=pending
+        worker_type="{{ validator_worker_type }}"
+        prd_ref="{{ prd_ref }}"
+        llm_profile="{{ llm_profile_validator or llm_profile }}"
+        prompt="VALIDATOR PHASE — Independently validate the current epic.
+
+You are an independent auditor. Do not trust the codegen worker's self-report.
+
+Step 1: Read the current epic.
+  cat {{ target_dir }}/state/{{ prd_ref }}-progress.json
+
+Step 2: Read prior feedback (tells you what this epic has already attempted).
+  cat {{ target_dir }}/state/{{ prd_ref }}-feedback.md  (may not exist on first attempt)
+  Count how many times feedback has been written — this is the attempt count.
+
+Step 3: Run the test suite yourself.
+  cd {{ target_dir }} && {{ test_command }}
+
+Step 4: Score each acceptance criterion from current_epic.acceptance_criteria:
+  0.0 = completely missing or wrong
+  0.5 = partially implemented
+  1.0 = fully implemented and tested
+  Compute overall_score = average of all criterion scores.
+
+Step 5: Write a feedback file regardless of outcome.
+  Path: {{ target_dir }}/state/{{ prd_ref }}-feedback.md
+  Include:
+    ## Validation Result — <PASS|FAIL|ESCALATION>
+    Overall score: <score>
+    Attempt number: <N>
+
+    ### Per-Criterion Results
+    For each criterion: status, evidence, and specific gap (if failing).
+
+    ### Actionable Guidance for Next Attempt
+    Specific code-level instructions for the implementer (if failing).
+
+Step 6: Determine your verdict and set your result accordingly.
+
+  PASS (result='pass'):   overall_score >= 0.70 AND all critical criteria pass.
+                          Write '## Validation Result — PASS' in feedback.md.
+
+  FAIL (result='fail'):   overall_score < 0.70 AND attempt count < 3.
+                          Write '## Validation Result — FAIL' in feedback.md.
+                          Include specific, actionable guidance.
+
+  ESCALATION (result='pass'):  overall_score < 0.70 AND attempt count >= 3.
+                          Write '## Validation Result — ESCALATION' in feedback.md.
+                          Explain why the epic is stuck. The replanner will move
+                          this epic to escalated_epics and continue with the next one.
+
+Output your result as 'pass' or 'fail' in your completion signal."
+    ];
+
+    // Routing node after validation
+    // condition='pass' matches result='pass' from validator (both PASS and ESCALATION)
+    // condition='fail' matches result='fail' from validator
+    val_route [
+        label="Validation\nResult?"
+        handler="conditional"
+        shape=diamond
+        fillcolor=lightyellow
+        status=pending
+    ];
+
+    // ════════════════════════════════════════════════════════════
+    // PHASE 4: REPLAN  (once per epic, after pass or escalation)
+    // Updates the progress state file: moves current_epic to
+    // completed or escalated, promotes the next epic.
+    // Writes routing.json so the tool node can make routing
+    // deterministic without relying on agent signal parsing.
+    // ════════════════════════════════════════════════════════════
+    replan [
+        label="Update Progress\n& Select Next Epic"
+        shape=note
+        fillcolor=lightcyan
+        status=pending
+        prd_ref="{{ prd_ref }}"
+        llm_profile="{{ llm_profile_planner or llm_profile }}"
+        prompt="REPLAN PHASE — Update progress and select the next epic.
+
+Step 1: Read the current state.
+  cat {{ target_dir }}/state/{{ prd_ref }}-progress.json
+  cat {{ target_dir }}/state/{{ prd_ref }}-feedback.md
+
+Step 2: Determine the outcome of the just-completed epic.
+  Read the feedback file header:
+  - '## Validation Result — PASS'      → this was a genuine acceptance
+  - '## Validation Result — ESCALATION' → the epic was stuck; treat as escalated
+
+Step 3: Update the progress JSON.
+  - If PASS:      move current_epic to completed_epics list
+  - If ESCALATION: move current_epic to escalated_epics list (with a note)
+  - Pop the first item from remaining_epics and set it as the new current_epic
+  - If remaining_epics is empty, set current_epic to null
+
+Step 4: Write the updated progress back.
+  {{ target_dir }}/state/{{ prd_ref }}-progress.json
+
+Step 5: Write the routing signal.
+  {{ target_dir }}/state/{{ prd_ref }}-routing.json
+  Content:  {'has_more': 'true'}   if remaining_epics had at least one item
+            {'has_more': 'false'}  if remaining_epics was empty (all done)
+
+Step 6: Delete the feedback file so the next epic starts clean.
+  rm -f {{ target_dir }}/state/{{ prd_ref }}-feedback.md
+
+Step 7: Append a progress entry to the plan summary.
+  {{ target_dir }}/state/{{ prd_ref }}-plan-summary.md
+  Format:  ## [timestamp] Epic completed: <id> (<PASS|ESCALATION>)
+           Next: <next epic id or 'ALL DONE'>"
+    ];
+
+    // ════════════════════════════════════════════════════════════
+    // TOOL NODE: read routing signal written by replan
+    // Outputs JSON that the conditional diamond can route on.
+    // Using a tool node makes routing deterministic — the routing
+    // decision is read directly from a file, not inferred from
+    // an agent's preferred_label signal.
+    // ════════════════════════════════════════════════════════════
+    check_routing [
+        label="Read Routing\nSignal"
+        handler="tool"
+        shape=parallelogram
+        fillcolor=lightyellow
+        status=pending
+        tool_command="cat state/{{ prd_ref }}-routing.json"
+        parse_json_output="true"
+        working_dir="target_dir"
+        max_retries=20
+    ];
+
+    // Routes on $check_routing.has_more set by tool node above
+    progress_route [
+        label="More Epics?"
+        handler="conditional"
+        shape=diamond
+        fillcolor=lightyellow
+        status=pending
+    ];
+
+    // ════════════════════════════════════════════════════════════
+    // EXIT
+    // ════════════════════════════════════════════════════════════
+    pipeline_exit [
+        label="Complete\n{{ prd_ref }}"
+        handler="exit"
+        shape=Msquare
+        fillcolor=darkgreen
+        status=pending
+    ];
+
+    // ════════════════════════════════════════════════════════════
+    // EDGES
+    // ════════════════════════════════════════════════════════════
+
+    // ── Entry ──────────────────────────────────────────────────
+    start -> decompose [label="begin"];
+    decompose -> red   [label="plan_ready"];
+
+    // ── Inner loop: Codegen ↔ Validate ─────────────────────────
+    // (iterates within a single epic until pass or escalation)
+    red -> codegen [label="tests_written"];
+    codegen -> validate [label="impl_done"];
+    validate -> val_route [label="validation_done"];
+
+    // condition="pass" matches result="pass" from validator signal
+    // (covers both genuine PASS and ESCALATION — replan distinguishes them)
+    val_route -> replan  [condition="pass" label="epic_done"];
+
+    // condition="fail" matches result="fail" from validator signal
+    val_route -> codegen [condition="fail" label="retry_impl"];
+
+    // ── Outer loop: Replan → next epic ─────────────────────────
+    // (advances to the next epic after each accepted or escalated epic)
+    replan -> check_routing [label="progress_updated"];
+    check_routing -> progress_route [label="routing_read"];
+
+    // $check_routing.has_more is set by parse_json_output on check_routing
+    progress_route -> red          [condition="$check_routing.has_more = \"true\""  label="next_epic"];
+    progress_route -> pipeline_exit [condition="$check_routing.has_more = \"false\"" label="prd_complete"];
+
+    // Catch-all: if routing file is missing or malformed, exit cleanly
+    progress_route -> pipeline_exit [condition="true" label="default_exit"];
+}

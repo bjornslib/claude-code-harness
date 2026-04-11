@@ -1,0 +1,112 @@
+template:
+  name: collaborative-prd
+  version: "1.0"
+  description: >
+    Adaptive collaborative pipeline: a single fixed graph implements an entire PRD
+    end-to-end by letting agents drive sequencing through shared state, not topology.
+
+    Phase 1 (once): Decompose — planner reads PRD, produces an ordered epic list
+    written to a state file. No graph nodes are generated per epic.
+
+    Phase 2 (per epic): RED — TDD engineer reads current_epic from state, writes
+    failing tests that define the contract.
+
+    Phase 3 (loop): Codegen ↔ Validate — implementation worker makes tests pass;
+    validator independently scores the result and writes feedback. Pass routes to
+    Replan; fail routes back to Codegen (with validator feedback injected).
+
+    Phase 4 (per epic): Replan — planner updates the progress state file (marks
+    current epic done or escalated), promotes the next epic, and writes a routing
+    signal file. A tool node reads the signal; a diamond routes to RED (next epic)
+    or EXIT (all epics done).
+
+    Key property: the graph has exactly 10 nodes regardless of PRD size. The
+    intelligence that determines what to build next lives in agents and state files,
+    not in pre-baked topology. The validator decides when to give up on a stuck
+    epic (escalation-pass); the replanner reads that signal and moves forward.
+  topology: sequential-gated
+  min_nodes: 10
+  max_nodes: 10
+
+parameters:
+  prd_ref:
+    type: string
+    required: true
+    description: "PRD identifier used as prefix for state files (e.g., PRD-AUTH-001)"
+
+  prd_path:
+    type: string
+    required: true
+    description: "Absolute path to the PRD / Business Spec document"
+
+  target_dir:
+    type: string
+    required: true
+    description: "Absolute path to the target implementation repository"
+
+  cobuilder_root:
+    type: string
+    required: true
+    description: "Absolute path to the cobuilder harness root"
+
+  test_command:
+    type: string
+    default: "pytest tests/ -v"
+    description: "Command to run the test suite (run from target_dir)"
+
+  worker_type:
+    type: string
+    default: "backend-solutions-engineer"
+    description: "Agent type for implementation (codegen node)"
+
+  test_worker_type:
+    type: string
+    default: "tdd-test-engineer"
+    description: "Agent type for writing failing tests (RED node)"
+
+  validator_worker_type:
+    type: string
+    default: "validation-test-agent"
+    description: "Agent type for independent validation"
+
+  llm_profile:
+    type: string
+    default: "alibaba-glm5"
+    description: "Default LLM profile applied to all nodes"
+
+  llm_profile_planner:
+    type: string
+    default: ""
+    description: "LLM profile override for planner nodes (decompose, replan)"
+
+  llm_profile_test:
+    type: string
+    default: ""
+    description: "LLM profile override for RED (test writing) node"
+
+  llm_profile_impl:
+    type: string
+    default: ""
+    description: "LLM profile override for codegen (implementation) node"
+
+  llm_profile_validator:
+    type: string
+    default: ""
+    description: "LLM profile override for validate node"
+
+defaults:
+  llm_profile: "alibaba-glm5"
+  handler_defaults:
+    research:
+      llm_profile: "alibaba-glm5"
+
+constraints:
+  has_start:
+    type: node_state_machine
+    description: "Pipeline must have exactly one start node"
+  has_exit:
+    type: node_state_machine
+    description: "Pipeline must have exactly one exit node"
+  loop_guard:
+    type: loop_constraint
+    description: "Codegen node max_retries must accommodate multi-epic runs"
