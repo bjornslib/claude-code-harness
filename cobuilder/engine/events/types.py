@@ -22,6 +22,7 @@ EventType = Literal[
     "node.started",
     "node.completed",
     "node.failed",
+    "node.dispatch",
     "edge.selected",
     "checkpoint.saved",
     "context.updated",
@@ -44,6 +45,7 @@ _ALL_EVENT_TYPES: frozenset[str] = frozenset([
     "node.started",
     "node.completed",
     "node.failed",
+    "node.dispatch",
     "edge.selected",
     "checkpoint.saved",
     "context.updated",
@@ -274,6 +276,44 @@ class EventBuilder:
                 "error_type": error_type,
                 "goal_gate": goal_gate,
                 "retry_target": retry_target,
+            },
+        )
+
+    @classmethod
+    def node_dispatch(
+        cls,
+        pipeline_id: str,
+        node_id: str,
+        handler_type: str,
+        worker_type: str,
+        attempt: int,
+        prompt: str,
+        node_attrs: dict[str, Any],
+    ) -> PipelineEvent:
+        """Emit immediately before a worker is dispatched.
+
+        Carries the full rendered prompt and key node attributes so the
+        event stream captures exactly what each worker was asked to do.
+        ``node_attrs`` is the raw DOT node attribute dict, filtered to
+        exclude the ``prompt`` key (already carried separately) and any
+        attribute longer than 500 chars.
+        """
+        # Omit 'prompt' from attrs (redundant) and long values (noise).
+        filtered_attrs = {
+            k: v for k, v in node_attrs.items()
+            if k != "prompt" and len(str(v)) <= 500
+        }
+        return cls._build(
+            "node.dispatch",
+            pipeline_id,
+            node_id,
+            {
+                "handler_type": handler_type,
+                "worker_type": worker_type,
+                "attempt": attempt,
+                "prompt_length": len(prompt),
+                "prompt": prompt,
+                "node_attrs": filtered_attrs,
             },
         )
 

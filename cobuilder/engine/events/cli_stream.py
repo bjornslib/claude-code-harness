@@ -46,6 +46,7 @@ _COLOR_RULES: list[tuple[str, str]] = [
     ("retry.triggered", "yellow"),
     ("loop.detected", "yellow"),
     ("*.started", "cyan"),
+    ("node.dispatch", "cyan"),
     ("pipeline.started", "cyan"),
     ("pipeline.resumed", "cyan"),
     ("checkpoint.saved", "dim"),
@@ -103,6 +104,23 @@ def _data_summary(event_type: str, data: dict) -> str:
         visit = data.get("visit_count", 1)
         if visit > 1:
             parts.append(f"visit={visit}")
+
+    elif event_type == "node.dispatch":
+        parts.append(f"handler={data.get('handler_type', '?')}")
+        worker = data.get("worker_type")
+        if worker:
+            parts.append(f"worker={worker}")
+        attempt = data.get("attempt", 1)
+        if attempt > 1:
+            parts.append(f"attempt={attempt}")
+        plen = data.get("prompt_length", 0)
+        parts.append(f"{plen:,}chars")
+        # Show the first line of the prompt as a preview
+        prompt = data.get("prompt", "")
+        if prompt:
+            first_line = prompt.split("\n")[0].strip()[:100]
+            if first_line:
+                parts.append(f'"{first_line}"')
 
     elif event_type == "node.completed":
         parts.append(f"status={data.get('outcome_status', '?')}")
@@ -212,10 +230,81 @@ def _data_summary(event_type: str, data: dict) -> str:
     return "  ".join(parts)
 
 
-def format_event(record: dict, use_color: bool = True) -> str:
+def _format_dispatch_verbose(data: dict, use_color: bool = True, indent: str = "  ") -> str:
+    """Return a multi-line verbose block for a node.dispatch event.
+
+    Renders the full prompt inside a box-drawing frame, followed by a
+    condensed table of the most useful node_attrs (skipping empties).
+
+    Example output::
+
+      ┌─ PROMPT ─────────────────────────────────────────────────────────┐
+      │ CODEGEN PHASE — Implement ONE epic.
+      │
+      │ ━━━ SCOPE CONTRACT ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      │ Your job is scoped to EXACTLY ONE EPIC ...
+      └──────────────────────────────────────────────────────────────────┘
+      ┌─ NODE ATTRS ──────────────────────────────────────────────────────┐
+      │ prd_ref        = PRD-TEST-001
+      │ worker_type    = backend-solutions-engineer
+      │ llm_profile    = alibaba-glm5
+      └──────────────────────────────────────────────────────────────────┘
+    """
+    lines: list[str] = []
+    width = 72  # inner content width (inside │ ... │)
+
+    dim = _ANSI["dim"] if use_color else ""
+    cyan = _ANSI["cyan"] if use_color else ""
+    reset = _ANSI["reset"] if use_color else ""
+
+    def _box(title: str, content: str) -> None:
+        top = f"┌─ {title} " + "─" * max(0, width - len(title) - 3) + "┐"
+        bot = "└" + "─" * (width + 1) + "┘"
+        lines.append(f"{indent}{dim}{top}{reset}")
+        for row in content.splitlines():
+            # Wrap long lines
+            while len(row) > width - 2:
+                lines.append(f"{indent}{dim}│{reset} {cyan}{row[:width - 2]}{reset} {dim}│{reset}")
+                row = "  " + row[width - 2:]
+            lines.append(f"{indent}{dim}│{reset} {cyan}{row:<{width - 2}}{reset} {dim}│{reset}")
+        lines.append(f"{indent}{dim}{bot}{reset}")
+
+    prompt = data.get("prompt", "")
+    if prompt:
+        _box("PROMPT", prompt)
+
+    attrs = data.get("node_attrs", {})
+    # Select the most useful keys — skip long values and internal ones
+    _skip = {"id", "status", "shape", "style", "fillcolor", "fontsize", "fontname"}
+    _useful_keys = [
+        "prd_ref", "worker_type", "llm_profile", "sd_path", "solution_design",
+        "acceptance", "bead_id", "test_command", "tool_set", "max_retries",
+    ]
+    shown: list[tuple[str, str]] = []
+    # Show useful keys first (in preferred order), then any others not in skip list
+    for k in _useful_keys:
+        if k in attrs and attrs[k]:
+            shown.append((k, str(attrs[k])[:200]))
+    for k, v in attrs.items():
+        if k not in _skip and k not in _useful_keys and v and str(v).strip():
+            shown.append((k, str(v)[:200]))
+
+    if shown:
+        max_klen = max(len(k) for k, _ in shown)
+        attr_lines = "\n".join(f"{k:<{max_klen}} = {v}" for k, v in shown)
+        _box("NODE ATTRS", attr_lines)
+
+    return "\n".join(lines)
+
+
+def format_event(record: dict, use_color: bool = True, verbose: bool = False) -> str:
     """Format a single JSONL record as a human-readable line.
 
     Format: ``HH:MM:SS.fff  event.type(padded)  [node_id]  data_summary``
+
+    When ``verbose=True`` and the event type is ``node.dispatch``, a
+    multi-line block showing the full prompt and node attributes is
+    appended below the summary line.
     """
     # Parse timestamp
     ts_raw = record.get("timestamp", "")
@@ -243,7 +332,7 @@ def format_event(record: dict, use_color: bool = True) -> str:
     # Data summary
     summary = _data_summary(event_type, data)
 
-    # Compose
+    # Compose summary line
     if use_color:
         color = _color_for_event(event_type)
         reset = _ANSI["reset"]
@@ -251,6 +340,12 @@ def format_event(record: dict, use_color: bool = True) -> str:
         line = f"{dim}{ts_str}{reset}  {color}{type_str}{reset}  {node_str}  {summary}"
     else:
         line = f"{ts_str}  {type_str}  {node_str}  {summary}"
+
+    # In verbose mode, append the full dispatch block for node.dispatch events.
+    if verbose and event_type == "node.dispatch":
+        block = _format_dispatch_verbose(data, use_color=use_color)
+        if block:
+            line = line + "\n" + block
 
     return line
 
@@ -339,6 +434,7 @@ def tail_events(
     filter_pattern: str | None = None,
     since_minutes: float | None = None,
     use_color: bool = True,
+    verbose: bool = False,
     output: TextIO | None = None,
 ) -> dict[str, int]:
     """Read and format pipeline events from a JSONL file.
@@ -349,6 +445,8 @@ def tail_events(
         filter_pattern: Glob pattern to match event types (e.g. ``node.*``).
         since_minutes: Skip events older than this many minutes.
         use_color: Enable ANSI color output.
+        verbose: When True, expand ``node.dispatch`` events to show the full
+                 prompt and node attributes below each summary line.
         output: Output stream (defaults to ``sys.stdout``).
 
     Returns:
@@ -399,7 +497,7 @@ def tail_events(
                     continue
 
                 counts[event_type] = counts.get(event_type, 0) + 1
-                formatted = format_event(record, use_color=use_color)
+                formatted = format_event(record, use_color=use_color, verbose=verbose)
                 output.write(formatted + "\n")
                 output.flush()
 
@@ -477,6 +575,11 @@ def main() -> None:
         action="store_true",
         help="Disable ANSI color output",
     )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Expand node.dispatch events to show the full prompt and node attributes",
+    )
 
     args = parser.parse_args()
 
@@ -508,6 +611,7 @@ def main() -> None:
         filter_pattern=args.filter_pattern,
         since_minutes=args.since,
         use_color=use_color,
+        verbose=args.verbose,
     )
 
     print_summary(counts, use_color=use_color)

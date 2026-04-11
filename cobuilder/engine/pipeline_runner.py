@@ -1871,6 +1871,16 @@ class PipelineRunner:
         # Build task prompt from node attributes
         prompt = self._build_worker_prompt(node, data)
 
+        # Emit node.dispatch so the watch stream shows the full prompt + context.
+        self._emit_dispatch_event(
+            node_id=nid,
+            handler_type=attrs.get("handler", "codergen"),
+            worker_type=worker_type,
+            attempt=self.retry_counts.get(nid, 0) + 1,
+            prompt=prompt,
+            node_attrs=attrs,
+        )
+
         # Register as active before spawning thread
         self.active_workers[nid] = {
             "node_id": nid,
@@ -1900,6 +1910,51 @@ class PipelineRunner:
 
         # Track the worker future using the advanced worker tracker
         self.worker_tracker.track_worker(nid, future)
+
+    def _emit_dispatch_event(
+        self,
+        node_id: str,
+        handler_type: str,
+        worker_type: str,
+        attempt: int,
+        prompt: str,
+        node_attrs: dict,
+    ) -> None:
+        """Append a node.dispatch event to pipeline-events.jsonl next to the DOT file.
+
+        This is a synchronous, fire-and-forget write that captures the full
+        rendered prompt and node attributes at the moment of dispatch.  It
+        intentionally bypasses the async emitter chain (which is not available
+        here) and writes directly to the JSONL file using the same format as
+        JSONLEmitter so that ``cli.py watch`` picks it up immediately.
+        """
+        import json as _json
+        from datetime import datetime, timezone
+        from cobuilder.engine.events.types import EventBuilder
+
+        jsonl_path = os.path.join(self.dot_dir, "pipeline-events.jsonl")
+        try:
+            event = EventBuilder.node_dispatch(
+                pipeline_id=self.pipeline_id,
+                node_id=node_id,
+                handler_type=handler_type,
+                worker_type=worker_type,
+                attempt=attempt,
+                prompt=prompt,
+                node_attrs=node_attrs,
+            )
+            record = {
+                "type": event.type,
+                "timestamp": event.timestamp.isoformat(),
+                "pipeline_id": event.pipeline_id,
+                "node_id": event.node_id,
+                "data": event.data,
+                "sequence": event.sequence,
+            }
+            with open(jsonl_path, "a", encoding="utf-8") as fh:
+                fh.write(_json.dumps(record) + "\n")
+        except Exception as exc:  # noqa: BLE001
+            log.warning("[dispatch] Failed to emit node.dispatch event for %s: %s", node_id, exc)
 
     def _handle_tool(self, node: dict, data: dict) -> None:  # noqa: ARG002
         """Tool nodes: run subprocess.run() with the command from node attrs."""
